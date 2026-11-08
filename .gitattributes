@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/*.java -text
+*.apk binary
+*.zip binary
+*.jar binary
+*.png binary

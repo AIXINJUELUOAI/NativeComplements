@@ -1,0 +1,10 @@
+.gradle/
+.kotlin/
+**/build/
+.local/
+local.properties
+*.log
+.idea/
+*.iml
+deliverables/
+verification/host-classes/

@@ -1,0 +1,874 @@
+{
+  "status": "PASS",
+  "count": 122,
+  "inventory_sha256": "9dce7353189802e914c18c5d0862e0566b044e31158df17e0225f46717b048b3",
+  "artifacts": [
+    {
+      "name": "framework.jar",
+      "size": 45060595,
+      "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f"
+    },
+    {
+      "name": "services.jar",
+      "size": 24951959,
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    }
+  ],
+  "checks": [
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "prepareSurfaces",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "onConfigurationChanged",
+      "descriptor": "(Landroid/content/res/Configuration;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "computeFreeformBounds",
+      "descriptor": "(Landroid/graphics/Rect;Landroid/content/res/Configuration;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "setWindowingMode",
+      "descriptor": "(I)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "setBounds",
+      "descriptor": "(Landroid/graphics/Rect;)I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "setAlwaysOnTop",
+      "descriptor": "(Z)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "isRootTask",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "isLeafTask",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/TaskFragment;",
+      "name": "isAttached",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/TaskFragment;",
+      "name": "getActivityType",
+      "descriptor": "()I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/ConfigurationContainer;",
+      "name": "getWindowingMode",
+      "descriptor": "()I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "isAlwaysOnTop",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "isOverrideBoundsAllowed",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "isOverrideWindowingModeAllowed",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "getBaseIntent",
+      "descriptor": "()Landroid/content/Intent;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "getRelativeDisplayRotation",
+      "descriptor": "()I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "getDisplayContent",
+      "descriptor": "()Lcom/android/server/wm/DisplayContent;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/TaskFragment;",
+      "name": "getDisplayArea",
+      "descriptor": "()Lcom/android/server/wm/TaskDisplayArea;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "supportsFreeformInDisplayArea",
+      "descriptor": "(Lcom/android/server/wm/TaskDisplayArea;)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/ConfigurationContainer;",
+      "name": "getBounds",
+      "descriptor": "()Landroid/graphics/Rect;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "getRelativePosition",
+      "descriptor": "(Landroid/graphics/Point;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "getPendingTransaction",
+      "descriptor": "()Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/ConfigurationContainer;",
+      "name": "getConfiguration",
+      "descriptor": "()Landroid/content/res/Configuration;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/ConfigurationContainer;",
+      "name": "getRequestedOverrideConfiguration",
+      "descriptor": "()Landroid/content/res/Configuration;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "onRequestedOverrideConfigurationChanged",
+      "descriptor": "(Landroid/content/res/Configuration;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "systemReady",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "requestTraversal",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/RootWindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/RootWindowContainer;",
+      "name": "anyTaskForId",
+      "descriptor": "(II)Lcom/android/server/wm/Task;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/RootWindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/RootWindowContainer;",
+      "name": "getTopDisplayFocusedLeafTask",
+      "descriptor": "()Lcom/android/server/wm/Task;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/TaskDisplayArea;",
+      "declaring_class": "Lcom/android/server/wm/TaskDisplayArea;",
+      "name": "isValidWindowingMode",
+      "descriptor": "(ILcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/Task;)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/DisplayContent;",
+      "declaring_class": "Lcom/android/server/wm/DisplayContent;",
+      "name": "getStableRect",
+      "descriptor": "(Landroid/graphics/Rect;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/DisplayContent;",
+      "declaring_class": "Lcom/android/server/wm/ConfigurationContainer;",
+      "name": "getBounds",
+      "descriptor": "()Landroid/graphics/Rect;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/SurfaceAnimator;",
+      "declaring_class": "Lcom/android/server/wm/SurfaceAnimator;",
+      "name": "hasLeash",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/TransitionController;",
+      "declaring_class": "Lcom/android/server/wm/TransitionController;",
+      "name": "inTransition",
+      "descriptor": "(Lcom/android/server/wm/WindowContainer;)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "mContext",
+      "descriptor": "Landroid/content/Context;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "mRoot",
+      "descriptor": "Lcom/android/server/wm/RootWindowContainer;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "mGlobalLock",
+      "descriptor": "Lcom/android/server/wm/WindowManagerGlobalLock;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "mAtmService",
+      "descriptor": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "declaring_class": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "name": "mSupportsMultiWindow",
+      "descriptor": "Z",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "declaring_class": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "name": "mSupportsFreeformWindowManagement",
+      "descriptor": "Z",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "mTaskId",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "mUserId",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "realActivity",
+      "descriptor": "Landroid/content/ComponentName;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/DisplayContent;",
+      "declaring_class": "Lcom/android/server/wm/DisplayContent;",
+      "name": "mDisplayId",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "mSurfaceControl",
+      "descriptor": "Landroid/view/SurfaceControl;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "mSurfaceAnimator",
+      "descriptor": "Lcom/android/server/wm/SurfaceAnimator;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "mTransitionController",
+      "descriptor": "Lcom/android/server/wm/TransitionController;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Landroid/content/res/Configuration;",
+      "declaring_class": "Landroid/content/res/Configuration;",
+      "name": "windowConfiguration",
+      "descriptor": "Landroid/app/WindowConfiguration;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Landroid/app/WindowConfiguration;",
+      "declaring_class": "Landroid/app/WindowConfiguration;",
+      "name": "getWindowingMode",
+      "descriptor": "()I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/app/WindowConfiguration;",
+      "declaring_class": "Landroid/app/WindowConfiguration;",
+      "name": "getBounds",
+      "descriptor": "()Landroid/graphics/Rect;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/app/WindowConfiguration;",
+      "declaring_class": "Landroid/app/WindowConfiguration;",
+      "name": "setAlwaysOnTop",
+      "descriptor": "(I)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/app/WindowConfiguration;",
+      "declaring_class": "Landroid/app/WindowConfiguration;",
+      "name": "mAlwaysOnTop",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setScale",
+      "descriptor": "(Landroid/view/SurfaceControl;FF)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setPosition",
+      "descriptor": "(Landroid/view/SurfaceControl;FF)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "moveToFront",
+      "descriptor": "(Ljava/lang/String;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "moveTaskToBack",
+      "descriptor": "(Lcom/android/server/wm/Task;)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "setFocusable",
+      "descriptor": "(Z)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "isFocusable",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "forAllTasks",
+      "descriptor": "(Ljava/util/function/Consumer;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/RootWindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/RootWindowContainer;",
+      "name": "ensureActivitiesVisible",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/RootWindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/RootWindowContainer;",
+      "name": "resumeFocusedTasksTopActivities",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "setForceTranslucent",
+      "descriptor": "(Z)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/TaskFragment;",
+      "name": "isForceTranslucent",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "isForceOpaque",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "declaring_class": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "name": "deferWindowLayout",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "declaring_class": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "name": "continueWindowLayout",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/app/ActivityOptions;",
+      "declaring_class": "Landroid/app/ActivityOptions;",
+      "name": "setAvoidMoveToFront",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/TaskFragment;",
+      "name": "mLastSurfaceSize",
+      "descriptor": "Landroid/graphics/Point;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "mLastTimeMoved",
+      "descriptor": "J",
+      "kind": "fields"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setWindowCrop",
+      "descriptor": "(Landroid/view/SurfaceControl;II)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setCornerRadius",
+      "descriptor": "(Landroid/view/SurfaceControl;F)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/RecentTasks;",
+      "declaring_class": "Lcom/android/server/wm/RecentTasks;",
+      "name": "isVisibleRecentTask",
+      "descriptor": "(Lcom/android/server/wm/Task;)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/InsetsPolicy;",
+      "declaring_class": "Lcom/android/server/wm/InsetsPolicy;",
+      "name": "updateSystemBars",
+      "descriptor": "(Lcom/android/server/wm/WindowState;IIZ)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/DisplayContent;",
+      "declaring_class": "Lcom/android/server/wm/DisplayContent;",
+      "name": "getDisplayPolicy",
+      "descriptor": "()Lcom/android/server/wm/DisplayPolicy;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "getTopVisibleAppMainWindow",
+      "descriptor": "()Lcom/android/server/wm/WindowState;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "isVisible",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "getTask",
+      "descriptor": "()Lcom/android/server/wm/Task;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "isDrawn",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "isVisible",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/TaskChangeNotificationController;",
+      "declaring_class": "Lcom/android/server/wm/TaskChangeNotificationController;",
+      "name": "notifyTaskStackChanged",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "mChildren",
+      "descriptor": "Ljava/util/ArrayList;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "mLastLayer",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowContainer;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "mLastRelativeToLayer",
+      "descriptor": "Landroid/view/SurfaceControl;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/InsetsPolicy;",
+      "declaring_class": "Lcom/android/server/wm/InsetsPolicy;",
+      "name": "mDisplayContent",
+      "descriptor": "Lcom/android/server/wm/DisplayContent;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/DisplayPolicy;",
+      "declaring_class": "Lcom/android/server/wm/DisplayPolicy;",
+      "name": "mTopFullscreenOpaqueWindowState",
+      "descriptor": "Lcom/android/server/wm/WindowState;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "declaring_class": "Lcom/android/server/wm/ActivityTaskManagerService;",
+      "name": "mTaskChangeNotificationController",
+      "descriptor": "Lcom/android/server/wm/TaskChangeNotificationController;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Builder;",
+      "declaring_class": "Landroid/view/SurfaceControl$Builder;",
+      "name": "<init>",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Builder;",
+      "declaring_class": "Landroid/view/SurfaceControl$Builder;",
+      "name": "setName",
+      "descriptor": "(Ljava/lang/String;)Landroid/view/SurfaceControl$Builder;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Builder;",
+      "declaring_class": "Landroid/view/SurfaceControl$Builder;",
+      "name": "setParent",
+      "descriptor": "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Builder;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Builder;",
+      "declaring_class": "Landroid/view/SurfaceControl$Builder;",
+      "name": "setColorLayer",
+      "descriptor": "()Landroid/view/SurfaceControl$Builder;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Builder;",
+      "declaring_class": "Landroid/view/SurfaceControl$Builder;",
+      "name": "setHidden",
+      "descriptor": "(Z)Landroid/view/SurfaceControl$Builder;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Builder;",
+      "declaring_class": "Landroid/view/SurfaceControl$Builder;",
+      "name": "build",
+      "descriptor": "()Landroid/view/SurfaceControl;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setLayer",
+      "descriptor": "(Landroid/view/SurfaceControl;I)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setRelativeLayer",
+      "descriptor": "(Landroid/view/SurfaceControl;Landroid/view/SurfaceControl;I)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setColor",
+      "descriptor": "(Landroid/view/SurfaceControl;[F)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "setAlpha",
+      "descriptor": "(Landroid/view/SurfaceControl;F)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "show",
+      "descriptor": "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "hide",
+      "descriptor": "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/SurfaceControl$Transaction;",
+      "declaring_class": "Landroid/view/SurfaceControl$Transaction;",
+      "name": "remove",
+      "descriptor": "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/TransitionController;",
+      "declaring_class": "Lcom/android/server/wm/TransitionController;",
+      "name": "setNoAnimation",
+      "descriptor": "(Lcom/android/server/wm/WindowContainer;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/DisplayContent;",
+      "declaring_class": "Lcom/android/server/wm/DisplayContent;",
+      "name": "getInsetsStateController",
+      "descriptor": "()Lcom/android/server/wm/InsetsStateController;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/InsetsStateController;",
+      "declaring_class": "Lcom/android/server/wm/InsetsStateController;",
+      "name": "getRawInsetsState",
+      "descriptor": "()Landroid/view/InsetsState;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "getRequestedVisibleTypes",
+      "descriptor": "()I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "canReceiveTouchInput",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/view/InsetsState;",
+      "declaring_class": "Landroid/view/InsetsState;",
+      "name": "calculateInsets",
+      "descriptor": "(Landroid/graphics/Rect;Landroid/graphics/Rect;IZ)Landroid/graphics/Insets;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "mAttrs",
+      "descriptor": "Landroid/view/WindowManager$LayoutParams;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Transition;",
+      "declaring_class": "Lcom/android/server/wm/Transition;",
+      "name": "collect",
+      "descriptor": "(Lcom/android/server/wm/WindowContainer;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Transition;",
+      "declaring_class": "Lcom/android/server/wm/Transition;",
+      "name": "setNoAnimation",
+      "descriptor": "(Lcom/android/server/wm/WindowContainer;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "moveTaskToBackInner",
+      "descriptor": "(Lcom/android/server/wm/Task;Lcom/android/server/wm/Transition;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/Task;",
+      "name": "updateSurfaceSize",
+      "descriptor": "(Landroid/view/SurfaceControl$Transaction;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Task;",
+      "declaring_class": "Lcom/android/server/wm/WindowContainer;",
+      "name": "isVisibleRequested",
+      "descriptor": "()Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/TaskSnapshotController;",
+      "declaring_class": "Lcom/android/server/wm/TaskSnapshotController;",
+      "name": "recordSnapshot",
+      "descriptor": "(Lcom/android/server/wm/Task;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "getFrame",
+      "descriptor": "()Landroid/graphics/Rect;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/app/ActivityOptions;",
+      "declaring_class": "Landroid/app/ActivityOptions;",
+      "name": "setLaunchTaskId",
+      "descriptor": "(I)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Landroid/util/MergedConfiguration;",
+      "declaring_class": "Landroid/util/MergedConfiguration;",
+      "name": "getMergedConfiguration",
+      "descriptor": "()Landroid/content/res/Configuration;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowManagerService;",
+      "declaring_class": "Lcom/android/server/wm/WindowManagerService;",
+      "name": "mTaskSnapshotController",
+      "descriptor": "Lcom/android/server/wm/TaskSnapshotController;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/WindowState;",
+      "declaring_class": "Lcom/android/server/wm/WindowState;",
+      "name": "mLastReportedConfiguration",
+      "descriptor": "Landroid/util/MergedConfiguration;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Transition;",
+      "declaring_class": "Lcom/android/server/wm/Transition;",
+      "name": "addFlag",
+      "descriptor": "(I)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Transition;",
+      "declaring_class": "Lcom/android/server/wm/Transition;",
+      "name": "getFlags",
+      "descriptor": "()I",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/TransitionController;",
+      "declaring_class": "Lcom/android/server/wm/TransitionController;",
+      "name": "requestStartTransition",
+      "descriptor": "(Lcom/android/server/wm/Transition;Lcom/android/server/wm/Task;Landroid/window/RemoteTransition;Ljava/util/List;)Lcom/android/server/wm/Transition;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/server/wm/Transition;",
+      "declaring_class": "Lcom/android/server/wm/Transition;",
+      "name": "mType",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Landroid/view/WindowManager;",
+      "declaring_class": "Landroid/view/WindowManager;",
+      "name": "TRANSIT_FLAG_INVISIBLE",
+      "descriptor": "I",
+      "kind": "fields"
+    }
+  ],
+  "limitation": "Offline declarations only; no Android runtime, no hook or recovery execution."
+}

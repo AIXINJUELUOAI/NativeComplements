@@ -1,0 +1,209 @@
+{
+  "status": "PASS",
+  "count": 27,
+  "checks": [
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "declaring_class": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "name": "onMotionEvent",
+      "descriptor": "(Landroid/view/MotionEvent;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "declaring_class": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "name": "onViewAttached",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "declaring_class": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "name": "onDestroy",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "declaring_class": "Lcom/android/systemui/util/ViewController;",
+      "name": "mView",
+      "descriptor": "Landroid/view/View;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "declaring_class": "Lcom/android/systemui/navigationbar/gestural/BackPanelController;",
+      "name": "backCallback",
+      "descriptor": "Lcom/android/systemui/plugins/NavigationEdgeBackPlugin$BackCallback;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/systemui/plugins/NavigationEdgeBackPlugin$BackCallback;",
+      "declaring_class": "Lcom/android/systemui/plugins/NavigationEdgeBackPlugin$BackCallback;",
+      "name": "cancelBack",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$5;",
+      "declaring_class": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$5;",
+      "name": "this$0",
+      "descriptor": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+      "declaring_class": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+      "name": "mBackAnimation",
+      "descriptor": "Lcom/android/wm/shell/back/BackAnimationController$BackAnimationImpl;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/wm/shell/back/BackAnimationController$BackAnimationImpl;",
+      "declaring_class": "Lcom/android/wm/shell/back/BackAnimationController$BackAnimationImpl;",
+      "name": "this$0",
+      "descriptor": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "declaring_class": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "name": "mBackNavigationInfo",
+      "descriptor": "Landroid/window/BackNavigationInfo;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "declaring_class": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "name": "mPostCommitAnimationInProgress",
+      "descriptor": "Z",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "declaring_class": "Lcom/android/wm/shell/back/BackAnimationController;",
+      "name": "mShellExecutor",
+      "descriptor": "Lcom/android/wm/shell/common/ShellExecutor;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/quickstep/views/RecentsView;",
+      "declaring_class": "Lcom/android/quickstep/views/RecentsView;",
+      "name": "applyLoadPlan",
+      "descriptor": "(Ljava/util/List;I)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/views/RecentsView;",
+      "declaring_class": "Lcom/android/quickstep/views/RecentsView;",
+      "name": "shouldAvoidAddingStubTaskView",
+      "descriptor": "(Lcom/android/wm/shell/shared/GroupedTaskInfo;)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/views/RecentsView;",
+      "declaring_class": "Lcom/android/quickstep/views/RecentsView;",
+      "name": "reloadIfNeeded",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/views/RecentsView;",
+      "declaring_class": "Lcom/android/quickstep/views/RecentsView;",
+      "name": "mAppliedTaskListChangeId",
+      "descriptor": "I",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/quickstep/util/GroupTask;",
+      "declaring_class": "Lcom/android/quickstep/util/GroupTask;",
+      "name": "containsTask",
+      "descriptor": "(I)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/util/GroupTask;",
+      "declaring_class": "Lcom/android/quickstep/util/GroupTask;",
+      "name": "getTasks",
+      "descriptor": "()Ljava/util/List;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/wm/shell/shared/GroupedTaskInfo;",
+      "declaring_class": "Lcom/android/wm/shell/shared/GroupedTaskInfo;",
+      "name": "getTaskInfo1",
+      "descriptor": "()Landroid/app/TaskInfo;",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/wm/shell/shared/GroupedTaskInfo;",
+      "declaring_class": "Lcom/android/wm/shell/shared/GroupedTaskInfo;",
+      "name": "isBaseType",
+      "descriptor": "(I)Z",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/TouchInteractionHandler;",
+      "declaring_class": "Lcom/android/quickstep/TouchInteractionHandler;",
+      "name": "onInputEvent",
+      "descriptor": "(Landroid/view/InputEvent;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/TouchInteractionService;",
+      "declaring_class": "Lcom/android/quickstep/TouchInteractionService;",
+      "name": "onCreate",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/quickstep/TouchInteractionService;",
+      "declaring_class": "Lcom/android/quickstep/TouchInteractionService;",
+      "name": "onDestroy",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/screenshot/ScreenshotController;",
+      "declaring_class": "Lcom/android/systemui/screenshot/ScreenshotController;",
+      "name": "handleScreenshot",
+      "descriptor": "(Lcom/android/systemui/screenshot/ScreenshotData;Lcom/android/systemui/screenshot/TakeScreenshotExecutorImpl$sam$java_util_function_Consumer$0;Lcom/android/systemui/screenshot/TakeScreenshotService$RequestCallbackImpl;)V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/screenshot/ScreenshotWindow;",
+      "declaring_class": "Lcom/android/systemui/screenshot/ScreenshotWindow;",
+      "name": "removeWindow",
+      "descriptor": "()V",
+      "kind": "methods"
+    },
+    {
+      "owner": "Lcom/android/systemui/screenshot/ScreenshotController;",
+      "declaring_class": "Lcom/android/systemui/screenshot/ScreenshotController;",
+      "name": "window",
+      "descriptor": "Lcom/android/systemui/screenshot/ScreenshotWindow;",
+      "kind": "fields"
+    },
+    {
+      "owner": "Lcom/android/systemui/screenshot/ScreenshotWindow;",
+      "declaring_class": "Lcom/android/systemui/screenshot/ScreenshotWindow;",
+      "name": "window",
+      "descriptor": "Lcom/android/internal/policy/PhoneWindow;",
+      "kind": "fields"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "SystemUI.apk",
+      "size": 48329834,
+      "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
+    },
+    {
+      "name": "NexusLauncherRelease.apk",
+      "size": 17335691,
+      "sha256": "3d7c14c02a7a42c9b88b0d5ced4662330ce6e6989563dab5abe9a8158cd70b56"
+    }
+  ],
+  "inventory_sha256": "4fa383d2985c5480d15d01477a055033597330bb63e6f324bad094db726680b0",
+  "limitation": "Saved APK member declarations; no phone gesture executed"
+}

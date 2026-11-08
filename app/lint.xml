@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!-- Existing Demo8.2 call runs inside the hooked Pixel Launcher process.
+         Preserve the device-calibrated hook and runtime preflight. This is not
+         a claim of ordinary-app hidden-API access or cross-ROM compatibility. -->
+    <issue id="BlockedPrivateApi">
+        <ignore path="src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LauncherGuard.java" />
+    </issue>
+</lint>

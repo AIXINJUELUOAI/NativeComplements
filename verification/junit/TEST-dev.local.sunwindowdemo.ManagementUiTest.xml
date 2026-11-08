@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.local.sunwindowdemo.ManagementUiTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-11-08T09:39:22.542Z" hostname="DESKTOP-UJCRUDN" time="10.09">
+  <properties/>
+  <testcase name="migratedPreferencesKeepDemoDefaultsOrderAndBounds" classname="dev.local.sunwindowdemo.ManagementUiTest" time="7.302"/>
+  <testcase name="windowPageOffersAllExistingSettingsAndRecovery" classname="dev.local.sunwindowdemo.ManagementUiTest" time="1.978"/>
+  <testcase name="gestureToggleWritesOriginalPreferenceAndSurvivesReload" classname="dev.local.sunwindowdemo.ManagementUiTest" time="0.586"/>
+  <testcase name="homeHasOnlyImplementedFeatureAndNavigates" classname="dev.local.sunwindowdemo.ManagementUiTest" time="0.222"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
