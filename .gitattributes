@@ -1,6 +1,7 @@
 * text=auto eol=lf
 *.bat text eol=crlf
-app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/*.java -text
+# Preserve immutable Demo8.2 runtime bytes, including existing CRLF endings.
+app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/*.java -text whitespace=cr-at-eol
 *.apk binary
 *.zip binary
 *.jar binary

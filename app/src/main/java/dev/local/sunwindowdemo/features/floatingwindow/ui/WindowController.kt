@@ -15,7 +15,8 @@ import androidx.compose.runtime.setValue
 
 data class WindowRuntime(
     val received: Boolean = false, val compatible: Boolean = false,
-    val serviceConnected: Boolean = false, val state: String = "unknown",
+    val hostConnected: Boolean = false, val state: String = "unknown",
+    val controlEnabled: Boolean = true,
     val hasJournal: Boolean = false, val report: String = "正在检查小窗后端…",
     val lastTouch: String = "尚无手势记录",
 )
@@ -37,11 +38,12 @@ class WindowController(private val activity: Activity) {
             if (intent.action != Wire.RESULT || sentFromUid != 1000) return
             val compatible = intent.getIntExtra("protocol", 0) == Wire.PROTOCOL
             runtime = WindowRuntime(
-                received = true, compatible = compatible, serviceConnected = CornerService.connected,
+                received = true, compatible = compatible, hostConnected = intent.getBooleanExtra("hostConnected", false),
+                controlEnabled = preferences.enabled,
                 state = if (compatible) intent.getStringExtra("state") ?: "unknown" else "incompatible",
                 hasJournal = intent.getBooleanExtra("hasJournal", false),
                 report = if (compatible) intent.getStringExtra("report") ?: "后端已连接" else "请重启手机，使系统后端与当前模块版本一致。",
-                lastTouch = CornerService.lastTouch ?: "尚无手势记录",
+                lastTouch = intent.getStringExtra("lastTouch") ?: "尚未收到角落触摸",
             )
             if (!compatible) return
             recovery = Intent(intent)
@@ -62,7 +64,7 @@ class WindowController(private val activity: Activity) {
     }
     fun resume() {
         preferences = store.read()
-        runtime = runtime.copy(serviceConnected = CornerService.connected, lastTouch = CornerService.lastTouch ?: "尚无手势记录")
+        runtime = runtime.copy(hostConnected = false)
         check()
     }
     fun check() {
@@ -78,14 +80,7 @@ class WindowController(private val activity: Activity) {
     fun number(key: String, value: Int) = store.number(key, value)
     fun selected(packages: List<String>) = store.apps(packages)
     fun blocked(packages: Set<String>) = store.blocked(packages)
-    fun accessibility() {
-        val component = ComponentName(activity, CornerService::class.java)
-        val intent = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-            .putExtra(Intent.EXTRA_COMPONENT_NAME, component)
-        runCatching { activity.startActivity(intent) }.onFailure {
-            activity.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
-    }
+    fun toggleControl() = store.boolean("enabled", !preferences.enabled)
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")
     fun notifications() {
@@ -94,7 +89,7 @@ class WindowController(private val activity: Activity) {
         else toast("通知权限已开启")
     }
     fun chrome() {
-        if (!runtime.compatible || !CornerService.connected) { toast("请先连接小窗后端并开启无障碍服务"); return }
+        if (!preferences.enabled || !runtime.compatible || !runtime.hostConnected) { toast("请先启用小窗控制并连接 SystemUI 宿主"); return }
         if (activity.packageManager.getLaunchIntentForPackage("com.android.chrome")?.component == null) { toast("未找到 Chrome，可使用内置诊断页"); return }
         Wire.send(activity, "OPEN", "com.android.chrome", -1, Wire.token(), false)
     }

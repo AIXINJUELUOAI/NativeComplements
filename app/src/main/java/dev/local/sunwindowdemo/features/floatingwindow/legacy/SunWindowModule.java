@@ -8,7 +8,7 @@ public final class SunWindowModule extends XposedModule {
     private boolean eligible, attempted;
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
         eligible = p.isSystemServer();
-        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.8.2-test1");
+        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.2.0-preview20");
     }
     @Override public void onSystemServerStarting(SystemServerStartingParam p) {
         note("SYSTEM_SERVER_START eligible=" + eligible + " attempted=" + attempted);
@@ -50,7 +50,93 @@ public final class SunWindowModule extends XposedModule {
                 if(engine.blockContentTouch(chain.getThisObject()))return false;
                 return chain.proceed();
             }));
+            // Mini tasks must stay nonfocusable for native Home/recents task
+            // selection. Preflight the native fragment resume path separately;
+            // window key eligibility is not task focus eligibility.
+            try{
+                java.lang.reflect.Method keys=a.method(window,"canReceiveKeys",boolean.class);
+                if(keys.getReturnType()!=boolean.class)throw new NoSuchMethodException("canReceiveKeys(boolean)");
+                handles.add(hook(keys).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    if(engine.blockContentTouch(chain.getThisObject()))return false;
+                    return chain.proceed();
+                }));
+                Class<?> visibleFragment=Class.forName("com.android.server.wm.TaskFragment",false,p.getClassLoader());
+                java.lang.reflect.Method resume=a.method(visibleFragment,"resumeTopActivity",a.activity,android.app.ActivityOptions.class,boolean.class);
+                if(resume.getReturnType()!=boolean.class)throw new NoSuchMethodException("resumeTopActivity(ActivityRecord,ActivityOptions,boolean)");
+                engine.visibleResumeReady();note("VISIBLE_MULTI_RESUME_READY nonfocusableMini=true");
+            }catch(Exception e){note("VISIBLE_MULTI_RESUME_UNAVAILABLE "+FrameworkAccess.reason(e));}
+            // Input sinks are separate surfaces, not WindowStates. Alpha zero and
+            // setFocusable(false) do not stop a parked task's sink intercepting touches.
+            // Preserve native calculation first so reactivation restores native input.
+            try{
+                Class<?> sink=Class.forName("com.android.server.wm.ActivityRecordInputSink",false,p.getClassLoader());
+                java.lang.reflect.Field record=a.field(sink,"mActivityRecord");
+                java.lang.reflect.Method wrapper=a.method(sink,"getInputWindowHandleWrapper",boolean.class);
+                java.lang.reflect.Method inputConfig=a.method(wrapper.getReturnType(),"setInputConfigMasked",int.class,int.class);
+                handles.add(hook(wrapper).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();
+                    if(engine.blockContentTouch(record.get(chain.getThisObject())))
+                        // NOT_TOUCHABLE=8, verified against the target framework's native sink.
+                        inputConfig.invoke(result,8,8);
+                    return result;
+                }));
+                note("PARKED_INPUT_SINK_HOOK_READY");
+            }catch(Exception e){note("PARKED_INPUT_SINK_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
+            // SunOS WindowState.canAffectSystemUiFlags excludes popup windows. The
+            // native frame here is logical (0,0), so it must not color the real bars.
+            handles.add(hook(a.method(window,"canAffectSystemUiFlags")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                if(engine.owns(a.call(chain.getThisObject(),"getTask")))return false;
+                return chain.proceed();
+            }));
             Class<?> transition=Class.forName("com.android.server.wm.Transition",false,p.getClassLoader());
+            Class<?> fragment=Class.forName("com.android.server.wm.TaskFragment",false,p.getClassLoader());
+            handles.add(hook(a.method(fragment,"canBeResumed",a.activity)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                boolean nativeResult=(Boolean)chain.proceed();
+                return nativeResult||engine.keepVisibleResumed(chain.getThisObject(),chain.getArg(0));
+            }));
+            // SunOS ActivityRecord uses isFocusableOrPopUpView in BOTH lifecycle
+            // decisions. Keep task/input focus native, but admit only a live,
+            // visible owned mini at these two lifecycle predicates.
+            List<XposedInterface.HookHandle> lifecycleHooks=new ArrayList<>();
+            try{
+                java.lang.reflect.Method resume=a.method(a.activity,"shouldBeResumed",a.activity);
+                java.lang.reflect.Method pause=a.method(a.activity,"shouldPauseActivity",a.activity);
+                for(java.lang.reflect.Method check:new java.lang.reflect.Method[]{resume,pause,
+                    a.method(a.activity,"shouldMakeActive",a.activity),a.method(a.activity,"canResumeByCompat")})
+                    if(check.getReturnType()!=boolean.class)throw new NoSuchMethodException("mini lifecycle boolean predicate");
+                a.method(a.activity,"getTaskFragment");
+                lifecycleHooks.add(hook(resume).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    boolean nativeResult=(Boolean)chain.proceed();
+                    return nativeResult||engine.shouldResumeMiniActivity(chain.getThisObject(),chain.getArg(0));
+                }));
+                lifecycleHooks.add(hook(pause).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    boolean nativeResult=(Boolean)chain.proceed();
+                    return nativeResult&&!engine.retainMiniActivity(chain.getThisObject(),chain.getArg(0));
+                }));
+                // The target ART may inline these small predicates into native
+                // visibility/relaunch callers. Interpret those callers so the
+                // paired hooks also apply to previously compiled framework code.
+                for(java.lang.reflect.Method caller:new java.lang.reflect.Method[]{
+                    a.method(a.activity,"makeActiveIfNeeded",a.activity),
+                    a.method(a.activity,"shouldResumeActivity",a.activity),
+                    a.method(a.activity,"relaunchActivityLocked",boolean.class,int.class)})
+                    note("MINI_LIFECYCLE_DEOPT method="+caller.getName()+" result="+deoptimize(caller));
+                handles.addAll(lifecycleHooks);note("MINI_LIFECYCLE_READY resumeAndPause=true taskFocus=false");
+            }catch(Throwable e){
+                for(XposedInterface.HookHandle handle:lifecycleHooks)try{handle.unhook();}catch(Throwable ignored){}
+                note("MINI_LIFECYCLE_UNAVAILABLE "+FrameworkAccess.reason(e));
+            }
+            handles.add(hook(a.method(transition,"onTransactionReady",int.class,android.view.SurfaceControl.Transaction.class))
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    engine.transitionReady(chain.getThisObject());return chain.proceed();
+                }));
+            handles.add(hook(a.method(transition,"buildFinishTransaction",android.view.SurfaceControl.Transaction.class,
+                Class.forName("android.window.TransitionInfo",false,p.getClassLoader()),java.lang.reflect.Array.newInstance(a.dc,0).getClass()))
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();
+                    engine.transitionBuilt(chain.getThisObject(),chain.getArg(1),(android.view.SurfaceControl.Transaction)chain.getArg(0));
+                    return result;
+                }));
             handles.add(hook(a.method(transition,"collect",a.wc)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();engine.collected(chain.getThisObject(),chain.getArg(0));return result;
             }));
@@ -61,7 +147,73 @@ public final class SunWindowModule extends XposedModule {
             handles.add(hook(a.requestTransition).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 engine.requesting(chain.getArg(0),chain.getArg(1));return chain.proceed();
             }));
-            note("HOOKS_READY count=11 sunwindow-0.8.2-test1; disarmed until explicit command");
+            // The target framework asks this before creating predictive-back leashes.
+            // Decline only the linked task's remote preview; keep native app callbacks.
+            // This is optional so a missing preview API cannot disable window management.
+            try{
+                Class<?> adapter=Class.forName("android.window.BackAnimationAdapter",false,p.getClassLoader());
+                handles.add(hook(a.method(adapter,"isAnimatable",int.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                        if(engine.suppressLinkedBackPreview())return false;
+                        return chain.proceed();
+                    }));
+            }catch(Exception e){note("LINKED_BACK_PREVIEW_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
+            LinkedBack.install(this,a,engine,handles,this::note);
+            // SunOS forces resizability at the system level. Scope that behavior
+            // to acquired tasks and the current preflight candidate; keep app
+            // manifests and the system-wide developer setting untouched.
+            List<XposedInterface.HookHandle> resizeHooks=new ArrayList<>();
+            try{
+                java.lang.reflect.Method taskResize=a.method(a.task,"isResizeable",boolean.class);
+                java.lang.reflect.Method activityResize=a.method(a.activity,"isResizeable");
+                if(taskResize.getReturnType()!=boolean.class||activityResize.getReturnType()!=boolean.class)
+                    throw new NoSuchMethodException("scoped resize signatures");
+                resizeHooks.add(hook(taskResize).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    if(engine.allowResize(chain.getThisObject()))return true;
+                    return chain.proceed();
+                }));
+                resizeHooks.add(hook(activityResize).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    if(engine.allowResize(a.call(chain.getThisObject(),"getTask")))return true;
+                    return chain.proceed();
+                }));
+                handles.addAll(resizeHooks);note("SCOPED_RESIZE_HOOK_READY hooks="+resizeHooks.size());
+            }catch(Throwable e){
+                for(XposedInterface.HookHandle handle:resizeHooks)try{handle.unhook();}catch(Throwable ignored){}
+                note("SCOPED_RESIZE_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));
+            }
+            ServerViewport.install(this,a,engine,handles);
+            // Diagnostics are optional: missing diagnostic callbacks must not disable windows.
+            try{
+                handles.add(hook(a.method(a.activity,"finishRelaunching")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();engine.trace.state("SERVER_FINISH_RELAUNCH",chain.getThisObject());return result;
+                }));
+                handles.add(hook(a.method(a.activity,"activityResumedLocked",android.os.IBinder.class,boolean.class)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();engine.trace.resumed((android.os.IBinder)chain.getArg(0));return result;
+                }));
+            }catch(Exception e){note("ENTRY_LAYOUT_CALLBACK_UNAVAILABLE "+FrameworkAccess.reason(e));}
+            // Target Android 17 signature, checked against the connected device's
+            // services.jar. Configure related tasks before handleStartResult requests Shell playback; preserve flags.
+            Class<?> starter=Class.forName("com.android.server.wm.ActivityStarter",false,p.getClassLoader());
+            java.lang.reflect.Field sourceRecord=a.field(starter,"mSourceRecord");
+            java.lang.reflect.Field lastStarted=a.field(starter,"mLastStartActivityRecord");
+            java.lang.reflect.Field realCallingUid=a.field(starter,"mRealCallingUid");
+            java.lang.reflect.Field activityIntent=a.field(a.activity,"intent");
+            handles.add(hook(a.method(starter,"handleStartResult",a.activity,android.app.ActivityOptions.class,
+                int.class,boolean.class,Class.forName("android.window.RemoteTransition"),transition,int.class))
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object ticket=null;
+                    int code=(Integer)chain.getArg(2);
+                    if(code>=0&&code<=3){
+                        try{
+                            android.content.Intent intent=(android.content.Intent)activityIntent.get(chain.getArg(0));
+                            ticket=engine.activityStarting(sourceRecord.get(chain.getThisObject()),chain.getArg(0),lastStarted.get(chain.getThisObject()),intent==null?0:intent.getFlags(),realCallingUid.getInt(chain.getThisObject()));
+                        }catch(Exception e){note("HANDOFF_OBSERVE_FAILED "+FrameworkAccess.reason(e));}
+                    }
+                    boolean success=false;
+                    try{Object result=chain.proceed();success=result!=null;return result;}
+                    finally{engine.activityStartResult(ticket,success);}
+                }));
+            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.2.0-preview20; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));

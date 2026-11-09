@@ -9,9 +9,9 @@ final class Wire {
     static final String PKG = "dev.local.sunwindowdemo";
     static final String COMMAND = PKG + ".COMMAND", RESULT = PKG + ".RESULT";
     static final String PERMISSION = PKG + ".CONTROL";
-    static final int PROTOCOL = 14;
+    static final int PROTOCOL = 16;
     static final Binder LEASE = new Binder();
-    static final String CHANNEL = PKG + ".frames.v14";
+    static final String CHANNEL = PKG + ".frames.v16";
     static final int MESSAGE = IBinder.FIRST_CALL_TRANSACTION;
     private static volatile IBinder endpoint;
     private static java.util.function.Consumer<Intent> listener;
@@ -46,7 +46,6 @@ final class Wire {
         try{data.writeInterfaceToken(CHANNEL);i.writeToParcel(data,0);return target.transact(MESSAGE,data,null,IBinder.FLAG_ONEWAY);}
         catch(RemoteException e){return false;}finally{data.recycle();}
     }
-    static final long TIMEOUT_MS = 180_000;
     static String token() { return "sunwindow5:" + UUID.randomUUID(); }
     static boolean validToken(String value) {
         return value != null && value.matches("sunwindow5:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
@@ -58,6 +57,7 @@ final class Wire {
         Intent i = new Intent(COMMAND).setPackage("android").putExtra("protocol", PROTOCOL)
             .putExtra("op", op).putExtra("package", pkg).putExtra("taskId", taskId)
             .putExtra("token", token).putExtra("landscape", landscape).putExtra("hideRecents",new Config(context).hideRecents());
+        if(BackBridge.PACKAGE.equals(context.getPackageName()))i.putExtra("hostReady",SystemUiHost.live!=null&&SystemUiHost.live.ready()).putExtra("lastTouch",SystemUiHost.lastTouch);
         Bundle b = new Bundle(); b.putBinder("lease", LEASE); if(listener!=null)b.putBinder("frameChannel",FRAMES); i.putExtras(b);
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
@@ -79,8 +79,8 @@ final class Wire {
         try {
             nm.notify(5, new Notification.Builder(c, "test")
                 .setSmallIcon(android.R.drawable.ic_menu_revert).setContentTitle("小窗承载测试进行中")
-                .setContentText("点击恢复；3 分钟后自动发起恢复")
+                .setContentText("点击恢复原窗口；小窗无定时退出")
                 .setContentIntent(p).setOngoing(true).build());
-        } catch (SecurityException ignored) { /* Launcher entry and timeout still provide recovery. */ }
+        } catch (SecurityException ignored) { /* The launcher entry still provides recovery. */ }
     }
 }

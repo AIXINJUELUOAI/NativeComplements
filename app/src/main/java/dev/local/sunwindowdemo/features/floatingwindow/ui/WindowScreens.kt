@@ -12,11 +12,11 @@ import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.navigation.Page
 
 @Composable
-fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) -> Unit, accessibility: () -> Unit) {
-    Surface(onClick = accessibility, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) -> Unit, toggleControl: () -> Unit) {
+    Surface(onClick = toggleControl, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer) {
         Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(if (runtime.serviceConnected) "小窗控制已开启" else "开启小窗控制", style = MaterialTheme.typography.titleLarge)
-            Text(if (runtime.serviceConnected) "角落菜单与窗口触摸控制正在运行" else "前往系统无障碍设置，开启小窗控制服务", style = MaterialTheme.typography.bodyMedium)
+            Text(if (!p.enabled) "小窗控制已关闭" else if (runtime.hostConnected) "小窗控制已开启" else "等待 SystemUI 宿主", style = MaterialTheme.typography.titleLarge)
+            Text(if (!p.enabled) "点击开启 · 由 LSPosed 运行，无需无障碍" else "点击关闭 · 由 SystemUI 承载角落菜单与窗口控制", style = MaterialTheme.typography.bodyMedium)
         }
     }
     Hint("从屏幕底角向内斜滑打开菜单；侧边返回长滑，震动后松手，将当前应用变成小窗。")
@@ -29,7 +29,7 @@ fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) 
     }
     GroupTitle("帮助")
     SettingsGroup { SettingRow("诊断与恢复", "检查连接、测试触摸、恢复原窗口", { navigate(Page.Diagnostics) }, leading = { Glyph("info") }) }
-    Hint("实验性功能 · 单个活动小窗，每轮最多三分钟。系统设置中关闭服务前，请先恢复正在运行的小窗。")
+    Hint("单个活动小窗，无定时退出。关闭控制会结束当前小窗；禁用模块前请先恢复窗口。")
 }
 
 @Composable
@@ -94,12 +94,12 @@ fun DiagnosticsScreen(controller: WindowController) {
         SettingRow("系统后端", when {
             !runtime.received -> "尚未连接"
             !runtime.compatible -> "版本不一致，需要重启"
-            else -> "已连接 · 协议 14"
+            else -> "已连接 · 协议 15"
         })
-        SettingRow("无障碍服务", if (runtime.serviceConnected) "已连接" else "未连接", controller::accessibility)
+        SettingRow("SystemUI 宿主", if (runtime.hostConnected) "已连接 · 不依赖无障碍" else "未连接，请检查作用域并重启")
         SettingRow("重新检查", "刷新后端与恢复状态", controller::check)
     }
-    Hint("在 LSPosed 中启用本模块，勾选系统框架（system）、系统界面和 Pixel 启动器。覆盖安装后重启手机，再检查连接。")
+    Hint("在 LSPosed 中启用本模块，勾选系统框架（system）、系统界面和 Pixel 启动器。覆盖安装后重启手机，再检查连接。普通应用无需加入作用域；窗口配置由系统后端统一下发。")
     GroupTitle("测试与恢复")
     SettingsGroup {
         SettingRow("触摸与键盘诊断", "打开原有五点触摸、方向与输入测试页", controller::diagnostic)
@@ -113,5 +113,5 @@ fun DiagnosticsScreen(controller: WindowController) {
         SelectionContainer { Text(runtime.report + "\n\n最近手势：" + runtime.lastTouch,
             Modifier.fillMaxWidth().padding(20.dp), style = MaterialTheme.typography.bodySmall) }
     }
-    Hint("系统后端日志标签：SunWindowDemo5。后端沿用 Demo8.2；页面连接状态不代表所有窗口效果均已通过验收。")
+    Hint("系统后端日志标签：SunWindowDemo5。系统窗口配置日志：VIEWPORT_READY。连接状态不代表真机效果验收。")
 }

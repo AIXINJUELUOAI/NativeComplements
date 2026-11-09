@@ -34,6 +34,14 @@ public final class BackBridge extends XposedModule {
         if(!eligible||attempted||!PACKAGE.equals(p.getPackageName()))return;attempted=true;
         List<XposedInterface.HookHandle> hooks=new ArrayList<>();
         try{
+            hook(Instrumentation.class.getDeclaredMethod("callApplicationOnCreate",Application.class))
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();Application app=(Application)chain.getArg(0);
+                    if(PACKAGE.equals(app.getPackageName()))main.post(()->{try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}});
+                    return result;
+                });
+        }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
+        try{
             ClassLoader cl=p.getDefaultClassLoader();
             Class<?> panel=Class.forName("com.android.systemui.navigationbar.gestural.BackPanelController",false,cl);
             viewField=field(panel,"mView");callbackField=field(panel,"backCallback");
@@ -59,7 +67,7 @@ public final class BackBridge extends XposedModule {
                     cancel.recycle();if(committed!=null)main.post(()->waitForNativeBack(committed,0));
                 }
             }));
-            note("BACK_READY hooks=3 version=0.8.2-test1");
+            note("BACK_READY hooks=3 version=0.2.0-preview1");
             installScreenshotHooks(cl);
         }catch(Throwable e){for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}note("BACK_DISABLED "+e.getClass().getSimpleName());}
     }
@@ -67,9 +75,9 @@ public final class BackBridge extends XposedModule {
     private synchronized void connect(Context c){
         if(context!=null)return;context=c.getApplicationContext();
         context.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-            configure(i);
-        }},new IntentFilter(LauncherGuard.STATE),Wire.PERMISSION,main,Context.RECEIVER_EXPORTED);
-        context.sendBroadcast(new Intent(LauncherGuard.QUERY).setClassName(Wire.PKG,Wire.PKG+".StateRequestReceiver"));
+            if(getSentFromUid()==android.os.Process.myUid())configure(i);
+        }},new IntentFilter(LauncherGuard.STATE),null,main,Context.RECEIVER_EXPORTED);
+        SystemUiHost.start(context);if(SystemUiHost.live!=null)SystemUiHost.live.publish(true);
         note("BACK_CONNECTED");
     }
     private synchronized void configure(Intent i){

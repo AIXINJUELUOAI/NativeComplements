@@ -9,9 +9,9 @@ import java.util.*;
 /** Reflect exact target signatures; never invoke an arbitrary same-name overload. */
 final class FrameworkAccess {
     final Class<?> task, wc, activity, tda, dc;
-    final int invisibleFlag;
+    final int invisibleFlag,noAnimationFlag;
     final Method systemReady, prepare, changed, freeform, lookup, focused, recentVisible, systemBars;
-    final Method requestTransition;
+    final Method requestTransition,finishLayers;
     private final Map<String, Method> methods = new HashMap<>();
     private final Map<String, Field> fields = new HashMap<>();
     FrameworkAccess(ClassLoader loader) throws Exception {
@@ -38,6 +38,14 @@ final class FrameworkAccess {
         method(tda, "isValidWindowingMode", int.class, activity, task);
         method(wms, "requestTraversal");
         method(wc, "getRelativePosition", Point.class);
+        method(wc, "assignChildLayers", SurfaceControl.Transaction.class);
+        method(task,"topRunningActivity");method(activity,"getRequestedOrientation");
+        field(activity,"packageName");method(root,"getDefaultDisplay");
+        method(task,"getRootActivity");method(activity,"attachedToProcess");method(activity,"isRelaunching");
+        method(activity,"getState");method(activity,"relaunchActivityLocked",boolean.class,int.class);
+        for(String name:new String[]{"intent","finishing","resultTo","results","newIntents","launchedFromUid","launchedFromPackage"})field(activity,name);
+        method(dc,"getImeWindow");field(dc,"mCurrentFocus");
+        method(wc,"forAllActivities",java.util.function.Consumer.class);method(activity,"getUid");
         method(wc, "getPendingTransaction"); method(wc, "getBounds");
         method(wc, "getRelativeDisplayRotation");
         method(field(wc,"mTransitionController").getType(),"setNoAnimation",wc);
@@ -52,6 +60,9 @@ final class FrameworkAccess {
         method(task,"moveToFront",String.class);
         method(task,"moveTaskToBack",task);
         Class<?> transition=Class.forName("com.android.server.wm.Transition",false,loader);
+        finishLayers=method(transition,"assignLayersForFinishTransaction",wc,SurfaceControl.Transaction.class);
+        if(!Modifier.isStatic(finishLayers.getModifiers())||finishLayers.getReturnType()!=void.class)
+            throw new NoSuchMethodException(finishLayers.toString());
         method(transition,"collect",wc);method(transition,"setNoAnimation",wc);
         method(transition,"addFlag",int.class);field(transition,"mType");
         method(transition,"getFlags");
@@ -65,6 +76,24 @@ final class FrameworkAccess {
         method(android.app.ActivityOptions.class,"setLaunchTaskId",int.class);
         Class<?> snapshot=field(wms,"mTaskSnapshotController").getType();method(snapshot,"recordSnapshot",task);
         method(task,"setFocusable",boolean.class);method(task,"isFocusable");
+        method(activity,"moveFocusableActivityToTop",String.class);
+        method(dc,"setFocusedApp",activity);method(wms,"updateFocusedWindowLocked",int.class,boolean.class);
+        Class<?> fragment=Class.forName("com.android.server.wm.TaskFragment",false,loader);
+        method(fragment,"canBeResumed",activity);method(fragment,"getVisibility",activity);
+        method(fragment,"shouldSleepOrShutDownActivities");method(fragment,"getTask");
+        Class<?> transitionInfo=Class.forName("android.window.TransitionInfo",false,loader);
+        noAnimationFlag=field(transitionInfo,"FLAG_NO_ANIMATION").getInt(null);
+        if(noAnimationFlag!=262144)throw new IllegalStateException("unexpected no-animation flag");
+        method(transition,"onTransactionReady",int.class,SurfaceControl.Transaction.class);
+        method(transition,"buildFinishTransaction",SurfaceControl.Transaction.class,transitionInfo,
+            java.lang.reflect.Array.newInstance(dc,0).getClass());
+        for(String name:new String[]{"mTargets","mChanges","mStartTransaction"})field(transition,name);
+        method(wc,"isDescendantOf",wc);method(transitionInfo,"getChanges");
+        Class<?> transitionChange=Class.forName("android.window.TransitionInfo$Change",false,loader);
+        method(transitionChange,"getLeash");method(transitionChange,"getFlags");method(transitionChange,"setFlags",int.class);
+        field(Class.forName("com.android.server.wm.Transition$ChangeInfo",false,loader),"mContainer");
+        method(SurfaceControl.Transaction.class,"addTransactionCommittedListener",java.util.concurrent.Executor.class,
+            SurfaceControl.TransactionCommittedListener.class);
         method(task,"setForceTranslucent",boolean.class);method(task,"isForceTranslucent");
         method(task,"isForceOpaque");
         method(android.app.ActivityOptions.class,"setAvoidMoveToFront");
@@ -82,6 +111,7 @@ final class FrameworkAccess {
         method(SurfaceControl.Transaction.class, "setPosition", SurfaceControl.class, float.class, float.class);
         method(SurfaceControl.Transaction.class,"setWindowCrop",SurfaceControl.class,int.class,int.class);
         method(SurfaceControl.Transaction.class,"setCornerRadius",SurfaceControl.class,float.class);
+        method(SurfaceControl.Transaction.class,"setCrop",SurfaceControl.class,Rect.class);
         for (String name : new String[]{"mContext", "mRoot", "mGlobalLock", "mAtmService"}) field(wms, name);
         for (String name : new String[]{"mTaskId", "mUserId", "realActivity"}) field(task, name);
         for (String name : new String[]{"mSurfaceControl", "mSurfaceAnimator", "mTransitionController"}) field(wc, name);
@@ -169,6 +199,11 @@ final class FrameworkAccess {
     void style(Object target,int width,int height,float radius) throws Exception {
         Object surface=field(target,"mSurfaceControl"),transaction=transaction(target);
         call(transaction,"setWindowCrop",new Class<?>[]{SurfaceControl.class,int.class,int.class},surface,width,height);
+        call(transaction,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},surface,radius);
+    }
+    void style(Object target,Rect crop,float radius) throws Exception {
+        Object surface=field(target,"mSurfaceControl"),transaction=transaction(target);
+        call(transaction,"setCrop",new Class<?>[]{SurfaceControl.class,Rect.class},surface,crop);
         call(transaction,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},surface,radius);
     }
     static String reason(Throwable e) {

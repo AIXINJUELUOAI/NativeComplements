@@ -13,6 +13,7 @@ abstract class DemoActivity extends Activity {
     private BroadcastReceiver receiver;
     boolean backendSeen;
     boolean backendCompatible;
+    boolean hostConnected;
     int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -31,7 +32,8 @@ abstract class DemoActivity extends Activity {
                 if (!Wire.RESULT.equals(i.getAction()) || getSentFromUid() != 1000) return;
                 backendSeen = true;
                 backendCompatible=i.getIntExtra("protocol",0)==Wire.PROTOCOL;
-                if(!backendCompatible){if(status!=null)status.setText("请重启，加载 Demo8.2 系统后端后再测试。");return;}
+                hostConnected=i.getBooleanExtra("hostConnected",false);
+                if(!backendCompatible){if(status!=null)status.setText("请重启，加载 0.2.0 系统后端后再测试。");return;}
                 if (status != null) status.setText(i.getStringExtra("report"));
                 Wire.notification(c, "active".equals(i.getStringExtra("state")) || "recovery".equals(i.getStringExtra("state")));
                 onBackendResult(i);

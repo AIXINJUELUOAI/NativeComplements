@@ -10,10 +10,6 @@
         </activity>
         <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="dev.local.sunwindowdemo.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" />
-        <service android:name=".CornerService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true" android:label="类原生补全 · 小窗控制">
-            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
-            <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility"/>
-        </service>
-        <receiver android:name=".StateRequestReceiver" android:exported="true"><intent-filter><action android:name="dev.local.sunwindowdemo.QUERY_GUARD_STATE"/></intent-filter></receiver>
+        <provider android:name=".ConfigProvider" android:authorities="dev.local.sunwindowdemo.settings" android:exported="true" />
     </application>
 </manifest>

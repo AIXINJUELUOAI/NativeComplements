@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SunOS / Nameless-AOSP 2023, Apache-2.0; original pinned-window colors and radius. -->
+<resources>
+    <color name="nc_pinned_window_button_background_color">#F2F0F2F2</color>
+    <color name="nc_pinned_window_button_color">#CC06080A</color>
+    <color name="nc_pinned_window_dim_color">#3306080A</color>
+    <dimen name="nc_pinned_window_menu_corner_radius_large">8dp</dimen>
+</resources>

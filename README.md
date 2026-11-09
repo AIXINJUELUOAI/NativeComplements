@@ -1,53 +1,64 @@
-# 类原生补全
+# NativeComplements
 
-面向小米 15 / PixelOS Android 17 的个人系统增强模块。第一版只接入小窗，首页不展示尚未实现的功能。管理界面采用 Compose Material 3 Expressive，支持系统动态颜色与深色模式。
+类原生 Android 功能补全模块。当前版本为 `0.2.0-preview20`（versionCode 33），目前只有小窗功能。
 
-## 当前版本
+设置界面采用 Compose Material 3 / Material 3 Expressive、系统动态颜色和深色模式。首页按功能独立跳转，功能可用后再加入入口。
 
-`0.1.0-preview1`，versionCode 13，applicationId `dev.local.sunwindowdemo`。
+## 当前小窗实现
 
-沿用 Demo8.2 的包名、签名和协议 14，覆盖升级保留 SharedPreferences("corner")、快捷应用顺序、禁用应用和既有设置。26 个运行层 Java 文件保持逐字节一致，包括窗口承载、白条、扇形菜单、返回长滑、迷你窗、动画、历史隐藏、恢复记录与三个 Hook 入口。`tests/verify_runtime.py` 以原始源码 ZIP 及摘要核对。
+- 基于原生 freeform 的默认小窗、mini、小窗与全屏切换，以及关联任务的独立小窗和返回接续。
+- 可见 mini 的生命周期与前台输入焦点分开处理；长按菜单提供本应用静音和 mini 大小切换，按钮与图标复用 SunOS 资源。
+- 保留应用方向、系统栏取色、最近任务恢复、锁屏后的窗口状态和固定浅色操作条。
+- SystemUI 承载操作层，system_server 管理任务；不依赖无障碍，不要求为普通应用逐个勾选 LSPosed 作用域。
 
-仍保留一个活动小窗、180 秒测试期限及原版已知问题；本次没有承诺完成 IME、完整 Shell 转场或所有应用兼容性。当前签名是原型测试签名，后续正式发布需单独规划签名迁移。
+这是一套针对已检查的 Android 17 / API 37 私有接口实现的 LSPosed 适配，并非 SunOS ROM 模式的完整移植。构建、主机检查与真机反馈分别记录，见 [VERIFICATION.md](VERIFICATION.md)。
 
-## 安装
+## 环境与构建
 
-1. 先在旧版恢复/关闭小窗，确认没有待恢复记录。
-2. 覆盖安装 `deliverables/NativeComplements-0.1.0-preview1.apk`，无需卸载或清除数据。
-3. LSPosed 保留三个作用域：`system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`，正常重启。
-4. 打开“类原生补全”→ 小窗 → 诊断与恢复，检查后端和无障碍服务。服务名称更新为“类原生补全 · 小窗控制”，组件名未变。
-5. 优先核对原快捷应用、各项参数和黑名单；再检查扇形菜单、侧边长滑、普通/迷你/全屏、关闭与恢复。
+- JDK 17+、Android SDK `android-37.0`，Gradle Wrapper 8.14.4。
+- SDK 路径通过 `ANDROID_HOME` 或本地 `local.properties` 配置。
+- 覆盖升级沿用本机 `.local/demo.keystore`；该文件不进入 Git，新的工作目录需要在本地配置原签名。
 
-安装、重启、手机手势操作由用户执行。电脑端检查与离屏截图不等于 LSPosed 真机验收。
-
-## 工程
-
-单 `app` Gradle 模块。界面组织为 `home`、`navigation`、`core/ui`、`features/floatingwindow/{ui,config,legacy}`。
-
-为了保留包内访问、反射路径及 Android 组件身份，小窗 Java 运行层目前仍使用 `dev.local.sunwindowdemo` 包，集中在 `legacy` 目录；没有在同一次迁移中重新拆解窗口后端。`MainActivity` / `SettingsActivity` 的组件名也保持不变。
-
-管理界面自己的适配类使用原来的偏好键，不重写小窗配置逻辑。系统端运行类不引用 Compose。旧版诊断 Activity 完整保留原有主题和行为。
-
-## 构建
-
-需要 JDK 17+、Android SDK `android-37.0`、Gradle 8.14.4。首次构建需要访问 Google Maven 和 Maven Central。
+Windows 下执行：
 
 ```powershell
-$env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
-.\gradlew.bat --no-daemon --console=plain :app:assembleRelease :app:testDebugUnitTest
-python tests\verify_runtime.py
+.\gradlew.bat --no-daemon --console=plain :app:assembleRelease
 ```
 
-`local.properties` 指定本机 SDK；原有 Demo 升级密钥保存在被 Git 忽略的 `.local/demo.keystore`，不打包进 APK。libxposed API 101.0.1 仅为 compileOnly，保存在 `app/libs`，不随 APK 打包。
+构建、检查包身份和签名并交付 APK：
 
-原始 Demo8.2 APK、源码 ZIP 和静态声明检查报告保存在 `baseline/`；静态报告为历史证据，没有将其冒充本次设备检查。
+```powershell
+python tests/package_release.py
+```
 
-## 停用和回退
+产物位于 `deliverables/NativeComplements-<version>.apk`。脚本只生成 APK，不生成源码 ZIP、备份或验收报告，不安装应用、不操作设备。
 
-先用“诊断与恢复 → 恢复原窗口”结束小窗，再到系统无障碍设置停用服务；如需停用 Hook，在 LSPosed 禁用模块后正常重启。
+## LSPosed 作用域
 
-`baseline` 中的旧 APK versionCode 为 12，不能当作可直接覆盖新版的回退包。不要为降级而卸载或清除数据。需要回到旧管理界面时，可基于保留的旧源码、同一签名构建更高版本号的恢复包；该回退包本轮未生成或安装。
+固定三个作用域：
 
-## 后续范围
+- `system`
+- `com.android.systemui`
+- `com.google.android.apps.nexuslauncher`
 
-先对第一版进行同设备迁移验收，再按具体复现步骤修复小窗 BUG。下一个功能做到可用后，才添加自己的首页条目、配置和设置页。统一跨进程远程偏好、启动健康计数和完整动态 Hook 启停尚未新增；现有预检、初始化异常回滚和窗口恢复机制保留。
+包名保持 `dev.local.sunwindowdemo`，宿主协议为 16。安装和重启由用户自行安排。
+
+## 项目结构
+
+- `app/src/main/java/dev/local/sunwindowdemo/home`、`navigation`、`core/ui`：首页、导航和共用界面。
+- `features/floatingwindow/config`、`features/floatingwindow/ui`：小窗配置与设置页。
+- `features/floatingwindow/legacy`：当前系统 Hook、任务管理、窗口呈现和输入处理。
+- `tests`：主机检查、归档接口签名和打包工具。
+- `baseline`：不可变 Demo8.2 来源、摘要和历史构建证据。
+
+`python tests/verify_runtime.py` 检查 Demo8.2 来源、变更登记及主机规则；`python tests/verify_target.py` 检查归档目标的一部分接口签名，后者不代表当前设备完整兼容性。
+
+## 开发约定
+
+以 `main` 集成，已交付版本使用 tag 固定。并行功能各用独立分支和 worktree；系统 Hook 入口、共用配置、首页导航与版本号统一集成。运行代码相对 Demo8.2 的变更原因记入 `tests/runtime-changes.json`。
+
+日志、构建缓存、设备采集、签名和交付文件不提交；源码通过 Git 版本管理，不创建逐轮目录副本。
+
+## 来源
+
+项目与复用资源的授权及修改说明见 [LICENSE](LICENSE) 和 [NOTICE.md](NOTICE.md)。原 Demo8.2 基线保持不变。

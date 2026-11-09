@@ -27,3 +27,20 @@ Demo8.2: adds a preference to hide the side long-swipe hint overlay while retain
 Demo8.2 additionally makes fan selection distance configurable (50%-100% of the drawn icon arc, default90%), independent of the menu-opening gesture distance. Drawing and selection share the animated/fitted radius.
 
 NativeComplements 0.1.0-preview1: migrates the management home and settings to Compose Material 3 Expressive in a single Gradle app module. The 26 Java runtime/diagnostic classes retain their exact Demo8.2 source bytes and package names. New app-process UI adapters preserve existing preference keys, signature permission, protocol 14 and accessibility component identity. This management UI migration does not port additional SunOS framework behavior.
+
+NativeComplements 0.2.0-preview1: replaces the accessibility host with a SystemUI window-context host and a UID-checked settings bridge. Generic raw-coordinate conversion follows the (raw - displayOffset) / displayScale semantics of SunOS MotionEventExt.java and ViewRootImplExt.java; per-task orientation follows WindowContainerExt.setOrientation, and the app-facing non-split distinction follows SunOS WindowConfiguration.inMultiWindowMode. These references belong to the same Nameless-AOSP / SunOS revision above, Apache-2.0. New LSPosed adapters, read-only per-task Binder queries, host lifecycle, icon normalization and task recovery changes are original module code. This does not import SunOS custom WM modes or claim identical full ROM behavior.
+
+0.2.0-preview2: local icon rasterization, detached-session recovery, system-server viewport configuration; no application-process hooks.
+
+0.2.0-preview3: adopts SunOS WindowState.canAffectSystemUiFlags popup exclusion from android_frameworks_base_old f9314eb17e9db7d37350e153d2b0993b7501f31b (Nameless-AOSP, Apache-2.0). Process transaction copies and logical display rotation/max bounds are original LSPosed adapters, not a full SunOS ROM port. SunOS floating-window inset filtering is preserved; no fabricated status-bar padding.
+
+
+0.2.0-preview5: restores Demo8.2 native freeform reporting while retaining logical rotation/max bounds and bar-appearance exclusion. Serial source-task handoff follows the source-based launch inheritance principle in SunOS PopUpWindowController.computeBeforeExecuteRequest (SDK revision above); restoration before acquiring the next task is original adapter code, not a port of SunOS multi-task popup lifecycle. TaskDecoration retains MiniWindowEdgeBarHelper fixed #FFF0F2F2 and adds an original dark outline; no automatic background sampling is claimed. No target framework or application decompilation is bundled.
+
+preview5: native root-launcher layout refresh; current-request caller-identity task handoff; fixed light handle without outline. These are module adaptations, not a complete SunOS framework port.
+
+0.2.0-preview6: adds an original temporary task-surface visibility guard with per-handoff cancellation and timeout, and bounded system-side launch/relaunch diagnostics. Existing source/caller inheritance follows the previously cited SunOS principle; this is not the SunOS popup mode or a full transition implementation. Fixed light handle is retained without the old outline.
+
+0.2.0-preview7: original freeform adaptations for explicit expansion focus, visible mini lifecycle eligibility and final transition flags/start-finish surface masking with late-commit recovery. Reviewed SunOS PopUpWindowController focus routing and target Android 17 framework behavior; no SunOS popup-mode transplant or app-process hooks.
+
+Preview20: mini menu vector icons, circle/menu shapes, colors, 42dp buttons and 20dp spacing reuse frameworks/res from SunOS android_sun-sdk commit 1f4bd2d7494dc2c317d86d156dcb3fc234a88aae (The Nameless-AOSP Project, Apache-2.0); resource names are prefixed nc_ and loaded from the module APK. The paired mini lifecycle predicates adapt ActivityRecord.isFocusableOrPopUpView usage in shouldBeResumed and shouldPauseActivity from android_frameworks_base_old commit f9314eb17e9db7d37350e153d2b0993b7501f31b; native task/input focus remains unchanged.

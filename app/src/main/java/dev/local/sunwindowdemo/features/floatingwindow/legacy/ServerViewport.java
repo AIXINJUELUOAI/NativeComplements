@@ -1,0 +1,135 @@
+package dev.local.sunwindowdemo;
+
+import android.content.res.Configuration;
+import android.os.IBinder;
+import android.graphics.Rect;
+import io.github.libxposed.api.*;
+import java.lang.reflect.*;
+import java.util.*;
+
+/** One logical viewport for the owned task, exported consistently from system_server.
+ * Native WM keeps its freeform task and transitions. Only outgoing copies are changed;
+ * unrelated activities and WM's cached reports remain native. A process override is
+ * mapped only when its configuration source is an activity in the owned task.
+ */
+final class ServerViewport {
+    private final FrameworkAccess a;
+    private final Class<?> merged;
+    private final Constructor<?> mergedCopy;
+    private ServerViewport(FrameworkAccess access)throws Exception{
+        a=access;merged=Class.forName("android.util.MergedConfiguration");
+        mergedCopy=merged.getDeclaredConstructor(merged);mergedCopy.setAccessible(true);
+        a.method(merged,"getOverrideConfiguration");a.method(merged,"setOverrideConfiguration",Configuration.class);
+        a.method(merged,"getGlobalConfiguration");a.method(merged,"setGlobalConfiguration",Configuration.class);
+        Class<?> windowConfig=Class.forName("android.app.WindowConfiguration");
+        a.method(windowConfig,"getDisplayRotation");a.method(windowConfig,"setDisplayRotation",int.class);
+        a.method(windowConfig,"setRotation",int.class);a.method(windowConfig,"setMaxBounds",Rect.class);
+        a.method(a.activity,"forTokenLocked",IBinder.class);a.method(a.activity,"getTask");
+        a.method(a.task,"forAllWindows",java.util.function.Consumer.class,boolean.class);
+    }
+    private Configuration configuration(Configuration original)throws Exception{
+        Configuration copy=new Configuration(original);
+        // Keep native freeform reporting, as in Demo8.2. Fullscreen reporting alone
+        // does not reproduce SunOS popup layout/insets and changes app title layout.
+        Object window=a.field(copy,"windowConfiguration");
+        Rect bounds=(Rect)a.call(window,"getBounds");
+        if(!bounds.isEmpty()){
+            // The app's logical display follows its task, not the physical display rotation.
+            boolean landscape=bounds.width()>bounds.height();
+            copy.orientation=landscape?Configuration.ORIENTATION_LANDSCAPE:Configuration.ORIENTATION_PORTRAIT;
+            int rotation=a.integer(window,"getDisplayRotation");
+            if(rotation<0||(rotation%2==1)!=landscape)rotation=landscape?1:0;
+            a.call(window,"setDisplayRotation",new Class<?>[]{int.class},rotation);
+            a.call(window,"setRotation",new Class<?>[]{int.class},rotation);
+            a.call(window,"setMaxBounds",new Class<?>[]{Rect.class},new Rect(bounds));
+        }
+        return copy;
+    }
+    private Configuration processConfiguration(Configuration original)throws Exception{
+        // A real display-wide configuration must never be rewritten. WPC's task-derived
+        // override carries freeform mode; the caller separately verifies its source task.
+        return a.integer(a.field(original,"windowConfiguration"),"getWindowingMode")==5
+            ?configuration(original):original;
+    }
+    private Object merged(Object original)throws Exception{
+        Object copy=mergedCopy.newInstance(original);
+        a.call(copy,"setGlobalConfiguration",new Class<?>[]{Configuration.class},processConfiguration((Configuration)a.call(copy,"getGlobalConfiguration")));
+        a.call(copy,"setOverrideConfiguration",new Class<?>[]{Configuration.class},configuration((Configuration)a.call(copy,"getOverrideConfiguration")));
+        return copy;
+    }
+    static void install(XposedModule module,FrameworkAccess a,WindowEngine engine,List<XposedInterface.HookHandle> handles)throws Exception{
+        ServerViewport policy=new ServerViewport(a);
+        String[] names={"LaunchActivityItem","ActivityRelaunchItem","ActivityConfigurationChangeItem","MoveToDisplayItem","WindowStateResizeItem"};
+        for(String name:names){
+            Class<?> type=Class.forName("android.app.servertransaction."+name);
+            boolean window=name.equals("WindowStateResizeItem");int installed=0;
+            for(Constructor<?> constructor:type.getDeclaredConstructors()){
+                Class<?>[] types=constructor.getParameterTypes();
+                if(types.length==0||!(window?types[0].getName().equals("android.view.IWindow"):types[0]==IBinder.class))continue;
+                int lastConfiguration=-1;
+                for(int i=1;i<types.length;i++)if(types[i]==Configuration.class)lastConfiguration=i;
+                final int overrideIndex=lastConfiguration;
+                constructor.setAccessible(true);
+                handles.add(module.hook(constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    boolean owned=window?engine.ownsClientWindow(chain.getArg(0)):engine.ownsActivityToken((IBinder)chain.getArg(0));
+                    boolean entry=name.equals("LaunchActivityItem")||name.equals("ActivityRelaunchItem");
+                    if(!owned&&!entry)return chain.proceed();
+                    Object[] args=new Object[types.length];
+                    for(int i=0;i<args.length;i++){
+                        args[i]=chain.getArg(i);
+                        // Launch carries both process and activity config. Mapping only the
+                        // activity left Application resources with the native freeform value.
+                        if(owned&&types[i]==Configuration.class&&args[i]!=null)args[i]=i==overrideIndex
+                            ?policy.configuration((Configuration)args[i]):policy.processConfiguration((Configuration)args[i]);
+                        else if(owned&&types[i]==policy.merged&&args[i]!=null)args[i]=policy.merged(args[i]);
+                        if(entry&&(types[i]==Configuration.class||types[i]==policy.merged))
+                            engine.trace.transaction((IBinder)chain.getArg(0),name,i,chain.getArg(i),args[i],owned);
+                    }
+                    return chain.proceed(args);
+                }));installed++;
+            }
+            if(installed==0)throw new NoSuchMethodException(name+" outgoing constructor");
+        }
+        Class<?> process=Class.forName("com.android.server.wm.WindowProcessController",false,a.task.getClassLoader());
+        Field configActivity=a.field(process,"mConfigActivityRecord");
+        Class<?> item=Class.forName("android.app.servertransaction.ConfigurationChangeItem");
+        Field itemConfig=a.field(item,"mConfiguration"),itemDevice=a.field(item,"mDeviceId");
+        Constructor<?> newItem=item.getDeclaredConstructor(Configuration.class,int.class);newItem.setAccessible(true);
+        Method schedule=a.method(process,"scheduleClientTransactionItem",Class.forName("android.app.IApplicationThread"),Class.forName("android.app.servertransaction.ClientTransactionItem"));
+        handles.add(module.hook(schedule).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+            Object outgoing=chain.getArg(1),source=configActivity.get(chain.getThisObject());
+            if(item.isInstance(outgoing)&&source!=null&&engine.owns(a.call(source,"getTask"))){
+                Configuration original=(Configuration)itemConfig.get(outgoing);
+                Configuration mapped=policy.processConfiguration(original);
+                if(mapped!=original)return chain.proceed(new Object[]{chain.getArg(0),newItem.newInstance(mapped,itemDevice.getInt(outgoing))});
+            }
+            return chain.proceed();
+        }));
+        Class<?> wms=Class.forName("com.android.server.wm.WindowManagerService",false,a.task.getClassLoader());
+        Class<?> resultType=Class.forName("android.view.WindowRelayoutResult");
+        Field resultConfig=a.field(resultType,"mergedConfiguration");
+        int installed=0;
+        for(Method method:wms.getDeclaredMethods())if(method.getName().equals("relayoutWindow")){
+            Class<?>[] types=method.getParameterTypes();int client=-1,result=-1;
+            for(int i=0;i<types.length;i++){
+                if(types[i].getName().equals("android.view.IWindow"))client=i;
+                if(types[i]==resultType)result=i;
+            }
+            if(client<0||result<0)continue;
+            final int clientIndex=client,resultIndex=result;method.setAccessible(true);
+            handles.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object value=chain.proceed();
+                if(value instanceof Integer&&(Integer)value<0)return value;
+                Object resultObject=chain.getArg(resultIndex);
+                if(resultObject!=null&&engine.ownsClientWindow(chain.getArg(clientIndex))){
+                    Object outgoing=resultConfig.get(resultObject);
+                    // This out parameter belongs to the Binder response, not WindowState's cache.
+                    a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing));
+                }
+                return value;
+            }));installed++;
+        }
+        if(installed!=1)throw new NoSuchMethodException("expected one relayoutWindow output, found "+installed);
+        module.log(4,"SunWindowDemo5","VIEWPORT_READY system-side launch/process/activity/resize/relayout logical-display");
+    }
+}

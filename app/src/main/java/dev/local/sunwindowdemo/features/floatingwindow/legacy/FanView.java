@@ -51,8 +51,12 @@ final class FanView extends View {
             paint.setColor(selected==i?0xffa7c7ff:0xff48515d);paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);
             if(i<apps.size()) {
                 android.graphics.drawable.Drawable drawable=apps.get(i).icon;
-                drawable.setBounds((int)(cx-size/2),(int)(cy-size/2),(int)(cx+size/2),(int)(cy+size/2));
-                drawable.setAlpha((int)(255*progress));drawable.draw(c);drawable.setAlpha(255);
+                int saved=c.save();Rect bounds=new Rect(drawable.getBounds());int alpha=drawable.getAlpha();
+                try{
+                    c.translate(cx-size/2,cy-size/2);c.clipRect(0,0,size,size);
+                    drawable.setBounds(0,0,Math.round(size),Math.round(size));
+                    drawable.setAlpha((int)(255*progress));drawable.draw(c);
+                }finally{drawable.setBounds(bounds);drawable.setAlpha(alpha);c.restoreToCount(saved);}
             } else {
                 paint.setColor(Color.WHITE);paint.setAlpha((int)(255*progress));paint.setStrokeWidth(size/18);paint.setStrokeCap(Paint.Cap.ROUND);
                 for(int line=-1;line<=1;line++) {float yy=cy+line*size*.17f;c.drawCircle(cx-size*.23f,yy,size*.035f,paint);c.drawLine(cx-size*.08f,yy,cx+size*.24f,yy,paint);}

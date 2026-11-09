@@ -9,7 +9,9 @@ import java.util.Set;
 
 final class Config {
     final SharedPreferences prefs;
-    Config(Context c) { prefs = c.getSharedPreferences("corner", Context.MODE_PRIVATE); }
+    static volatile SharedPreferences hostPreferences;
+    Config(Context c) { prefs = hostPreferences!=null?hostPreferences:c.getSharedPreferences("corner", Context.MODE_PRIVATE); }
+    boolean enabled(){return prefs.getBoolean("enabled",true);}
     int number(String key, int def, int min, int max) { return Rules.clamp(prefs.getInt(key, def), min, max); }
     static final int HEAT_MIN=36,HEAT_MAX=72;
     int heat() { return number("heat", HEAT_MIN, HEAT_MIN, HEAT_MAX); }

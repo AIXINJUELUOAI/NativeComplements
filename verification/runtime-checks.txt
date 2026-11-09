@@ -1,9 +1,0 @@
-﻿PASS geometry: 4 orientation combinations, safe-area clamp, invalid-input rejection
-PASS state thresholds: portrait/landscape/reversed orientation, drag directions, invalid scale
-PASS: corner/handle stream ownership, central navigation, cancellation, device/display isolation, bounds and defensive copies
-PASS: fan geometry 1..6, symmetry, icon spacing, diagonal threshold, package validation, blocking combinations
-PASS motion: SunOS bar scaling, radii, placement, reversible morph and centered entry/exit opacity/scale
-PASS back-long: SunOS portrait/landscape defaults, entry, withdrawal hysteresis, short/outward swipes, invalid input
-PASS history: multi-task close/switch persistence, fullscreen draw/transition gating, reload and task removal
-PASS: 26 runtime Java sources exactly match the packaged Demo8.2 baseline
-PASS: original seven host checks

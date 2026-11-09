@@ -11,8 +11,8 @@ android {
         applicationId = "dev.local.sunwindowdemo"
         minSdk = 34
         targetSdk = 37
-        versionCode = 13
-        versionName = "0.1.0-preview1"
+        versionCode = 33
+        versionName = "0.2.0-preview20"
     }
     signingConfigs {
         create("demoUpdate") {

@@ -58,7 +58,7 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
                             style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Normal)
                         when (current) {
                             Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true })
-                            Page.Window -> WindowScreen(controller.preferences, controller.runtime, { navigate(it) }, controller::accessibility)
+                            Page.Window -> WindowScreen(controller.preferences, controller.runtime, { navigate(it) }, controller::toggleControl)
                             Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                             Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean)
                             Page.Prevention -> PreventionScreen(controller.preferences, controller::boolean, { navigate(Page.Blocked) })
@@ -71,6 +71,6 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
         }
     }
     if (aboutVisible) AlertDialog(onDismissRequest = { aboutVisible = false }, title = { Text("类原生补全") },
-        text = { Text("${BuildConfig.VERSION_NAME}\n\n小窗基于 Demo8.2，保留原有手势、窗口和动画。当前为单活动小窗，每轮最多三分钟。\n\n窗口几何参考 Nameless / SunOS，遵循 Apache 2.0。") },
+        text = { Text("${BuildConfig.VERSION_NAME}\n\n小窗基于 Demo8.2，保留原有手势、窗口和动画。当前为单活动小窗，由 LSPosed / SystemUI 承载，无定时退出。\n\n窗口几何参考 Nameless / SunOS，遵循 Apache 2.0。") },
         confirmButton = { TextButton(onClick = { aboutVisible = false }) { Text("知道了") } })
 }

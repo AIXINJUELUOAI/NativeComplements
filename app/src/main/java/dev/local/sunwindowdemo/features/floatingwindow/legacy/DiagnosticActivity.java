@@ -24,8 +24,8 @@ public final class DiagnosticActivity extends DemoActivity {
             leaving = true; Wire.send(this, "RESTORE");
         });
         text("小窗触摸与键盘诊断", 21);
-        button("开始本页小窗测试（3 分钟）", () -> {
-            if(!backendCompatible||!CornerService.connected){Toast.makeText(this,"先完成预检并开启 Demo8.2 无障碍服务",1).show();return;}
+        button("开始本页小窗测试", () -> {
+            if(!backendCompatible||!hostConnected){Toast.makeText(this,"请先连接系统后端与 SystemUI 宿主",Toast.LENGTH_LONG).show();return;}
             landscape=false;padReset();Wire.send(this, "START", Wire.PKG, getTaskId(), token, false);
         });
         text("缩小后点击四角和中心圆点，观察是否分别变绿；再试双指、横屏和输入框。", 13);

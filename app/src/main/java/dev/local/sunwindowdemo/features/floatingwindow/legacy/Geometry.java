@@ -9,12 +9,27 @@ final class Geometry {
     record Placement(int width, int height, float scale, float x, float y) {}
 
     static Placement miniTopRight(Placement p,float normal,int left,int top,int right,int bottom,float margin){
+        return miniTopRight(p,normal,left,top,right,bottom,margin,false);
+    }
+    static Placement miniTopRight(Placement p,float normal,int left,int top,int right,int bottom,float margin,boolean large){
         if(p==null||p.width()<=0||p.height()<=0||!Float.isFinite(normal)||normal<=0
             ||!Float.isFinite(margin)||right<=left||bottom<=top||margin<0)throw new IllegalArgumentException("safe area");
-        float scale=Math.min(.28f,normal);
+        // SunOS small=.28, large portrait=.43 / landscape=.517. Keep the large
+        // preview below the normal size and fit the actual display safe area.
+        float small=Math.min(.28f,normal);
+        float scale=large?Math.max(small,Math.min(normal*.9f,p.width()>p.height()?.517f:.43f)):small;
         scale=Math.min(scale,Math.min((right-left-2*margin)/p.width(),(bottom-top-2*margin)/p.height()));
         if(scale<=0)throw new IllegalArgumentException("mini fit");
         return new Placement(p.width(),p.height(),scale,right-margin-p.width()*scale,top+margin);
+    }
+    static Placement resizeMini(Placement p,float normal,int left,int top,int right,int bottom,float margin,boolean large){
+        Placement target=miniTopRight(p,normal,left,top,right,bottom,margin,large);
+        float available=bottom-top-2*margin-p.height()*p.scale();
+        float ratio=available<=0?0:Math.max(0,Math.min(1,(p.y()-top-margin)/available));
+        boolean dockLeft=p.x()+p.width()*p.scale()/2<(left+right)/2f;
+        float x=dockLeft?left+margin:target.x();
+        float y=top+margin+ratio*Math.max(0,bottom-top-2*margin-p.height()*target.scale());
+        return new Placement(p.width(),p.height(),target.scale(),x,y);
     }
     static Placement place(int logicalShort, boolean appLandscape,
             int left, int top, int right, int bottom, int margin) {

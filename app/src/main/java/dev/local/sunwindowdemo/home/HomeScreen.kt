@@ -20,7 +20,8 @@ fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -
                 !runtime.compatible -> "需要重启手机"
                 runtime.state == "recovery" -> "有窗口等待恢复"
                 runtime.state == "active" -> "小窗正在运行"
-                !runtime.serviceConnected -> "开启小窗控制"
+                !runtime.controlEnabled -> "小窗控制已关闭"
+                !runtime.hostConnected -> "开启小窗控制"
                 else -> "小窗已就绪"
             }, style = MaterialTheme.typography.titleLarge)
             Text(when {
@@ -28,8 +29,9 @@ fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -
                 !runtime.compatible -> "点击查看启用步骤"
                 runtime.state == "recovery" -> "点击检查并恢复原窗口"
                 runtime.state == "active" -> "点击查看状态或恢复原窗口"
-                !runtime.serviceConnected -> "后端已连接 · 无障碍服务未连接"
-                else -> "系统后端与无障碍服务已连接"
+                !runtime.controlEnabled -> "在小窗页面点击顶部卡片开启"
+                !runtime.hostConnected -> "后端已连接 · SystemUI 宿主未连接"
+                else -> "系统后端与 SystemUI 宿主已连接"
             }, style = MaterialTheme.typography.bodyMedium)
         }
     }

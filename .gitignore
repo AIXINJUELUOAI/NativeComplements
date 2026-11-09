@@ -1,10 +1,23 @@
+# Local tools, signing material and machine configuration
 .gradle/
 .kotlin/
-**/build/
 .local/
-local.properties
-*.log
+.acl-recovery/
 .idea/
 *.iml
+local.properties
+*.keystore
+*.jks
+*.p12
+*.pfx
+
+# Reproducible outputs and temporary work
+**/build/
 deliverables/
-verification/host-classes/
+verification/
+.worktrees/
+__pycache__/
+*.py[cod]
+*.log
+.DS_Store
+Thumbs.db

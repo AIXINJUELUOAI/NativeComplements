@@ -57,7 +57,7 @@ class ManagementUiTest {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 32.dp)) {
                         androidx.compose.material3.Text("类原生补全", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 20.dp, 12.dp, 28.dp))
-                        HomeScreen(WindowRuntime(received = true, compatible = true, serviceConnected = true), { selected = true }, {}, {})
+                        HomeScreen(WindowRuntime(received = true, compatible = true, hostConnected = true), { selected = true }, {}, {})
                     }
                 }
             }

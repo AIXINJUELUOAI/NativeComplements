@@ -68,6 +68,7 @@ public final class LauncherGuard extends XposedModule {
         disconnect();context=service.getApplicationContext();
         receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent intent){
             if(!STATE.equals(intent.getAction()))return;
+            try{if(getSentFromUid()!=context.getPackageManager().getApplicationInfo(BackBridge.PACKAGE,0).uid)return;}catch(Exception e){return;}
             if(!intent.getBooleanExtra("enabled",false)){gate.disable();note("GUARD_STATE disabled");return;}
             android.os.Bundle extras=intent.getExtras();
             IBinder lease=extras==null?null:extras.getBinder("lease");
@@ -75,14 +76,14 @@ public final class LauncherGuard extends XposedModule {
             boolean accepted=gate.update(intent.getIntExtra("width",0),intent.getIntExtra("height",0),intent.getIntArrayExtra("rects"),intent.getIntArrayExtra("handleRects"),lease::isBinderAlive);
             note(accepted?"GUARD_STATE enabled":"GUARD_STATE rejected-geometry");
         }};
-        context.registerReceiver(receiver,new IntentFilter(STATE),Wire.PERMISSION,null,Context.RECEIVER_EXPORTED);
+        context.registerReceiver(receiver,new IntentFilter(STATE),null,null,Context.RECEIVER_EXPORTED);
         historyReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
             if(getSentFromUid()==1000&&i.getIntExtra("protocol",0)==Wire.PROTOCOL&&recents!=null)recents.configure(i);
         }};
         context.registerReceiver(historyReceiver,new IntentFilter(WindowEngine.HISTORY),null,null,Context.RECEIVER_EXPORTED);
         context.sendBroadcast(new Intent(WindowEngine.HISTORY_QUERY).setPackage("android"),null,
             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
-        context.sendBroadcast(new Intent(QUERY).setClassName("dev.local.sunwindowdemo","dev.local.sunwindowdemo.StateRequestReceiver"));
+        context.sendBroadcast(new Intent(QUERY).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
     private void disconnect(){gate.disable();if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
     private void note(String s){try{log(4,"CornerGuard",s);}catch(Throwable ignored){}}

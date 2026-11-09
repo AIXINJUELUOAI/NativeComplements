@@ -23,22 +23,23 @@ final class TaskDecoration {
         a.method(t,"setAlpha",SurfaceControl.class,float.class);
         a.method(t,"show",SurfaceControl.class);a.method(t,"hide",SurfaceControl.class);
         a.method(t,"remove",SurfaceControl.class);
-        a.field(a.wc,"mChildren");a.field(a.wc,"mLastLayer");a.field(a.wc,"mLastRelativeToLayer");
+        Class<?> controller=a.field(a.wc,"mTransitionController").getType();
+        a.method(controller,"isPlaying");a.method(controller,"isCollecting");
+        a.field(controller,"mBuildingTransitionLayers");
         a.method(a.task,"getTopVisibleAppMainWindow");
         Class<?> w=Class.forName("com.android.server.wm.WindowState",false,a.task.getClassLoader());
         a.method(w,"isDrawn");a.method(w,"isVisible");
     }
     private void tx(Object t,String name,Class<?>[] types,Object... args) throws Exception {a.call(t,name,types,args);}
-    /** WM keeps its logical order; explicitly restore the owned surface above its normal siblings. */
+    /** Reapply native sibling ordering after Shell playback; never invent a topmost Z. */
     void order(Object task,Object parent,Object t) throws Exception {
-        SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl"),anchor=null;
-        for(Object child:(List<?>)a.field(parent,"mChildren")){
-            if(child==task||!a.task.isInstance(child)||a.integer(child,"getWindowingMode")!=1)continue;
-            if(a.animating(child))continue;
-            SurfaceControl candidate=(SurfaceControl)a.field(child,"mSurfaceControl");
-            if(candidate!=null&&candidate.isValid())anchor=candidate;
-        }
-        if(anchor!=null)tx(t,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},surface,anchor,1);
+        Object controller=a.field(task,"mTransitionController");
+        if(a.bool(controller,"isPlaying")||a.bool(controller,"isCollecting")
+            ||(Boolean)a.field(controller,"mBuildingTransitionLayers"))return;
+        // Plain assignChildLayers skips root tasks with Shell transitions enabled.
+        // The native finish helper enables ordering and rewrites every sibling's
+        // cached layer, so a former fullscreen task cannot retain a stale higher Z.
+        a.finishLayers.invoke(null,parent,t);
     }
     boolean update(Object task,Object parent,Geometry.Placement p,float density,boolean landscape,float alpha,boolean structural) throws Exception {
         Object t=a.transaction(task);
@@ -84,20 +85,6 @@ final class TaskDecoration {
     }
     /** Undo our relative-layer override using current WM ordering after restoration. */
     void restoreLayer(Object task) throws Exception {
-        Object parent=a.call(task,"getParent"),t=a.transaction(task);
-        SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl");
-        List<?> children=(List<?>)a.field(parent,"mChildren");
-        int layer=0;boolean found=false;
-        // Same home / ordinary / always-on-top grouping as TaskDisplayArea.assignRootTaskOrdering.
-        for(int group=0;group<3&&!found;group++)for(Object child:children){
-            int bucket=a.bool(child,"isAlwaysOnTop")?2:a.integer(child,"getActivityType")==2?0:1;
-            if(bucket!=group)continue;
-            if(child==task){found=true;break;}layer++;
-        }
-        if(found){
-            tx(t,"setLayer",new Class<?>[]{SurfaceControl.class,int.class},surface,layer);
-            a.field(a.wc,"mLastLayer").setInt(task,layer);
-            a.field(a.wc,"mLastRelativeToLayer").set(task,null);
-        }
+        order(task,a.call(task,"getParent"),a.transaction(task));
     }
 }
