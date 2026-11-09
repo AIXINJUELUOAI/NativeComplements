@@ -1,7 +1,7 @@
 # NativeComplements
 
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
-- 首页按功能独立跳转；功能做到可用后再加入入口。当前只有小窗，不创建其他功能的占位页面或接口。
+- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗与电话拦截，不创建其他功能的占位页面或接口。
 - 单 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。
 - 第一版行为基线是 Demo8.2。基线原有26个Java文件，当前变更清单记录于 tests/runtime-changes.json，代码位于 features/floatingwindow/legacy，包名保持 dev.local.sunwindowdemo。修改小窗时记录原因，不改基线摘要来隐藏差异。
 - applicationId、三个系统作用域、签名权限和 corner 偏好键是覆盖升级兼容点。使用 SystemUI 宿主与协议16，不依赖无障碍，不增加普通应用作用域或包名特判。
@@ -14,3 +14,5 @@
 - main 用于集成，交付版本打 tag。并行任务使用各自的分支与 worktree；公共 Hook 入口、首页导航、共享配置和版本号由集成任务统一修改。
 - 保留用户未提交工作，不执行 reset 或强制推送。测试签名和原始基线不清理。
 - 小窗已移除180秒期限，配置由只读Provider同步到SystemUI；启动健康计数和全套动态Hook卸载尚未实现。
+
+- 电话拦截位于 features/callblocking；使用独立 CallBlockingModule 和 UID 检查的 CallBlockingProvider，设备保护存储。只使用既有 system 作用域，按实际来电 PhoneAccount 识别卡槽，不轮询铃响猜 SIM，不接管默认电话角色。

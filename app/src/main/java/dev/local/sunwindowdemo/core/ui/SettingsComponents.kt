@@ -102,6 +102,22 @@ fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceCont
                     drawRoundRect(container, point(.4f,.44f), Size(size.width*.55f,size.height*.46f), CornerRadius(3.dp.toPx()))
                     drawRoundRect(foreground, point(.4f,.44f), Size(size.width*.55f,size.height*.46f), CornerRadius(3.dp.toPx()), style=line)
                 }
+                "phone" -> {
+                    val handset = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(size.width*.2f, size.height*.1f)
+                        lineTo(size.width*.38f, size.height*.1f)
+                        lineTo(size.width*.45f, size.height*.33f)
+                        lineTo(size.width*.33f, size.height*.44f)
+                        quadraticBezierTo(size.width*.4f, size.height*.62f, size.width*.58f, size.height*.69f)
+                        lineTo(size.width*.7f, size.height*.57f)
+                        lineTo(size.width*.91f, size.height*.65f)
+                        lineTo(size.width*.91f, size.height*.82f)
+                        quadraticBezierTo(size.width*.8f, size.height*.99f, size.width*.5f, size.height*.79f)
+                        quadraticBezierTo(size.width*.08f, size.height*.54f, size.width*.12f, size.height*.2f)
+                        close()
+                    }
+                    drawPath(handset, foreground, style=line)
+                }
                 "apps" -> for (x in 0..2) for (y in 0..2) drawCircle(foreground, 2.3.dp.toPx(), point(.2f+x*.3f,.2f+y*.3f))
                 "gesture" -> {
                     drawLine(foreground,point(.16f,.84f),point(.8f,.2f),2.5.dp.toPx())

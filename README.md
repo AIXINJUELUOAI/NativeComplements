@@ -1,6 +1,6 @@
 # NativeComplements
 
-类原生 Android 功能补全模块。当前版本为 `0.2.0-preview20`（versionCode 33），目前只有小窗功能。
+类原生 Android 功能补全模块。当前版本为 `0.3.0-preview1`（versionCode 34），包含小窗与电话拦截。
 
 设置界面采用 Compose Material 3 / Material 3 Expressive、系统动态颜色和深色模式。首页按功能独立跳转，功能可用后再加入入口。
 
@@ -12,6 +12,15 @@
 - SystemUI 承载操作层，system_server 管理任务；不依赖无障碍，不要求为普通应用逐个勾选 LSPosed 作用域。
 
 这是一套针对已检查的 Android 17 / API 37 私有接口实现的 LSPosed 适配，并非 SunOS ROM 模式的完整移植。构建、主机检查与真机反馈分别记录，见 [VERIFICATION.md](VERIFICATION.md)。
+
+## 电话拦截
+
+- 首页独立设置页，按 SIM 物理卡槽识别双卡；每张卡可拦截全部来电或按号码规则过滤，保持 SIM 数据连接。
+- SIM2 可实时跟随 SIM1，关闭跟随后恢复 SIM2 自己的配置。所有拦截选项默认关闭。
+- `*` 匹配任意长度，连续星号合并：`952**` 与 `952*` 均匹配 952 开头的号码。未知号码适用单卡全拦，但不匹配号码规则。
+- 拦截记录仅存本机，保留最近 200 条并显示 SIM 和原因。应用的电话权限用于显示双卡名称与状态。
+- 系统 Hook 在真实来电的 PhoneAccount → SubscriptionInfo → 卡槽链路上判定，通过 Telecom 原有过滤结果执行挂断与通话日志，不占用默认拨号或来电识别应用角色。紧急回拨等原生紧急场景维持平台处理。
+- 本轮接口依据设备 Android 17 的 `service-telecom.jar` 核对，运行于现有 `system` 作用域，无新增普通应用作用域。设置页显示后端最近运行时间；实际来电效果仍需真机验收。
 
 ## 环境与构建
 
@@ -47,6 +56,7 @@ python tests/package_release.py
 
 - `app/src/main/java/dev/local/sunwindowdemo/home`、`navigation`、`core/ui`：首页、导航和共用界面。
 - `features/floatingwindow/config`、`features/floatingwindow/ui`：小窗配置与设置页。
+- `features/callblocking`：电话设置、规则、记录、受 UID 限制的 Provider 与独立系统 Telecom Hook。
 - `features/floatingwindow/legacy`：当前系统 Hook、任务管理、窗口呈现和输入处理。
 - `tests`：主机检查、归档接口签名和打包工具。
 - `baseline`：不可变 Demo8.2 来源、摘要和历史构建证据。

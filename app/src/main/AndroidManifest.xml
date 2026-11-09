@@ -2,6 +2,7 @@
     <permission android:name="dev.local.sunwindowdemo.CONTROL" android:protectionLevel="signature" />
     <uses-permission android:name="dev.local.sunwindowdemo.CONTROL" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <queries><package android:name="com.android.systemui"/><package android:name="com.google.android.apps.nexuslauncher"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
 <uses-permission android:name="android.permission.VIBRATE"/>
     <application android:label="@string/app_name" android:description="@string/description" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:supportsRtl="true" android:theme="@style/Theme.NativeComplements" android:enableOnBackInvokedCallback="true">
@@ -10,6 +11,7 @@
         </activity>
         <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="dev.local.sunwindowdemo.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" />
+        <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.local.sunwindowdemo.callblocking" android:exported="true" android:directBootAware="true" />
         <provider android:name=".ConfigProvider" android:authorities="dev.local.sunwindowdemo.settings" android:exported="true" />
     </application>
 </manifest>

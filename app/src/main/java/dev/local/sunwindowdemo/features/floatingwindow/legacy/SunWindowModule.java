@@ -8,7 +8,7 @@ public final class SunWindowModule extends XposedModule {
     private boolean eligible, attempted;
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
         eligible = p.isSystemServer();
-        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.2.0-preview20");
+        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.3.0-preview1");
     }
     @Override public void onSystemServerStarting(SystemServerStartingParam p) {
         note("SYSTEM_SERVER_START eligible=" + eligible + " attempted=" + attempted);
@@ -213,7 +213,7 @@ public final class SunWindowModule extends XposedModule {
                     try{Object result=chain.proceed();success=result!=null;return result;}
                     finally{engine.activityStartResult(ticket,success);}
                 }));
-            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.2.0-preview20; system scopes only");
+            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview1; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));
