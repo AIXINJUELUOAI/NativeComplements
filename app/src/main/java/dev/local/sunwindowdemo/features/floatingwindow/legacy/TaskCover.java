@@ -18,9 +18,10 @@ final class TaskCover {
     private final float radiusFrom,radiusTo;
     private final int iconSize;
     private final float[] color;
-    private final long began=SystemClock.elapsedRealtime(),duration,fadeDuration;
-    private long entryAt=-1,fadeAt=-1;
-    private boolean closed;
+    private long began=SystemClock.elapsedRealtime(),notBefore;
+    private final long duration,fadeDuration;
+    private long entryAt=-1,fadeAt=-1,hiddenAt=-1;
+    private boolean closed,exiting;
     private float ownerAlpha;
     private final boolean fadeIn;
     TaskCover(FrameworkAccess a,Context context,Object task,Object parent,String pkg,
@@ -63,12 +64,36 @@ final class TaskCover {
         return (SurfaceControl)a.call(b,"build");
     }
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
-    void target(RectF bounds){to.set(bounds);}
+    void target(RectF bounds){if(!exiting)to.set(bounds);}
+    void delayEntry(long delay){notBefore=SystemClock.elapsedRealtime()+Math.max(0,delay);}
+    boolean exiting(){return exiting;}
+    long exit(){
+        if(exiting)return 0;
+        exiting=true;ownerAlpha=0;began=SystemClock.elapsedRealtime();
+        from.set(to);float dx=from.width()*.025f,dy=from.height()*.025f;to.inset(dx,dy);
+        return fadeDuration;
+    }
     boolean step(boolean ready,boolean visible)throws Exception{
         if(closed)return false;
         long now=SystemClock.elapsedRealtime();
-        if(now-began>=3000){close();return false;}
-        if(fadeIn&&visible&&entryAt<0)entryAt=now;
+        if(!visible){
+            if(hiddenAt<0)hiddenAt=now;
+            if(mask.holding())mask.hold();
+            paint(1,0);return true;
+        }
+        if(hiddenAt>=0){
+            long paused=now-hiddenAt;
+            began+=paused;if(entryAt>=0)entryAt+=paused;if(fadeAt>=0)fadeAt+=paused;
+            if(notBefore>0)notBefore+=paused;
+            hiddenAt=-1;
+        }
+        if(exiting){
+            float q=fadeDuration==0?1:Math.min(1,(now-began)/(float)fadeDuration);
+            if(q>=1){close();return false;}
+            if(mask.holding())mask.hold();paint(1-(float)Math.pow(1-q,3),visible?1-q:0);return true;
+        }
+        if(now-began>=5000)throw new IllegalStateException("cover target frame timeout");
+        if(fadeIn&&visible&&entryAt<0&&now>=notBefore)entryAt=now;
         long elapsed=fadeIn?(entryAt<0?0:now-entryAt):now-began;
         float p=duration==0?1:Math.min(1,elapsed/(float)duration);
         if(ready&&p==1&&fadeAt<0){mask.release(ownerAlpha);fadeAt=now;}
@@ -94,6 +119,7 @@ final class TaskCover {
             a.call(tx,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},background,Math.min(Math.min(w,h)/2,radiusFrom+(radiusTo-radiusFrom)*p));
             a.call(tx,"setScale",new Class<?>[]{SurfaceControl.class,float.class,float.class},icon,size,size);
             a.call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},icon,x-pb.left+(w-iconSize*size)/2,y-pb.top+(h-iconSize*size)/2);
+            if(mask.holding())mask.inTransaction(tx,null);
             tx.setAlpha(background,alpha).setAlpha(icon,alpha);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},background);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},icon);

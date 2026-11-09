@@ -234,15 +234,19 @@ final class WindowControls {
                 public boolean onTouch(View v,MotionEvent e){
                     if(fullTransition||transitioning&&!inputPending)return true;
                     if(e.getActionMasked()==MotionEvent.ACTION_DOWN){dragging=true;start=landscape?e.getRawX():e.getRawY();startScale=scale;scaleZone=GestureMath.release(scale,normalScale,appLandscape,landscape);axis=landscape?logicalW:logicalH;return true;}
-                    if(e.getActionMasked()==MotionEvent.ACTION_MOVE){float delta=(landscape?e.getRawX():e.getRawY())-start;sendMoveScale(GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape));return true;}
+                    if(e.getActionMasked()==MotionEvent.ACTION_MOVE){float delta=(landscape?e.getRawX():e.getRawY())-start;
+                        if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));if(!next.equals(scaleZone)){scaleZone=next;if(!"normal".equals(next))v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}v.setAlpha("normal".equals(next)?1:.65f);return true;}
+                        sendMoveScale(GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape));return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_UP){
                         float delta=(landscape?e.getRawX():e.getRawY())-start;
                         float end=GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape);
                         frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;dragging=false;
                         // One final sample + commit, rather than stale MOVE, RESIZE and RELEASE messages.
-                        if(token!=null)Wire.control(c,"END_RESIZE",token,taskId,end,0,0);return true;
+                        v.setAlpha(1);
+                        if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));send("full".equals(next)?"FULL":"mini".equals(next)?"MINI":"NORMAL",0,0,0);}
+                        else if(token!=null)Wire.control(c,"END_RESIZE",token,taskId,end,0,0);return true;
                     }
-                    if(e.getActionMasked()==MotionEvent.ACTION_CANCEL){dragging=false;send("NORMAL",0,0,0);return true;}
+                    if(e.getActionMasked()==MotionEvent.ACTION_CANCEL){dragging=false;v.setAlpha(1);frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;send("NORMAL",0,0,0);return true;}
                     return true;
                 }
             });add(bar);

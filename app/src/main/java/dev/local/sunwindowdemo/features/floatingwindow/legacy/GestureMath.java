@@ -19,6 +19,10 @@ final class GestureMath {
         float min=Math.min(.28f,normal);
         return Math.max(min,Math.min(Math.max(min,max),scale));
     }
+    static String horizontalRelease(float delta,float threshold) {
+        if(!Float.isFinite(delta)||!Float.isFinite(threshold)||threshold<=0)throw new IllegalArgumentException("distance");
+        return delta>=threshold?"full":delta<=-threshold?"mini":"normal";
+    }
     static float dragScale(float start, float delta, int logicalAxis) {
         if (logicalAxis<=0) throw new IllegalArgumentException("axis");
         return Math.max(.28f,start+2f*delta/logicalAxis);

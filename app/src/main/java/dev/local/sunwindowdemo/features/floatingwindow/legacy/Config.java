@@ -27,6 +27,7 @@ final class Config {
     boolean hideRecents() { return prefs.getBoolean("hideRecents", false); }
     boolean doubleClose() { return prefs.getBoolean("doubleClose", false); }
     boolean notificationWindow() { return prefs.getBoolean("notificationWindow", true); }
+    boolean landscapeShareWindow() { return prefs.getBoolean("landscapeShareWindow", true); }
     boolean showHeat() { return prefs.getBoolean("showHeat", false); }
     List<String> apps() {
         Set<String> unique = new LinkedHashSet<>();

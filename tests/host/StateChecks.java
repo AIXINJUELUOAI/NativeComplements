@@ -2,6 +2,12 @@ package dev.local.sunwindowdemo;
 public final class StateChecks {
     static void eq(String expected,String got){if(!expected.equals(got))throw new AssertionError(expected+" != "+got);}
     public static void main(String[] args){
+        for(float density:new float[]{1,2,4}){
+            eq("normal",GestureMath.horizontalRelease(47*density,48*density));
+            eq("full",GestureMath.horizontalRelease(48*density,48*density));
+            eq("mini",GestureMath.horizontalRelease(-48*density,48*density));
+            eq("normal",GestureMath.horizontalRelease(0,48*density));
+        }
         eq("normal",GestureMath.release(.75f,.75f,false,false));
         eq("mini",GestureMath.release(.59f,.75f,false,false));
         eq("full",GestureMath.release(.87f,.75f,false,false));

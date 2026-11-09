@@ -83,3 +83,17 @@ for cls,kind,name,descriptor in [
  (entry,'fields','mSbn','Landroid/service/notification/StatusBarNotification;')]:
  assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==descriptor for m in notifications['classes'][cls][kind]),(cls,name,descriptor)
 print('PASS: archived SystemUI notification click and original PendingIntent launch signatures')
+
+handoff=json.loads((root/'tests/target/handoff-members.json').read_text())['classes']
+for cls,name,sig in [
+ ('Lcom/android/server/wm/ActivityStarter;','startActivityUnchecked','(Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/ActivityRecord;Landroid/service/voice/IVoiceInteractionSession;Lcom/android/internal/app/IVoiceInteractor;ILandroid/app/ActivityOptions;Lcom/android/server/wm/Task;Lcom/android/server/wm/TaskFragment;Lcom/android/server/wm/BackgroundActivityStartController$BalVerdict;Lcom/android/server/uri/NeededUriGrants;ILcom/android/server/wm/Transition;ZI)I'),
+ ('Lcom/android/server/wm/ActivityRecord;','isResolverOrDelegateActivity','()Z'),
+ ('Landroid/app/ActivityOptions;','fromBundle','(Landroid/os/Bundle;)Landroid/app/ActivityOptions;'),
+ ('Landroid/app/ActivityOptions;','setLaunchWindowingMode','(I)V'),
+ ('Landroid/app/ActivityOptions;','getLaunchWindowingMode','()I'),
+ ('Landroid/view/InsetsState;','setDisplayFrame','(Landroid/graphics/Rect;)V'),
+ ('Landroid/view/InsetsState;','setDisplayCutout','(Landroid/view/DisplayCutout;)V'),
+ ('Landroid/view/InsetsSource;','setVisible','(Z)Landroid/view/InsetsSource;')]:
+ assert any(m['name']==name and m['descriptor']==sig for m in handoff[cls]['methods']),(cls,name,sig)
+assert any(f['name']=='NO_CUTOUT' and f['type']=='Landroid/view/DisplayCutout;' for f in handoff['Landroid/view/DisplayCutout;']['fields'])
+print('PASS: archived early share launch and local viewport Insets signatures')

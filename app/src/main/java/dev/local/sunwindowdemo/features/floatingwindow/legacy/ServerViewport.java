@@ -26,6 +26,9 @@ final class ServerViewport {
         a.method(windowConfig,"setRotation",int.class);a.method(windowConfig,"setMaxBounds",Rect.class);
         a.method(a.activity,"forTokenLocked",IBinder.class);a.method(a.activity,"getTask");
         a.method(a.task,"forAllWindows",java.util.function.Consumer.class,boolean.class);
+        Class<?> state=Class.forName("android.view.InsetsState"),source=Class.forName("android.view.InsetsSource");
+        a.method(state,"setDisplayFrame",Rect.class);a.method(state,"setDisplayCutout",android.view.DisplayCutout.class);
+        a.field(android.view.DisplayCutout.class,"NO_CUTOUT");a.method(source,"setVisible",boolean.class);
     }
     private Configuration configuration(Configuration original)throws Exception{
         Configuration copy=new Configuration(original);

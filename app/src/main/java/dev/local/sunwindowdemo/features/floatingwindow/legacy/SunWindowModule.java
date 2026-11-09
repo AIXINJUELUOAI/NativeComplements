@@ -246,6 +246,7 @@ public final class SunWindowModule extends XposedModule {
                     Object result=chain.proceed();engine.trace.resumed((android.os.IBinder)chain.getArg(0));return result;
                 }));
             }catch(Exception e){note("ENTRY_LAYOUT_CALLBACK_UNAVAILABLE "+FrameworkAccess.reason(e));}
+            ShareWindow.install(this,a,engine,this::note);
             // Target Android 17 signature, checked against the connected device's
             // services.jar. Configure related tasks before handleStartResult requests Shell playback; preserve flags.
             Class<?> starter=Class.forName("com.android.server.wm.ActivityStarter",false,p.getClassLoader());

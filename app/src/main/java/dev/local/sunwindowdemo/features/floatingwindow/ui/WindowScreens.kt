@@ -59,6 +59,7 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
 @Composable
 fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
     SettingsGroup {
+        ToggleRow("横屏分享小窗打开", "横屏时将分享、打开方式选出的目标以小窗打开，保留底下应用的方向", p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
         ToggleRow("通知小窗打开", "点击普通应用通知时，用小窗打开对应页面；关闭后沿用系统方式", p.notificationWindow) { boolean("notificationWindow", it) }
         ToggleRow("双击空白处关闭", "开启时双击关闭普通小窗，关闭时单击关闭", p.doubleClose) { boolean("doubleClose", it) }
         ToggleRow("在多任务中隐藏小窗应用", "关闭或切换后继续隐藏；真正全屏打开并完成绘制后重新显示", p.hideRecents) { boolean("hideRecents", it) }

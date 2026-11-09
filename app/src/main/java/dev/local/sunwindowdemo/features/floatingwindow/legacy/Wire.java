@@ -93,7 +93,11 @@ final class Wire {
         sendRequest(context,request);
     }
     private static void sendRequest(Context context,Intent i){
-        if(BackBridge.PACKAGE.equals(context.getPackageName()))i.putExtra("hostReady",SystemUiHost.live!=null&&SystemUiHost.live.ready()).putExtra("lastTouch",SystemUiHost.lastTouch);
+        if(BackBridge.PACKAGE.equals(context.getPackageName())){
+            Config config=new Config(context);
+            i.putExtra("hostReady",SystemUiHost.live!=null&&SystemUiHost.live.ready()).putExtra("lastTouch",SystemUiHost.lastTouch)
+                .putExtra("landscapeShareWindow",config.enabled()&&config.landscapeShareWindow());
+        }
         Bundle b = new Bundle(); b.putBinder("lease", LEASE); if(listener!=null)b.putBinder("frameChannel",FRAMES); i.putExtras(b);
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
