@@ -1,6 +1,6 @@
 <resources>
     <string name="app_name">类原生补全</string>
-    <string name="description">类原生补全 · 小窗与电话拦截</string>
+    <string name="description">类原生补全 · 小窗、建议、电话拦截与防误触</string>
     <string name="accessibility_description">用于角落手势、快捷应用菜单和小窗触摸控制。检查窗口类型及前台应用，不读取页面正文。</string>
-    <color name="launcher_background">#DCE9E3</color>
+    <color name="launcher_background">#151515</color>
 </resources>

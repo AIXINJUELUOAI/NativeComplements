@@ -15,6 +15,11 @@ final class FanView extends View {
     private int selected=-1;
     private android.animation.ValueAnimator animator;
     private boolean firstFrame;
+    private int themeColor(int attr,int fallback){
+        android.util.TypedValue v=new android.util.TypedValue();
+        try{if(getContext().getTheme().resolveAttribute(attr,v,true))return v.resourceId!=0?getContext().getColor(v.resourceId):v.data;}
+        catch(RuntimeException ignored){}return fallback;
+    }
     private final Runnable startEntry=()->{
         if(!isAttachedToWindow())return;
         animator=android.animation.ValueAnimator.ofFloat(0,1);
@@ -48,7 +53,7 @@ final class FanView extends View {
             double a=Math.toRadians(Rules.angle(i,apps.size()+1));
             float cx=x+(right?-1:1)*r*(float)Math.cos(a),cy=y-r*(float)Math.sin(a);
             float size=icon*(selected==i?1.12f:1);
-            if(i==0){paint.setColor(selected==i?0xffa7c7ff:0xff48515d);paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);}
+            if(i==0){paint.setColor(themeColor(android.R.attr.colorAccent,0xff6750a4));paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);}
             if(i>0) {
                 android.graphics.drawable.Drawable drawable=apps.get(i-1).icon;
                 int saved=c.save();Rect bounds=new Rect(drawable.getBounds());int alpha=drawable.getAlpha();
@@ -58,7 +63,8 @@ final class FanView extends View {
                     drawable.setAlpha((int)(255*progress));drawable.draw(c);
                 }finally{drawable.setBounds(bounds);drawable.setAlpha(alpha);c.restoreToCount(saved);}
             } else {
-                paint.setColor(Color.WHITE);paint.setAlpha((int)(255*progress));
+                int background=themeColor(android.R.attr.colorAccent,0xff6750a4);
+                paint.setColor(Color.luminance(background)>.45?Color.BLACK:Color.WHITE);paint.setAlpha((int)(255*progress));
                 for(int dot=-1;dot<=1;dot++)c.drawCircle(cx+dot*size*.2f,cy,size*.065f,paint);
             }
         }

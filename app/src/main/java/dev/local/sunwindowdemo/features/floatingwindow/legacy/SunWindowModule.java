@@ -8,12 +8,48 @@ public final class SunWindowModule extends XposedModule {
     private boolean eligible, attempted;
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
         eligible = p.isSystemServer();
-        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.3.0-preview4");
+        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.4.0-preview1");
+    }
+    private void installUndimSuggestion(ClassLoader loader){
+        try{
+            Class<?> power=Class.forName("com.android.server.power.PowerManagerService",false,loader);
+            Class<?> group=Class.forName("com.android.server.power.PowerGroup",false,loader);
+            java.lang.reflect.Method event=power.getDeclaredMethod("userActivityNoUpdateLocked",group,long.class,int.class,int.class,int.class);
+            java.lang.reflect.Method dim=group.getDeclaredMethod("isPolicyDimLocked"),id=group.getDeclaredMethod("getGroupId"),wake=group.getDeclaredMethod("getWakefulnessLocked");
+            java.lang.reflect.Field context=power.getDeclaredField("mContext");
+            int touch=android.os.PowerManager.class.getDeclaredField("USER_ACTIVITY_EVENT_TOUCH").getInt(null);
+            int noLights=android.os.PowerManager.class.getDeclaredField("USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS").getInt(null);
+            if(event.getReturnType()!=boolean.class||dim.getReturnType()!=boolean.class||id.getReturnType()!=int.class
+                ||wake.getReturnType()!=int.class||context.getType()!=android.content.Context.class)throw new NoSuchMethodException("undim signature");
+            event.setAccessible(true);dim.setAccessible(true);id.setAccessible(true);wake.setAccessible(true);context.setAccessible(true);
+            android.os.Handler main=new android.os.Handler(android.os.Looper.getMainLooper());
+            hook(event).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                boolean offer=false;long time=(Long)chain.getArg(1);
+                try{Object g=chain.getArg(0);offer=(Integer)chain.getArg(2)==touch&&((Integer)chain.getArg(3)&noLights)==0
+                    &&(Integer)id.invoke(g)==0&&(Integer)wake.invoke(g)==1&&(Boolean)dim.invoke(g);}
+                catch(Exception ignored){}
+                Object result=chain.proceed();
+                if(offer&&Boolean.TRUE.equals(result))try{
+                    android.content.Context c=(android.content.Context)context.get(chain.getThisObject());
+                    main.post(()->{try{
+                        long age=android.os.SystemClock.uptimeMillis()-time;
+                        if(age<0||age>1500||!c.getSystemService(android.os.PowerManager.class).isInteractive()
+                            ||c.getSystemService(android.app.KeyguardManager.class).isKeyguardLocked())return;
+                        c.sendBroadcast(new android.content.Intent(dev.local.sunwindowdemo.features.suggestions.SuggestionStore.AWAKE)
+                            .setPackage(BackBridge.PACKAGE).putExtra("time",time),null,
+                            android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+                    }catch(RuntimeException ignored){}});
+                }catch(Exception ignored){}
+                return result;
+            });
+            note("SUGGESTIONS_UNDIM_READY");
+        }catch(Throwable unavailable){note("SUGGESTIONS_UNDIM_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
     }
     @Override public void onSystemServerStarting(SystemServerStartingParam p) {
         note("SYSTEM_SERVER_START eligible=" + eligible + " attempted=" + attempted);
         if (!eligible || attempted) return;
         attempted = true;
+        installUndimSuggestion(p.getClassLoader());
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         try {
             FrameworkAccess a = new FrameworkAccess(p.getClassLoader());

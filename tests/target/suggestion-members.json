@@ -1,0 +1,46 @@
+{
+  "artifacts": {
+    "services.jar": {
+      "size": 24951959,
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    },
+    "framework.jar": {
+      "size": 45060595,
+      "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f"
+    },
+    "SystemUI.apk": {
+      "size": 48329834,
+      "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
+    }
+  },
+  "classes": {
+    "com.android.server.power.PowerManagerService": [
+      "userActivityNoUpdateLocked(long, int, int, int): boolean",
+      "userActivityNoUpdateLocked(PowerGroup, long, int, int, int): boolean"
+    ],
+    "com.android.server.power.PowerGroup": [
+      "getGroupId(): int",
+      "getWakefulnessLocked(): int",
+      "isPolicyDimLocked(): boolean"
+    ],
+    "android.hardware.input.InputManager": [
+      "injectInputEvent(InputEvent, int): boolean",
+      "injectInputEvent(InputEvent, int, int): boolean"
+    ],
+    "com.android.systemui.statusbar.NotificationListener": [
+      "onNotificationPosted(StatusBarNotification, NotificationListenerService$RankingMap): void",
+      "onNotificationRemoved(StatusBarNotification, NotificationListenerService$RankingMap, int): void"
+    ]
+  },
+  "power_constants": {
+    "USER_ACTIVITY_EVENT_TOUCH": 2,
+    "USER_ACTIVITY_FLAG_NO_CHANGE_LIGHTS": 1,
+    "SCREEN_BRIGHT_WAKE_LOCK": 10
+  },
+  "systemui_manifest_permissions": [
+    "android.permission.READ_CLIPBOARD_IN_BACKGROUND",
+    "android.permission.SUPPRESS_CLIPBOARD_ACCESS_NOTIFICATION",
+    "android.permission.CAMERA",
+    "android.permission.WAKE_LOCK"
+  ]
+}

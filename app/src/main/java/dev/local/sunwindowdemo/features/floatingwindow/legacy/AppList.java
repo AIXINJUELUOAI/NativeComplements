@@ -53,7 +53,8 @@ final class AppList {
         final int surface,container,text,secondary,accent,tonal;
         final TextView manage,help,empty,bubble;
         final TextView[] tabs=new TextView[2];
-        final ScrollView selectedScroll;
+        final LinearLayout selectedScroll,tabRow;
+        final View divider;
         final LinearLayout selectedRows;
         final ListView list;
         final FrameLayout body;
@@ -94,26 +95,25 @@ final class AppList {
             manage=button("管理",this::toggleEditing);manage.setTextColor(text);manage.setIncludeFontPadding(false);manage.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
             header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));addView(header);
 
-            selectedScroll=new ScrollView(c);selectedScroll.setFillViewport(false);selectedScroll.setClipToPadding(false);selectedScroll.setVerticalScrollBarEnabled(false);selectedScroll.setPadding(0,0,dp(26),0);
-            selectedRows=new LinearLayout(c);selectedRows.setOrientation(VERTICAL);selectedScroll.addView(selectedRows,new ScrollView.LayoutParams(-1,-2));
-            addView(selectedScroll,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
+            selectedScroll=new LinearLayout(c);selectedScroll.setOrientation(VERTICAL);
+            selectedRows=new LinearLayout(c);selectedRows.setOrientation(VERTICAL);selectedScroll.addView(selectedRows,new LinearLayout.LayoutParams(-1,-2));
             selectedScroll.setOnDragListener((view,event)->drag(event));
             help=label("长按图标拖动排序；点击 + 添加、− 移除，完成后保存",11,secondary);
-            help.setPadding(dp(4),dp(2),dp(4),dp(4));help.setMaxLines(2);addView(help);
-            View divider=new View(c);divider.setBackgroundColor(blend(container,text,.12f));
-            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));addView(divider,line);
+            help.setPadding(dp(4),dp(2),dp(4),dp(4));help.setMaxLines(2);selectedScroll.addView(help);
+            divider=new View(c);divider.setBackgroundColor(blend(container,text,.12f));
+            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));selectedScroll.addView(divider,line);
 
-            LinearLayout tabRow=new LinearLayout(c);tabRow.setPadding(0,0,0,dp(compact?4:6));
+            tabRow=new LinearLayout(c);tabRow.setPadding(0,0,0,dp(compact?4:6));
             for(int i=0;i<2;i++){
                 final int target=i;tabs[i]=button(i==0?"应用":"快捷功能",()->setTab(target));
                 LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(compact?32:36),1);if(i==0)p.rightMargin=dp(6);
                 tabRow.addView(tabs[i],p);
             }
-            addView(tabRow);
+            selectedScroll.addView(tabRow);
             body=new FrameLayout(c);addView(body,new LinearLayout.LayoutParams(-1,0,1));
-            list=new ListView(c);list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setPadding(0,dp(2),0,dp(2));
+            list=new ListView(c);list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setPadding(0,dp(2),dp(18),dp(2));
             list.setVerticalScrollBarEnabled(false);list.setSelector(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
-            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,-1);lp.rightMargin=dp(26);body.addView(list,lp);
+            FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,-1);body.addView(list,lp);
             adapter=new BaseAdapter(){
                 public int getCount(){return rows.size();}
                 public Object getItem(int position){return rows.get(position);}
@@ -142,32 +142,27 @@ final class AppList {
                     return row;
                 }
             };
-            list.setAdapter(adapter);
-            empty=label("",14,secondary);empty.setGravity(Gravity.CENTER);empty.setPadding(dp(16),0,dp(16),0);body.addView(empty,new FrameLayout.LayoutParams(-1,-1));
+            list.addHeaderView(selectedScroll,null,false);list.setAdapter(adapter);
+            empty=label("",14,secondary);empty.setGravity(Gravity.CENTER);empty.setPadding(dp(16),0,dp(16),0);empty.setLayoutParams(new AbsListView.LayoutParams(-1,dp(72)));list.addFooterView(empty,null,false);
             bubble=label("",22,accent);bubble.setGravity(Gravity.CENTER);bubble.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
             bubble.setBackground(round(tonal,20));bubble.setVisibility(GONE);bubble.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
             FrameLayout.LayoutParams bp=new FrameLayout.LayoutParams(dp(40),dp(40),Gravity.TOP|Gravity.RIGHT);bp.rightMargin=dp(32);body.addView(bubble,bp);
             index=new IndexBar(c);body.addView(index,new FrameLayout.LayoutParams(dp(26),-1,Gravity.RIGHT));
+            list.setOnScrollListener(new AbsListView.OnScrollListener(){
+                public void onScrollStateChanged(AbsListView v,int state){}
+                public void onScroll(AbsListView v,int first,int count,int total){updateIndex();}
+            });
             renderSelected();setTab(0);
         }
         int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
-        int appTileHeight(){return compact?78:92;}
+        int appTileHeight(){return compact?66:72;}
         int sectionHeight(){return compact?22:26;}
-        @Override protected void onMeasure(int widthSpec,int heightSpec){
-            if(selectedScroll!=null&&MeasureSpec.getMode(heightSpec)!=MeasureSpec.UNSPECIFIED){
-                int fixed=getPaddingTop()+getPaddingBottom();
-                for(int i=0;i<getChildCount();i++){
-                    View child=getChildAt(i);if(child==selectedScroll||child==body||child.getVisibility()==GONE)continue;
-                    measureChildWithMargins(child,widthSpec,0,MeasureSpec.makeMeasureSpec(0,MeasureSpec.UNSPECIFIED),0);
-                    LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)child.getLayoutParams();fixed+=child.getMeasuredHeight()+p.topMargin+p.bottomMargin;
-                }
-                int room=Math.max(0,MeasureSpec.getSize(heightSpec)-fixed-dp(sectionHeight())-dp(appTileHeight())-dp(4));
-                int rowHeight=dp(appTileHeight()),count=Math.max(1,(chosen.size()+3)/4);
-                int cap=Math.min(room,dp(compact?132:260));
-                int height=Math.min(count*rowHeight,cap<rowHeight?cap:cap/rowHeight*rowHeight);
-                LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)selectedScroll.getLayoutParams();p.height=height;
-            }
-            super.onMeasure(widthSpec,heightSpec);
+        void updateIndex(){
+            if(index==null)return;
+            boolean scrolled=list.getFirstVisiblePosition()>0
+                || selectedScroll.getTop()+divider.getBottom()<=list.getPaddingTop();
+            index.setVisibility(!rows.isEmpty()&&scrolled?VISIBLE:GONE);
+            if(!scrolled&&bubble!=null)bubble.setVisibility(GONE);
         }
         int color(int attr,int fallback){
             TypedValue value=new TypedValue();
@@ -194,7 +189,7 @@ final class AppList {
         }
         void finishSaving(boolean success){
             if(disposed||!saving)return;saving=false;
-            if(success)editing=false;else Toast.makeText(c,"保存失败，请重试",Toast.LENGTH_SHORT).show();
+            if(success){editing=false;if(tab!=0)setTab(0);}else Toast.makeText(c,"保存失败，请重试",Toast.LENGTH_SHORT).show();
             renderSelected();adapter.notifyDataSetChanged();
         }
         void toggle(ShortcutTarget target){
@@ -208,8 +203,8 @@ final class AppList {
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
             manage.setText(saving?"保存中…":editing?"完成":"管理");manage.setEnabled(!saving);
-            help.setVisibility(editing&&!compact?VISIBLE:GONE);
-            int scrollY=selectedScroll.getScrollY();selectedRows.removeAllViews();
+            help.setVisibility(editing&&!compact?VISIBLE:GONE);tabRow.setVisibility(editing?VISIBLE:GONE);
+            selectedRows.removeAllViews();
             if(chosen.isEmpty()){
                 TextView hint=label(editing?"点击下方应用或快捷功能添加":"点击管理添加应用或快捷功能",12,secondary);hint.setGravity(Gravity.CENTER);
                 selectedRows.addView(hint,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
@@ -227,7 +222,7 @@ final class AppList {
                     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(2),0,dp(2),0);row.addView(child,p);
                 }
             }
-            selectedScroll.post(()->{if(!disposed)selectedScroll.scrollTo(0,scrollY);});requestLayout();
+            selectedScroll.post(this::updateIndex);requestLayout();
         }
         int dropIndex(float px,float py){
             float x=px+selectedScroll.getScrollX()-selectedRows.getLeft(),y=py+selectedScroll.getScrollY()-selectedRows.getTop();
@@ -258,11 +253,12 @@ final class AppList {
         }
         void scrollDrag(){
             if(!editing||saving||hover<0||disposed)return;
-            int edge=Math.min(dp(24),selectedScroll.getHeight()/3);
-            int direction=dragY<edge?-1:dragY>selectedScroll.getHeight()-edge?1:0;
+            int[] headerLocation=new int[2],listLocation=new int[2];selectedScroll.getLocationOnScreen(headerLocation);list.getLocationOnScreen(listLocation);
+            int top=listLocation[1]-headerLocation[1],edge=Math.min(dp(24),list.getHeight()/3);
+            int direction=dragY<top+edge?-1:dragY>top+list.getHeight()-edge?1:0;
             if(direction==0)return;
-            int old=selectedScroll.getScrollY();selectedScroll.scrollBy(0,direction*dp(10));
-            if(selectedScroll.getScrollY()!=old){highlightDrop();main.postDelayed(dragScroll,16);}
+            list.smoothScrollBy(direction*dp(10),16);
+            highlightDrop();main.postDelayed(dragScroll,16);
         }
         boolean drag(DragEvent event){
             if(!editing||saving||!(event.getLocalState() instanceof String)||selectedIndex((String)event.getLocalState())<0)return false;
@@ -283,17 +279,17 @@ final class AppList {
             boolean dense=compact;
             LinearLayout cell=new LinearLayout(c);cell.setOrientation(VERTICAL);cell.setGravity(Gravity.CENTER_HORIZONTAL);
             cell.setPadding(dp(2),dp(dense?2:4),dp(2),dp(2));cell.setBackground(ripple(Color.TRANSPARENT));
-            FrameLayout artwork=new FrameLayout(c);cell.addView(artwork,new LinearLayout.LayoutParams(-1,dp(dense?38:48)));
+            FrameLayout artwork=new FrameLayout(c);cell.addView(artwork,new LinearLayout.LayoutParams(-1,dp(dense?34:38)));
             ImageView image=new ImageView(c);Drawable icon=target.icon;
             if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
             image.setImageDrawable(icon);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int iconSize=dp(dense?36:42);artwork.addView(image,new FrameLayout.LayoutParams(iconSize,iconSize,Gravity.CENTER));
+            int iconSize=dp(dense?30:34);artwork.addView(image,new FrameLayout.LayoutParams(iconSize,iconSize,Gravity.CENTER));
             if(editing) {
                 TextView badge=label(selectedIndex(target.key())>=0?"−":"+",16,accent);badge.setGravity(Gravity.CENTER);badge.setBackground(round(tonal,12));badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
                 FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(22),dp(22),Gravity.TOP|Gravity.RIGHT);artwork.addView(badge,b);
             }
-            TextView title=label(target.label,12,text);title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setMaxLines(dense||target.isShortcut()?1:2);title.setEllipsize(TextUtils.TruncateAt.END);
-            cell.addView(title,new LinearLayout.LayoutParams(-1,dense?dp(18):target.isShortcut()?dp(17):dp(32)));
+            TextView title=label(target.label,11,text);title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setSingleLine(true);title.setIncludeFontPadding(false);title.setEllipsize(TextUtils.TruncateAt.END);
+            cell.addView(title,new LinearLayout.LayoutParams(-1,dp(17)));
             if(target.isShortcut()){TextView owner=label(target.appLabel,10,secondary);owner.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);owner.setSingleLine(true);owner.setEllipsize(TextUtils.TruncateAt.END);cell.addView(owner,new LinearLayout.LayoutParams(-1,dp(15)));}
             cell.setContentDescription(target.label+(target.isShortcut()?"，"+target.appLabel:"")+(editing?(selectedIndex(target.key())>=0?"，已选，点击移除":"，点击添加"):""));
             return cell;
@@ -308,12 +304,12 @@ final class AppList {
             for(int letter=0;letter<ALPHABET.length();letter++){
                 ArrayList<ShortcutTarget> group=new ArrayList<>();for(ShortcutTarget target:visible)if(sectionIndex(target.section)==letter)group.add(target);
                 if(group.isEmpty())continue;
-                sectionPositions[letter]=rows.size();rows.add(new AppRow(ALPHABET.substring(letter,letter+1),List.of()));
+                sectionPositions[letter]=rows.size()+list.getHeaderViewsCount();rows.add(new AppRow(ALPHABET.substring(letter,letter+1),List.of()));
                 for(int start=0;start<group.size();start+=4)rows.add(new AppRow(null,List.copyOf(group.subList(start,Math.min(start+4,group.size())))));
             }
             adapter.notifyDataSetChanged();boolean noRows=rows.isEmpty();
             empty.setText(tab==1?(shortcutLoading?"正在读取应用快捷功能…":shortcutMessage):"暂无可启动的应用");
-            empty.setVisibility(noRows?VISIBLE:GONE);list.setVisibility(noRows?GONE:VISIBLE);index.setVisibility(noRows?GONE:VISIBLE);bubble.setVisibility(GONE);
+            empty.setVisibility(noRows?VISIBLE:GONE);list.setVisibility(VISIBLE);updateIndex();bubble.setVisibility(GONE);
         }
         void applyShortcuts(AppCatalog.Shortcuts result){
             shortcuts.clear();shortcuts.addAll(result.items);shortcutMessage=result.message;

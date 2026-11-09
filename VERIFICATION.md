@@ -1,3 +1,18 @@
+# 0.4.0-preview1 验证记录
+
+当前版本：`0.4.0-preview1`，versionCode 40；原覆盖签名、包名、宿主协议16与三个系统作用域保持不变。
+
+- 本轮完成菜单滚动结构、截图保留、主题三点按钮、手机齿轮图标与独立建议模块。新增本次常亮、一次性按钮行为和系统轻震；SIM 拦截逻辑未修改。
+- `:app:testReleaseUnitTest --tests dev.local.sunwindowdemo.features.suggestions.SuggestionRulesTest` 通过：4 项检查覆盖前导零／全角数字、长号码排除、中文分享标点、主域与伪域区分、保留真实分享 URL／口令、宽松地址识别与输入长度边界。检查发现并修复了中文逗号后的分享文案被吞进 URL 的问题。
+- `python tests/verify_runtime.py` 通过：不可变 Demo8.2 基线、几何／手势／状态／历史、旋转、mini 磁吸、边缘区域与遮罩检查。`python tests/verify_target.py` 通过原有归档接口核对。
+- 新增输入、PowerGroup DIM/TOUCH 与通知回调依据现有设备归档核对，签名与归档 SHA256 记录在 `tests/target/suggestion-members.json`；归档 SystemUI 声明了后台剪贴板、相机与 WAKE_LOCK 权限。新增私有接口在运行时独立预检，缺失时只关闭相关能力。
+- `python tests/package_release.py` 通过：Release 编译、lintVital、APK CRC、版本／包名／原证书／静态作用域与四个既有入口检查。未新增模块入口或普通应用作用域。
+- 本轮没有安装 APK、重启设备或改动 LSPosed。交付时 ADB 无设备；短信接收权限、逐位输入、蓝牙／手电筒、常亮结束、链接深层跳转和菜单截图层级均仍需真机验收。构建和归档签名核对不代替真机效果。
+
+APK：`deliverables/NativeComplements-0.4.0-preview1.apk`
+
+SHA256：`03141bdd8a1412b780152401ea2d26eaa446d4f6d0d67c21919312394e7e942e`
+
 # 0.3.0-preview1 验证记录
 
 当前版本：`0.3.0-preview1`，versionCode 34，宿主协议16，沿用原覆盖升级签名与三个系统作用域。

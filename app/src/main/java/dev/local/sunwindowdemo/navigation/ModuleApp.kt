@@ -21,7 +21,7 @@ import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 
 enum class Page(val title: String) {
-    EdgeTouch("边缘防误触"), Calls("电话拦截"), Home("类原生补全"), Window("小窗"), Apps("快捷应用"), Gestures("手势与菜单"),
+    Suggestions("建议"), EdgeTouch("边缘防误触"), Calls("电话拦截"), Home("类原生补全"), Window("小窗"), Apps("快捷应用"), Gestures("手势与菜单"),
     Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"), Diagnostics("诊断与恢复"), About("关于")
 }
 
@@ -61,8 +61,9 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
                         Text(current.title, Modifier.padding(start = 12.dp, top = if(current == Page.Home) 42.dp else 4.dp, bottom = 28.dp),
                             style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Normal)
                         when (current) {
-                            Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true }, { navigate(Page.Calls) }, { navigate(Page.EdgeTouch) })
+                            Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true }, { navigate(Page.Calls) }, { navigate(Page.EdgeTouch) }, { navigate(Page.Suggestions) })
                             Page.Window -> WindowScreen(controller.preferences, controller.runtime, { navigate(it) }, controller::toggleControl)
+                            Page.Suggestions -> dev.local.sunwindowdemo.features.suggestions.SuggestionScreen(controller)
                             Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                             Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean)
                             Page.Prevention -> PreventionScreen(controller.preferences, controller::boolean, { navigate(Page.Blocked) })

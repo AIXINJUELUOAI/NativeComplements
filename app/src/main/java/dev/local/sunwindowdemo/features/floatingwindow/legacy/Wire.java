@@ -66,6 +66,20 @@ final class Wire {
             .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",target.user);
         sendRequest(context,i);
     }
+    static void openIntent(Context context,String pkg,Intent original){
+        if(!allowedPackage(pkg)||original==null||!pkg.equals(original.getPackage()))throw new IllegalArgumentException("suggestion target");
+        Intent target=new Intent(original).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent launch=PendingIntent.getActivity(context,UUID.randomUUID().hashCode(),target,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_ONE_SHOT);
+        Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
+            .putExtra("package",pkg).putExtra("taskId",-1).putExtra("token",token())
+            .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",android.os.Process.myUserHandle());
+        sendRequest(context,request);
+    }
+    static void inputDigits(Context context,String digits,int delay,ResultReceiver receiver){
+        Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OTP_INPUT")
+            .putExtra("token",token()).putExtra("digits",digits).putExtra("delay",delay).putExtra("inputReply",receiver);
+        sendRequest(context,request);
+    }
     private static void sendRequest(Context context,Intent i){
         if(BackBridge.PACKAGE.equals(context.getPackageName()))i.putExtra("hostReady",SystemUiHost.live!=null&&SystemUiHost.live.ready()).putExtra("lastTouch",SystemUiHost.lastTouch);
         Bundle b = new Bundle(); b.putBinder("lease", LEASE); if(listener!=null)b.putBinder("frameChannel",FRAMES); i.putExtras(b);

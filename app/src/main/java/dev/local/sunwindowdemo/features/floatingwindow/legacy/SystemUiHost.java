@@ -82,7 +82,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             data.enforceInterface(BackBridge.CHANNEL);
             if(code==android.os.IBinder.FIRST_CALL_TRANSACTION+3){
                 boolean shown=data.readBoolean();data.enforceNoDataAvail();
-                main.post(()->{screenshotVisible=shown;updateOverlayPriority();if(shown){hideFan();hidePanel();removeHot();}else refresh();});return true;
+                main.post(()->{screenshotVisible=shown;updateOverlayPriority();if(shown){hideFan();removeHot();}else refresh();});return true;
             }
             if(code==android.os.IBinder.FIRST_CALL_TRANSACTION+1){
                 int stage=data.readInt();data.enforceNoDataAvail();
@@ -137,6 +137,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
 
     }
     private WindowControls controls;
+    private SuggestionHost suggestions;
+    private int suggestionImeTop=Integer.MAX_VALUE;
+    void suggestionNotification(android.service.notification.NotificationListenerService source,android.service.notification.StatusBarNotification notification){
+        main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);});
+    }
+    void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);});}
     private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
     boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
     private volatile boolean backendReady;
@@ -149,7 +155,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(cleaned||controls==null)return;
         backendReady=true;backendState=i.getStringExtra("state");
         if(i.hasExtra("foreground")){foreground=i.getStringExtra("foreground");keyboard=i.getBooleanExtra("imeVisible",false);systemFocus=i.getBooleanExtra("systemOverlay",false);
-            updateOverlayPriority();controls.imeTop(i.getIntExtra("imeTop",Integer.MAX_VALUE));refresh();}
+            suggestionImeTop=i.getIntExtra("imeTop",Integer.MAX_VALUE);
+            updateOverlayPriority();controls.imeTop(suggestionImeTop);refresh();}
         if(i.hasExtra("immersive"))immersive=i.getBooleanExtra("immersive",false);
         activeTask="active".equals(backendState)?i.getIntExtra("taskId",-1):-1;
         publish(false);
@@ -193,6 +200,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         Config.hostPreferences=getSharedPreferences("nativecomplements_corner",Context.MODE_PRIVATE);
         config=new Config(this);wm=getSystemService(WindowManager.class);
         controls=new WindowControls(this);
+        try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
         edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
@@ -218,6 +226,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         },"corner-app-catalog").start();
     }
     private void updateOverlayPriority(){
+        if(panel!=null&&panel.getLayoutParams() instanceof WindowManager.LayoutParams p){
+            int mask=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            int next=screenshotVisible||systemFocus?p.flags|mask:p.flags&~mask;
+            if(next!=p.flags){p.flags=next;try{wm.updateViewLayout(panel,p);}catch(RuntimeException ignored){}}
+        }
+        if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panel!=null,suggestionImeTop);
         if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);
         if(edgeTouch!=null)edgeTouch.setEnvironment(screenshotVisible||systemFocus,keyboard);
     }
@@ -235,7 +249,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         p.setFitInsetsTypes(0);p.setTitle("NativeComplements-corner");trust(p);return p;
     }
     private void refresh() {
-        if(!allowed()){hideFan();if(panel!=null)hidePanel();removeHot();return;}
+        if(!allowed()){hideFan();if(panel!=null&&!(screenshotVisible||systemFocus))hidePanel();removeHot();return;}
         if(left==null)addHot(false);if(right==null)addHot(true);
         publish(false);
     }
@@ -376,10 +390,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             public void onViewDetachedFromWindow(View v){if(panelDispatcher!=null){panelDispatcher.unregisterOnBackInvokedCallback(panelBack);panelDispatcher=null;}}
         });
         outside.setAlpha(0);
-        try{wm.addView(outside,p);outside.animate().alpha(1).setDuration(150).start();publish(false);}
+        try{wm.addView(outside,p);outside.animate().alpha(1).setDuration(150).start();updateOverlayPriority();publish(false);}
         catch(RuntimeException failure){panel=null;Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
     }
-    private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;publish(false);}}
+    private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;updateOverlayPriority();publish(false);}}
     private void launch(String key) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
         ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
@@ -400,5 +414,5 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     @Override public void onConfigurationChanged(Configuration c){hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;if(shortcutLauncher!=null)try{shortcutLauncher.unregisterCallback(shortcutChanges);}catch(RuntimeException ignored){}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
+    private void cleanup(){if(cleaned)return;if(shortcutLauncher!=null)try{shortcutLauncher.unregisterCallback(shortcutChanges);}catch(RuntimeException ignored){}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
 }

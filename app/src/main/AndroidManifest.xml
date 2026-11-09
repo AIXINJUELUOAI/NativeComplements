@@ -3,6 +3,7 @@
     <uses-permission android:name="dev.local.sunwindowdemo.CONTROL" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <queries><package android:name="com.android.systemui"/><package android:name="com.google.android.apps.nexuslauncher"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
 <uses-permission android:name="android.permission.VIBRATE"/>
     <application android:label="@string/app_name" android:description="@string/description" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:supportsRtl="true" android:theme="@style/Theme.NativeComplements" android:enableOnBackInvokedCallback="true">
@@ -13,6 +14,10 @@
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" />
         <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.local.sunwindowdemo.callblocking" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.local.sunwindowdemo.edgetouch" android:exported="true" android:directBootAware="true" />
+        <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
+        </receiver>
+        <provider android:name=".features.suggestions.SuggestionProvider" android:authorities="dev.local.sunwindowdemo.suggestions" android:exported="true" android:directBootAware="true" />
         <provider android:name=".ConfigProvider" android:authorities="dev.local.sunwindowdemo.settings" android:exported="true" />
     </application>
 </manifest>

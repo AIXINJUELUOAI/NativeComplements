@@ -15,7 +15,7 @@ import java.util.function.Consumer;
 import org.json.*;
 
 /** Related freeform tasks share one presentation and a live host lease.
- * No global freeform override, input injection, or system configuration writes.
+ * No global freeform override or system configuration writes. Explicit suggestion input is isolated.
  */
 final class WindowEngine {
     final FrameworkAccess a;
@@ -26,6 +26,7 @@ final class WindowEngine {
     private Handler handler;
     private Choreographer frames;
     private WindowAudio audio;
+    private SuggestionInput suggestionInput;
     private boolean visibleResumeReady;
     void visibleResumeReady(){visibleResumeReady=true;}
     private IBinder frameSink;
@@ -152,6 +153,8 @@ final class WindowEngine {
             handler = new Handler(worker.getLooper());
             handler.post(()->{
                 audio=WindowAudio.create(context,handler,log);
+                try{suggestionInput=new SuggestionInput(a,context,root,lock,handler);log.accept("SUGGESTIONS_INPUT_READY");}
+                catch(Exception unavailable){log.accept("SUGGESTIONS_INPUT_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
                 try{frames=(Choreographer)Choreographer.class.getDeclaredMethod("getSfInstance").invoke(null);}
                 catch(Exception e){frames=Choreographer.getInstance();log.accept("SF_CLOCK_FALLBACK "+e.getClass().getSimpleName());}
             });
@@ -216,6 +219,11 @@ final class WindowEngine {
             }
             if ("STATUS".equals(op)) { pushHistory();report("STATUS"); return; }
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
+            if ("OTP_INPUT".equals(op)) {
+                if(suggestionInput!=null)suggestionInput.start(i);
+                else{ResultReceiver receiver=i.getParcelableExtra("inputReply",ResultReceiver.class);if(receiver!=null)receiver.send(0,null);}
+                return;
+            }
             if ("GESTURE".equals(op)) { cancelStart("gesture");trace.stop();gestureStart(new Intent(i).putExtra("generation",++openGeneration),0);return; }
             if ("OPEN".equals(op)) { cancelStart("open");trace.stop();open(new Intent(i).putExtra("generation",++openGeneration),0); return; }
             if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)||"RESTORE_MINI".equals(op)||"MINI_DRAG".equals(op)||"MINI_DRAG_CANCEL".equals(op)||"EDGE_DRAG".equals(op)||"EDGE_DOCK".equals(op)||"EDGE_BAR_DRAG".equals(op)||"EDGE_BAR_DOCK".equals(op)||"EDGE_DRAG_CANCEL".equals(op)) {
