@@ -49,7 +49,7 @@ final class WindowEngine {
             data.enforceInterface(Wire.CHANNEL);
             Intent i=Intent.CREATOR.createFromParcel(data);data.enforceNoDataAvail();
             String op=i.getStringExtra("op");
-            if(!java.util.Set.of("RESIZE","END_RESIZE","MOVE","RELEASE","DOCK","MINI","NORMAL","FULL","CLOSE","MINI_SIZE","MUTE").contains(op==null?"":op))return false;
+            if(!java.util.Set.of("RESIZE","END_RESIZE","MOVE","RELEASE","DOCK","MINI","NORMAL","FULL","CLOSE","MINI_SIZE","MUTE","RESTORE_MINI").contains(op==null?"":op))return false;
             handler.post(()->enqueueControl(i));return true;
         }
     };
@@ -83,7 +83,11 @@ final class WindowEngine {
         Object task, parent;
         int taskId, userId, mode, logicalShort, topState;
         int uid=-1;
-        boolean miniLarge;
+        boolean miniLarge,edgeHidden,geometryDirty,refreshingGeometry;
+        int edgeSide;
+        float placementMargin;
+        Rect safeBounds;
+        Geometry.Placement miniPlacement;
         String lastRuntimeState;
         Rect lastSurfaceCrop;
         String pkg, token, component, baseId;
@@ -193,7 +197,7 @@ final class WindowEngine {
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
             if ("GESTURE".equals(op)) { cancelStart("gesture");trace.stop();gestureStart(new Intent(i).putExtra("generation",++openGeneration),0);return; }
             if ("OPEN".equals(op)) { cancelStart("open");trace.stop();open(new Intent(i).putExtra("generation",++openGeneration),0); return; }
-            if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)) {
+            if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)||"RESTORE_MINI".equals(op)) {
                 control(i); return;
             }
             if ("RESTORE".equals(op)) {
@@ -580,8 +584,12 @@ final class WindowEngine {
             else report("MUTE");
             return;
         }
+        if("RESTORE_MINI".equals(op)){
+            if("mini".equals(s.frame)&&s.edgeHidden&&!s.transitioning)restoreMini(s);
+            return;
+        }
         if("MINI_SIZE".equals(op)){
-            if(!"mini".equals(s.frame)||s.transitioning||s.entering)return;
+            if(!"mini".equals(s.frame)||s.edgeHidden||s.transitioning||s.entering)return;
             resizeMini(s);return;
         }
         s.animationRev++;s.transitioning=false;s.radiusFactor=1;
@@ -608,16 +616,20 @@ final class WindowEngine {
                 if("full".equals(target)){fullscreen(s);return;}
                 state(s,target);return;
             } else if("MOVE".equals(op)||"DOCK".equals(op)) {
-                if(!"mini".equals(s.frame))return;
+                if(!"mini".equals(s.frame)||s.edgeHidden)return;
                 float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
                 if(!Float.isFinite(x)||!Float.isFinite(y))throw new IllegalArgumentException("position");
                 Rect safe=safeArea(a.call(s.task,"getDisplayContent"));
                 float margin=a.config(s.task,false).densityDpi/160f*12;
-                if("DOCK".equals(op))x=x+p.width()*p.scale()/2<safe.centerX()?safe.left+margin:safe.right-margin-p.width()*p.scale();
+                if("DOCK".equals(op)){
+                    int side=Geometry.hideSide(p,x,safe.left,safe.right,margin);
+                    if(side!=0){hideMini(s,p,side,y,safe,margin);return;}
+                    x=x+p.width()*p.scale()/2<safe.centerX()?safe.left+margin:safe.right-margin-p.width()*p.scale();
+                }
                 x=Math.max(safe.left,Math.min(x,safe.right-p.width()*p.scale()));
                 y=Math.max(safe.top,Math.min(y,safe.bottom-p.height()*p.scale()));
                 Geometry.Placement destination=new Geometry.Placement(p.width(),p.height(),p.scale(),x,y);
-                if("DOCK".equals(op)){animate(s,p,destination,false,0,0);return;}
+                if("DOCK".equals(op)){s.miniPlacement=destination;animate(s,p,destination,false,0,0);return;}
                 s.placement=destination;
             }
             renderFrame(s);
@@ -710,7 +722,7 @@ final class WindowEngine {
                 if(active!=s||s.restoring||revision!=s.animationRev)return;
                 try{
                     synchronized(lock){
-                        if(s.screenSuspended||a.animating(s.task)){
+                        if(s.screenSuspended||a.presentationLeashed(s.task)){
                             if(began>=0&&lastFrame>=0)began+=now-lastFrame;
                             lastFrame=now;frames.postFrameCallback(this);return;
                         }
@@ -735,7 +747,13 @@ final class WindowEngine {
     private void state(Session s,String target) throws Exception {
         if(s.entering)return;
         float startBar="mini".equals(s.frame)?0:s.barAlpha;
-        s.frame=target;s.animationRev++;s.fullTransition=false;s.radiusFactor=1;
+        if("mini".equals(s.frame)&&!s.edgeHidden)s.miniPlacement=s.placement;
+        if("normal".equals(s.frame)&&s.placement!=null){
+            Geometry.Placement p=s.placement;
+            s.normalPlacement=new Geometry.Placement(p.width(),p.height(),s.defaultScale,
+                p.x()+p.width()*(p.scale()-s.defaultScale)/2,p.y()+p.height()*(p.scale()-s.defaultScale)/2);
+        }
+        s.edgeHidden=false;s.frame=target;s.animationRev++;s.fullTransition=false;s.radiusFactor=1;
         Geometry.Placement start=s.placement;
         if(start==null){refresh(s);report("STATE");return;}
         Rect safe=new Rect();
@@ -746,12 +764,30 @@ final class WindowEngine {
         float x=normal!=null?normal.x():safe.centerX()-start.width()*scale/2;
         float y=normal!=null?normal.y():safe.centerY()-start.height()*scale/2;
         if("mini".equals(target)) {
-            Geometry.Placement mini=Geometry.miniTopRight(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
-            x=mini.x();y=mini.y();scale=mini.scale();
+            Geometry.Placement mini=s.miniPlacement==null
+                ?Geometry.miniTopRight(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge)
+                :Geometry.resizeMini(s.miniPlacement,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
+            s.miniPlacement=mini;x=mini.x();y=mini.y();scale=mini.scale();
         }
         Geometry.Placement end=new Geometry.Placement(start.width(),start.height(),scale,x,y);
         // Change focus after the surface morph; avoid starting a competing native transition first.
         animate(s,start,end,false,startBar,"mini".equals(target)?0:1);
+    }
+    private void hideMini(Session s,Geometry.Placement start,int side,float y,Rect safe,float margin)throws Exception{
+        float height=start.height()*start.scale(),width=start.width()*start.scale();
+        y=Math.max(safe.top+margin,Math.min(y,safe.bottom-margin-height));
+        s.miniPlacement=new Geometry.Placement(start.width(),start.height(),start.scale(),
+            side<0?safe.left+margin:safe.right-margin-width,y);
+        s.edgeHidden=true;s.edgeSide=side;
+        animate(s,start,Geometry.offscreen(s.miniPlacement,side,0,s.displayW,margin),false,0,0);
+        log.accept("MINI_EDGE_HIDE task="+s.taskId+" side="+side);
+    }
+    private void restoreMini(Session s)throws Exception{
+        Geometry.Placement end=s.miniPlacement;
+        if(end==null)return;
+        s.animationRev++;s.edgeHidden=false;
+        animate(s,s.placement,end,false,0,0);
+        log.accept("MINI_EDGE_RESTORE task="+s.taskId+" side="+s.edgeSide);
     }
     private void resizeMini(Session s)throws Exception{
         synchronized(lock){
@@ -760,15 +796,15 @@ final class WindowEngine {
             float margin=a.config(s.task,false).densityDpi/160f*12;
             s.miniLarge=!s.miniLarge;s.animationRev++;s.radiusFactor=1;
             Geometry.Placement end=Geometry.resizeMini(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
-            animate(s,start,end,false,0,0);
+            s.miniPlacement=end;animate(s,start,end,false,0,0);
         }
     }
     private void fullscreen(Session s) throws Exception {
         Geometry.Placement start=s.placement;
         Rect bounds;
-        synchronized(lock){bounds=new Rect((Rect)a.call(a.call(s.task,"getDisplayContent"),"getBounds"));
-            a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},true);
-            a.call(s.task,"moveToFront",new Class<?>[]{String.class},"SunWindowDemo8.2-full");}
+        synchronized(lock){bounds=new Rect((Rect)a.call(a.call(s.task,"getDisplayContent"),"getBounds"));}
+        // Keep the native foreground identity until the morph finishes. The endpoint
+        // restores focus/configuration together instead of starting a second transition now.
         // Preserve aspect ratio while expanding. Real fullscreen configuration is restored at
         // the endpoint; Android owns the final app relayout (especially orientation changes).
         float scale=Math.min((float)bounds.width()/start.width(),(float)bounds.height()/start.height());
@@ -792,7 +828,7 @@ final class WindowEngine {
                 if(active!=s||s.restoring||s.animationRev!=revision)return;
                 try{
                     synchronized(lock){
-                        if(s.screenSuspended||a.animating(s.task)){
+                        if(s.screenSuspended||a.presentationLeashed(s.task)){
                             nativeWaits++;
                             if(began>=0&&lastFrame>=0)began+=time-lastFrame;
                             lastFrame=time;frames.postFrameCallback(this);return;
@@ -950,13 +986,17 @@ final class WindowEngine {
             s.defaultScale=p.scale();s.normalPlacement=p;
             if("mini".equals(s.frame)) p=Geometry.miniTopRight(p,p.scale(),safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
             s.placement = p; s.displayW = displayBounds.width(); s.displayH = displayBounds.height();
+            s.safeBounds=new Rect(safe);s.placementMargin=margin;
     }
-    private void refresh(Session s) throws Exception {
+    private void refresh(Session s) throws Exception {refresh(s,false);}
+    private void refresh(Session s,boolean surfaceOnly) throws Exception {
         synchronized (lock) {
             if (active != s || s.restoring) return;
             if (find(s.taskId) != s.task || !identity(s.task, s) || a.call(s.task, "getParent") != s.parent)
                 throw new IllegalStateException("任务身份或父层发生变化");
-            if (a.animating(s.task)) return;
+            if (s.refreshingGeometry||s.closing||s.fullTransition||a.presentationLeashed(s.task)) return;
+            s.refreshingGeometry=true;
+            try{
             if (a.integer(s.task, "getWindowingMode") != 5) throw new IllegalStateException("任务已退出 freeform");
             ComponentName real=(ComponentName)a.field(s.task,"realActivity");Intent base=(Intent)a.call(s.task,"getBaseIntent");
             if(real!=null&&s.pkg.equals(real.getPackageName())&&base!=null&&(!s.component.equals(real.flattenToString())||!java.util.Objects.equals(s.baseId,base.getIdentifier()))){
@@ -964,24 +1004,51 @@ final class WindowEngine {
                 history.windowed(new WindowHistory.Entry(s.taskId,s.userId,s.pkg,s.component,s.baseId));saveHistory();
                 log.accept("LIVE_IDENTITY_UPDATED task="+s.taskId);
             }
-            Geometry.Placement previous=s.placement;
+            Geometry.Placement previous=s.placement,oldNormal=s.normalPlacement,oldMini=s.miniPlacement;
+            boolean completingMorph=s.transitioning;
+            Rect oldSafe=s.safeBounds==null?null:new Rect(s.safeBounds);
+            float oldMargin=s.placementMargin;
             int oldW=s.displayW,oldH=s.displayH;
             prepareGeometry(s);
-            if(previous!=null&&oldW==s.displayW&&oldH==s.displayH
-                &&previous.width()==s.placement.width()&&previous.height()==s.placement.height())s.placement=previous;
+            boolean unchanged=previous!=null&&oldW==s.displayW&&oldH==s.displayH
+                &&java.util.Objects.equals(oldSafe,s.safeBounds)
+                &&previous.width()==s.placement.width()&&previous.height()==s.placement.height();
+            if(unchanged){s.placement=previous;if(oldNormal!=null)s.normalPlacement=oldNormal;}
             else{
+                Rect safe=s.safeBounds;
+                if(oldSafe!=null&&previous!=null){
+                    if(oldNormal!=null)s.normalPlacement=Geometry.remapNormal(oldNormal,s.normalPlacement,
+                        oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,safe.left,safe.top,safe.right,safe.bottom,s.placementMargin);
+                    Geometry.Placement mini="mini".equals(s.frame)&&!s.edgeHidden?previous:oldMini;
+                    if(mini!=null)s.miniPlacement=Geometry.remapMini(mini,s.normalPlacement,s.defaultScale,
+                        oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,oldMargin,
+                        safe.left,safe.top,safe.right,safe.bottom,s.placementMargin,s.miniLarge);
+                    s.placement="mini".equals(s.frame)?s.miniPlacement:s.normalPlacement;
+                    if(s.placement==null)s.placement=previous;
+                    if(s.edgeHidden)s.placement=Geometry.offscreen(s.miniPlacement,s.edgeSide,0,s.displayW,s.placementMargin);
+                }
                 s.animationRev++;s.transitioning=false;s.fullTransition=false;s.radiusFactor=1;s.barAlpha="mini".equals(s.frame)?0:1;
                 if(s.entering){s.entryStarted=false;s.presented=false;s.transitioning=true;s.opacity=0;s.barAlpha=0;}
             }
+            s.geometryDirty=false;
+            if(!unchanged&&completingMorph&&!s.entering&&!surfaceOnly){
+                a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},!"mini".equals(s.frame));
+                if(!"mini".equals(s.frame))focusExpanded(s);
+                resumeMini(s);
+            }
             Geometry.Placement p=s.placement;
             Rect logical = new Rect(0, 0, p.width(), p.height());
-            if (!logical.equals(a.call(s.task, "getBounds")))
+            if (!logical.equals(a.call(s.task, "getBounds"))){
+                if(surfaceOnly){s.geometryDirty=true;configurationChanged(s.task);return;}
                 a.call(s.task, "setBounds", new Class<?>[]{Rect.class}, logical);
+            }
             // Check actual post-configuration geometry, not only the requested rectangle.
             Rect actual = (Rect) a.call(s.task, "getBounds");
             if (actual.width() != p.width() || actual.height() != p.height())
                 throw new IllegalStateException("逻辑画布被系统重写：" + actual);
-            apply(s); a.call(root,"ensureActivitiesVisible");a.call(wms, "requestTraversal");
+            apply(s);
+            if(!surfaceOnly){a.call(root,"ensureActivitiesVisible");a.call(wms,"requestTraversal");}
+            }finally{s.refreshingGeometry=false;}
         }
     }
 
@@ -1189,7 +1256,7 @@ final class WindowEngine {
         }catch(Exception e){return false;}
     }
     private boolean suppressTransition(Session s){
-        return s.restoring?!s.restoreForeground:!s.fullTransition||s.closing;
+        return s.restoring?!s.restoreForeground||s.fullTransition:!s.fullTransition||s.closing;
     }
     void collected(Object transition,Object container){
         if(sessions.isEmpty())return;
@@ -1220,6 +1287,7 @@ final class WindowEngine {
             java.util.List<?> changes=(java.util.List<?>)a.call(info,"getChanges");
             if(targets.size()!=changes.size())return;
             android.view.SurfaceControl.Transaction start=(android.view.SurfaceControl.Transaction)a.field(transition,"mStartTransaction");
+            java.util.ArrayList<Object> steadyMiniChanges=new java.util.ArrayList<>();
             for(Session s:sessions){
                 if(!suppressTransition(s))continue;
                 TaskVisibilityGuard mask=s.startMask;
@@ -1227,6 +1295,7 @@ final class WindowEngine {
                 for(int i=0;i<targets.size();i++){
                     Object container=a.field(targets.get(i),"mContainer"),change=changes.get(i);
                     if(!belongsTo(container,s.task))continue;
+                    if(container==s.task&&steadyMiniChange(s,transition,change,targets))steadyMiniChanges.add(change);
                     a.call(change,"setFlags",new Class<?>[]{int.class},a.integer(change,"getFlags")|a.noAnimationFlag);
                     android.view.SurfaceControl leash=(android.view.SurfaceControl)a.call(change,"getLeash");
                     if(mask!=null&&mask.holding()){
@@ -1254,12 +1323,56 @@ final class WindowEngine {
                     android.view.SurfaceControl surface=(android.view.SurfaceControl)a.field(s.task,"mSurfaceControl");
                     if(surface!=null&&surface.isValid()){start.setAlpha(surface,0);finish.setAlpha(surface,0);}
                 }
+                if(touched&&!s.restoring&&!s.parked&&!s.screenSuspended&&s.placement!=null
+                    &&(s.startMask==null||!s.startMask.holding())){
+                    // Native finish resets task position/scale/crop even for a no-animation
+                    // foreground transition. Put the owned presentation into that same
+                    // transaction instead of allowing an identity frame before a later tick.
+                    Rect parent=(Rect)a.call(s.parent,"getBounds");
+                    Rect crop=s.lastSurfaceCrop==null?new Rect(0,0,s.placement.width(),s.placement.height()):s.lastSurfaceCrop;
+                    float radius=surfaceRadius(s,s.placement,crop);
+                    a.presentation(s.task,finish,s.placement,parent,crop,radius,s.opacity);
+                }
                 if(touched){
                     start.addTransactionCommittedListener(handler::post,()->repairTransition(s,mask));
                     finish.addTransactionCommittedListener(handler::post,()->repairTransition(s,mask));
                 }
             }
+            // TransitionInfo.getChanges returns its actual ArrayList; onTransitionReady
+            // marshals this same info after this hook. Native mTargets/completion remain
+            // intact. Shell must not reset a stationary mini to its logical (0,0) bounds
+            // merely because another application is opening/closing in the foreground.
+            // Keep at least one unowned change, including every dependent child change.
+            if(!steadyMiniChanges.isEmpty()&&steadyMiniChanges.size()<changes.size()){
+                changes.removeAll(steadyMiniChanges);
+                log.accept("MINI_STEADY_TRANSITION_RETAINED count="+steadyMiniChanges.size());
+            }
         }}catch(Throwable e){log.accept("LINKED_TX_FAILED "+FrameworkAccess.reason(e));}
+    }
+    private boolean steadyMiniChange(Session s,Object transition,Object change,java.util.List<?> targets){
+        try{
+            int transitionType=(Integer)a.field(transition,"mType");
+            boolean foregroundTransition=transitionType>=1&&transitionType<=4;
+            boolean busy=s.entering||s.closing||s.restoring||s.parked||s.screenSuspended||s.transitioning||s.fullTransition
+                ||s.geometryDirty||pendingStart!=null||s.startMask!=null&&s.startMask.holding()
+                ||a.bool(a.field(s.task,"mSurfaceAnimator"),"hasLeash");
+            boolean dependent=false;
+            for(Object target:targets){
+                Object container=a.field(target,"mContainer");
+                if(container!=s.task&&belongsTo(container,s.task)){dependent=true;break;}
+            }
+            Object display=a.call(s.task,"getDisplayContent"),top=a.call(s.task,"topRunningActivity");
+            Rect bounds=(Rect)a.call(s.task,"getBounds"),displayBounds=display==null?null:(Rect)a.call(display,"getBounds");
+            boolean geometry=s.placement!=null&&displayBounds!=null&&top!=null&&s.displayW==displayBounds.width()&&s.displayH==displayBounds.height()
+                &&new Rect(0,0,s.placement.width(),s.placement.height()).equals(bounds)
+                &&java.util.Objects.equals(s.safeBounds,safeArea(display))
+                &&WindowPolicy.landscape(a.integer(top,"getRequestedOrientation"),s.landscape)==s.landscape
+                &&(s.placement.width()>s.placement.height())==s.landscape
+                &&a.call(change,"getStartAbsBounds").equals(a.call(change,"getEndAbsBounds"));
+            return WindowPolicy.steadyMiniTransition(active==s&&"mini".equals(s.frame)&&foregroundTransition,busy,
+                a.integer(change,"getMode"),geometry,a.integer(change,"getStartRotation")==a.integer(change,"getEndRotation"),
+                dependent,a.call(change,"getSnapshot")!=null);
+        }catch(Exception|LinkageError unavailable){return false;}
     }
     private void repairTransition(Session s,TaskVisibilityGuard mask){
         try{synchronized(lock){
@@ -1300,7 +1413,23 @@ final class WindowEngine {
     }
     void prepared(Object task) {
         Session s=sessionFor(task);if(s==null||lock==null)return;
-        try{synchronized(lock){apply(s);}}catch(Throwable e){failure(s,e);}
+        try{synchronized(lock){
+            if(!s.restoring&&!s.parked&&!s.refreshingGeometry&&!a.presentationLeashed(task)){
+                Object display=a.call(task,"getDisplayContent");
+                Rect bounds=display==null?null:(Rect)a.call(display,"getBounds");
+                // A native surface traversal may safely update position/scale. It
+                // must not change Activity bounds, focus, or visibility mid-traversal.
+                if(!s.transitioning&&(s.geometryDirty||bounds!=null&&(s.displayW!=bounds.width()||s.displayH!=bounds.height()))){
+                    Geometry.Placement p=s.placement;
+                    Rect canvas=(Rect)a.call(task,"getBounds");
+                    int expectedWidth=s.landscape?Math.round(s.logicalShort*(16f/9f)):s.logicalShort;
+                    int expectedHeight=s.landscape?s.logicalShort:Math.round(s.logicalShort*(16f/9f));
+                    if(p!=null&&canvas.equals(new Rect(0,0,expectedWidth,expectedHeight)))refresh(s,true);
+                    else configurationChanged(task);
+                }
+            }
+            apply(s);
+        }}catch(Throwable e){failure(s,e);}
     }
     // Caller holds the WM lock. Native transitions keep their own leash until finished.
     private void renderFrame(Session s) throws Exception {
@@ -1320,7 +1449,7 @@ final class WindowEngine {
         if(s.startMask!=null&&s.startMask.holding()){
             s.startMask.hold();if(s.decoration!=null)s.decoration.hide(s.task);return;
         }
-        if(a.animating(s.task)){
+        if(a.presentationLeashed(s.task)){
             if(s.entering||s.closing)a.opacity(s.task,0);
             if(s.decoration!=null)s.decoration.hide(s.task);return;
         }
@@ -1357,7 +1486,14 @@ final class WindowEngine {
             });
         }
     }
+    private float surfaceRadius(Session s,Geometry.Placement p,Rect crop)throws Exception{
+        float visual=Math.min(a.config(s.task,false).densityDpi/160f*MotionStyle.radius(p.scale(),s.defaultScale)*s.radiusFactor,
+            Math.min(p.width(),p.height())*p.scale()/2f);
+        return Math.min(visual/p.scale(),crop.height()/2f);
+    }
     void configurationChanged(Object task) {
+        Session changed=sessionFor(task);
+        if(changed!=null&&!changed.refreshingGeometry)changed.geometryDirty=true;
         if (!owns(task) || handler == null || refreshQueued) return;
         refreshQueued = true;
         handler.post(() -> {
@@ -1584,7 +1720,10 @@ final class WindowEngine {
             // Task.setAlwaysOnTop reorders through getParent(). A finished task
             // can survive in native recents without a parent; restore its saved
             // override below, never call hierarchy mutators on that detached task.
-            if(surfaceAttached)a.call(task,"setFocusable",new Class<?>[]{boolean.class},true);
+            if(surfaceAttached){
+                a.call(task,"setFocusable",new Class<?>[]{boolean.class},true);
+                if(foreground)a.call(task,"moveToFront",new Class<?>[]{String.class},"NativeComplements-fullscreen-endpoint");
+            }
             if(s.restoreTranslucent)a.call(task,"setForceTranslucent",new Class<?>[]{boolean.class},s.forceTranslucent);
             if(surfaceAttached)a.call(task,"setAlwaysOnTop",new Class<?>[]{boolean.class},s.alwaysOnTop);
             if(surfaceAttached){
@@ -1680,6 +1819,8 @@ final class WindowEngine {
             .putExtra("transitioning",s.transitioning).putExtra("fullTransition",s.fullTransition)
             .putExtra("transitionHandle",s.transitionHandle).putExtra("presented",s.presented).putExtra("nativeHandle",true)
             .putExtra("barAlpha",s.barAlpha).putExtra("miniLarge",s.miniLarge)
+            .putExtra("edgeHidden",s.edgeHidden).putExtra("edgeSide",s.edgeSide)
+            .putExtra("edgeCenterY",s.miniPlacement==null?p.y()+p.height()*p.scale()/2:s.miniPlacement.y()+s.miniPlacement.height()*s.miniPlacement.scale()/2)
             .putExtra("muted",audio!=null&&audio.isMuted(s.uid));
     }
     private void frameReport(String event){

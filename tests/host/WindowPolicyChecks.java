@@ -12,6 +12,9 @@ public final class WindowPolicyChecks {
         for(int landscape:new int[]{0,6,8,11})require(WindowPolicy.landscape(landscape,false));
         for(int portrait:new int[]{1,7,9,12})require(!WindowPolicy.landscape(portrait,true));
         for(int unspecified:new int[]{-1,2,4,5,10,14}){require(WindowPolicy.landscape(unspecified,true));require(!WindowPolicy.landscape(unspecified,false));}
+        require(WindowPolicy.steadyMiniTransition(true,false,6,true,true,false,false));
+        for(int blocker=0;blocker<7;blocker++)require(!WindowPolicy.steadyMiniTransition(
+            blocker!=0,blocker==1,blocker==2?1:6,blocker!=3,blocker!=4,blocker==5,blocker==6));
         Object owned=new Object();
         require(WindowPolicy.sameLiveTask(owned,owned,10,10,0,0));
         require(!WindowPolicy.sameLiveTask(new Object(),owned,10,10,0,0));

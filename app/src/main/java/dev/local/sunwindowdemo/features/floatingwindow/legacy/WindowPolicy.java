@@ -2,6 +2,10 @@ package dev.local.sunwindowdemo;
 
 /** Shared, framework-independent geometry and orientation decisions. */
 final class WindowPolicy {
+    static boolean steadyMiniTransition(boolean liveMini,boolean busy,int changeMode,boolean sameGeometry,
+            boolean sameRotation,boolean dependentChanges,boolean snapshot){
+        return liveMini&&!busy&&changeMode==6&&sameGeometry&&sameRotation&&!dependentChanges&&!snapshot;
+    }
     static boolean sameWindowCaller(int callingUid,int realCallingUid,int ownerUid,String callingPackage,String ownerPackage){
         return ownerUid>=10000&&callingUid==ownerUid&&(realCallingUid<0||realCallingUid==ownerUid)
             &&ownerPackage!=null&&!ownerPackage.isEmpty()&&ownerPackage.equals(callingPackage);

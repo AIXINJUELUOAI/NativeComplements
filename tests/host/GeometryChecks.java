@@ -31,6 +31,32 @@ public final class GeometryChecks {
         }
         Geometry.Placement tiny=Geometry.miniTopRight(new Geometry.Placement(1200,2133,.75f,0,0),.75f,0,0,300,300,32);
         check(tiny.y()+tiny.height()*tiny.scale()<=268.01f,"mini fits constrained area");
+        // Portrait -> landscape -> portrait keeps a docked mini on the same
+        // edge and at the same fraction of the usable vertical travel.
+        Geometry.Placement portraitCanvas=Geometry.place(1200,false,0,100,1200,2600,32);
+        Geometry.Placement landscapeCanvas=Geometry.place(1200,false,140,0,2670,1200,12);
+        for(boolean large:new boolean[]{false,true})for(boolean left:new boolean[]{false,true})for(float ratio:new float[]{0,.5f,1}){
+            Geometry.Placement seed=Geometry.miniTopRight(portraitCanvas,portraitCanvas.scale(),0,100,1200,2600,32,large);
+            Geometry.Placement oldMini=new Geometry.Placement(seed.width(),seed.height(),seed.scale(),
+                left?32:seed.x(),132+ratio*(2500-64-seed.height()*seed.scale()));
+            Geometry.Placement rotated=Geometry.remapMini(oldMini,landscapeCanvas,landscapeCanvas.scale(),
+                0,100,1200,2600,32,140,0,2670,1200,12,large);
+            check(Math.abs((left?rotated.x()-152:rotated.x()+rotated.width()*rotated.scale()-2658))<.01,"rotation retains mini edge");
+            float travel=1200-24-rotated.height()*rotated.scale();
+            check(Math.abs(rotated.y()-(12+ratio*Math.max(0,travel)))<.02,"rotation retains mini vertical fraction");
+            Geometry.Placement roundTrip=Geometry.remapMini(rotated,portraitCanvas,portraitCanvas.scale(),
+                140,0,2670,1200,12,0,100,1200,2600,32,large);
+            check(Math.abs(roundTrip.x()-oldMini.x())<.02&&Math.abs(roundTrip.y()-oldMini.y())<.02,"rotation round trip does not drift");
+        }
+        Geometry.Placement docked=Geometry.miniTopRight(portraitCanvas,portraitCanvas.scale(),0,100,1200,2600,32);
+        check(Geometry.hideSide(docked,docked.x(),0,1200,32)==0,"resting at edge does not hide");
+        check(Geometry.hideSide(docked,1200-docked.width()*docked.scale()/2,0,1200,32)==1,"push half beyond right hides");
+        check(Geometry.hideSide(docked,-docked.width()*docked.scale()/2,0,1200,32)==-1,"push half beyond left hides");
+        check(Geometry.offscreen(docked,-1,0,1200,12).x()+docked.width()*docked.scale()<0,"hidden left has no content on display");
+        check(Geometry.offscreen(docked,1,0,1200,12).x()>1200,"hidden right has no content on display");
+        Geometry.Placement appRotated=Geometry.place(1200,true,0,100,1200,2600,32);
+        Geometry.Placement remapped=Geometry.remapMini(docked,appRotated,appRotated.scale(),0,100,1200,2600,32,0,100,1200,2600,32,false);
+        check(remapped.width()==appRotated.width()&&remapped.height()==appRotated.height(),"app orientation uses the new logical canvas");
         check(Rules.angle(0,1)==45,"one item");
         check(Rules.fanSelection(100,0,200,44,6,90)==-1,"halfway no longer selects by default");
         check(Rules.fanSelection(179,0,200,44,6,90)==-1,"wait until near the icon");
