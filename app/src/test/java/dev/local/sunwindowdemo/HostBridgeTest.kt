@@ -66,6 +66,30 @@ class HostBridgeTest {
         assertTrue(WindowPreferenceStore(context).read().enabled)
     }
 
+    @Test fun shortcutLibraryPersistsBeyondFanLimitWithoutDroppingOrder() {
+        val store = WindowPreferenceStore(context)
+        val targets = (0 until 12).map { "com.example.app$it" }
+        store.apps(targets)
+        store.number("fanCount", 2)
+        val restored = WindowPreferenceStore(context).read()
+        assertEquals(targets, restored.apps)
+        assertEquals(2, restored.fanCount)
+        store.number("fanCount", 99)
+        assertEquals(4, WindowPreferenceStore(context).read().fanCount)
+        assertEquals(targets, WindowPreferenceStore(context).read().apps)
+    }
+
+    @Test fun shortcutPayloadIsRejectedBeforeChangingSavedOrder() {
+        val store = WindowPreferenceStore(context)
+        val original = listOf("com.example.first", "com.example.second")
+        store.apps(original)
+        val oversized = (0 until 40).map { "shortcut:v1:0:com.example.app$it:${"x".repeat(2000)}" }
+        assertTrue(oversized.all(ShortcutTarget::validKey))
+        assertThrows(IllegalArgumentException::class.java) { dev.local.sunwindowdemo.Config.validateTargets(oversized, oversized.map { "快捷功能" }) }
+        assertThrows(IllegalArgumentException::class.java) { store.apps(oversized) }
+        assertEquals(original, store.read().apps)
+    }
+
     @Test fun legacyWideIconKeepsAspectRatioAndUsesAdaptiveMask() {
         val bitmap = Bitmap.createBitmap(100, 40, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.RED) }
         val source = BitmapDrawable(context.resources, bitmap)

@@ -18,20 +18,22 @@ final class TaskCover {
     private final float radiusFrom,radiusTo;
     private final int iconSize;
     private final float[] color;
-    private final long began=SystemClock.elapsedRealtime(),duration;
-    private long fadeAt=-1;
+    private final long began=SystemClock.elapsedRealtime(),duration,fadeDuration;
+    private long entryAt=-1,fadeAt=-1;
     private boolean closed;
     private float ownerAlpha;
+    private final boolean fadeIn;
     TaskCover(FrameworkAccess a,Context context,Object task,Object parent,String pkg,
-            RectF from,RectF to,float radiusFrom,float radiusTo,float ownerAlpha)throws Exception{
+            RectF from,RectF to,float radiusFrom,float radiusTo,float ownerAlpha,boolean fadeIn)throws Exception{
         this.a=a;this.task=task;this.parent=parent;this.from=new RectF(from);this.to=new RectF(to);
-        this.radiusFrom=radiusFrom;this.radiusTo=radiusTo;this.ownerAlpha=ownerAlpha;
+        this.radiusFrom=radiusFrom;this.radiusTo=radiusTo;this.ownerAlpha=ownerAlpha;this.fadeIn=fadeIn;
         float density=context.getResources().getDisplayMetrics().density;
         float shade=(context.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES?.09f:.94f;
         color=new float[]{shade,shade,shade};
         iconSize=Math.max(48,Math.min(256,Math.round(64*density)));
-        duration=Math.max(0,Math.round(320*android.provider.Settings.Global.getFloat(context.getContentResolver(),
-            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f)));
+        float animationScale=android.provider.Settings.Global.getFloat(context.getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f);
+        duration=Math.max(0,Math.round(320*animationScale));fadeDuration=Math.max(0,Math.round(150*animationScale));
         mask=new TaskVisibilityGuard(a,task);
         try{
             background=build("NativeComplements-cover",0);
@@ -45,7 +47,7 @@ final class TaskCover {
                 try{canvas.drawColor(Color.TRANSPARENT,PorterDuff.Mode.CLEAR);drawable.setBounds(0,0,iconSize,iconSize);drawable.draw(canvas);}
                 finally{canvasSurface.unlockCanvasAndPost(canvas);}
             }finally{canvasSurface.release();}
-            paint(0,1);mask.hide();
+            paint(0,fadeIn?0:1);mask.hide();
         }catch(Throwable error){close();throw error;}
     }
     private SurfaceControl build(String name,int size)throws Exception{
@@ -66,11 +68,14 @@ final class TaskCover {
         if(closed)return false;
         long now=SystemClock.elapsedRealtime();
         if(now-began>=3000){close();return false;}
-        float p=duration==0?1:Math.min(1,(now-began)/(float)duration);
+        if(fadeIn&&visible&&entryAt<0)entryAt=now;
+        long elapsed=fadeIn?(entryAt<0?0:now-entryAt):now-began;
+        float p=duration==0?1:Math.min(1,elapsed/(float)duration);
         if(ready&&p==1&&fadeAt<0){mask.release(ownerAlpha);fadeAt=now;}
-        if(fadeAt>=0&&now-fadeAt>=150){close();return false;}
+        if(fadeAt>=0&&now-fadeAt>=fadeDuration){close();return false;}
         if(mask.holding())mask.hold();
-        paint(1-(float)Math.pow(1-p,3),visible?(fadeAt<0?1:1-(now-fadeAt)/150f):0);
+        float alpha=fadeAt<0?(fadeIn&&fadeDuration>0?Math.min(1,elapsed/(float)fadeDuration):1):1-(now-fadeAt)/(float)fadeDuration;
+        paint(1-(float)Math.pow(1-p,3),visible?alpha:0);
         return true;
     }
     private void paint(float p,float alpha)throws Exception{

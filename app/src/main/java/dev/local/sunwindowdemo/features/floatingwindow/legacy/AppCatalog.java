@@ -77,28 +77,44 @@ final class AppCatalog {
 
     static final class Shortcuts {
         final List<ShortcutTarget> items;
-        final boolean hostPermission;
+        final boolean hostPermission,cacheable;
+        final int revision;
         final String message;
-        Shortcuts(List<ShortcutTarget> items,boolean permission,String message) {
-            this.items=List.copyOf(items); hostPermission=permission; this.message=message;
+        Shortcuts(List<ShortcutTarget> items,boolean permission,String message) {this(items,permission,message,true);}
+        Shortcuts(List<ShortcutTarget> items,boolean permission,String message,boolean cacheable) {
+            this(items,permission,message,cacheable,-1);
         }
+        private Shortcuts(List<ShortcutTarget> items,boolean permission,String message,boolean cacheable,int revision) {
+            this.items=List.copyOf(items);hostPermission=permission;this.message=message;this.cacheable=cacheable;this.revision=revision;
+        }
+        boolean isCurrent(){return revision==shortcutRevision.get();}
     }
-    /** Worker-thread only. hasShortcutHostPermission is checked in the actual calling process. */
-    static Shortcuts loadShortcuts(Context c) { return loadShortcuts(c,List.of()); }
-    static Shortcuts loadShortcuts(Context c,List<App> apps) {
+    private static final java.util.concurrent.atomic.AtomicInteger shortcutRevision=new java.util.concurrent.atomic.AtomicInteger();
+    private static volatile Shortcuts shortcutCache;
+    static Shortcuts cachedShortcuts(){Shortcuts cached=shortcutCache;return cached!=null&&cached.isCurrent()?cached:null;}
+    static void invalidateShortcuts(){shortcutRevision.incrementAndGet();}
+    /** Worker-thread only. Reuse the process cache until packages or shortcuts change. */
+    static synchronized Shortcuts loadShortcuts(Context c) {
+        Shortcuts cached=cachedShortcuts();if(cached!=null)return cached;
+        int revision=shortcutRevision.get();
+        Shortcuts queried=queryShortcuts(c);
+        Shortcuts result=new Shortcuts(queried.items,queried.hostPermission,queried.message,queried.cacheable,revision);
+        if(result.cacheable&&result.isCurrent())shortcutCache=result;
+        return result;
+    }
+    private static Shortcuts queryShortcuts(Context c) {
         LauncherApps launcher=c.getSystemService(LauncherApps.class);
         try {
             if (launcher==null||!launcher.hasShortcutHostPermission())
-                return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限");
+                return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限",false);
             UserHandle user=Process.myUserHandle();
             long serial=ShortcutTarget.serial(c,user);
-            if (serial<0) return new Shortcuts(List.of(),true,"暂未取得当前用户的标识，请稍后重试");
+            if (serial<0) return new Shortcuts(List.of(),true,"暂未取得当前用户的标识，请稍后重试",false);
             var query=new LauncherApps.ShortcutQuery().setQueryFlags(
                     LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC|LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST
                             |LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED);
             List<ShortcutInfo> available=launcher.getShortcuts(query,user);
             HashMap<String,App> owners=new HashMap<>();
-            for(App app:apps) owners.put(app.pkg,app);
             ArrayList<ShortcutTarget> result=new ArrayList<>();
             HashSet<String> seen=new HashSet<>();
             if(available!=null) for(ShortcutInfo info:available) {
@@ -126,9 +142,9 @@ final class AppCatalog {
             }).thenComparing(t->sortKey(t.label)).thenComparing(ShortcutTarget::key));
             return new Shortcuts(result,true,result.isEmpty()?"暂无可用的应用快捷功能":"");
         } catch(SecurityException denied) {
-            return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限");
+            return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限",false);
         } catch(RuntimeException failure) {
-            return new Shortcuts(List.of(),true,"应用快捷功能读取失败，请重新打开面板重试");
+            return new Shortcuts(List.of(),true,"应用快捷功能读取失败，请重新打开面板重试",false);
         }
     }
 }

@@ -39,7 +39,7 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
                     shape = RoundedCornerShape(50), singleLine = true)
             }
             if (!blocked && query.isBlank()) {
-                item { GroupTitle("菜单顺序 · ${selected.size} / 5") }
+                item { GroupTitle("菜单顺序 · ${selected.size} 项") }
                 if (selected.isEmpty()) item { Hint("从下方选择快捷应用，固定的全部应用入口始终保留。") }
                 items(selected, key = { "selected:$it" }) { pkg ->
                     val targetPackage = if (pkg.startsWith("shortcut:v1:")) android.net.Uri.decode(pkg.split(':').getOrElse(3) { "" }) else pkg
@@ -70,7 +70,7 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
             else if (visible.isEmpty()) item { Hint(if (query.isBlank()) "未找到可启动的应用" else "没有匹配的应用") }
             items(visible, key = { "app:${it.packageName}" }) { app ->
                 val checked = if (blocked) app.packageName in excluded else app.packageName in selected
-                val enabled = blocked || checked || selected.size < 5
+                val enabled = blocked || checked || selected.size < WindowPreferenceStore.MAX_TARGETS
                 fun change() {
                     if (blocked) controller.blocked(if (checked) excluded - app.packageName else excluded + app.packageName)
                     else if (enabled) controller.selected(if (checked) selected - app.packageName else selected + app.packageName)
@@ -87,7 +87,7 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
                     }
                 }
             }
-            item { Hint(if (blocked) "选中后，这些应用处于前台时不触发新的手势唤起。更改立即保存。" else "应用与快捷功能共用五个名额。快捷功能可在手势面板的管理中添加；上方可调整顺序。") }
+            item { Hint(if (blocked) "选中后，这些应用处于前台时不触发新的手势唤起。更改立即保存。" else "菜单顶部可保存多个应用和快捷功能；扇区显示前 ${controller.preferences.fanCount} 项。可在上方调整顺序，快捷功能在手势面板管理中添加。") }
         }
     }
 }

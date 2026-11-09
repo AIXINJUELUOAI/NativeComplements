@@ -243,7 +243,7 @@ public final class SunWindowModule extends XposedModule {
                         return result;
                     }finally{engine.activityStartResult(ticket,success);}
                 }));
-            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview4; system scopes only");
+            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview5; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));

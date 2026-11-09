@@ -22,7 +22,7 @@ fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) 
     Hint("从屏幕底角向内斜滑打开菜单；侧边返回长滑，震动后松手，将当前应用变成小窗。")
     GroupTitle("小窗设置")
     SettingsGroup {
-        SettingRow("快捷应用", "已选择 ${p.apps.size} / 5 · 选择与排序", { navigate(Page.Apps) }, leading = { Glyph("apps") })
+        SettingRow("快捷应用", "已选择 ${p.apps.size} 项 · 扇区显示前 ${p.fanCount} 项", { navigate(Page.Apps) }, leading = { Glyph("apps") })
         SettingRow("手势与菜单", "触发热区、滑动距离、扇形外观", { navigate(Page.Gestures) }, leading = { Glyph("gesture") })
         SettingRow("窗口与多任务", "空白处关闭、最近任务中的显示", { navigate(Page.Behavior) }, leading = { Glyph("window") })
         SettingRow("小窗触发限制", "横屏、键盘与指定应用", { navigate(Page.Prevention) }, leading = { Glyph("check") })
@@ -45,6 +45,7 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
     }
     GroupTitle("菜单外观")
     SettingsGroup {
+        SliderRow("扇区快捷项数量", "按快捷区顺序显示前几项，另保留一个列表入口", p.fanCount, 1..4, " 个") { number("fanCount", it) }
         SliderRow("扇形半径", "图标较多时自动适配间距，左右镜像", p.radius, 120..260, " dp") { number("radius", it) }
         SliderRow("图标直径", "应用列表入口固定排在最下面", p.icon, 32..56, " dp") { number("icon", it) }
     }

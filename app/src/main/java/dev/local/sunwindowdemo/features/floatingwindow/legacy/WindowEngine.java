@@ -116,7 +116,7 @@ final class WindowEngine {
         Rect bounds;
         boolean alwaysOnTop, landscape, forceTranslucent, restoreTranslucent;
         boolean backRequested,backComplete,returning;
-        boolean entering,entryStarted;
+        boolean entering,entryStarted,entryFade;
         Configuration originalConfig;
         String recoveryReason;
         long startedAt=SystemClock.elapsedRealtime();
@@ -251,6 +251,7 @@ final class WindowEngine {
             Session s;
             synchronized (lock) { s = snapshot(i.getIntExtra("taskId", -1), pkg, token); }
             trace.arm(pkg,openGeneration);
+            s.entryFade=i.getBooleanExtra("fadeEntry",false);
             s.lease = lease;
             s.death = () -> handler.post(() -> { if (sessions.contains(s)) recover("控制进程退出"); });
             lease.linkToDeath(s.death, 0);
@@ -266,7 +267,7 @@ final class WindowEngine {
                         s.decoration=new TaskDecoration(a);
                         s.entering=true;s.transitioning=true;s.opacity=0;s.barAlpha=0;
                         active = s;
-                        beginCover(s,new Geometry.Placement(s.displayW,s.displayH,1,0,0),s.placement,false);
+                        beginCover(s,s.entryFade?s.placement:new Geometry.Placement(s.displayW,s.displayH,1,0,0),s.placement,false);
                         a.opacity(s.task,0);
                         a.call(s.task,"setForceTranslucent",new Class<?>[]{boolean.class},true);
                         if(!a.bool(s.task,"isForceTranslucent"))throw new IllegalStateException("系统未保留小窗下方的内容");
@@ -398,7 +399,7 @@ final class WindowEngine {
                 openPhase(request,"wait-native",id);handler.postDelayed(()->open(request,attempt+1),32);return;}
             }
             clearShortcutLaunch(generation);
-            openPhase(request,"start",id);command(new Intent(request).putExtra("op","START").putExtra("taskId",id));
+            openPhase(request,"start",id);command(new Intent(request).putExtra("op","START").putExtra("taskId",id).putExtra("fadeEntry",true));
         }catch(Throwable e){clearShortcutLaunch(generation);note("OPEN_FAILED package="+pkg+"："+FrameworkAccess.reason(e));}
     }
     private void clearShortcutLaunch(long generation){
@@ -874,7 +875,7 @@ final class WindowEngine {
                         float t=duration==0?1:Math.min(1,(float)(now-began)/duration);
                         float progress=modeCurve.getInterpolation(show?t:1-t);
                         MotionStyle.Visibility sample=MotionStyle.visibility(target,progress);
-                        s.placement=sample.placement();s.opacity=startAlpha*sample.alpha();s.barAlpha=startBar*sample.alpha();
+                        s.placement=show?target:sample.placement();s.opacity=startAlpha*sample.alpha();s.barAlpha=startBar*sample.alpha();
                         renderFrame(s);callbacks++;
                         frameReport(show?"APPEARING":"CLOSING");
                         if(t<1){frames.postFrameCallback(this);return;}
@@ -1210,7 +1211,7 @@ final class WindowEngine {
             if(s.cover!=null){s.cover.target(visualBounds(to));return;}
             float density=a.config(s.task,false).densityDpi/160f;
             float radius=a.integer(s.task,"getWindowingMode")==1?0:density*MotionStyle.radius(from.scale(),s.defaultScale);
-            TaskCover cover=new TaskCover(a,context,s.task,s.parent,s.pkg,visualBounds(from),visualBounds(to),radius,fullscreen?0:density*MotionStyle.radius(to.scale(),s.defaultScale),coverReleaseAlpha(s));
+            TaskCover cover=new TaskCover(a,context,s.task,s.parent,s.pkg,visualBounds(from),visualBounds(to),radius,fullscreen?0:density*MotionStyle.radius(to.scale(),s.defaultScale),coverReleaseAlpha(s),s.entering&&s.entryFade&&!fullscreen);
             s.cover=cover;coverTasks.put(s.task,s);pollCover(s,cover);
         }catch(Throwable error){log.accept("COVER_SKIPPED "+FrameworkAccess.reason(error));endCover(s);}
     }

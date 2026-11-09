@@ -48,7 +48,7 @@ final class FanView extends View {
             double a=Math.toRadians(Rules.angle(i,apps.size()+1));
             float cx=x+(right?-1:1)*r*(float)Math.cos(a),cy=y-r*(float)Math.sin(a);
             float size=icon*(selected==i?1.12f:1);
-            paint.setColor(selected==i?0xffa7c7ff:0xff48515d);paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);
+            if(i==0){paint.setColor(selected==i?0xffa7c7ff:0xff48515d);paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);}
             if(i>0) {
                 android.graphics.drawable.Drawable drawable=apps.get(i-1).icon;
                 int saved=c.save();Rect bounds=new Rect(drawable.getBounds());int alpha=drawable.getAlpha();
