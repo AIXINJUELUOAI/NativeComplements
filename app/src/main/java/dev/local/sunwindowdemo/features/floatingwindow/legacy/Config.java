@@ -23,7 +23,7 @@ final class Config {
     boolean landscapeOff() { return prefs.getBoolean("landscape", true); }
     boolean keyboardOff() { return prefs.getBoolean("keyboard", true); }
     boolean hideRecents() { return prefs.getBoolean("hideRecents", false); }
-    boolean doubleClose() { return prefs.getBoolean("doubleClose", true); }
+    boolean doubleClose() { return false; }
     boolean showHeat() { return prefs.getBoolean("showHeat", false); }
     List<String> apps() {
         Set<String> unique = new LinkedHashSet<>();
@@ -32,6 +32,37 @@ final class Config {
         }
         return new ArrayList<>(unique);
     }
-    void apps(List<String> apps) { prefs.edit().putString("apps", String.join(",", apps)).apply(); }
+    List<String> targets() {
+        if(!prefs.contains("targets"))return apps();
+        Set<String> unique=new LinkedHashSet<>();
+        try{org.json.JSONArray array=new org.json.JSONArray(prefs.getString("targets","[]"));
+            for(int n=0;n<array.length()&&unique.size()<5;n++){
+                String key=array.optString(n,"");if(ShortcutTarget.validKey(key))unique.add(key);
+            }
+        }catch(org.json.JSONException ignored){}
+        return new ArrayList<>(unique);
+    }
+    java.util.Map<String,String> targetLabels(){
+        java.util.Map<String,String> result=new java.util.HashMap<>();
+        try{org.json.JSONObject labels=new org.json.JSONObject(prefs.getString("targetLabels","{}"));
+            for(String key:targets()){String label=labels.optString(key,"");if(!label.isBlank())result.put(key,label);}
+        }catch(org.json.JSONException ignored){}
+        return result;
+    }
+    void targets(List<String> keys){targets(keys,null);}
+    void targets(List<String> keys,List<String> names) {
+        if(keys==null||keys.size()>5)throw new IllegalArgumentException("shortcut limit");
+        if(names!=null&&(names.size()!=keys.size()||names.stream().anyMatch(n->n==null||n.length()>200)))throw new IllegalArgumentException("shortcut names");
+        org.json.JSONObject labels=new org.json.JSONObject();java.util.Map<String,String> previous=targetLabels();
+        for(int n=0;n<keys.size();n++)try{labels.put(keys.get(n),names==null?previous.getOrDefault(keys.get(n),""):names.get(n));}catch(org.json.JSONException e){throw new IllegalArgumentException(e);}
+        Set<String> unique=new LinkedHashSet<>();List<String> packages=new ArrayList<>();
+        for(String key:keys){
+            if(!ShortcutTarget.validKey(key)||!unique.add(key))throw new IllegalArgumentException("shortcut key");
+            if(Rules.validPackage(key))packages.add(key);
+        }
+        if(!prefs.edit().putString("targets",new org.json.JSONArray(keys).toString())
+            .putString("apps",String.join(",",packages)).putString("targetLabels",labels.toString()).commit())throw new IllegalStateException("shortcut save failed");
+    }
+    void apps(List<String> apps) { targets(apps); }
     Set<String> blocked() { return new LinkedHashSet<>(prefs.getStringSet("blocked", Set.of())); }
 }

@@ -13,13 +13,21 @@ import android.graphics.drawable.InsetDrawable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Locale;
+import android.content.pm.ShortcutInfo;
+import android.icu.text.Transliterator;
+import android.os.Process;
+import android.os.UserHandle;
 import java.util.List;
 
 final class AppCatalog {
     static final class App {
-        final String pkg, label;
+        final String pkg, label, section, sortKey;
         final Drawable icon;
-        App(String p, String l, Drawable i) { pkg=p; label=l; icon=i; }
+        App(String p, String l, Drawable i) {
+            pkg=p; label=l; icon=i; sortKey=AppCatalog.sortKey(l); section=AppCatalog.sectionFromKey(sortKey);
+        }
         @Override public String toString() { return label; }
     }
     static Drawable normalized(Context c,Drawable icon){
@@ -50,7 +58,77 @@ final class AppCatalog {
             try { result.add(new App(pkg, activity.getLabel().toString(), normalized(c,activity.getIcon(c.getResources().getDisplayMetrics().densityDpi)))); }
             catch (RuntimeException ignored) { }
         }
-        result.sort(Comparator.comparing(a -> a.label, java.text.Collator.getInstance()));
+        result.sort(Comparator.comparing((App a)->a.section.equals("#")?"~"+a.sortKey:a.sortKey)
+                .thenComparing(a->a.pkg));
         return result;
+    }
+
+    private static final ThreadLocal<Transliterator> PINYIN=ThreadLocal.withInitial(
+            ()->Transliterator.getInstance("Han-Latin; Latin-ASCII; Upper"));
+    static String sortKey(String label) {
+        String value=label==null?"":label.trim();
+        try { return PINYIN.get().transliterate(value).toUpperCase(Locale.ROOT); }
+        catch (RuntimeException unavailable) { return value.toUpperCase(Locale.ROOT); }
+    }
+    private static String sectionFromKey(String key) {
+        return !key.isEmpty()&&key.charAt(0)>='A'&&key.charAt(0)<='Z'?key.substring(0,1):"#";
+    }
+    static String section(String label) { return sectionFromKey(sortKey(label)); }
+
+    static final class Shortcuts {
+        final List<ShortcutTarget> items;
+        final boolean hostPermission;
+        final String message;
+        Shortcuts(List<ShortcutTarget> items,boolean permission,String message) {
+            this.items=List.copyOf(items); hostPermission=permission; this.message=message;
+        }
+    }
+    /** Worker-thread only. hasShortcutHostPermission is checked in the actual calling process. */
+    static Shortcuts loadShortcuts(Context c) { return loadShortcuts(c,List.of()); }
+    static Shortcuts loadShortcuts(Context c,List<App> apps) {
+        LauncherApps launcher=c.getSystemService(LauncherApps.class);
+        try {
+            if (launcher==null||!launcher.hasShortcutHostPermission())
+                return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限");
+            UserHandle user=Process.myUserHandle();
+            long serial=ShortcutTarget.serial(c,user);
+            if (serial<0) return new Shortcuts(List.of(),true,"暂未取得当前用户的标识，请稍后重试");
+            var query=new LauncherApps.ShortcutQuery().setQueryFlags(
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC|LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST
+                            |LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED);
+            List<ShortcutInfo> available=launcher.getShortcuts(query,user);
+            HashMap<String,App> owners=new HashMap<>();
+            for(App app:apps) owners.put(app.pkg,app);
+            ArrayList<ShortcutTarget> result=new ArrayList<>();
+            HashSet<String> seen=new HashSet<>();
+            if(available!=null) for(ShortcutInfo info:available) {
+                if(!info.isEnabled()||info.getPackage().equals(Wire.PKG)) continue;
+                try {
+                    String pkg=info.getPackage(); App owner=owners.get(pkg);
+                    if(owner==null) {
+                        var pm=c.getPackageManager(); var application=pm.getApplicationInfo(pkg,0);
+                        owner=new App(pkg,pm.getApplicationLabel(application).toString(),normalized(c,pm.getApplicationIcon(application)));
+                        owners.put(pkg,owner);
+                    }
+                    CharSequence title=info.getShortLabel();
+                    if(title==null||title.length()==0) title=info.getLongLabel();
+                    if(title==null||title.length()==0) continue;
+                    Drawable icon;
+                    try { icon=launcher.getShortcutBadgedIconDrawable(info,c.getResources().getDisplayMetrics().densityDpi); }
+                    catch(RuntimeException unavailableIcon) { icon=null; }
+                    if(icon==null) icon=owner.icon; else icon=normalized(c,icon);
+                    ShortcutTarget target=new ShortcutTarget(pkg,info.getId(),user,serial,title.toString(),owner.label,icon,owner.section);
+                    if(ShortcutTarget.validKey(target.key())&&seen.add(target.key())) result.add(target);
+                } catch(Exception staleShortcut) { }
+            }
+            result.sort(Comparator.comparing((ShortcutTarget t)->{
+                String sort=sortKey(t.appLabel); return sectionFromKey(sort).equals("#")?"~"+sort:sort;
+            }).thenComparing(t->sortKey(t.label)).thenComparing(ShortcutTarget::key));
+            return new Shortcuts(result,true,result.isEmpty()?"暂无可用的应用快捷功能":"");
+        } catch(SecurityException denied) {
+            return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限");
+        } catch(RuntimeException failure) {
+            return new Shortcuts(List.of(),true,"应用快捷功能读取失败，请重新打开面板重试");
+        }
     }
 }

@@ -51,11 +51,13 @@ final class TaskVisibilityGuard {
         restoreLeashes(0);finished=true;
     }
 
-    void release()throws Exception {
+    void release()throws Exception {release(1);}
+    void release(float ownerAlpha)throws Exception {
         if(finished)return;
         // Restore only the exact surfaces we changed, never a replacement task.
-        if(surface.isValid())pending(1);
-        restoreLeashes(1);
+        float alpha=Float.isFinite(ownerAlpha)?Math.max(0,Math.min(1,ownerAlpha)):0;
+        if(surface.isValid())pending(alpha);
+        restoreLeashes(alpha);
         finished=true;
     }
 

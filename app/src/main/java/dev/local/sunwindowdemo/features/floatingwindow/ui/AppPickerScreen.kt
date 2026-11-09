@@ -42,22 +42,24 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
                 item { GroupTitle("菜单顺序 · ${selected.size} / 5") }
                 if (selected.isEmpty()) item { Hint("从下方选择快捷应用，固定的全部应用入口始终保留。") }
                 items(selected, key = { "selected:$it" }) { pkg ->
-                    val app = catalog.firstOrNull { it.packageName == pkg }
+                    val targetPackage = if (pkg.startsWith("shortcut:v1:")) android.net.Uri.decode(pkg.split(':').getOrElse(3) { "" }) else pkg
+                    val app = catalog.firstOrNull { it.packageName == targetPackage }
+                    val label = if (pkg.startsWith("shortcut:v1:")) controller.preferences.targetLabels[pkg] ?: "${app?.label ?: targetPackage} · 快捷功能" else app?.label ?: pkg
                     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 AppIcon(app)
-                                Text(app?.label ?: pkg, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                                Text(label, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                 val index = selected.indexOf(pkg)
                                 TextButton(enabled = index > 0, onClick = {
                                     val next = selected.toMutableList(); java.util.Collections.swap(next, index, index - 1); controller.selected(next)
-                                }, modifier = Modifier.semantics { contentDescription = "上移 ${app?.label ?: pkg}" }) { Text("上移") }
+                                }, modifier = Modifier.semantics { contentDescription = "上移 ${label}" }) { Text("上移") }
                                 TextButton(enabled = index < selected.lastIndex, onClick = {
                                     val next = selected.toMutableList(); java.util.Collections.swap(next, index, index + 1); controller.selected(next)
-                                }, modifier = Modifier.semantics { contentDescription = "下移 ${app?.label ?: pkg}" }) { Text("下移") }
-                                TextButton(onClick = { controller.selected(selected - pkg) }, modifier = Modifier.semantics { contentDescription = "移除 ${app?.label ?: pkg}" }) { Text("移除") }
+                                }, modifier = Modifier.semantics { contentDescription = "下移 ${label}" }) { Text("下移") }
+                                TextButton(onClick = { controller.selected(selected - pkg) }, modifier = Modifier.semantics { contentDescription = "移除 ${label}" }) { Text("移除") }
                             }
                         }
                     }
@@ -85,7 +87,7 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
                     }
                 }
             }
-            item { Hint(if (blocked) "选中后，这些应用处于前台时不触发新的手势唤起。更改立即保存。" else "最多五个快捷应用。上方可调整菜单顺序，更改立即保存。") }
+            item { Hint(if (blocked) "选中后，这些应用处于前台时不触发新的手势唤起。更改立即保存。" else "应用与快捷功能共用五个名额。快捷功能可在手势面板的管理中添加；上方可调整顺序。") }
         }
     }
 }

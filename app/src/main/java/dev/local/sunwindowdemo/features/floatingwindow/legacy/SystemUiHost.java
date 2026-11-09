@@ -157,6 +157,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(i.getStringExtra("event")!=null&&(i.getStringExtra("event").endsWith("FAILED")||"BLOCKED".equals(i.getStringExtra("event"))))Toast.makeText(this,i.getStringExtra("report"),Toast.LENGTH_LONG).show();
     }
     private List<AppCatalog.App> all=List.of();
+    private List<ShortcutTarget> availableShortcuts=List.of();
     private String foreground="";
     private boolean keyboard,cleaned,receiverRegistered;
     private int lastSelection=-1;
@@ -192,7 +193,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void loadApps() {
         new Thread(()->{
             List<AppCatalog.App> apps=AppCatalog.load(this);
-            main.post(()->{if(!connected||cleaned)return;all=apps;refresh();});
+            AppCatalog.Shortcuts shortcuts=AppCatalog.loadShortcuts(this,apps);
+            main.post(()->{if(!connected||cleaned)return;all=apps;availableShortcuts=shortcuts.items;refresh();});
         },"corner-app-catalog").start();
     }
     private void updateOverlayPriority(){
@@ -254,8 +256,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void showFan(boolean isRight,View hot) {
         if(panel!=null)return;
-        List<AppCatalog.App> shortcuts=new ArrayList<>();
-        for(String pkg:config.apps())for(AppCatalog.App a:all)if(a.pkg.equals(pkg)){shortcuts.add(a);break;}
+        List<ShortcutTarget> shortcuts=selectedTargets();
         fan=new FanView(this,shortcuts,isRight,dp(config.icon()),dp(config.radius()),bottom(),config.selectionDistance());lastSelection=-1;
         WindowManager.LayoutParams p=params(-1,-1,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
         p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
@@ -295,39 +296,74 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         sendBroadcast(state,null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
         sendBroadcast(new Intent(state).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
+    private List<ShortcutTarget> selectedTargets(){
+        List<ShortcutTarget> selected=new ArrayList<>();
+        for(String key:config.targets()){
+            ShortcutTarget target=null;
+            for(ShortcutTarget item:availableShortcuts)if(item.key().equals(key)){target=item;break;}
+            if(target==null){
+                target=ShortcutTarget.fromKey(this,key,all);
+                String label=config.targetLabels().get(key);
+                if(target!=null&&target.isShortcut()&&label!=null&&!label.isBlank())
+                    target=new ShortcutTarget(target.pkg,target.shortcutId,target.user,target.serialNumber,label,target.appLabel,target.icon,target.section);
+            }
+            if(target!=null)selected.add(target);
+        }
+        return selected;
+    }
+    private void saveTargets(List<ShortcutTarget> targets){
+        ArrayList<String> keys=new ArrayList<>(),labels=new ArrayList<>();for(ShortcutTarget target:targets){keys.add(target.key());labels.add(target.label.length()>200?target.label.substring(0,200):target.label);}
+        View savingPanel=panel;
+        settingsWorker.execute(()->{
+            try{android.os.Bundle extras=new android.os.Bundle();extras.putStringArrayList("targets",keys);extras.putStringArrayList("labels",labels);
+                android.os.Bundle result=getContentResolver().call(android.net.Uri.parse("content://"+ConfigProvider.AUTHORITY),"targets",null,extras);
+                if(result==null||!result.getBoolean("saved"))throw new IllegalStateException("settings save");
+                main.post(()->{if(panel==savingPanel)hidePanel();});
+            }catch(Exception e){main.post(()->Toast.makeText(this,"快捷方式保存失败",Toast.LENGTH_LONG).show());}
+        });
+    }
     private void showPanel() {
         if(panel!=null)return;
         if(all.isEmpty()){Toast.makeText(this,"应用列表正在加载，请稍后重试",Toast.LENGTH_SHORT).show();return;}
-        LinearLayout box=new LinearLayout(this){
-            @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)hidePanel();return true;}return super.dispatchKeyEvent(e);}
-        };
-        box.setOrientation(LinearLayout.VERTICAL);box.setBackgroundColor(0xff20252c);
-        int top=wm.getCurrentWindowMetrics().getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.statusBars()).top;
-        box.setPadding(dp(20),dp(16),dp(20),dp(16));
-        android.graphics.drawable.GradientDrawable bg=new android.graphics.drawable.GradientDrawable();bg.setColor(0xff24212a);bg.setCornerRadius(dp(28));box.setBackground(bg);
         FrameLayout outside=new FrameLayout(this){
             @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)hidePanel();return true;}return super.dispatchKeyEvent(e);}
-        };outside.setBackgroundColor(0x44000000);outside.setOnClickListener(v->hidePanel());box.setOnClickListener(v->{});
+        };
+        outside.setBackgroundColor(0x44000000);outside.setOnClickListener(v->hidePanel());
+        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key());},this::saveTargets,this::hidePanel);
+        content.setOnClickListener(v->{});
         android.graphics.Rect display=wm.getCurrentWindowMetrics().getBounds();
-        FrameLayout.LayoutParams card=new FrameLayout.LayoutParams(Math.min(display.width()-dp(32),dp(380)),Math.min(display.height()-dp(80),dp(640)),Gravity.CENTER);outside.addView(box,card);
-        Button close=new Button(this);close.setText("应用列表 · 关闭");close.setOnClickListener(v->hidePanel());box.addView(close);
-        AppList.fill(this,box,all,a->{String pkg=a.pkg;hidePanel();launch(pkg);});
+        android.graphics.Insets bars=wm.getCurrentWindowMetrics().getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+        boolean landscape=display.width()>display.height();
+        FrameLayout.LayoutParams card=new FrameLayout.LayoutParams(Math.min(display.width()-bars.left-bars.right-dp(32),dp(landscape?420:400)),
+            Math.min(display.height()-bars.top-bars.bottom-dp(24),dp(680)),Gravity.CENTER_VERTICAL|(landscape?Gravity.LEFT:Gravity.CENTER_HORIZONTAL));
+        card.leftMargin=landscape?bars.left+dp(16):0;outside.addView(content,card);
         WindowManager.LayoutParams p=params(-1,-1,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
-        p.softInputMode=WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;panel=outside;
+        p.windowAnimations=0;panel=outside;
         outside.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
             public void onViewAttachedToWindow(View v){panelDispatcher=v.findOnBackInvokedDispatcher();if(panelDispatcher!=null)panelDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,panelBack);}
             public void onViewDetachedFromWindow(View v){if(panelDispatcher!=null){panelDispatcher.unregisterOnBackInvokedCallback(panelBack);panelDispatcher=null;}}
         });
-        try{wm.addView(outside,p);publish(false);}catch(RuntimeException failure){panel=null;Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
+        outside.setAlpha(0);
+        try{wm.addView(outside,p);outside.animate().alpha(1).setDuration(150).start();publish(false);}
+        catch(RuntimeException failure){panel=null;Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
     }
     private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;publish(false);}}
-    private void launch(String pkg) {
+    private void launch(String key) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
-        if(!Rules.validPackage(pkg))return;
+        ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
         main.postDelayed(()->{
             if(cleaned)return;
             if(!backendReady){Wire.send(this,"STATUS");Toast.makeText(this,"后端尚未就绪，请先在模块内预检",Toast.LENGTH_LONG).show();return;}
-            Wire.send(this,"OPEN",pkg,-1,Wire.token(),false);
+            if(!target.isShortcut()){Wire.send(this,"OPEN",target.pkg,-1,Wire.token(),false);return;}
+            settingsWorker.execute(()->{
+                try{
+                    android.content.pm.LauncherApps launcher=getSystemService(android.content.pm.LauncherApps.class);
+                    if(launcher==null||!launcher.hasShortcutHostPermission())throw new SecurityException("shortcut host");
+                    android.app.PendingIntent pending=launcher.getShortcutIntent(target.pkg,target.shortcutId,null,target.user);
+                    if(pending==null)throw new IllegalStateException("shortcut unavailable");
+                    main.post(()->{if(!cleaned)Wire.openShortcut(this,target,pending);});
+                }catch(Exception e){main.post(()->Toast.makeText(this,"该快捷功能当前不可用",Toast.LENGTH_LONG).show());}
+            });
         },180);
     }
     @Override public void onConfigurationChanged(Configuration c){hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}

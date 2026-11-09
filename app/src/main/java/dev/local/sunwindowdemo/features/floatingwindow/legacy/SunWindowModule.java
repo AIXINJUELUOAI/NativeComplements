@@ -8,7 +8,7 @@ public final class SunWindowModule extends XposedModule {
     private boolean eligible, attempted;
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
         eligible = p.isSystemServer();
-        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.3.0-preview3");
+        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.3.0-preview4");
     }
     @Override public void onSystemServerStarting(SystemServerStartingParam p) {
         note("SYSTEM_SERVER_START eligible=" + eligible + " attempted=" + attempted);
@@ -46,6 +46,14 @@ public final class SunWindowModule extends XposedModule {
                 return chain.proceed();
             }));
             Class<?> window=Class.forName("com.android.server.wm.WindowState",false,p.getClassLoader());
+            try{
+                java.lang.reflect.Method drawn=a.method(window,"finishDrawing",android.view.SurfaceControl.Transaction.class,int.class);
+                if(drawn.getReturnType()!=boolean.class)throw new NoSuchMethodException("finishDrawing(Transaction,int)");
+                handles.add(hook(drawn).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();engine.drawingFinished(chain.getThisObject(),(Integer)chain.getArg(1));return result;
+                }));
+                note("TASK_COVER_DRAW_HOOK_READY");
+            }catch(Exception e){note("TASK_COVER_DRAW_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
             handles.add(hook(a.method(window,"canReceiveTouchInput")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 if(engine.blockContentTouch(chain.getThisObject()))return false;
                 return chain.proceed();
@@ -220,11 +228,22 @@ public final class SunWindowModule extends XposedModule {
                             ticket=engine.activityStarting(sourceRecord.get(chain.getThisObject()),chain.getArg(0),lastStarted.get(chain.getThisObject()),intent==null?0:intent.getFlags(),realCallingUid.getInt(chain.getThisObject()));
                         }catch(Exception e){note("HANDOFF_OBSERVE_FAILED "+FrameworkAccess.reason(e));}
                     }
+                    Object shortcutTicket=code>=0&&code<=3?engine.shortcutLaunchTicket():null;
                     boolean success=false;
-                    try{Object result=chain.proceed();success=result!=null;return result;}
-                    finally{engine.activityStartResult(ticket,success);}
+                    try{
+                        Object result=chain.proceed();success=result!=null;
+                        if(success&&shortcutTicket!=null)try{
+                            Object started=lastStarted.get(chain.getThisObject());
+                            // Reused singleTask starts can return an existing task while
+                            // the incoming request record itself was never attached.
+                            if((started==null||a.call(started,"getTask")==null)&&a.task.isInstance(result))
+                                started=a.call(result,"topRunningActivity");
+                            engine.shortcutActivityStarted(shortcutTicket,started);
+                        }catch(Exception e){note("SHORTCUT_OBSERVE_FAILED "+FrameworkAccess.reason(e));}
+                        return result;
+                    }finally{engine.activityStartResult(ticket,success);}
                 }));
-            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview3; system scopes only");
+            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview4; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));

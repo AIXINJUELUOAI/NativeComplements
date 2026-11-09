@@ -57,6 +57,16 @@ final class Wire {
         Intent i = new Intent(COMMAND).setPackage("android").putExtra("protocol", PROTOCOL)
             .putExtra("op", op).putExtra("package", pkg).putExtra("taskId", taskId)
             .putExtra("token", token).putExtra("landscape", landscape).putExtra("hideRecents",new Config(context).hideRecents());
+        sendRequest(context,i);
+    }
+    static void openShortcut(Context context,ShortcutTarget target,PendingIntent launch){
+        if(!target.isShortcut()||!launch.isActivity())throw new IllegalArgumentException("shortcut activity");
+        Intent i=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
+            .putExtra("package",target.pkg).putExtra("taskId",-1).putExtra("token",token())
+            .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",target.user);
+        sendRequest(context,i);
+    }
+    private static void sendRequest(Context context,Intent i){
         if(BackBridge.PACKAGE.equals(context.getPackageName()))i.putExtra("hostReady",SystemUiHost.live!=null&&SystemUiHost.live.ready()).putExtra("lastTouch",SystemUiHost.lastTouch);
         Bundle b = new Bundle(); b.putBinder("lease", LEASE); if(listener!=null)b.putBinder("frameChannel",FRAMES); i.putExtras(b);
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());

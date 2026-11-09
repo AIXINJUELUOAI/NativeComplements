@@ -6,7 +6,7 @@ import android.view.View;
 import java.util.List;
 
 final class FanView extends View {
-    private final List<AppCatalog.App> apps;
+    private final List<ShortcutTarget> apps;
     private final boolean right;
     private final float icon, requested, bottom;
     private final int selectionDistance;
@@ -23,7 +23,7 @@ final class FanView extends View {
         animator.addUpdateListener(a->{progress=(float)a.getAnimatedValue();invalidate();});
         animator.start();
     };
-    FanView(Context c,List<AppCatalog.App> apps,boolean right,float icon,float radius,float bottom,int selectionDistance) {
+    FanView(Context c,List<ShortcutTarget> apps,boolean right,float icon,float radius,float bottom,int selectionDistance) {
         super(c);this.apps=apps;this.right=right;this.icon=icon;requested=radius;this.bottom=bottom;
         this.selectionDistance=selectionDistance;
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -38,7 +38,7 @@ final class FanView extends View {
         int next=Rules.fanSelection(dx,dy,drawnRadius(),icon,apps.size()+1,selectionDistance);
         selected=next;invalidate();return next;
     }
-    String picked(){return selected<0?null:selected==apps.size()?"":apps.get(selected).pkg;}
+    String picked(){return selected<0?null:selected==0?"":apps.get(selected-1).key();}
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);float x=ox(),y=oy(),r=drawnRadius();
         
@@ -49,8 +49,8 @@ final class FanView extends View {
             float cx=x+(right?-1:1)*r*(float)Math.cos(a),cy=y-r*(float)Math.sin(a);
             float size=icon*(selected==i?1.12f:1);
             paint.setColor(selected==i?0xffa7c7ff:0xff48515d);paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);
-            if(i<apps.size()) {
-                android.graphics.drawable.Drawable drawable=apps.get(i).icon;
+            if(i>0) {
+                android.graphics.drawable.Drawable drawable=apps.get(i-1).icon;
                 int saved=c.save();Rect bounds=new Rect(drawable.getBounds());int alpha=drawable.getAlpha();
                 try{
                     c.translate(cx-size/2,cy-size/2);c.clipRect(0,0,size,size);

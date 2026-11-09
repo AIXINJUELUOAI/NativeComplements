@@ -6,7 +6,7 @@ import android.net.Uri;
 import android.os.*;
 import java.util.*;
 
-/** Read-only settings bridge. Only our UID and the SystemUI host may read it. */
+/** UID-checked settings snapshot and a narrow shortcut-list write endpoint. */
 public final class ConfigProvider extends ContentProvider {
     static final String AUTHORITY=Wire.PKG+".settings", CHANGED=Wire.PKG+".SETTINGS_CHANGED";
     @Override public boolean onCreate(){return true;}
@@ -16,6 +16,11 @@ public final class ConfigProvider extends ContentProvider {
             if(uid!=getContext().getApplicationInfo().uid && uid!=getContext().getPackageManager().getApplicationInfo(BackBridge.PACKAGE,0).uid)
                 throw new SecurityException("settings reader");
         } catch(android.content.pm.PackageManager.NameNotFoundException e){throw new SecurityException(e);}
+        if("targets".equals(method)){
+            ArrayList<String> keys=extras==null?null:extras.getStringArrayList("targets");
+            new Config(getContext()).targets(keys,extras==null?null:extras.getStringArrayList("labels"));
+            changed(getContext());Bundle saved=new Bundle();saved.putBoolean("saved",true);return saved;
+        }
         if(!"read".equals(method))throw new IllegalArgumentException("method");
         Bundle out=new Bundle();
         for(var e:getContext().getSharedPreferences("corner",0).getAll().entrySet()){

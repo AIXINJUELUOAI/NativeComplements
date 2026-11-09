@@ -49,7 +49,7 @@ final class WindowEngine {
             data.enforceInterface(Wire.CHANNEL);
             Intent i=Intent.CREATOR.createFromParcel(data);data.enforceNoDataAvail();
             String op=i.getStringExtra("op");
-            if(!java.util.Set.of("RESIZE","END_RESIZE","MOVE","RELEASE","DOCK","MINI","NORMAL","FULL","CLOSE","MINI_SIZE","MUTE","RESTORE_MINI").contains(op==null?"":op))return false;
+            if(!java.util.Set.of("RESIZE","END_RESIZE","MOVE","RELEASE","DOCK","MINI","NORMAL","FULL","CLOSE","MINI_SIZE","MUTE","RESTORE_MINI","MINI_DRAG","MINI_DRAG_CANCEL","EDGE_DRAG","EDGE_DOCK","EDGE_BAR_DRAG","EDGE_BAR_DOCK","EDGE_DRAG_CANCEL").contains(op==null?"":op))return false;
             handler.post(()->enqueueControl(i));return true;
         }
     };
@@ -65,6 +65,7 @@ final class WindowEngine {
     // A task is not owned yet during preflight. Keep that permission on this
     // thread only, then use the ordinary session lifetime after acquisition.
     private final ThreadLocal<Object> resizeCandidate=new ThreadLocal<>();
+    private final java.util.Map<Object,Session> coverTasks=new java.util.IdentityHashMap<>();
     private volatile SwitchStart pendingStart;
     private volatile boolean recovering;
     final EntryTrace trace;
@@ -72,6 +73,19 @@ final class WindowEngine {
     private int recoveryWaits;
     private int endedTaskId=-1;
     private volatile long openGeneration;
+    private final java.util.concurrent.atomic.AtomicReference<ShortcutLaunch> pendingShortcutLaunch=
+        new java.util.concurrent.atomic.AtomicReference<>();
+    private static final class ShortcutLaunch {
+        final long generation;
+        final String pkg;
+        final int userId;
+        volatile Object task;
+        volatile int taskId=-1;
+        volatile boolean dispatched;
+        ShortcutLaunch(long generation,String pkg,int userId){
+            this.generation=generation;this.pkg=pkg;this.userId=userId;
+        }
+    }
     private volatile boolean refreshQueued;
     private String last = "后端正在初始化";
     private boolean attached;
@@ -80,13 +94,14 @@ final class WindowEngine {
         Session returnTo;
         boolean parked,restoreForeground;
         TaskVisibilityGuard startMask,rotationMask;
+        TaskCover cover;boolean coverDrawn,coverFullscreen;
         final RotationGate rotation=new RotationGate();
         final java.util.Set<Object> rotationTransitions=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         boolean rotationProbeQueued;
         Object task, parent;
         int taskId, userId, mode, logicalShort, topState;
         int uid=-1;
-        boolean miniLarge,edgeHidden,geometryDirty,refreshingGeometry;
+        boolean miniLarge,edgeHidden,geometryDirty,refreshingGeometry,resizing;
         int edgeSide;
         float placementMargin;
         Rect safeBounds;
@@ -113,7 +128,10 @@ final class WindowEngine {
         Geometry.Placement normalPlacement;
         volatile boolean transitioning,fullTransition,transitionHandle;
         volatile float radiusFactor=1,barAlpha=1,opacity=1;
-        int displayW, displayH;
+        int displayW, displayH,displayRotation=-1;
+        Geometry.Placement miniDragBase;float miniDragOpacity;
+        Geometry.Placement edgeDragBase,edgeDragMini;int edgeDragSide;
+        boolean edgeBarDragging;float edgeBarCenterX,edgeBarCenterY;
     }
 
     // Task objects and originals stay alive across switches. Only presentation changes.
@@ -200,7 +218,7 @@ final class WindowEngine {
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
             if ("GESTURE".equals(op)) { cancelStart("gesture");trace.stop();gestureStart(new Intent(i).putExtra("generation",++openGeneration),0);return; }
             if ("OPEN".equals(op)) { cancelStart("open");trace.stop();open(new Intent(i).putExtra("generation",++openGeneration),0); return; }
-            if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)||"RESTORE_MINI".equals(op)) {
+            if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)||"RESTORE_MINI".equals(op)||"MINI_DRAG".equals(op)||"MINI_DRAG_CANCEL".equals(op)||"EDGE_DRAG".equals(op)||"EDGE_DOCK".equals(op)||"EDGE_BAR_DRAG".equals(op)||"EDGE_BAR_DOCK".equals(op)||"EDGE_DRAG_CANCEL".equals(op)) {
                 control(i); return;
             }
             if ("RESTORE".equals(op)) {
@@ -248,6 +266,7 @@ final class WindowEngine {
                         s.decoration=new TaskDecoration(a);
                         s.entering=true;s.transitioning=true;s.opacity=0;s.barAlpha=0;
                         active = s;
+                        beginCover(s,new Geometry.Placement(s.displayW,s.displayH,1,0,0),s.placement,false);
                         a.opacity(s.task,0);
                         a.call(s.task,"setForceTranslucent",new Class<?>[]{boolean.class},true);
                         if(!a.bool(s.task,"isForceTranslucent"))throw new IllegalStateException("系统未保留小窗下方的内容");
@@ -279,8 +298,9 @@ final class WindowEngine {
 
     private void open(Intent request,int attempt) {
         String pkg=request.getStringExtra("package");
+        final long generation=request.getLongExtra("generation",-1);
         try {
-            if(request.getLongExtra("generation",-1)!=openGeneration)return;
+            if(generation!=openGeneration){clearShortcutLaunch(generation);return;}
             long began=request.getLongExtra("began",0);
             if(began==0){began=SystemClock.elapsedRealtime();request.putExtra("began",began);}
             if(SystemClock.elapsedRealtime()-began>12000)throw new IllegalStateException("等待应用/转场超时，phase="+request.getStringExtra("phase"));
@@ -290,7 +310,13 @@ final class WindowEngine {
                 recoveryWaits=0;recover("重新检查待恢复任务");
                 if(recovering||!sessions.isEmpty())throw new IllegalStateException("旧任务仍待恢复："+last);
             }
+            boolean shortcut=request.hasExtra("shortcutLaunch");
+            android.app.PendingIntent shortcutLaunch=request.getParcelableExtra("shortcutLaunch",android.app.PendingIntent.class);
+            if(shortcut&&(shortcutLaunch==null||!shortcutLaunch.isActivity()||!android.os.Process.myUserHandle().equals(request.getParcelableExtra("shortcutUser",UserHandle.class))))
+                throw new IllegalArgumentException("shortcut identity");
+            final int shortcutUser=shortcut?(Integer)a.call(request.getParcelableExtra("shortcutUser",UserHandle.class),"getIdentifier"):-1;
             if(active!=null){
+                if(!shortcut){
                 // Sessions retain creation order: reopen the app's main task before its children.
                 for(Session retained:sessions)if(!retained.restoring&&pkg.equals(retained.pkg)){
                     synchronized(lock){
@@ -311,12 +337,28 @@ final class WindowEngine {
                     }
                     state(active,"normal");return;
                 }
+                }
                 openPhase(request,"wait-close",-1);if(!active.closing&&!active.restoring)close(active);
                 handler.postDelayed(()->open(request,attempt+1),40);return;
             }
             if(journal.getBaseFile().exists())throw new IllegalStateException("请先完成待恢复记录");
             final Object[] candidate={null};final long[] newest={Long.MIN_VALUE};
-            synchronized(lock){a.call(root,"forAllTasks",new Class<?>[]{Consumer.class},(Consumer<Object>)task->{
+            if(shortcut){
+                if(request.getBooleanExtra("launched",false)){
+                    ShortcutLaunch ticket=pendingShortcutLaunch.get();
+                    if(ticket==null||ticket.generation!=generation||!pkg.equals(ticket.pkg)||shortcutUser!=ticket.userId)
+                        throw new IllegalStateException("快捷功能启动请求已失效");
+                    if(ticket.dispatched&&ticket.taskId>=0)synchronized(lock){
+                        Object task=find(ticket.taskId);
+                        ComponentName component=task==null?null:(ComponentName)a.field(task,"realActivity");
+                        if(task==null||task!=ticket.task||(Integer)a.field(task,"mUserId")!=ticket.userId
+                            ||component==null||!pkg.equals(component.getPackageName())
+                            ||!a.bool(task,"isRootTask")||!a.bool(task,"isLeafTask"))
+                            throw new IllegalStateException("快捷功能目标任务已改变");
+                        candidate[0]=task;
+                    }
+                }
+            }else synchronized(lock){a.call(root,"forAllTasks",new Class<?>[]{Consumer.class},(Consumer<Object>)task->{
                 try{ComponentName component=(ComponentName)a.field(task,"realActivity");
                     if(component!=null&&pkg.equals(component.getPackageName())&&(Integer)a.field(task,"mUserId")==0
                         &&a.bool(task,"isRootTask")&&a.bool(task,"isLeafTask")){
@@ -326,21 +368,66 @@ final class WindowEngine {
             });}
             int id=candidate[0]==null?-1:(Integer)a.field(candidate[0],"mTaskId");
             if(!request.getBooleanExtra("launched",false)){
-                Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
-                if(launch==null)throw new IllegalStateException("没有启动入口");
                 ActivityOptions options=ActivityOptions.makeBasic();a.call(options,"setAvoidMoveToFront");
-                if(id>=0)a.call(options,"setLaunchTaskId",new Class<?>[]{int.class},id);
-                request.putExtra("launched",true);openPhase(request,"launch",id);
-                trace.arm(pkg,openGeneration);
-                context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),options.toBundle());
+                request.putExtra("launched",true);openPhase(request,"launch",id);trace.arm(pkg,openGeneration);
+                if(shortcut){
+                    // The system-issued shortcut PendingIntent preserves its real intent stack.
+                    // Do not replace it with the launcher activity or force it into the old task.
+                    ShortcutLaunch ticket=new ShortcutLaunch(generation,pkg,shortcutUser);
+                    pendingShortcutLaunch.set(ticket);
+                    shortcutLaunch.send(context,0,null,(pi,intent,code,data,extras)->{
+                        synchronized(ticket){
+                            if(pendingShortcutLaunch.get()==ticket&&ticket.generation==openGeneration)ticket.dispatched=true;
+                        }
+                    },handler,null,options.toBundle());
+                }else{
+                    Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
+                    if(launch==null)throw new IllegalStateException("没有启动入口");
+                    if(id>=0)a.call(options,"setLaunchTaskId",new Class<?>[]{int.class},id);
+                    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),options.toBundle());
+                }
                 handler.postDelayed(()->open(request,attempt+1),32);return;
+            }
+            if(shortcut){
+                ShortcutLaunch ticket=pendingShortcutLaunch.get();
+                if(ticket==null||ticket.generation!=generation)throw new IllegalStateException("快捷功能启动请求已失效");
+                if(!ticket.dispatched){openPhase(request,"wait-shortcut",-1);handler.postDelayed(()->open(request,attempt+1),32);return;}
             }
             if(candidate[0]==null){openPhase(request,"wait-task",-1);handler.postDelayed(()->open(request,attempt+1),32);return;}
             synchronized(lock){if(a.animating(candidate[0])||a.integer(candidate[0],"getRelativeDisplayRotation")!=0){
                 openPhase(request,"wait-native",id);handler.postDelayed(()->open(request,attempt+1),32);return;}
             }
+            clearShortcutLaunch(generation);
             openPhase(request,"start",id);command(new Intent(request).putExtra("op","START").putExtra("taskId",id));
-        }catch(Throwable e){note("OPEN_FAILED package="+pkg+"："+FrameworkAccess.reason(e));}
+        }catch(Throwable e){clearShortcutLaunch(generation);note("OPEN_FAILED package="+pkg+"："+FrameworkAccess.reason(e));}
+    }
+    private void clearShortcutLaunch(long generation){
+        ShortcutLaunch ticket=pendingShortcutLaunch.get();
+        if(ticket!=null&&ticket.generation==generation)pendingShortcutLaunch.compareAndSet(ticket,null);
+    }
+    Object shortcutLaunchTicket(){
+        ShortcutLaunch ticket=pendingShortcutLaunch.get();
+        if(ticket!=null&&ticket.generation!=openGeneration){pendingShortcutLaunch.compareAndSet(ticket,null);return null;}
+        return ticket;
+    }
+    /** The existing start-result hook calls this only after a successful native start.
+     * Keep the last matching activity in a shortcut's real intent stack, including
+     * singleTask/onNewIntent reuse; never guess from the package's recent tasks. */
+    void shortcutActivityStarted(Object value,Object started){
+        if(!(value instanceof ShortcutLaunch ticket)||started==null||lock==null)return;
+        try{synchronized(lock){
+            if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration)return;
+            Object task=a.call(started,"getTask");
+            if(task==null||!ticket.pkg.equals(a.field(started,"packageName"))
+                ||(Integer)a.field(task,"mUserId")!=ticket.userId)return;
+            ComponentName component=(ComponentName)a.field(task,"realActivity");
+            if(component==null||!ticket.pkg.equals(component.getPackageName()))return;
+            synchronized(ticket){
+                if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration||ticket.dispatched)return;
+                ticket.task=task;ticket.taskId=(Integer)a.field(task,"mTaskId");
+            }
+            log.accept("SHORTCUT_TASK_BOUND generation="+ticket.generation+" package="+ticket.pkg+" task="+ticket.taskId);
+        }}catch(Exception e){log.accept("SHORTCUT_TASK_BIND_FAILED "+FrameworkAccess.reason(e));}
     }
     private void openPhase(Intent request,String phase,int id){
         if(phase.equals(request.getStringExtra("phase")))return;request.putExtra("phase",phase);
@@ -493,7 +580,7 @@ final class WindowEngine {
         active=next;
         a.call(atm,"deferWindowLayout");
         try{
-            prepareGeometry(next);placeLinked(next,placement);
+            prepareGeometry(next);
             if(next.decoration==null)next.decoration=new TaskDecoration(a);
             a.opacity(next.task,0);
             a.call(next.task,"setFocusable",new Class<?>[]{boolean.class},true);
@@ -558,20 +645,6 @@ final class WindowEngine {
         }catch(Throwable e){recover("关联任务恢复失败："+FrameworkAccess.reason(e));}
     }
 
-    private void placeLinked(Session s,Geometry.Placement old)throws Exception{
-        if(old==null)return;
-        Geometry.Placement p=s.placement;
-        Rect safe=safeArea(a.call(s.task,"getDisplayContent"));
-        float margin=a.config(s.task,false).densityDpi/160f*12;
-        float scale=GestureMath.clampScale(old.scale(),s.defaultScale,s.landscape,s.displayW>s.displayH);
-        scale=Math.min(scale,Math.min((safe.width()-2*margin)/p.width(),(safe.height()-2*margin)/p.height()));
-        if(scale<=0)return;
-        float x=old.x()+(old.width()*old.scale()-p.width()*scale)/2;
-        float y=old.y()+(old.height()*old.scale()-p.height()*scale)/2;
-        x=Math.max(safe.left+margin,Math.min(x,safe.right-margin-p.width()*scale));
-        y=Math.max(safe.top+margin,Math.min(y,safe.bottom-margin-p.height()*scale));
-        s.placement=new Geometry.Placement(p.width(),p.height(),scale,x,y);s.normalPlacement=s.placement;
-    }
     private void control(Intent i) throws Exception {
         Session s=active;
         if(s==null||s.restoring||!s.token.equals(i.getStringExtra("token")))throw new IllegalStateException("小窗已结束");
@@ -595,8 +668,29 @@ final class WindowEngine {
             if(!"mini".equals(s.frame)||s.edgeHidden||s.transitioning||s.entering)return;
             resizeMini(s);return;
         }
+        if(op!=null&&op.startsWith("EDGE_")){edgeControl(s,i,op);return;}
+        if("MINI_DRAG".equals(op)||"MINI_DRAG_CANCEL".equals(op)){
+            if(!"mini".equals(s.frame)||s.edgeHidden||s.entering)return;
+            synchronized(lock){
+                if("MINI_DRAG_CANCEL".equals(op))endMiniDrag(s,true);
+                else{
+                    Geometry.Placement p=s.placement;if(p==null)return;
+                    if(s.miniDragBase==null){s.miniDragBase=p;s.miniDragOpacity=s.opacity;}
+                    Geometry.Placement base=s.miniDragBase;
+                    float progress=i.getFloatExtra("scale",0),cx=i.getFloatExtra("x",p.x()+p.width()*p.scale()/2),cy=i.getFloatExtra("y",p.y()+p.height()*p.scale()/2);
+                    if(!Float.isFinite(progress)||!Float.isFinite(cx)||!Float.isFinite(cy))return;
+                    float scale=base.scale()*MiniMagnet.scaleFactor(progress);
+                    s.placement=new Geometry.Placement(base.width(),base.height(),scale,cx-base.width()*scale/2,cy-base.height()*scale/2);
+                    s.opacity=s.miniDragOpacity*MiniMagnet.alphaFactor(progress);
+                }
+                renderFrame(s);
+            }
+            frameReport(op);return;
+        }
+        s.resizing="RESIZE".equals(op);
         s.animationRev++;s.transitioning=false;s.radiusFactor=1;
-        if("CLOSE".equals(op)){close(s);return;}
+        if("CLOSE".equals(op)){s.miniDragBase=null;close(s);return;}
+        if("DOCK".equals(op))endMiniDrag(s,false);
         if("FULL".equals(op)){fullscreen(s);return;}
         if("MINI".equals(op)||"NORMAL".equals(op)){state(s,"MINI".equals(op)?"mini":"normal");return;}
         Geometry.Placement p=s.placement;
@@ -622,10 +716,10 @@ final class WindowEngine {
                 if(!"mini".equals(s.frame)||s.edgeHidden)return;
                 float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
                 if(!Float.isFinite(x)||!Float.isFinite(y))throw new IllegalArgumentException("position");
-                Rect safe=safeArea(a.call(s.task,"getDisplayContent"));
+                Rect safe=s.safeBounds==null?safeArea(a.call(s.task,"getDisplayContent")):new Rect(s.safeBounds);
                 float margin=s.placementMargin;
                 if("DOCK".equals(op)){
-                    int side=Geometry.hideSide(p,x,safe.left,safe.right,margin);
+                    int side=Geometry.hideSide(p,x,s.displayW);
                     if(side!=0){hideMini(s,p,side,y,safe,margin);return;}
                     x=x+p.width()*p.scale()/2<safe.centerX()?safe.left+margin:safe.right-margin-p.width()*p.scale();
                 }
@@ -638,6 +732,52 @@ final class WindowEngine {
             renderFrame(s);
         }
         if("RESIZE".equals(op)||"MOVE".equals(op))frameReport(op);else report(op);
+    }
+
+    private void endMiniDrag(Session s,boolean cancel){
+        Geometry.Placement base=s.miniDragBase,current=s.placement;if(base==null||current==null)return;
+        float cx=current.x()+current.width()*current.scale()/2,cy=current.y()+current.height()*current.scale()/2;
+        s.placement=cancel?base:new Geometry.Placement(base.width(),base.height(),base.scale(),cx-base.width()*base.scale()/2,cy-base.height()*base.scale()/2);
+        s.opacity=s.miniDragOpacity;s.miniDragBase=null;
+    }
+
+    private void edgeControl(Session s,Intent i,String op)throws Exception{
+        if(!"mini".equals(s.frame)||!s.edgeHidden||s.entering||s.transitioning)return;
+        synchronized(lock){
+            Geometry.Placement p=s.placement;if(p==null||s.miniPlacement==null)return;
+            if("EDGE_DRAG_CANCEL".equals(op)){
+                if(s.edgeDragBase!=null){s.placement=s.edgeDragBase;s.miniPlacement=s.edgeDragMini;s.edgeSide=s.edgeDragSide;}
+                s.edgeDragBase=null;s.edgeBarDragging=false;renderFrame(s);frameReport(op);return;
+            }
+            if(s.edgeDragBase==null){s.edgeDragBase=p;s.edgeDragMini=s.miniPlacement;s.edgeDragSide=s.edgeSide;}
+            float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
+            if(!Float.isFinite(x)||!Float.isFinite(y))return;
+            Rect safe=s.safeBounds==null?safeArea(a.call(s.task,"getDisplayContent")):new Rect(s.safeBounds);
+            float margin=s.placementMargin;
+            if("EDGE_BAR_DRAG".equals(op)){
+                s.edgeBarDragging=true;s.edgeBarCenterX=x;s.edgeBarCenterY=y;
+            }else if("EDGE_BAR_DOCK".equals(op)){
+                int side=x<s.displayW/2f?-1:1;
+                Geometry.Placement visible=s.miniPlacement;
+                float vy=Math.max(safe.top+margin,Math.min(y-visible.height()*visible.scale()/2,safe.bottom-margin-visible.height()*visible.scale()));
+                s.miniPlacement=new Geometry.Placement(visible.width(),visible.height(),visible.scale(),side<0?safe.left+margin:safe.right-margin-visible.width()*visible.scale(),vy);
+                s.edgeSide=side;s.placement=Geometry.offscreen(s.miniPlacement,side,0,s.displayW,margin);
+                s.edgeDragBase=null;s.edgeBarDragging=false;
+            }else{
+                y=Math.max(safe.top,Math.min(y,safe.bottom-p.height()*p.scale()));
+                Geometry.Placement destination=new Geometry.Placement(p.width(),p.height(),p.scale(),x,y);
+                if("EDGE_DOCK".equals(op)){
+                    s.edgeDragBase=null;s.edgeBarDragging=false;s.animationRev++;
+                    int side=Geometry.hideSide(destination,x,s.displayW);
+                    if(side!=0){hideMini(s,p,side,y,safe,margin);return;}
+                    x=x+p.width()*p.scale()/2<safe.centerX()?safe.left+margin:safe.right-margin-p.width()*p.scale();
+                    destination=new Geometry.Placement(p.width(),p.height(),p.scale(),x,y);
+                    s.edgeHidden=false;s.miniPlacement=destination;animate(s,p,destination,false,0,0);return;
+                }
+                s.placement=destination;
+            }
+            renderFrame(s);frameReport(op);
+        }
     }
 
     record BackRoot(Object activity,Object window,Object display,int uid,int taskId) {}
@@ -749,33 +889,20 @@ final class WindowEngine {
     }
     private void state(Session s,String target) throws Exception {
         if(s.entering)return;
-        boolean expanding="mini".equals(s.frame)&&"normal".equals(target);
         float startBar="mini".equals(s.frame)?0:s.barAlpha;
         if("mini".equals(s.frame)&&!s.edgeHidden)s.miniPlacement=s.placement;
-        if("normal".equals(s.frame)&&s.placement!=null){
-            Geometry.Placement p=s.placement;
-            s.normalPlacement=new Geometry.Placement(p.width(),p.height(),s.defaultScale,
-                p.x()+p.width()*(p.scale()-s.defaultScale)/2,p.y()+p.height()*(p.scale()-s.defaultScale)/2);
-        }
         s.edgeHidden=false;s.frame=target;s.animationRev++;s.fullTransition=false;s.radiusFactor=1;
         Geometry.Placement start=s.placement;
         if(start==null){refresh(s);report("STATE");return;}
         Rect safe=new Rect();
         synchronized(lock){safe.set(safeArea(a.call(s.task,"getDisplayContent")));}
         float margin=s.placementMargin;
-        Geometry.Placement normal=s.normalPlacement;
-        Geometry.Placement end=new Geometry.Placement(start.width(),start.height(),s.defaultScale,
-            normal!=null?normal.x():safe.centerX()-start.width()*s.defaultScale/2,
-            normal!=null?normal.y():safe.centerY()-start.height()*s.defaultScale/2);
+        Geometry.Placement end=normalForIme(s);
         if("mini".equals(target)) {
             end=s.miniPlacement==null
                 ?Geometry.miniTopRight(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge)
                 :Geometry.resizeMini(s.miniPlacement,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
             s.miniPlacement=end;
-        }else if(expanding){
-            // A hidden mini retains its visible dock in miniPlacement.
-            end=Geometry.expandMini(s.miniPlacement==null?start:s.miniPlacement,end,
-                safe.left,safe.top,safe.right,safe.bottom,margin);
         }
         // Change focus after the surface morph; avoid starting a competing native transition first.
         animate(s,start,end,false,startBar,"mini".equals(target)?0:1);
@@ -817,6 +944,7 @@ final class WindowEngine {
         float scale=Math.min((float)bounds.width()/start.width(),(float)bounds.height()/start.height());
         Geometry.Placement end=new Geometry.Placement(start.width(),start.height(),scale,
             bounds.centerX()-start.width()*scale/2,bounds.centerY()-start.height()*scale/2);
+        beginCover(s,start,new Geometry.Placement(bounds.width(),bounds.height(),1,bounds.left,bounds.top),true);
         s.fullTransition=true;s.animationRev++;
         animate(s,start,end,true,"mini".equals(s.frame)?0:s.barAlpha,0);
     }
@@ -991,9 +1119,18 @@ final class WindowEngine {
             Geometry.Placement p = Geometry.place(s.logicalShort, s.landscape,
                 safe.left, safe.top, safe.right, safe.bottom, margin);
             s.defaultScale=p.scale();s.normalPlacement=p;
-            if("mini".equals(s.frame)) p=Geometry.miniTopRight(p,p.scale(),safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
-            s.placement = p; s.displayW = displayBounds.width(); s.displayH = displayBounds.height();
+            s.miniPlacement=Geometry.miniTopRight(p,p.scale(),safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
+            s.placement="mini".equals(s.frame)?s.miniPlacement:p;
+            s.displayW=displayBounds.width();s.displayH=displayBounds.height();s.displayRotation=a.integer(display,"getRotation");
             s.safeBounds=new Rect(safe);s.placementMargin=margin;
+    }
+    private Geometry.Placement normalForIme(Session s)throws Exception{
+        Geometry.Placement normal=s.normalPlacement;
+        if(normal==null||s.displayW>s.displayH)return normal;
+        Object display=a.call(s.task,"getDisplayContent");Rect bounds=(Rect)a.call(display,"getBounds");
+        Object state=a.call(a.call(display,"getInsetsStateController"),"getRawInsetsState");
+        Insets ime=(Insets)a.call(state,"calculateInsets",new Class<?>[]{Rect.class,Rect.class,int.class,boolean.class},bounds,bounds,android.view.WindowInsets.Type.ime(),false);
+        return Geometry.avoidIme(normal,s.displayW,s.displayH,ime.bottom);
     }
     private void refresh(Session s) throws Exception {refresh(s,false);}
     private void refresh(Session s,boolean surfaceOnly) throws Exception {
@@ -1011,32 +1148,32 @@ final class WindowEngine {
                 history.windowed(new WindowHistory.Entry(s.taskId,s.userId,s.pkg,s.component,s.baseId));saveHistory();
                 log.accept("LIVE_IDENTITY_UPDATED task="+s.taskId);
             }
-            Geometry.Placement previous=s.placement,oldNormal=s.normalPlacement,oldMini=s.miniPlacement;
+            Geometry.Placement previous=s.placement,oldMini=s.miniPlacement;
             boolean completingMorph=s.transitioning;
             Rect oldSafe=s.safeBounds==null?null:new Rect(s.safeBounds);
             float oldMargin=s.placementMargin;
-            int oldW=s.displayW,oldH=s.displayH;
+            int oldW=s.displayW,oldH=s.displayH,oldRotation=s.displayRotation;
             prepareGeometry(s);
-            boolean unchanged=previous!=null&&oldW==s.displayW&&oldH==s.displayH
+            boolean rotated=oldRotation>=0&&oldRotation!=s.displayRotation;
+            if(previous!=null&&(previous.width()!=s.placement.width()||previous.height()!=s.placement.height())&&!rotated&&!s.rotation.active())
+                beginCover(s,previous,s.placement,false);
+            boolean unchanged=!rotated&&previous!=null&&oldW==s.displayW&&oldH==s.displayH
                 &&java.util.Objects.equals(oldSafe,s.safeBounds)
                 &&previous.width()==s.placement.width()&&previous.height()==s.placement.height();
-            if(unchanged){s.placement=previous;if(oldNormal!=null)s.normalPlacement=oldNormal;}
+            if(unchanged){s.placement=previous;if(oldMini!=null)s.miniPlacement=oldMini;}
             else{
                 Rect safe=s.safeBounds;
                 if(oldSafe!=null&&previous!=null){
-                    if(oldNormal!=null)s.normalPlacement=Geometry.remapNormal(oldNormal,s.normalPlacement,
-                        oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,safe.left,safe.top,safe.right,safe.bottom,s.placementMargin);
                     Geometry.Placement mini="mini".equals(s.frame)&&!s.edgeHidden?previous:oldMini;
-                    if(mini!=null)s.miniPlacement=Geometry.remapMini(mini,s.normalPlacement,s.defaultScale,
+                    if(rotated){
+                        s.resizing=false;s.edgeHidden=false;s.edgeSide=0;
+                        if(s.miniDragBase!=null)s.opacity=s.miniDragOpacity;
+                        s.miniDragBase=null;s.edgeDragBase=null;s.edgeBarDragging=false;
+                    }
+                    else if(mini!=null)s.miniPlacement=Geometry.remapMini(mini,s.normalPlacement,s.defaultScale,
                         oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,oldMargin,
                         safe.left,safe.top,safe.right,safe.bottom,s.placementMargin,s.miniLarge);
                     s.placement="mini".equals(s.frame)?s.miniPlacement:s.normalPlacement;
-                    if("normal".equals(s.frame)&&safe.width()>safe.height()){
-                        Geometry.Placement anchor=Geometry.remapNormal(previous,s.normalPlacement,
-                            oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,safe.left,safe.top,safe.right,safe.bottom,s.placementMargin);
-                        s.placement=Geometry.expandMini(anchor,s.normalPlacement,
-                            safe.left,safe.top,safe.right,safe.bottom,s.placementMargin);
-                    }
                     if(s.placement==null)s.placement=previous;
                     if(s.edgeHidden)s.placement=Geometry.offscreen(s.miniPlacement,s.edgeSide,0,s.displayW,s.placementMargin);
                 }
@@ -1062,6 +1199,74 @@ final class WindowEngine {
             apply(s);
             if(!surfaceOnly){a.call(root,"ensureActivitiesVisible");a.call(wms,"requestTraversal");}
             }finally{s.refreshingGeometry=false;}
+        }
+    }
+
+    private static RectF visualBounds(Geometry.Placement p){return new RectF(p.x(),p.y(),p.x()+p.width()*p.scale(),p.y()+p.height()*p.scale());}
+    private void beginCover(Session s,Geometry.Placement from,Geometry.Placement to,boolean fullscreen){
+        if(from==null||to==null)return;
+        try{
+            s.coverDrawn=false;s.coverFullscreen=fullscreen;
+            if(s.cover!=null){s.cover.target(visualBounds(to));return;}
+            float density=a.config(s.task,false).densityDpi/160f;
+            float radius=a.integer(s.task,"getWindowingMode")==1?0:density*MotionStyle.radius(from.scale(),s.defaultScale);
+            TaskCover cover=new TaskCover(a,context,s.task,s.parent,s.pkg,visualBounds(from),visualBounds(to),radius,fullscreen?0:density*MotionStyle.radius(to.scale(),s.defaultScale),coverReleaseAlpha(s));
+            s.cover=cover;coverTasks.put(s.task,s);pollCover(s,cover);
+        }catch(Throwable error){log.accept("COVER_SKIPPED "+FrameworkAccess.reason(error));endCover(s);}
+    }
+    private boolean coverConfigurationMatches(Session s,Object window)throws Exception{
+        if(a.integer(s.task,"getWindowingMode")!=(s.coverFullscreen?1:5))return false;
+        Configuration reported=(Configuration)a.call(a.field(window,"mLastReportedConfiguration"),"getMergedConfiguration");
+        Object wc=a.field(reported,"windowConfiguration"),display=a.call(s.task,"getDisplayContent");
+        if(display==null||a.integer(wc,"getWindowingMode")!=(s.coverFullscreen?1:5)
+            ||a.integer(wc,"getRotation")!=a.integer(display,"getRotation"))return false;
+        Rect actual=(Rect)a.call(wc,"getBounds"),expected=s.coverFullscreen?(Rect)a.call(display,"getBounds"):new Rect(0,0,s.placement.width(),s.placement.height());
+        return actual.width()==expected.width()&&actual.height()==expected.height();
+    }
+    void drawingFinished(Object window,int seq){
+        if(lock==null)return;
+        try{synchronized(lock){
+            Object task=a.call(window,"getTask");Session s=coverTasks.get(task);
+            if(s==null||s.cover==null||a.call(task,"getTopVisibleAppMainWindow")!=window
+                ||seq<(Integer)a.field(window,"mSyncSeqId"))return;
+            if(coverConfigurationMatches(s,window))s.coverDrawn=true;
+        }}catch(Throwable error){log.accept("COVER_DRAW_CHECK_FAILED "+FrameworkAccess.reason(error));}
+    }
+    private void pollCover(Session s,TaskCover cover){
+        handler.postDelayed(()->{synchronized(lock){
+            if(s.cover!=cover)return;
+            try{
+                cover.ownerAlpha(coverReleaseAlpha(s));
+                boolean attached=a.bool(s.task,"isAttached");
+                if(!attached||s.parked||s.restoring&&!s.restoreForeground){endCover(s);return;}
+                Object main=a.call(s.task,"getTopVisibleAppMainWindow");
+                boolean ready=s.coverDrawn&&main!=null&&a.bool(main,"isDrawn")&&a.bool(main,"isVisible")
+                    &&coverConfigurationMatches(s,main)&&!a.presentationLeashed(s.task);
+                if(s.coverFullscreen){
+                    Object display=a.call(s.task,"getDisplayContent");if(display!=null)cover.target(new RectF((Rect)a.call(display,"getBounds")));
+                }else ready&=!s.entering;
+                boolean visible=context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
+                if(!cover.step(ready,visible)){s.cover=null;coverTasks.remove(s.task);if(active==s&&!s.restoring)renderFrame(s);return;}
+                pollCover(s,cover);
+            }catch(Throwable error){log.accept("COVER_RELEASED "+FrameworkAccess.reason(error));endCover(s);}
+        }},16);
+    }
+    private float coverReleaseAlpha(Session s){
+        if(s.parked||s.screenSuspended)return 0;
+        if(s.restoring)return s.restoreForeground?1:0;
+        if(s.startMask!=null&&s.startMask.holding()||s.rotationMask!=null&&s.rotationMask.holding())return 0;
+        return s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
+    }
+    private void endCover(Session s){
+        TaskCover cover=s.cover;s.cover=null;coverTasks.remove(s.task);
+        if(cover!=null){
+            cover.ownerAlpha(coverReleaseAlpha(s));cover.close();
+            // Releasing the cover mask restores its surface alpha. Reapply the
+            // live owner immediately so parked/background tasks stay hidden.
+            try{
+                if(s.restoring&&!s.restoreForeground)a.opacity(s.task,0);
+                else if(sessions.contains(s)&&!s.restoring)renderFrame(s);
+            }catch(Throwable error){log.accept("COVER_OWNER_REAPPLY_FAILED "+FrameworkAccess.reason(error));}
         }
     }
 
@@ -1319,10 +1524,12 @@ final class WindowEngine {
     }
     private float presentationAlpha(Session s){
         return s.parked||s.restoring||s.screenSuspended||s.startMask!=null&&s.startMask.holding()
-            ?0:s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
+            ||s.cover!=null&&s.cover.mask.holding()?0:s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
     }
     private TaskVisibilityGuard presentationMask(Session s){
-        return s.rotationMask!=null&&s.rotationMask.holding()?s.rotationMask:s.startMask;
+        if(s.rotationMask!=null&&s.rotationMask.holding())return s.rotationMask;
+        if(s.startMask!=null&&s.startMask.holding())return s.startMask;
+        return s.cover!=null&&s.cover.mask.holding()?s.cover.mask:s.startMask;
     }
     private void probeRotation(Session s){
         if(!s.rotation.active()||s.rotation.fading())return;
@@ -1609,6 +1816,13 @@ final class WindowEngine {
             if(s.entering||s.closing)a.opacity(s.task,0);
             if(s.decoration!=null)s.decoration.hide(s.task);return;
         }
+        if("normal".equals(s.frame)&&!s.resizing&&!s.transitioning&&!s.entering&&!s.fullTransition){
+            Geometry.Placement adjusted=normalForIme(s);
+            if(adjusted!=null&&!adjusted.equals(s.placement)){
+                s.placement=adjusted;handler.post(()->{if(active==s)frameReport("IME_PLACEMENT");});
+            }
+        }
+        if(s.cover!=null&&!s.coverFullscreen)s.cover.target(visualBounds(s.placement));
         Rect parentBounds = (Rect) a.call(s.parent, "getBounds");
         Geometry.Placement p = s.placement;
         // Transform the task; preserve native child-window layout/input metadata.
@@ -1633,11 +1847,15 @@ final class WindowEngine {
         a.opacity(s.task,presentationAlpha(s));
         if(s.decoration!=null){
             boolean wasPresented=s.presented;
-            s.presented=s.decoration.update(s.task,s.parent,p,a.config(s.task,false).densityDpi/160f,s.displayW>s.displayH,s.barAlpha*s.rotation.alpha(SystemClock.elapsedRealtime()),!a.inFrame()&&!s.backRequested);
+            s.presented=s.decoration.update(s.task,s.parent,p,a.config(s.task,false).densityDpi/160f,s.displayW>s.displayH,s.barAlpha*s.rotation.alpha(SystemClock.elapsedRealtime())*(s.cover==null?1:0),!a.inFrame()&&!s.backRequested);
             if(s.presented&&!wasPresented)handler.post(()->{
                 if(active!=s||s.restoring||s.closing)return;
                 log.accept("PRESENTED task="+s.taskId+" elapsedMs="+(SystemClock.elapsedRealtime()-s.startedAt));
-                if(s.entering&&!s.entryStarted){s.entryStarted=true;visibility(s,true);}
+                if(s.entering&&!s.entryStarted){
+                    s.entryStarted=true;
+                    if(s.cover!=null){s.entering=false;s.transitioning=false;s.opacity=1;s.barAlpha=1;try{synchronized(lock){renderFrame(s);}}catch(Exception e){failure(s,e);}}
+                    else visibility(s,true);
+                }
                 else report("PRESENTED");
             });
         }
@@ -1807,6 +2025,7 @@ final class WindowEngine {
             if(s.rotationMask.holding())s.rotationMask.transfer();
             s.rotationMask.afterTransaction(1);
         }
+        if(s.cover!=null&&!s.restoreForeground)endCover(s);
         if(s.decoration!=null)s.decoration.dispose();
         if(s.lease!=null&&s.death!=null)try{s.lease.unlinkToDeath(s.death,0);}catch(RuntimeException ignored){}
         endedTaskId=s.taskId;
@@ -1982,12 +2201,15 @@ final class WindowEngine {
             .putExtra("frame",s.frame).putExtra("x",p.x()).putExtra("y",p.y())
             .putExtra("width",p.width()*p.scale()).putExtra("height",p.height()*p.scale())
             .putExtra("scale",p.scale()).putExtra("normalScale",s.defaultScale).putExtra("appLandscape",s.landscape).putExtra("logicalW",p.width()).putExtra("logicalH",p.height())
-            .putExtra("transitioning",s.transitioning||s.rotation.active()).putExtra("fullTransition",s.fullTransition)
+            .putExtra("transitioning",s.transitioning||s.rotation.active()||s.cover!=null).putExtra("fullTransition",s.fullTransition)
             .putExtra("transitionHandle",s.transitionHandle).putExtra("presented",s.presented&&!s.rotation.active()).putExtra("nativeHandle",true)
             .putExtra("barAlpha",s.barAlpha).putExtra("miniLarge",s.miniLarge)
             .putExtra("edgeHidden",s.edgeHidden).putExtra("edgeSide",s.edgeSide)
+            .putExtra("edgeBarDragging",s.edgeBarDragging).putExtra("edgeBarCenterX",s.edgeBarCenterX).putExtra("edgeBarCenterY",s.edgeBarCenterY)
             .putExtra("edgeCenterY",s.miniPlacement==null?p.y()+p.height()*p.scale()/2:s.miniPlacement.y()+s.miniPlacement.height()*s.miniPlacement.scale()/2)
             .putExtra("muted",audio!=null&&audio.isMuted(s.uid));
+        if(s.safeBounds!=null)result.putExtra("safeLeft",s.safeBounds.left).putExtra("safeTop",s.safeBounds.top)
+            .putExtra("safeRight",s.safeBounds.right).putExtra("safeBottom",s.safeBounds.bottom).putExtra("placementMargin",s.placementMargin);
     }
     private void frameReport(String event){
         Intent i=new Intent(Wire.RESULT).putExtra("protocol",Wire.PROTOCOL).putExtra("event",event)

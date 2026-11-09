@@ -12,6 +12,7 @@ checks={
 'Lcom/android/server/wm/WindowContainer;':{'methods':[('assignChildLayers','(Landroid/view/SurfaceControl$Transaction;)V'),('forAllActivities','(Ljava/util/function/Consumer;)V')]},
 'Lcom/android/server/wm/TaskFragment;':{'methods':[('topRunningActivity','()Lcom/android/server/wm/ActivityRecord;')]},
 'Lcom/android/server/wm/ActivityRecord;':{'methods':[('getRequestedOrientation','()I'),('getUid','()I')],'fields':[('packageName','Ljava/lang/String;')]},
+'Lcom/android/server/wm/WindowState;':{'methods':[('finishDrawing','(Landroid/view/SurfaceControl$Transaction;I)Z')]},
 'Landroid/app/Activity;':{'methods':[('onResume','()V'),('isInMultiWindowMode','()Z'),('dispatchMultiWindowModeChanged','(ZLandroid/content/res/Configuration;)V')]},
 'Landroid/view/ViewRootImpl$ViewPostImeInputStage;':{'methods':[('processPointerEvent','(Landroid/view/ViewRootImpl$QueuedInputEvent;)I')],'fields':[('this$0','Landroid/view/ViewRootImpl;')]},
 'Landroid/view/ViewRootImpl$QueuedInputEvent;':{'fields':[('mEvent','Landroid/view/InputEvent;')]},

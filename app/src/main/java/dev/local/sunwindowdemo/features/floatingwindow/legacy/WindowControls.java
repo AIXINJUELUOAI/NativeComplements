@@ -29,7 +29,17 @@ final class WindowControls {
     private String motionOp;
     private float motionScale,motionX,motionY,barAlpha=1;
     private final Choreographer frames=Choreographer.getInstance();
-    private final Choreographer.FrameCallback motionFrame=time->{motionPosted=false;flushMotion();};
+    private final Choreographer.FrameCallback motionFrame=this::motionFrame;
+    private final MiniMagnet miniMagnet=new MiniMagnet();
+    private Geometry.Placement miniDragBase;
+    private float miniDragX,miniDragY;
+    private long miniFrameTime;
+    private int hideHapticSide,displayW,displayH;
+    private int edgeGesture;
+    private boolean edgeBarDragging;
+    private float edgeBarCenterX,edgeBarCenterY;
+    private View edgeHoldView;
+    private Runnable edgeHoldCallback;
     private int imeTop=Integer.MAX_VALUE;
     private WindowMetrics layoutMetrics;
     private View dismiss;
@@ -72,19 +82,28 @@ final class WindowControls {
         if(transitioning&&i.getBooleanExtra("transitionHandle",false))next="normal";
         boolean rebuild=!Objects.equals(token,key)||views.isEmpty();
         if(rebuild){hide();token=key;}
+        Rect display=wm.getCurrentWindowMetrics().getBounds();
+        if(miniDragBase!=null&&(!"mini".equals(next)||i.getBooleanExtra("edgeHidden",false)||transitioning||systemBlocked
+                ||display.width()!=displayW||display.height()!=displayH
+                ||i.getIntExtra("logicalW",1200)!=miniDragBase.width()||i.getIntExtra("logicalH",2133)!=miniDragBase.height()))cancelMiniDrag();
+        if(edgeGesture!=0&&(!"mini".equals(next)||!i.getBooleanExtra("edgeHidden",false)||transitioning||systemBlocked
+                ||display.width()!=displayW||display.height()!=displayH
+                ||i.getIntExtra("logicalW",1200)!=logicalW||i.getIntExtra("logicalH",2133)!=logicalH))cancelEdgeDrag();
+        displayW=display.width();displayH=display.height();
         frame=next;
         miniLarge=i.getBooleanExtra("miniLarge",false);muted=i.getBooleanExtra("muted",false);
         edgeHidden=i.getBooleanExtra("edgeHidden",false);edgeSide=i.getIntExtra("edgeSide",1);
         edgeCenterY=i.getFloatExtra("edgeCenterY",ny+nh/2);
+        edgeBarDragging=i.getBooleanExtra("edgeBarDragging",false);
+        edgeBarCenterX=i.getFloatExtra("edgeBarCenterX",0);edgeBarCenterY=i.getFloatExtra("edgeBarCenterY",edgeCenterY);
         if(!"mini".equals(frame)||edgeHidden||transitioning||systemBlocked)hideMenu();
         normalScale=i.getFloatExtra("normalScale",.75f);appLandscape=i.getBooleanExtra("appLandscape",false);
         if(!dragging||transitioning){x=nx;y=ny;w=nw;h=nh;scale=i.getFloatExtra("scale",1);}
         logicalW=i.getIntExtra("logicalW",1200);logicalH=i.getIntExtra("logicalH",2133);
-        Rect display=wm.getCurrentWindowMetrics().getBounds();boolean orientation=display.width()>display.height();
-        landscape=orientation;
+        landscape=display.width()>display.height();
         if(rebuild)build();
         if(transitioning||systemBlocked){for(View v:views)v.setVisibility(View.GONE);changed();}
-        else if(!dragging)layout();
+        else if(!dragging||edgeGesture==2)layout();
     }
     private void build(){
         {
@@ -93,9 +112,9 @@ final class WindowControls {
                 final Paint edgePaint=new Paint(Paint.ANTI_ALIAS_FLAG);
                 @Override protected void onDraw(Canvas cv){
                     super.onDraw(cv);
-                    if(edgeHidden){
+                    if(edgeHidden&&edgeGesture!=1){
                         edgePaint.setColor(0xfff0f2f2);
-                        float left=edgeSide<0?dp(12):getWidth()-dp(16),top=(getHeight()-dp(48))/2f;
+                        float left=edgeBarDragging?(getWidth()-dp(4))/2f:edgeSide<0?dp(12):getWidth()-dp(16),top=(getHeight()-dp(48))/2f;
                         cv.drawRoundRect(left,top,left+dp(4),top+dp(48),dp(2),dp(2),edgePaint);
                     }
                 }
@@ -112,31 +131,76 @@ final class WindowControls {
                 }
             });
             mini.setOnTouchListener(new View.OnTouchListener(){
-                float downX,downY,baseX,baseY,endX,endY;boolean moving,edgeTouch,edgeRestored;
+                float downX,downY,baseX,baseY,endX,endY,barBaseX,barBaseY;
+                boolean moving,edgeTouch,edgePressed,edgeMoving;
+                Geometry.Placement basePlacement;
+                View edgeView;
+                final Runnable edgeHold=()->{
+                    clearEdgeHold();
+                    if(!edgePressed||edgeMoving||!edgeHidden||transitioning||systemBlocked||!Objects.equals(boundToken,token))return;
+                    edgeMoving=true;edgeGesture=2;dragging=true;hideMenu();
+                    edgeView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+                    scheduleMotion("EDGE_BAR_DRAG",0,barBaseX,barBaseY);
+                };
                 public boolean onTouch(View v,MotionEvent e){
+                    if(!Objects.equals(boundToken,token)||!"mini".equals(frame)||transitioning||systemBlocked){clearEdgeHold();edgePressed=false;return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
-                        edgeTouch=edgeHidden;edgeRestored=false;
-                        if(edgeTouch){downX=e.getRawX();downY=e.getRawY();return true;}
+                        clearEdgeHold();
+                        edgeTouch=edgeHidden;edgePressed=edgeTouch;edgeMoving=false;edgeView=v;
+                        if(edgeTouch){
+                            downX=e.getRawX();downY=e.getRawY();baseX=endX=x;baseY=endY=y;
+                            basePlacement=new Geometry.Placement(logicalW,logicalH,scale,x,y);
+                            WindowManager.LayoutParams p=params.get(0);barBaseX=p.x+(edgeSide<0?dp(14):p.width-dp(14));barBaseY=p.y+p.height/2f;
+                            edgeHoldView=v;edgeHoldCallback=edgeHold;v.postDelayed(edgeHold,ViewConfiguration.getLongPressTimeout());return true;
+                        }
                     }
                     if(edgeTouch){
-                        float inward=(e.getRawX()-downX)*(edgeSide<0?1:-1);
-                        if(!edgeRestored&&(e.getActionMasked()==MotionEvent.ACTION_MOVE&&inward>dp(20)
-                            ||e.getActionMasked()==MotionEvent.ACTION_UP&&Math.hypot(e.getRawX()-downX,e.getRawY()-downY)<dp(20))){
-                            edgeRestored=true;send("RESTORE_MINI",0,0,0);
+                        float dx=e.getRawX()-downX,dy=e.getRawY()-downY;
+                        float slop=ViewConfiguration.get(c).getScaledTouchSlop();
+                        if(edgeMoving&&edgeGesture==0){clearEdgeHold();edgePressed=false;return true;}
+                        if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
+                            if(Math.hypot(dx,dy)>slop)clearEdgeHold();
+                            if(!edgeMoving&&dx*(edgeSide<0?1:-1)>slop){
+                                edgeMoving=true;edgeGesture=1;dragging=true;hideMenu();v.invalidate();
+                                hideHapticSide=Geometry.hideSide(basePlacement,baseX,displayW);
+                            }
+                            if(edgeMoving){
+                                if(edgeGesture==2)scheduleMotion("EDGE_BAR_DRAG",0,barBaseX+dx,barBaseY+dy);
+                                else{endX=baseX+dx;endY=baseY+dy;hideFeedback(v,basePlacement,endX);scheduleMotion("EDGE_DRAG",0,endX,endY);}
+                            }
+                        }else if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL){
+                            clearEdgeHold();edgePressed=false;
+                            if(edgeMoving){
+                                boolean up=e.getActionMasked()==MotionEvent.ACTION_UP,bar=edgeGesture==2;
+                                float px=bar?barBaseX+dx:baseX+dx,py=bar?barBaseY+dy:baseY+dy;
+                                stopEdgeDrag();send(up?(bar?"EDGE_BAR_DOCK":"EDGE_DOCK"):"EDGE_DRAG_CANCEL",0,px,py);
+                            }else if(e.getActionMasked()==MotionEvent.ACTION_UP&&Math.hypot(dx,dy)<slop)send("RESTORE_MINI",0,0,0);
                         }
                         return true;
                     }
                     if(e.getActionMasked()==MotionEvent.ACTION_OUTSIDE){hideMenu();return true;}
-                    if(e.getActionMasked()==MotionEvent.ACTION_DOWN){moving=false;dragging=false;downX=e.getRawX();downY=e.getRawY();baseX=x;baseY=y;endX=x;endY=y;taps.onTouchEvent(e);return true;}
+                    if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
+                        moving=false;dragging=false;downX=e.getRawX();downY=e.getRawY();baseX=x;baseY=y;endX=x;endY=y;
+                        basePlacement=new Geometry.Placement(logicalW,logicalH,scale,x,y);taps.onTouchEvent(e);return true;
+                    }
+                    // A display/configuration interruption cancels the captured stream until its next DOWN.
+                    if(moving&&miniDragBase==null)return true;
                     if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
                         if(!moving&&Math.hypot(e.getRawX()-downX,e.getRawY()-downY)>ViewConfiguration.get(c).getScaledTouchSlop()){
                             moving=true;dragging=true;MotionEvent cancel=MotionEvent.obtain(e);cancel.setAction(MotionEvent.ACTION_CANCEL);taps.onTouchEvent(cancel);cancel.recycle();hideMenu();showDismiss();
+                            miniDragBase=basePlacement;miniMagnet.reset();miniFrameTime=System.nanoTime();hideHapticSide=0;
                         }
-                        if(moving){endX=baseX+e.getRawX()-downX;endY=baseY+e.getRawY()-downY;sendMove("MOVE",endX,endY);highlight(e.getRawX(),e.getRawY());}else taps.onTouchEvent(e);
+                        if(moving){endX=baseX+e.getRawX()-downX;endY=baseY+e.getRawY()-downY;updateMiniDrag(v,e.getRawX(),e.getRawY(),endX,endY);}else taps.onTouchEvent(e);
                         return true;
                     }
                     if(e.getActionMasked()==MotionEvent.ACTION_UP||e.getActionMasked()==MotionEvent.ACTION_CANCEL){
-                        if(moving){boolean close=e.getActionMasked()==MotionEvent.ACTION_UP&&inDismiss(e.getRawX(),e.getRawY());hideDismiss();dragging=false;send(close?"CLOSE":"DOCK",0,endX,endY);}else taps.onTouchEvent(e);
+                        if(moving){
+                            boolean up=e.getActionMasked()==MotionEvent.ACTION_UP;
+                            if(up){endX=baseX+e.getRawX()-downX;endY=baseY+e.getRawY()-downY;updateMiniDrag(v,e.getRawX(),e.getRawY(),endX,endY);}
+                            boolean close=up&&miniMagnet.latched();
+                            if(close){prepareMiniMotion();flushMotion();}
+                            stopMiniDrag();send(close?"CLOSE":up?"DOCK":"MINI_DRAG_CANCEL",0,endX,endY);
+                        }else taps.onTouchEvent(e);
                         return true;
                     }
                     return true;
@@ -151,7 +215,7 @@ final class WindowControls {
                     @Override public boolean onSingleTapUp(MotionEvent e){if(!new Config(c).doubleClose())send("CLOSE",0,0,0);return true;}
                     @Override public boolean onDoubleTap(MotionEvent e){if(new Config(c).doubleClose())send("CLOSE",0,0,0);return true;}
                 });
-                outside.setContentDescription("空白处关闭小窗，方式可在设置选择");
+                outside.setContentDescription("单击空白处关闭小窗");
                 outside.setOnTouchListener((v,e)->{closeTaps.onTouchEvent(e);return true;});add(outside);
             }
             View bar=new ClearView(){final Paint p=new Paint(3);@Override protected void onDraw(Canvas cv){
@@ -183,9 +247,52 @@ final class WindowControls {
         }
 
     }
+    private void postMotion(){if(!motionPosted){motionPosted=true;frames.postFrameCallback(motionFrame);}}
+    private void motionFrame(long time){
+        motionPosted=false;
+        if(miniDragBase!=null){miniMagnet.advance(time-miniFrameTime);miniFrameTime=time;prepareMiniMotion();}
+        flushMotion();
+        if(miniDragBase!=null&&miniMagnet.animating())postMotion();
+    }
     private void scheduleMotion(String op,float value,float px,float py){
-        motionOp=op;motionScale=value;motionX=px;motionY=py;
-        if(!motionPosted){motionPosted=true;frames.postFrameCallback(motionFrame);}
+        motionOp=op;motionScale=value;motionX=px;motionY=py;postMotion();
+    }
+    private void updateMiniDrag(View v,float px,float py,float rawX,float rawY){
+        miniDragX=rawX;miniDragY=rawY;
+        miniMagnet.target(dismissBounds.left,dismissBounds.top,dismissBounds.right,dismissBounds.bottom,px,py);
+        highlight(miniMagnet.latched());
+        if(miniMagnet.latched())hideHapticSide=0;else hideFeedback(v,miniDragBase,rawX);
+        postMotion();
+    }
+    private void hideFeedback(View v,Geometry.Placement base,float rawX){
+        int side=Geometry.hideSide(base,rawX,displayW);
+        if(side!=0&&hideHapticSide==0)v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        hideHapticSide=side;
+    }
+    private void prepareMiniMotion(){
+        if(miniDragBase==null)return;
+        float progress=miniMagnet.progress();
+        float cx=miniDragX+miniDragBase.width()*miniDragBase.scale()/2,cy=miniDragY+miniDragBase.height()*miniDragBase.scale()/2;
+        motionOp="MINI_DRAG";motionScale=progress;
+        motionX=cx+(dismissBounds.exactCenterX()-cx)*progress;
+        motionY=cy+(dismissBounds.exactCenterY()-cy)*progress;
+    }
+    private void clearMotion(){frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;}
+    private void stopMiniDrag(){
+        clearMotion();miniDragBase=null;miniMagnet.reset();miniFrameTime=0;hideHapticSide=0;dragging=false;hideDismiss();
+    }
+    private void cancelMiniDrag(){
+        if(miniDragBase==null)return;
+        stopMiniDrag();if(token!=null)Wire.control(c,"MINI_DRAG_CANCEL",token,0,0,0);
+    }
+    private void clearEdgeHold(){
+        if(edgeHoldView!=null&&edgeHoldCallback!=null)edgeHoldView.removeCallbacks(edgeHoldCallback);
+        edgeHoldView=null;edgeHoldCallback=null;
+    }
+    private void stopEdgeDrag(){clearEdgeHold();clearMotion();edgeGesture=0;hideHapticSide=0;dragging=false;edgeBarDragging=false;}
+    private void cancelEdgeDrag(){
+        clearEdgeHold();if(edgeGesture==0)return;
+        stopEdgeDrag();if(token!=null)Wire.control(c,"EDGE_DRAG_CANCEL",token,0,0,0);
     }
     private void flushMotion(){
         if(motionOp==null)return;String op=motionOp;motionOp=null;
@@ -239,7 +346,8 @@ final class WindowControls {
             if(edgeHidden){
                 Insets insets=layoutMetrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
                 int width=dp(48),height=dp(104);
-                rect(0,edgeSide<0?insets.left:d.width()-insets.right-width,
+                if(edgeBarDragging)rect(0,edgeBarCenterX-width/2f,edgeBarCenterY-height/2f,width,height);
+                else rect(0,edgeSide<0?insets.left:d.width()-insets.right-width,
                     Math.max(insets.top,Math.min(edgeCenterY-height/2,d.height()-insets.bottom-height)),width,height);
                 views.get(0).setSystemGestureExclusionRects(List.of(new Rect(0,0,width,height)));
                 views.get(0).invalidate();
@@ -338,18 +446,15 @@ final class WindowControls {
     void systemOverlay(boolean blocked){
         if(systemBlocked==blocked)return;systemBlocked=blocked;
         if(blocked){
-            frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;
-            if(dragging&&token!=null)Wire.control(c,"NORMAL",token,0,0,0);
+            clearEdgeHold();clearMotion();
+            if(edgeGesture!=0)cancelEdgeDrag();
+            else if(miniDragBase!=null)cancelMiniDrag();
+            else if(dragging&&token!=null)Wire.control(c,"NORMAL",token,0,0,0);
             dragging=false;hideMenu();hideDismiss();for(View v:views)v.setVisibility(View.GONE);changed();
         }else if(!views.isEmpty()&&!transitioning)layout();
     }
     static boolean dismissContains(int left,int top,int right,int bottom,float px,float py){
-        float radius=Math.min(right-left,bottom-top)/2f;
-        float dx=px-(left+(right-left)/2f),dy=py-(top+(bottom-top)/2f);
-        return radius>0&&dx*dx+dy*dy<=radius*radius;
-    }
-    private boolean inDismiss(float px,float py){
-        return dismiss!=null&&dismissContains(dismissBounds.left,dismissBounds.top,dismissBounds.right,dismissBounds.bottom,px,py);
+        return MiniMagnet.contains(left,top,right,bottom,px,py,1);
     }
     private int dismissDimension(String name,float fallbackDp){
         int id=c.getResources().getIdentifier(name,"dimen","com.android.systemui");
@@ -398,9 +503,8 @@ final class WindowControls {
         p.gravity=Gravity.TOP|Gravity.LEFT;p.x=left;p.y=top;p.setFitInsetsTypes(0);p.setTitle("NativeComplements-dismiss");p.windowAnimations=0;
         try{SystemUiHost.trust(p);wm.addView(dismiss,p);}catch(RuntimeException e){dismiss=null;dismissBounds.setEmpty();}
     }
-    private void highlight(float px,float py){
+    private void highlight(boolean entered){
         if(dismiss==null)return;
-        boolean entered=inDismiss(px,py);
         if(entered&&!dismissEntered)dismiss.performHapticFeedback(HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE);
         if(entered!=dismissEntered){dismissEntered=entered;dismiss.invalidate();}
     }
@@ -409,7 +513,7 @@ final class WindowControls {
         dismissEntered=false;dismissBounds.setEmpty();
     }
     private void hideViews(){hideMenu();for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}views.clear();params.clear();hideDismiss();}
-    void hide(){frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;hideViews();frame="";token=null;dragging=false;changed();}
+    void hide(){cancelEdgeDrag();cancelMiniDrag();clearMotion();hideViews();frame="";token=null;dragging=false;changed();}
     void close(){send("CLOSE",0,0,0);hide();}
     void imeTop(int top){if(imeTop==top)return;imeTop=top;if(!views.isEmpty()&&!transitioning&&!dragging)layout();}
 }

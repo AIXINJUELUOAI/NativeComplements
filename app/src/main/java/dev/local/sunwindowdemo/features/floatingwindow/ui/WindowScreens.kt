@@ -46,7 +46,7 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
     GroupTitle("菜单外观")
     SettingsGroup {
         SliderRow("扇形半径", "图标较多时自动适配间距，左右镜像", p.radius, 120..260, " dp") { number("radius", it) }
-        SliderRow("图标直径", "应用列表入口固定排在最后", p.icon, 32..56, " dp") { number("icon", it) }
+        SliderRow("图标直径", "应用列表入口固定排在最下面", p.icon, 32..56, " dp") { number("icon", it) }
     }
     GroupTitle("调试")
     SettingsGroup {
@@ -57,24 +57,16 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
 
 @Composable
 fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
-    var showCloseChoice by remember { mutableStateOf(false) }
     SettingsGroup {
-        SettingRow("空白处关闭方式", if (p.doubleClose) "双击" else "单击", { showCloseChoice = true })
+        SettingRow("空白处关闭方式", "单击空白处关闭普通小窗")
         ToggleRow("在多任务中隐藏小窗应用", "关闭或切换后继续隐藏；真正全屏打开并完成绘制后重新显示", p.hideRecents) { boolean("hideRecents", it) }
     }
     GroupTitle("窗口操作")
     SettingsGroup {
-        SettingRow("普通小窗", "白条向内推缩成迷你窗，向外拉进入全屏；中间区间松手回到默认比例。")
-        SettingRow("迷你窗", "单击还原、双击全屏；拖到底部关闭圆环内松手关闭，进入时有触感提示。默认缩到右上角。")
+        SettingRow("普通小窗", "竖屏固定默认位置，横屏固定靠左。底部键盘弹出时，竖屏小窗向上避让。")
+        SettingRow("迷你窗", "单击还原、双击全屏；旋转后回到右上角。拖到关闭圆环内松手关闭，推过贴边阈值松手隐藏，两处都有触感提示。")
         SettingRow("返回与截图", "返回先交给应用；应用根页面返回时关闭小窗。截图工具栏出现时优先响应截图操作。")
     }
-    if (showCloseChoice) AlertDialog(onDismissRequest = { showCloseChoice = false }, title = { Text("空白处关闭方式") },
-        text = { Column {
-            listOf(false to "单击", true to "双击").forEach { (value, title) ->
-                SettingRow(title, onClick = { boolean("doubleClose", value); showCloseChoice = false },
-                    trailing = { RadioButton(selected = p.doubleClose == value, onClick = { boolean("doubleClose", value); showCloseChoice = false }) })
-            }
-        } }, confirmButton = { TextButton(onClick = { showCloseChoice = false }) { Text("取消") } })
 }
 
 @Composable

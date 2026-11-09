@@ -48,6 +48,11 @@ public final class TaskVisibilityGuardChecks {
         TaskVisibilityGuard next=new TaskVisibilityGuard(access,task);next.hide();
         mask.continueWith(next);require(task.surface.alpha==0&&child.alpha==0);
         next.release();require(task.surface.alpha==1&&child.alpha==1);
+        task=new FrameworkAccess.Task();mask=new TaskVisibilityGuard(access,task);mask.hide();
+        mask.release(0);require(task.surface.alpha==0&&!mask.holding());
+        task.pending.apply();require(task.surface.alpha==0); // releasing a parked cover must not flash
+        mask=new TaskVisibilityGuard(access,task);mask.hide();mask.release(.4f);
+        require(task.surface.alpha==.4f);task.pending.apply();require(task.surface.alpha==.4f);
         System.out.println("PASS: mask lifecycle, two-surface Shell writes, late finish after cancel/transfer, replacement isolation and failed cleanup retry");
     }
 }

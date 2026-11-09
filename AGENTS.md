@@ -13,6 +13,6 @@
 - 不自动安装、重启或更改设备的 LSPosed 配置。
 - main 用于集成，交付版本打 tag。并行任务使用各自的分支与 worktree；公共 Hook 入口、首页导航、共享配置和版本号由集成任务统一修改。
 - 保留用户未提交工作，不执行 reset 或强制推送。测试签名和原始基线不清理。
-- 小窗已移除180秒期限，配置由只读Provider同步到SystemUI；启动健康计数和全套动态Hook卸载尚未实现。
+- 小窗已移除180秒期限，配置由UID检查的Provider同步到SystemUI，另提供仅可写快捷项列表的管理接口；启动健康计数和全套动态Hook卸载尚未实现。
 
 - 电话拦截位于 features/callblocking；使用独立 CallBlockingModule 和 UID 检查的 CallBlockingProvider，设备保护存储。只使用既有 system 作用域，按实际来电 PhoneAccount 识别卡槽，不轮询铃响猜 SIM，不接管默认电话角色。
