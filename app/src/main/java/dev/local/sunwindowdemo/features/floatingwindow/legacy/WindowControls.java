@@ -4,7 +4,6 @@ import android.content.*;
 import android.graphics.*;
 
 import android.view.*;
-import android.widget.TextView;
 import android.widget.LinearLayout;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -33,7 +32,9 @@ final class WindowControls {
     private final Choreographer.FrameCallback motionFrame=time->{motionPosted=false;flushMotion();};
     private int imeTop=Integer.MAX_VALUE;
     private WindowMetrics layoutMetrics;
-    private TextView dismiss;
+    private View dismiss;
+    private final Rect dismissBounds=new Rect();
+    private boolean dismissEntered;
     private View menu;
     private LinearLayout menuActions;
     private Context moduleContext;
@@ -342,16 +343,71 @@ final class WindowControls {
             dragging=false;hideMenu();hideDismiss();for(View v:views)v.setVisibility(View.GONE);changed();
         }else if(!views.isEmpty()&&!transitioning)layout();
     }
-    private boolean inDismiss(float px,float py){Rect d=wm.getCurrentWindowMetrics().getBounds();return px>d.width()/2-dp(110)&&px<d.width()/2+dp(110)&&py>=0&&py<dp(125);}
+    static boolean dismissContains(int left,int top,int right,int bottom,float px,float py){
+        float radius=Math.min(right-left,bottom-top)/2f;
+        float dx=px-(left+(right-left)/2f),dy=py-(top+(bottom-top)/2f);
+        return radius>0&&dx*dx+dy*dy<=radius*radius;
+    }
+    private boolean inDismiss(float px,float py){
+        return dismiss!=null&&dismissContains(dismissBounds.left,dismissBounds.top,dismissBounds.right,dismissBounds.bottom,px,py);
+    }
+    private int dismissDimension(String name,float fallbackDp){
+        int id=c.getResources().getIdentifier(name,"dimen","com.android.systemui");
+        try{if(id!=0)return c.getResources().getDimensionPixelSize(id);}catch(android.content.res.Resources.NotFoundException ignored){}
+        return dp(fallbackDp);
+    }
+    private android.graphics.drawable.Drawable dismissDrawable(String name){
+        int id=c.getResources().getIdentifier(name,"drawable","com.android.systemui");
+        try{return id==0?null:c.getResources().getDrawable(id,c.getTheme()).mutate();}
+        catch(android.content.res.Resources.NotFoundException ignored){return null;}
+    }
     private void showDismiss(){
         if(dismiss!=null)return;
-        dismiss=new TextView(c);dismiss.setText("拖到这里松手关闭");dismiss.setTextColor(Color.WHITE);dismiss.setTextSize(16);dismiss.setGravity(Gravity.CENTER);dismiss.setBackgroundColor(0xee34303a);
-        WindowManager.LayoutParams p=new WindowManager.LayoutParams(dp(220),dp(64),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,PixelFormat.TRANSLUCENT);
-        p.gravity=Gravity.TOP|Gravity.CENTER_HORIZONTAL;p.y=dp(35);p.setFitInsetsTypes(0);p.setTitle("NativeComplements-dismiss");
-        try{SystemUiHost.trust(p);wm.addView(dismiss,p);}catch(RuntimeException e){dismiss=null;}
+        // Target SystemUI Bubble DismissView: 96dp circle, 32dp icon, 50dp + nav bottom.
+        int size=dismissDimension("floating_dismiss_background_size",96);
+        int iconSize=dismissDimension("floating_dismiss_icon_size",32);
+        WindowMetrics metrics=wm.getCurrentWindowMetrics();
+        Insets nav=metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars());
+        int left=(metrics.getBounds().width()-size)/2;
+        int top=metrics.getBounds().height()-nav.bottom-dismissDimension("floating_dismiss_bottom_margin",50)-size;
+        dismissBounds.set(left,top,left+size,top+size);dismissEntered=false;
+        android.graphics.drawable.Drawable background=dismissDrawable("floating_dismiss_background");
+        android.graphics.drawable.Drawable icon=dismissDrawable("floating_dismiss_ic_close");
+        dismiss=new View(c){
+            final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
+            @Override protected void onDraw(Canvas cv){
+                float cx=getWidth()/2f,cy=getHeight()/2f,radius=Math.min(getWidth(),getHeight())/2f;
+                if(background!=null){background.setBounds(0,0,getWidth(),getHeight());background.draw(cv);}
+                else{paint.setStyle(Paint.Style.FILL);paint.setColor(0xee34303a);cv.drawCircle(cx,cy,radius,paint);}
+                if(dismissEntered){paint.setStyle(Paint.Style.FILL);paint.setColor(0x338b3d46);cv.drawCircle(cx,cy,radius,paint);}
+                if(icon!=null){int l=(getWidth()-iconSize)/2,t=(getHeight()-iconSize)/2;icon.setBounds(l,t,l+iconSize,t+iconSize);icon.draw(cv);}
+                else{
+                    float half=iconSize*7f/24;paint.setColor(Color.WHITE);paint.setStrokeWidth(iconSize*2f/24);
+                    cv.drawLine(cx-half,cy-half,cx+half,cy+half,paint);cv.drawLine(cx-half,cy+half,cx+half,cy-half,paint);
+                }
+            }
+        };
+        dismiss.setContentDescription("松手关闭小窗");
+        dismiss.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
+            if(v!=dismiss)return;
+            int[] xy=new int[2];v.getLocationOnScreen(xy);
+            dismissBounds.set(xy[0],xy[1],xy[0]+v.getWidth(),xy[1]+v.getHeight());
+        });
+        WindowManager.LayoutParams p=new WindowManager.LayoutParams(size,size,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
+        p.gravity=Gravity.TOP|Gravity.LEFT;p.x=left;p.y=top;p.setFitInsetsTypes(0);p.setTitle("NativeComplements-dismiss");p.windowAnimations=0;
+        try{SystemUiHost.trust(p);wm.addView(dismiss,p);}catch(RuntimeException e){dismiss=null;dismissBounds.setEmpty();}
     }
-    private void highlight(float px,float py){if(dismiss!=null)dismiss.setBackgroundColor(inDismiss(px,py)?0xff8b3d46:0xee34303a);}
-    private void hideDismiss(){if(dismiss!=null){try{wm.removeViewImmediate(dismiss);}catch(RuntimeException ignored){}dismiss=null;}}
+    private void highlight(float px,float py){
+        if(dismiss==null)return;
+        boolean entered=inDismiss(px,py);
+        if(entered&&!dismissEntered)dismiss.performHapticFeedback(HapticFeedbackConstants.GESTURE_THRESHOLD_ACTIVATE);
+        if(entered!=dismissEntered){dismissEntered=entered;dismiss.invalidate();}
+    }
+    private void hideDismiss(){
+        if(dismiss!=null){try{wm.removeViewImmediate(dismiss);}catch(RuntimeException ignored){}dismiss=null;}
+        dismissEntered=false;dismissBounds.setEmpty();
+    }
     private void hideViews(){hideMenu();for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}views.clear();params.clear();hideDismiss();}
     void hide(){frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;hideViews();frame="";token=null;dragging=false;changed();}
     void close(){send("CLOSE",0,0,0);hide();}

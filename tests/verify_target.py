@@ -46,6 +46,7 @@ for cls,kind,name,sig in [
  ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;','methods','invoke','(Ljava/lang/Object;)Ljava/lang/Object;'),
  ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;','fields','mDisplayBackGestureHandlers','Ljava/util/Map;'),
  ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;','methods','cancelGesture','(Landroid/view/MotionEvent;)V'),
- ('Lcom/android/systemui/shared/system/InputChannelCompat$InputEventReceiver$1;','methods','onInputEvent','(Landroid/view/InputEvent;)V')]:
+ ('Lcom/android/systemui/shared/system/InputChannelCompat$InputEventReceiver$1;','methods','onInputEvent','(Landroid/view/InputEvent;)V'),
+ ('Lkotlin/Unit;','fields','INSTANCE','Lkotlin/Unit;')]:
  assert any(x['name']==name and x['descriptor']==sig for x in edge_classes[cls][kind]),(cls,name,sig)
 print('PASS: archived rotation and SystemUI input admission signatures; live behavior still needs device validation')

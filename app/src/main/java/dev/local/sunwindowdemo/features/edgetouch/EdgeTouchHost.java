@@ -7,6 +7,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
+import android.graphics.Canvas;
+import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
@@ -34,6 +36,8 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ArrayList<View> windows = new ArrayList<>();
+    private final Paint regionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private boolean showRegions;
     private volatile int[] activeRects = new int[0];
     private volatile boolean closed;
     private volatile String state = "starting";
@@ -158,6 +162,12 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
             android.view.WindowMetrics metrics = wm.getCurrentWindowMetrics();
             Rect bounds = metrics.getBounds();
             android.graphics.Insets insets = metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            boolean nextShowRegions = settings.getBoolean("show_regions", false);
+            if (showRegions != nextShowRegions) {
+                showRegions = nextShowRegions;
+                // Appearance changes do not remove windows or cancel an owned pointer stream.
+                for (View view : windows) view.invalidate();
+            }
             int[] rectangles = EdgeTouchGeometry.build(bounds.width(), bounds.height(), insets.top, insets.bottom,
                     windowContext.getResources().getDisplayMetrics().density,
                     settings.getBoolean("left_enabled", true), settings.getBoolean("right_enabled", true),
@@ -169,7 +179,22 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
                 int left = rectangles[i], top = rectangles[i + 1], width = rectangles[i + 2] - left, height = rectangles[i + 3] - top;
                 View touch = new View(windowContext) {
                     @Override public boolean onTouchEvent(MotionEvent event) { return true; }
+                    @Override protected void onDraw(Canvas canvas) {
+                        super.onDraw(canvas);
+                        if (!showRegions) return;
+                        // Fixed Material tones: SystemUI must not resolve application theme resources.
+                        regionPaint.setStyle(Paint.Style.FILL);
+                        regionPaint.setColor(0x336750A4);
+                        canvas.drawRect(0, 0, getWidth(), getHeight(), regionPaint);
+                        float stroke = Math.min(getWidth(), Math.max(1f, getResources().getDisplayMetrics().density));
+                        float inset = stroke / 2f;
+                        regionPaint.setStyle(Paint.Style.STROKE);
+                        regionPaint.setStrokeWidth(stroke);
+                        regionPaint.setColor(0xB39A82DB);
+                        canvas.drawRect(inset, inset, getWidth() - inset, getHeight() - inset, regionPaint);
+                    }
                 };
+                touch.setWillNotDraw(false);
                 touch.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
                 touch.setFilterTouchesWhenObscured(false);
                 touch.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->

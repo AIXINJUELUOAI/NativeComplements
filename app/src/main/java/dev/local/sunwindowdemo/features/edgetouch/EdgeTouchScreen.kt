@@ -55,12 +55,15 @@ fun EdgeTouchScreen(onBack: () -> Unit) {
                     ToggleRow("开启边缘防误触", "忽略指定屏幕边缘的触点，减少单手握持时的误触", config.getBoolean("enabled")) {
                         EdgeTouchStore.setBoolean(context, "enabled", it)
                     }
+                    ToggleRow("显示实际禁触区", "开启防误触后，在屏幕边缘按真实尺寸显示范围，便于调整大小", config.getBoolean("show_regions")) {
+                        EdgeTouchStore.setBoolean(context, "show_regions", it)
+                    }
                 }
                 GroupTitle("范围预览")
                 Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                     RegionPreview(config)
                 }
-                Hint("着色区域为触摸禁区；关闭的区域显示为灰色。此功能使用固定禁触范围，不会自动识别手掌。")
+                Hint("小预览用于了解范围；打开“显示实际禁触区”可在屏幕边缘查看真实大小。灰色表示已关闭；固定禁区不会自动识别手掌。")
                 GroupTitle("左侧")
                 SettingsGroup {
                     ToggleRow("左侧禁触区", "仅拦截从左侧设定范围内按下的触点", config.getBoolean("left_enabled")) {

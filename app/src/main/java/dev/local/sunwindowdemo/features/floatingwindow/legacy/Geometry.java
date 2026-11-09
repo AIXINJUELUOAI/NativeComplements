@@ -42,6 +42,17 @@ final class Geometry {
         float y=top+margin+ratio*Math.max(0,bottom-top-2*margin-target.height()*target.scale());
         return new Placement(target.width(),target.height(),target.scale(),onLeft?left+margin:target.x(),y);
     }
+    /** Landscape expands at the live edge; portrait retains its remembered normal placement. */
+    static Placement expandMini(Placement mini,Placement normal,
+            int left,int top,int right,int bottom,float margin){
+        if(right-left<=bottom-top)return normal;
+        float range=bottom-top-2*margin-mini.height()*mini.scale();
+        float ratio=range<=0?.5f:clamp((mini.y()-top-margin)/range,0,1);
+        boolean onLeft=mini.x()+mini.width()*mini.scale()/2<=(left+right)/2f;
+        float x=onLeft?left+margin:right-margin-normal.width()*normal.scale();
+        float y=top+margin+ratio*Math.max(0,bottom-top-2*margin-normal.height()*normal.scale());
+        return new Placement(normal.width(),normal.height(),normal.scale(),x,y);
+    }
     static Placement remapNormal(Placement previous,Placement target,
             int oldLeft,int oldTop,int oldRight,int oldBottom,int left,int top,int right,int bottom,float margin){
         float cx=clamp((previous.x()+previous.width()*previous.scale()/2-oldLeft)/Math.max(1,oldRight-oldLeft),0,1);

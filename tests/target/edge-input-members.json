@@ -40,6 +40,16 @@
           "descriptor": "(Landroid/view/InputEvent;)V"
         }
       ]
+    },
+    {
+      "descriptor": "Lkotlin/Unit;",
+      "fields": [
+        {
+          "name": "INSTANCE",
+          "descriptor": "Lkotlin/Unit;"
+        }
+      ],
+      "methods": []
     }
   ]
 }

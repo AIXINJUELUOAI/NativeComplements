@@ -623,7 +623,7 @@ final class WindowEngine {
                 float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
                 if(!Float.isFinite(x)||!Float.isFinite(y))throw new IllegalArgumentException("position");
                 Rect safe=safeArea(a.call(s.task,"getDisplayContent"));
-                float margin=a.config(s.task,false).densityDpi/160f*12;
+                float margin=s.placementMargin;
                 if("DOCK".equals(op)){
                     int side=Geometry.hideSide(p,x,safe.left,safe.right,margin);
                     if(side!=0){hideMini(s,p,side,y,safe,margin);return;}
@@ -749,6 +749,7 @@ final class WindowEngine {
     }
     private void state(Session s,String target) throws Exception {
         if(s.entering)return;
+        boolean expanding="mini".equals(s.frame)&&"normal".equals(target);
         float startBar="mini".equals(s.frame)?0:s.barAlpha;
         if("mini".equals(s.frame)&&!s.edgeHidden)s.miniPlacement=s.placement;
         if("normal".equals(s.frame)&&s.placement!=null){
@@ -761,18 +762,21 @@ final class WindowEngine {
         if(start==null){refresh(s);report("STATE");return;}
         Rect safe=new Rect();
         synchronized(lock){safe.set(safeArea(a.call(s.task,"getDisplayContent")));}
-        float margin=a.config(s.task,false).densityDpi/160f*12;
-        float scale="mini".equals(target)?Math.min(.28f,s.defaultScale):s.defaultScale;
+        float margin=s.placementMargin;
         Geometry.Placement normal=s.normalPlacement;
-        float x=normal!=null?normal.x():safe.centerX()-start.width()*scale/2;
-        float y=normal!=null?normal.y():safe.centerY()-start.height()*scale/2;
+        Geometry.Placement end=new Geometry.Placement(start.width(),start.height(),s.defaultScale,
+            normal!=null?normal.x():safe.centerX()-start.width()*s.defaultScale/2,
+            normal!=null?normal.y():safe.centerY()-start.height()*s.defaultScale/2);
         if("mini".equals(target)) {
-            Geometry.Placement mini=s.miniPlacement==null
+            end=s.miniPlacement==null
                 ?Geometry.miniTopRight(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge)
                 :Geometry.resizeMini(s.miniPlacement,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
-            s.miniPlacement=mini;x=mini.x();y=mini.y();scale=mini.scale();
+            s.miniPlacement=end;
+        }else if(expanding){
+            // A hidden mini retains its visible dock in miniPlacement.
+            end=Geometry.expandMini(s.miniPlacement==null?start:s.miniPlacement,end,
+                safe.left,safe.top,safe.right,safe.bottom,margin);
         }
-        Geometry.Placement end=new Geometry.Placement(start.width(),start.height(),scale,x,y);
         // Change focus after the surface morph; avoid starting a competing native transition first.
         animate(s,start,end,false,startBar,"mini".equals(target)?0:1);
     }
@@ -796,7 +800,7 @@ final class WindowEngine {
         synchronized(lock){
             Geometry.Placement start=s.placement;if(start==null)return;
             Rect safe=safeArea(a.call(s.task,"getDisplayContent"));
-            float margin=a.config(s.task,false).densityDpi/160f*12;
+            float margin=s.placementMargin;
             s.miniLarge=!s.miniLarge;s.animationRev++;s.radiusFactor=1;
             Geometry.Placement end=Geometry.resizeMini(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
             s.miniPlacement=end;animate(s,start,end,false,0,0);
@@ -1027,6 +1031,12 @@ final class WindowEngine {
                         oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,oldMargin,
                         safe.left,safe.top,safe.right,safe.bottom,s.placementMargin,s.miniLarge);
                     s.placement="mini".equals(s.frame)?s.miniPlacement:s.normalPlacement;
+                    if("normal".equals(s.frame)&&safe.width()>safe.height()){
+                        Geometry.Placement anchor=Geometry.remapNormal(previous,s.normalPlacement,
+                            oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,safe.left,safe.top,safe.right,safe.bottom,s.placementMargin);
+                        s.placement=Geometry.expandMini(anchor,s.normalPlacement,
+                            safe.left,safe.top,safe.right,safe.bottom,s.placementMargin);
+                    }
                     if(s.placement==null)s.placement=previous;
                     if(s.edgeHidden)s.placement=Geometry.offscreen(s.miniPlacement,s.edgeSide,0,s.displayW,s.placementMargin);
                 }

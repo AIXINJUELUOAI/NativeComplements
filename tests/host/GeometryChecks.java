@@ -57,6 +57,49 @@ public final class GeometryChecks {
         Geometry.Placement appRotated=Geometry.place(1200,true,0,100,1200,2600,32);
         Geometry.Placement remapped=Geometry.remapMini(docked,appRotated,appRotated.scale(),0,100,1200,2600,32,0,100,1200,2600,32,false);
         check(remapped.width()==appRotated.width()&&remapped.height()==appRotated.height(),"app orientation uses the new logical canvas");
+        // Landscape follows the live dock; portrait keeps the remembered normal position.
+        for(boolean app:new boolean[]{false,true})for(int display=0;display<3;display++)
+            for(boolean large:new boolean[]{false,true})for(boolean left:new boolean[]{false,true})for(float ratio:new float[]{0,.5f,1}){
+            int safeLeft=display>0?140:0,safeTop=display>0?0:100,right=display==0?1200:display==1?2670:1800,bottom=display==0?2600:display==1?1200:1400,margin=display>0?12:32;
+            Geometry.Placement normal=Geometry.place(1200,app,safeLeft,safeTop,right,bottom,margin);
+            Geometry.Placement seed=Geometry.miniTopRight(normal,normal.scale(),safeLeft,safeTop,right,bottom,margin,large);
+            Geometry.Placement mini=new Geometry.Placement(seed.width(),seed.height(),seed.scale(),
+                left?safeLeft+margin:seed.x(),safeTop+margin+ratio*Math.max(0,bottom-safeTop-2*margin-seed.height()*seed.scale()));
+            Geometry.Placement expanded=Geometry.expandMini(mini,normal,safeLeft,safeTop,right,bottom,margin);
+            if(display==0){
+                check(expanded.equals(normal),"portrait expansion retains ordinary normal position");
+                Geometry.Placement userNormal=new Geometry.Placement(normal.width(),normal.height(),normal.scale(),56,240);
+                check(Geometry.expandMini(mini,userNormal,safeLeft,safeTop,right,bottom,margin).equals(userNormal),"portrait expansion retains user normal position");
+                continue;
+            }
+            check(expanded.width()==normal.width()&&expanded.height()==normal.height()&&expanded.scale()==normal.scale(),"expansion retains normal canvas/scale");
+            check(Math.abs(left?expanded.x()-safeLeft-margin:expanded.x()+expanded.width()*expanded.scale()-right+margin)<.02,"landscape expansion retains live mini edge");
+            check(Math.abs(expanded.y()-safeTop-margin-ratio*Math.max(0,bottom-safeTop-2*margin-expanded.height()*expanded.scale()))<.02,"expansion retains vertical travel fraction");
+            check(expanded.y()>=safeTop+margin-.02f&&expanded.y()+expanded.height()*expanded.scale()<=bottom-margin+.02f,"expanded bottom mini stays inside safe area");
+            Geometry.Placement staleCenter=new Geometry.Placement(normal.width(),normal.height(),normal.scale(),-999,-999);
+            check(expanded.equals(Geometry.expandMini(mini,staleCenter,safeLeft,safeTop,right,bottom,margin)),"old normal position cannot recenter landscape expansion");
+        }
+        // Repeated rotations and expansions do not feed the normal center back into mini position.
+        for(boolean left:new boolean[]{false,true}){
+            Geometry.Placement mini=new Geometry.Placement(docked.width(),docked.height(),docked.scale(),left?32:docked.x(),2600-32-docked.height()*docked.scale());
+            Geometry.Placement original=mini;
+            for(int cycle=0;cycle<8;cycle++){
+                Geometry.Placement rotated=Geometry.remapMini(mini,landscapeCanvas,landscapeCanvas.scale(),0,100,1200,2600,32,140,0,2670,1200,12,false);
+                Geometry.Placement expanded=Geometry.expandMini(rotated,landscapeCanvas,140,0,2670,1200,12);
+                check(Math.abs(left?expanded.x()-152:expanded.x()+expanded.width()*expanded.scale()-2658)<.02,"rotated expansion stays on mini side");
+                mini=Geometry.remapMini(rotated,portraitCanvas,portraitCanvas.scale(),140,0,2670,1200,12,0,100,1200,2600,32,false);
+                expanded=Geometry.expandMini(mini,portraitCanvas,0,100,1200,2600,32);
+                check(expanded.equals(portraitCanvas),"round-trip portrait expansion restores remembered normal");
+                check(Math.abs(mini.x()-original.x())<.02&&Math.abs(mini.y()-original.y())<.02,"repeated mini rotations do not drift");
+            }
+        }
+        Geometry.Placement landscapeMemory=Geometry.remapNormal(portraitCanvas,landscapeCanvas,0,100,1200,2600,140,0,2670,1200,12);
+        Geometry.Placement landscapeNormal=Geometry.expandMini(landscapeMemory,landscapeMemory,140,0,2670,1200,12);
+        check(landscapeNormal.x()==152,"ordinary centered normal rotates to the landscape default left edge");
+        Geometry.Placement portraitMemory=Geometry.remapNormal(landscapeMemory,portraitCanvas,140,0,2670,1200,0,100,1200,2600,32);
+        check(portraitMemory.equals(portraitCanvas),"landscape presentation does not overwrite portrait normal memory");
+        Geometry.Placement normalRoundTrip=Geometry.remapNormal(portraitCanvas,portraitCanvas,0,100,1200,2600,0,100,1200,2600,32);
+        check(normalRoundTrip.equals(portraitCanvas),"ordinary normal refresh retains its original position");
         check(Rules.angle(0,1)==45,"one item");
         check(Rules.fanSelection(100,0,200,44,6,90)==-1,"halfway no longer selects by default");
         check(Rules.fanSelection(179,0,200,44,6,90)==-1,"wait until near the icon");
@@ -102,6 +145,6 @@ public final class GeometryChecks {
             if(keyboardOff&&keyboard)expected=true;
             check(Rules.blocked(locked,landscape,landscapeOff,keyboard,keyboardOff,excluded)==expected,"blocking toggles");
         }
-        System.out.println("PASS: fan geometry 1..6, symmetry, icon spacing, diagonal threshold, package validation, blocking combinations");
+        System.out.println("PASS: mini expansion/rotation edges, safe bounds, normal position; fan geometry, package validation, blocking combinations");
     }
 }

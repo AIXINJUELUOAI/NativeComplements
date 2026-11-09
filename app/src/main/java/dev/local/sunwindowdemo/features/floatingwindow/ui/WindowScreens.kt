@@ -65,7 +65,7 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
     GroupTitle("窗口操作")
     SettingsGroup {
         SettingRow("普通小窗", "白条向内推缩成迷你窗，向外拉进入全屏；中间区间松手回到默认比例。")
-        SettingRow("迷你窗", "单击还原、双击全屏；拖到顶部关闭区后松手关闭。默认缩到右上角。")
+        SettingRow("迷你窗", "单击还原、双击全屏；拖到底部关闭圆环内松手关闭，进入时有触感提示。默认缩到右上角。")
         SettingRow("返回与截图", "返回先交给应用；应用根页面返回时关闭小窗。截图工具栏出现时优先响应截图操作。")
     }
     if (showCloseChoice) AlertDialog(onDismissRequest = { showCloseChoice = false }, title = { Text("空白处关闭方式") },
@@ -94,7 +94,7 @@ fun DiagnosticsScreen(controller: WindowController) {
         SettingRow("系统后端", when {
             !runtime.received -> "尚未连接"
             !runtime.compatible -> "版本不一致，需要重启"
-            else -> "已连接 · 协议 15"
+            else -> "已连接 · 协议 16"
         })
         SettingRow("SystemUI 宿主", if (runtime.hostConnected) "已连接 · 不依赖无障碍" else "未连接，请检查作用域并重启")
         SettingRow("重新检查", "刷新后端与恢复状态", controller::check)

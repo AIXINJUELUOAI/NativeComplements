@@ -23,6 +23,7 @@ public final class EdgeTouchStore {
         SharedPreferences p = preferences(context);
         Bundle b = new Bundle();
         b.putBoolean("enabled", p.getBoolean("enabled", false));
+        b.putBoolean("show_regions", p.getBoolean("show_regions", false));
         b.putBoolean("left_enabled", p.getBoolean("left_enabled", true));
         b.putBoolean("right_enabled", p.getBoolean("right_enabled", true));
         b.putInt("left_width_dp", clamp(p.getInt("left_width_dp", 8), 1, 48));
@@ -33,7 +34,8 @@ public final class EdgeTouchStore {
     }
 
     public static void setBoolean(Context context, String key, boolean value) {
-        if (!key.equals("enabled") && !key.equals("left_enabled") && !key.equals("right_enabled"))
+        if (!key.equals("enabled") && !key.equals("show_regions")
+                && !key.equals("left_enabled") && !key.equals("right_enabled"))
             throw new IllegalArgumentException("edge touch preference");
         preferences(context).edit().putBoolean(key, value).apply();
         changed(context);
