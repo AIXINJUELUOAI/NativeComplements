@@ -6,6 +6,8 @@ import android.content.*;
 import android.content.res.Configuration;
 import android.graphics.PixelFormat;
 import android.graphics.Color;
+import android.os.Bundle;
+import android.os.ResultReceiver;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.*;
@@ -41,7 +43,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         try{host.initialize();}catch(Throwable failure){host.cleanup();android.util.Log.e("NativeComplements","HOST_START_FAILED",failure);}
     }
     private final BroadcastReceiver settingsReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-        try{if(getSentFromUid()==getPackageManager().getApplicationInfo(Wire.PKG,0).uid)loadSettings();}catch(Exception ignored){}
+        try{if(getSentFromUid()==getPackageManager().getApplicationInfo(Wire.PKG,0).uid){
+            if(WindowShortcutActivity.ACTION.equals(i.getAction()))main.postDelayed(()->floatCurrent(0),120);else loadSettings();
+        }}catch(Exception ignored){}
     }};
     private final BroadcastReceiver queryReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
         try{int uid=getSentFromUid();if(uid==getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid||uid==getApplicationInfo().uid)publish(true);}catch(Exception ignored){}
@@ -216,7 +220,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         registerReceiver(screenReceiver,screen,Context.RECEIVER_NOT_EXPORTED);
         IntentFilter pkgs=new IntentFilter(Intent.ACTION_PACKAGE_ADDED);pkgs.addAction(Intent.ACTION_PACKAGE_REMOVED);pkgs.addAction(Intent.ACTION_PACKAGE_CHANGED);pkgs.addDataScheme("package");
         registerReceiver(packageReceiver,pkgs,Context.RECEIVER_NOT_EXPORTED);receiverRegistered=true;
-        registerReceiver(settingsReceiver,new IntentFilter(ConfigProvider.CHANGED),null,main,Context.RECEIVER_EXPORTED);
+        registerReceiver(settingsReceiver,settingsFilter(),null,main,Context.RECEIVER_EXPORTED);
         registerReceiver(queryReceiver,new IntentFilter(LauncherGuard.QUERY),null,main,Context.RECEIVER_EXPORTED);
         getApplicationContext().registerComponentCallbacks(this);
         try{shortcutLauncher=getSystemService(android.content.pm.LauncherApps.class);if(shortcutLauncher!=null)shortcutLauncher.registerCallback(shortcutChanges,main);}
@@ -404,12 +408,52 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         catch(RuntimeException failure){panel=null;Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
     }
     private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;updateOverlayPriority();publish(false);}}
+    private IntentFilter settingsFilter(){IntentFilter filter=new IntentFilter(ConfigProvider.CHANGED);filter.addAction(WindowShortcutActivity.ACTION);return filter;}
+    boolean notificationWindowReady(){
+        return ready()&&config.enabled()&&config.notificationWindow()&&backendReady&&!"recovery".equals(backendState)
+            &&getSystemService(android.os.PowerManager.class).isInteractive()&&!getSystemService(KeyguardManager.class).isKeyguardLocked();
+    }
+    void openNotification(android.service.notification.StatusBarNotification notice,android.app.PendingIntent pending,Intent fill){
+        if(Looper.myLooper()!=main.getLooper()){main.post(()->openNotification(notice,pending,fill));return;}
+        hideFan();hidePanel();
+        ResultReceiver reply=new ResultReceiver(main){protected void onReceiveResult(int result,Bundle data){
+            if(result==1||data!=null&&data.getBoolean("superseded"))return;
+            try{
+                if(data!=null&&data.getBoolean("dispatched")){
+                    int task=data.getInt("taskId",-1);
+                    if(task>=0){getSystemService(android.app.ActivityManager.class).moveTaskToFront(task,0);return;}
+                    throw new IllegalStateException("notification target unavailable after dispatch");
+                }
+                android.app.ActivityOptions options=android.app.ActivityOptions.makeBasic();
+                options.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS);
+                pending.send(SystemUiHost.this,0,fill,null,null,null,options.toBundle());
+            }catch(Exception error){android.util.Log.w("NativeComplements","NOTIFICATION_WINDOW_FAILED "+error.getClass().getSimpleName());Toast.makeText(SystemUiHost.this,"通知页面打开失败，请从应用内查看",Toast.LENGTH_LONG).show();}
+        }};
+        try{Wire.openNotification(this,notice.getPackageName(),pending,fill,reply);}
+        catch(RuntimeException error){reply.send(0,null);}
+    }
+    private void floatCurrent(int attempt){
+        if(!ready()||!config.enabled()||!backendReady||!dropAvailable()||getSystemService(KeyguardManager.class).isKeyguardLocked()){
+            Toast.makeText(this,"请先启用小窗控制，并留出默认小窗位置",Toast.LENGTH_SHORT).show();return;
+        }
+        try{
+            var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(1);
+            if(tasks.isEmpty()||tasks.get(0).topActivity==null)return;
+            var task=tasks.get(0);String pkg=task.topActivity.getPackageName();
+            if(Wire.PKG.equals(pkg)&&attempt<20){main.postDelayed(()->floatCurrent(attempt+1),32);return;}
+            if(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task)!=0||Wire.PKG.equals(pkg)||BackBridge.PACKAGE.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg)||!Wire.allowedPackage(pkg)){
+                Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
+            }
+            Wire.send(this,"GESTURE",pkg,task.taskId,Wire.token(),false);
+        }catch(Exception error){Toast.makeText(this,"当前应用转换失败，请稍后重试",Toast.LENGTH_SHORT).show();}
+    }
     private void launch(String key) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
         ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
         main.postDelayed(()->{
             if(cleaned)return;
             if(!backendReady){Wire.send(this,"STATUS");Toast.makeText(this,"后端尚未就绪，请先在模块内预检",Toast.LENGTH_LONG).show();return;}
+            if(WindowShortcutActivity.isCurrent(target.pkg,target.shortcutId)){floatCurrent(0);return;}
             if(!target.isShortcut()){Wire.send(this,"OPEN",target.pkg,-1,Wire.token(),false);return;}
             settingsWorker.execute(()->{
                 try{

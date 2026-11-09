@@ -43,6 +43,7 @@ public final class BackBridge extends XposedModule {
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         installSuggestionNotifications(p.getDefaultClassLoader());
+        NotificationWindow.install(this,p.getDefaultClassLoader(),this::note);
         try{
             ClassLoader cl=p.getDefaultClassLoader();
             Class<?> panel=Class.forName("com.android.systemui.navigationbar.gestural.BackPanelController",false,cl);

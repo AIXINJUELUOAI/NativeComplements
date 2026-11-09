@@ -82,7 +82,13 @@ final class WindowEngine {
     }
     private void completeOpen(Intent request,boolean success){
         ResultReceiver reply=request.getParcelableExtra("openReply",ResultReceiver.class);
-        request.removeExtra("openReply");if(reply!=null)reply.send(success?1:0,null);
+        request.removeExtra("openReply");
+        if(reply!=null){
+            Bundle result=new Bundle();result.putBoolean("dispatched",request.getBooleanExtra("launchDispatched",false));result.putBoolean("superseded",request.getLongExtra("generation",-1)!=openGeneration);
+            ShortcutLaunch ticket=pendingShortcutLaunch.get();
+            result.putInt("taskId",ticket!=null&&ticket.generation==request.getLongExtra("generation",-1)?ticket.taskId:request.getIntExtra("taskId",-1));
+            reply.send(success?1:0,result);
+        }
     }
     private volatile java.util.List<Session> sessions=java.util.List.of();
     // A task is not owned yet during preflight. Keep that permission on this
@@ -429,11 +435,12 @@ final class WindowEngine {
                     // Do not replace it with the launcher activity or force it into the old task.
                     ShortcutLaunch ticket=new ShortcutLaunch(generation,pkg,shortcutUser);
                     pendingShortcutLaunch.set(ticket);
-                    shortcutLaunch.send(context,0,null,(pi,intent,code,data,extras)->{
+                    shortcutLaunch.send(context,0,request.getParcelableExtra("launchFillIn",Intent.class),(pi,intent,code,data,extras)->{
                         synchronized(ticket){
                             if(pendingShortcutLaunch.get()==ticket&&ticket.generation==openGeneration)ticket.dispatched=true;
                         }
                     },handler,null,options.toBundle());
+                    request.putExtra("launchDispatched",true);
                 }else{
                     Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
                     if(launch==null)throw new IllegalStateException("没有启动入口");
@@ -467,7 +474,7 @@ final class WindowEngine {
                 completeOpen(request,true);report("INTENT_REUSED");return;
             }
             openPhase(request,"start",id);command(new Intent(request).putExtra("op","START").putExtra("taskId",id).putExtra("fadeEntry",true));
-        }catch(Throwable e){clearShortcutLaunch(generation);completeOpen(request,false);note("OPEN_FAILED package="+pkg+"："+FrameworkAccess.reason(e));}
+        }catch(Throwable e){completeOpen(request,false);clearShortcutLaunch(generation);note("OPEN_FAILED package="+pkg+"："+FrameworkAccess.reason(e));}
     }
     private void clearShortcutLaunch(long generation){
         ShortcutLaunch ticket=pendingShortcutLaunch.get();

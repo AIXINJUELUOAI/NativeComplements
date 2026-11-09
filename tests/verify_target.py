@@ -68,3 +68,18 @@ for cls,name,sig in [
  assert any(m['name']==name and m['descriptor']==sig for m in viewport[cls]['methods']),(cls,name,sig)
 assert any(f['name']=='insetsState' and f['type']=='Landroid/view/InsetsState;' for f in viewport['Landroid/view/WindowRelayoutResult;']['fields'])
 print('PASS: archived API37 IME source, relayout and direct notification boundaries')
+
+# Notification clicks: exact current-device SystemUI declared callback/field shapes.
+notifications=json.loads((root/'tests/target/notification-members.json').read_text())
+assert notifications['artifacts'][0]['sha256']=='a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972'
+prefix='Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda'
+entry='Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;'
+for cls,kind,name,descriptor in [
+ (prefix+'7;','methods','run','()V'),
+ (prefix+'10;','methods','startPendingIntent','(Landroid/view/RemoteAnimationAdapter;)I'),
+ (prefix+'7;','fields','f$1',entry),(prefix+'7;','fields','f$3','Landroid/app/PendingIntent;'),(prefix+'7;','fields','f$5','Z'),
+ (prefix+'10;','fields','f$5',entry),(prefix+'10;','fields','f$3','Landroid/app/PendingIntent;'),
+ (prefix+'10;','fields','f$4','Landroid/content/Intent;'),(prefix+'10;','fields','f$2','I'),
+ (entry,'fields','mSbn','Landroid/service/notification/StatusBarNotification;')]:
+ assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==descriptor for m in notifications['classes'][cls][kind]),(cls,name,descriptor)
+print('PASS: archived SystemUI notification click and original PendingIntent launch signatures')

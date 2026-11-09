@@ -1,0 +1,105 @@
+{
+  "artifacts": [
+    {
+      "name": "SystemUI.apk",
+      "size": 48329834,
+      "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
+    }
+  ],
+  "classes": {
+    "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes2.dex",
+      "superclass": "Lcom/android/systemui/statusbar/notification/collection/ListEntry;",
+      "fields": [
+        {
+          "name": "mSbn",
+          "type": "Landroid/service/notification/StatusBarNotification;",
+          "access": 1
+        }
+      ],
+      "methods": []
+    },
+    "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "fields": [
+        {
+          "name": "f$1",
+          "type": "Lcom/android/systemui/statusbar/notification/row/ExpandableNotificationRow;",
+          "access": 4097
+        },
+        {
+          "name": "f$2",
+          "type": "I",
+          "access": 4097
+        },
+        {
+          "name": "f$3",
+          "type": "Landroid/app/PendingIntent;",
+          "access": 4097
+        },
+        {
+          "name": "f$4",
+          "type": "Landroid/content/Intent;",
+          "access": 4097
+        },
+        {
+          "name": "f$5",
+          "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+          "access": 4097
+        }
+      ],
+      "methods": [
+        {
+          "name": "startPendingIntent",
+          "descriptor": "(Landroid/view/RemoteAnimationAdapter;)I",
+          "access": 17,
+          "has_code": true
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "fields": [
+        {
+          "name": "f$1",
+          "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+          "access": 4097
+        },
+        {
+          "name": "f$2",
+          "type": "Lcom/android/systemui/statusbar/notification/row/ExpandableNotificationRow;",
+          "access": 4097
+        },
+        {
+          "name": "f$3",
+          "type": "Landroid/app/PendingIntent;",
+          "access": 4097
+        },
+        {
+          "name": "f$4",
+          "type": "Z",
+          "access": 4097
+        },
+        {
+          "name": "f$5",
+          "type": "Z",
+          "access": 4097
+        }
+      ],
+      "methods": [
+        {
+          "name": "run",
+          "descriptor": "()V",
+          "access": 17,
+          "has_code": true
+        }
+      ]
+    }
+  },
+  "sun_classes": []
+}

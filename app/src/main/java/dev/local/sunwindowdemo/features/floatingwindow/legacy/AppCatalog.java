@@ -118,7 +118,7 @@ final class AppCatalog {
             ArrayList<ShortcutTarget> result=new ArrayList<>();
             HashSet<String> seen=new HashSet<>();
             if(available!=null) for(ShortcutInfo info:available) {
-                if(!info.isEnabled()||info.getPackage().equals(Wire.PKG)) continue;
+                if(!info.isEnabled()||info.getPackage().equals(Wire.PKG)&&!WindowShortcutActivity.isCurrent(info.getPackage(),info.getId())) continue;
                 try {
                     String pkg=info.getPackage(); App owner=owners.get(pkg);
                     if(owner==null) {

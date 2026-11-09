@@ -364,6 +364,7 @@ final class WindowControls {
         for(int n=1;n<=4;n++)views.get(n).setContentDescription(closeDescription);
         rect(1,0,0,d.width(),Math.max(0,y));rect(2,0,y,Math.max(0,x),h);
         rect(3,x+w,y,Math.max(0,d.width()-x-w),h);rect(4,0,y+h,d.width(),Math.max(0,d.height()-y-h));
+        views.get(5).setContentDescription(landscape?"小窗白条：左滑迷你，右滑全屏":"小窗白条：上滑迷你，下滑全屏");
         MotionStyle.Bar b=MotionStyle.bar(scale);
         float length=dp(b.length()),thickness=dp(b.thickness()),margin=dp(b.margin());
         float touchLength=Math.max(dp(120),length+dp(64)),touchDepth=dp(72);

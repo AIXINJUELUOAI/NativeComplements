@@ -78,6 +78,15 @@ final class Wire {
             .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",android.os.Process.myUserHandle());
         request.putExtra("openReply",reply);sendRequest(context,request);
     }
+    static void openNotification(Context context,String pkg,PendingIntent launch,Intent fill,ResultReceiver reply){
+        if(!allowedPackage(pkg)||launch==null||!launch.isActivity())throw new IllegalArgumentException("notification activity");
+        Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
+            .putExtra("package",pkg).putExtra("taskId",-1).putExtra("token",token())
+            .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch)
+            .putExtra("shortcutUser",launch.getCreatorUserHandle()).putExtra("openReply",reply);
+        if(fill!=null)request.putExtra("launchFillIn",new Intent(fill));
+        sendRequest(context,request);
+    }
     static void inputDigits(Context context,String digits,int delay,ResultReceiver receiver){
         Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OTP_INPUT")
             .putExtra("token",token()).putExtra("digits",digits).putExtra("delay",delay).putExtra("inputReply",receiver);

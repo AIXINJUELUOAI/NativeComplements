@@ -23,6 +23,14 @@ public final class StateChecks {
             eq("full",GestureMath.release(max,normal,app,display));
         }
         if(GestureMath.clampScale(.001f,.2f,false,false)!=.2f)throw new AssertionError("small safe-area fit");
+        // Landscape fit can be .98: the old absolute 1.1 cap never reached full.
+        for(boolean app:new boolean[]{false,true}){
+            Geometry.Placement p=Geometry.place(1200,app,0,0,2670,1200,12);
+            float right=GestureMath.clampScale(GestureMath.dragScale(p.scale(),300,p.width()),p.scale(),app,true);
+            float left=GestureMath.clampScale(GestureMath.dragScale(p.scale(),-400,p.width()),p.scale(),app,true);
+            eq("full",GestureMath.release(right,p.scale(),app,true));
+            eq("mini",GestureMath.release(left,p.scale(),app,true));
+        }
         boolean rejected=false;try{GestureMath.release(Float.NaN,.75f,false,false);}catch(IllegalArgumentException e){rejected=true;}
         if(!rejected)throw new AssertionError("reject NaN");
         System.out.println("PASS state thresholds: portrait/landscape/reversed orientation, drag directions, invalid scale");
