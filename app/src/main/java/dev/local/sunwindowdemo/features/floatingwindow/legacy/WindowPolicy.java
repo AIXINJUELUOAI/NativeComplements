@@ -2,6 +2,11 @@ package dev.local.sunwindowdemo;
 
 /** Shared, framework-independent geometry and orientation decisions. */
 final class WindowPolicy {
+    static boolean mayRestoreNormalFocus(int type,boolean dimmed,int mode){
+        // Standard full-screen app windows may change underneath a normal window.
+        // System/IME overlays, modal dialogs, PiP and other freeform windows win.
+        return type>=1&&type<=99&&!dimmed&&mode==1;
+    }
     static boolean steadyMiniTransition(boolean liveMini,boolean busy,int changeMode,boolean sameGeometry,
             boolean sameRotation,boolean dependentChanges,boolean snapshot){
         return liveMini&&!busy&&changeMode==6&&sameGeometry&&sameRotation&&!dependentChanges&&!snapshot;

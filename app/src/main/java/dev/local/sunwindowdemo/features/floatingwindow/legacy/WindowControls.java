@@ -26,7 +26,7 @@ final class WindowControls {
     private int logicalW,logicalH;
     private boolean landscape,dragging;
     private long sequence=-1;
-    private boolean motionPosted,transitioning,fullTransition,nativeHandle;
+    private boolean motionPosted,transitioning,fullTransition,nativeHandle,inputPending;
     private String motionOp;
     private float motionScale,motionX,motionY,barAlpha=1;
     private final Choreographer frames=Choreographer.getInstance();
@@ -70,7 +70,8 @@ final class WindowControls {
         if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL)return;
         long serial=i.getLongExtra("sequence",0);if(serial<=sequence)return;sequence=serial;
         if(!"active".equals(i.getStringExtra("state"))){hide();return;}
-        if(!i.getBooleanExtra("presented",false)){hide();return;}
+        inputPending=i.getBooleanExtra("inputPending",false);
+        if(!i.getBooleanExtra("presented",false)&&!inputPending){hide();return;}
         nativeHandle=i.getBooleanExtra("nativeHandle",false);
         String next=i.getStringExtra("frame"),key=i.getStringExtra("token");
         if(!Wire.validToken(key))return;
@@ -104,7 +105,7 @@ final class WindowControls {
         logicalW=i.getIntExtra("logicalW",1200);logicalH=i.getIntExtra("logicalH",2133);
         landscape=display.width()>display.height();
         if(rebuild)build();
-        if(transitioning||systemBlocked){for(View v:views)v.setVisibility(View.GONE);changed();}
+        if(transitioning&&!inputPending||systemBlocked){for(View v:views)v.setVisibility(View.GONE);changed();}
         else if(!dragging||edgeGesture==2)layout();
     }
     private void build(){
@@ -231,7 +232,7 @@ final class WindowControls {
             bar.setOnTouchListener(new View.OnTouchListener(){
                 float start,startScale;int axis;
                 public boolean onTouch(View v,MotionEvent e){
-                    if(fullTransition||transitioning)return true;
+                    if(fullTransition||transitioning&&!inputPending)return true;
                     if(e.getActionMasked()==MotionEvent.ACTION_DOWN){dragging=true;start=landscape?e.getRawX():e.getRawY();startScale=scale;scaleZone=GestureMath.release(scale,normalScale,appLandscape,landscape);axis=landscape?logicalW:logicalH;return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_MOVE){float delta=(landscape?e.getRawX():e.getRawY())-start;sendMoveScale(GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape));return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_UP){
@@ -355,7 +356,10 @@ final class WindowControls {
             }else{views.get(0).setSystemGestureExclusionRects(List.of());rect(0,x,y,w,h);views.get(0).invalidate();layoutMenu();}
             changed();return;
         }
-        if(!views.isEmpty())views.get(0).setVisibility(View.GONE);
+        // The cover is a SurfaceControl, not an input window. Reuse the compact
+        // mini hit surface to stop entry touches reaching the underlying app.
+        if(inputPending){views.get(0).setSystemGestureExclusionRects(List.of());rect(0,x,y,w,h);}
+        else if(!views.isEmpty())views.get(0).setVisibility(View.GONE);
         String closeDescription=new Config(c).doubleClose()?"双击空白处关闭小窗":"单击空白处关闭小窗";
         for(int n=1;n<=4;n++)views.get(n).setContentDescription(closeDescription);
         rect(1,0,0,d.width(),Math.max(0,y));rect(2,0,y,Math.max(0,x),h);
@@ -369,7 +373,7 @@ final class WindowControls {
         changed();
     }
     int[] protectedRects(){
-        if(systemBlocked||transitioning)return new int[0];
+        if(systemBlocked||transitioning&&!inputPending)return new int[0];
         // Keep the existing one-rectangle GestureGate contract. Protect the
         // compact buttons, rather than the potentially wide landscape preview.
         if(edgeHidden&&!params.isEmpty()&&views.get(0).getVisibility()==View.VISIBLE){
@@ -456,7 +460,7 @@ final class WindowControls {
             else if(miniDragBase!=null)cancelMiniDrag();
             else if(dragging&&token!=null)Wire.control(c,"NORMAL",token,taskId,0,0,0);
             dragging=false;hideMenu();hideDismiss();for(View v:views)v.setVisibility(View.GONE);changed();
-        }else if(!views.isEmpty()&&!transitioning)layout();
+        }else if(!views.isEmpty()&&(!transitioning||inputPending))layout();
     }
     static boolean dismissContains(int left,int top,int right,int bottom,float px,float py){
         return MiniMagnet.contains(left,top,right,bottom,px,py,1);

@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-/** Attribute a root finish to an actual committed Back, never to an ordinary close. */
+/** Route owned root Back to fade/linked return; preserve ordinary finish and inner pages. */
 final class LinkedBack {
     private final FrameworkAccess a;
     private final WindowEngine engine;

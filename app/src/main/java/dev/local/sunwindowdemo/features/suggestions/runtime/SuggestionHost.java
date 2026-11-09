@@ -218,7 +218,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         try{return AppCatalog.normalized(windowContext,context.getPackageManager().getApplicationIcon(pkg));}catch(Exception e){return null;}
     }
     private Drawable glyph(String name){
-        try{int id=moduleContext.getResources().getIdentifier(name,"drawable",Wire.PKG);Drawable d=moduleContext.getDrawable(id).mutate();d.setTint(color(android.R.attr.colorAccent,0xff6750a4));return d;}catch(RuntimeException e){return context.getDrawable(android.R.drawable.ic_menu_compass);}
+        try{int id=moduleContext.getResources().getIdentifier(name,"drawable",Wire.PKG);Drawable d=moduleContext.getDrawable(id).mutate();d.setTint(switch(name){case "ic_suggestion_torch"->0xffbb8700;case "ic_suggestion_torch_off"->0xff80868b;case "ic_suggestion_awake"->0xffe9bc54;case "ic_suggestion_otp"->Color.WHITE;default->color(android.R.attr.colorAccent,0xff6750a4);});return d;}catch(RuntimeException e){return context.getDrawable(android.R.drawable.ic_menu_compass);}
     }
     private boolean installed(String pkg){try{return context.getPackageManager().getLaunchIntentForPackage(pkg)!=null;}catch(RuntimeException e){return false;}}
     private List<String> mapApps(){
@@ -236,6 +236,10 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         button.setContentDescription(description);button.setFocusable(false);button.setClickable(true);
         button.setOnClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.CONFIRM);click.run();});
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(48),dp(48));p.setMargins(dp(5),dp(5),dp(5),dp(5));row.addView(button,p);return button;
+    }
+    private ImageView addAppButton(LinearLayout row,Drawable drawable,String description,Runnable click){
+        ImageView button=addButton(row,drawable,description,click);
+        button.setBackground(null);button.setElevation(0);button.setPadding(dp(4),dp(4),dp(4),dp(4));return button;
     }
     private void render(){
         try{renderContent();}catch(RuntimeException failure){removeView();status("RENDER_UNAVAILABLE");}
@@ -262,7 +266,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             }
         }else{
             if(enabled("torch")&&(!torchUsed&&!litCameras.isEmpty()||torchUntil>now())){
-                ImageView torch=addButton(row,glyph("ic_suggestion_torch"),litCameras.isEmpty()?"打开手电筒":"关闭手电筒",this::toggleTorch);
+                ImageView torch=addButton(row,glyph(litCameras.isEmpty()?"ic_suggestion_torch_off":"ic_suggestion_torch"),litCameras.isEmpty()?"打开手电筒":"关闭手电筒",this::toggleTorch);
                 torch.setEnabled(requestedTorchMode==null);torch.setAlpha(requestedTorchMode==null?1:.5f);
             }
             if(enabled("awake")&&awakeUntil>now())addButton(row,glyph("ic_suggestion_awake"),"本次保持屏幕常亮",()->{
@@ -270,11 +274,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 try{awakeLock.acquire();awakeUntil=0;render();}catch(RuntimeException e){Toast.makeText(context,"常亮暂不可用",Toast.LENGTH_SHORT).show();}
             });
             String bluetooth=settings.getString("bluetooth_app","");
-            if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&installed(bluetooth))addButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
+            if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
                 Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);open(launch,bluetooth,()->{bluetoothUsed=true;render();});
             });
             if(enabled("otp")&&code!=null&&!inputRunning){
                 ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input);
+                GradientDrawable blue=new GradientDrawable();blue.setShape(GradientDrawable.OVAL);blue.setColor(0xff2866c7);otp.setBackground(blue);
                 otp.setEnabled(!inputRunning);otp.setAlpha(inputRunning?.5f:1);
                 int generation=renderGeneration;
                 row.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener(){
@@ -290,15 +295,15 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             }
             if(enabled("links")&&link!=null&&installed(link.packageName())){
                 SuggestionRules.Link target=link;
-                addButton(row,icon(target.packageName()),target.token()?"打开应用识别分享口令":"打开分享链接",()->{
+                addAppButton(row,icon(target.packageName()),target.token()?"打开应用识别分享口令":"打开分享链接",()->{
                     Intent launch=target.token()?context.getPackageManager().getLaunchIntentForPackage(target.packageName()):new Intent(Intent.ACTION_VIEW,Uri.parse(target.value())).setPackage(target.packageName());
                     open(launch,target.packageName(),()->{if(Objects.equals(link,target))link=null;render();});
                 });
             }
             if(enabled("maps")&&mapText!=null){
-                maps=mapApps();if(!maps.isEmpty())addButton(row,maps.size()==1?icon(maps.get(0)):glyph("ic_suggestion_navigation"),"用地图搜索地点",()->{
+                maps=mapApps();if(!maps.isEmpty()){ImageView map=addButton(row,maps.size()==1?icon(maps.get(0)):glyph("ic_suggestion_navigation"),"用地图搜索地点",()->{
                     if(maps.size()==1)openMap(maps.get(0));else{chooser=true;render();}
-                });
+                });if(maps.size()==1){map.setBackground(null);map.setElevation(0);map.setPadding(dp(4),dp(4),dp(4),dp(4));}}
             }
         }
         if(row.getChildCount()==0)return;

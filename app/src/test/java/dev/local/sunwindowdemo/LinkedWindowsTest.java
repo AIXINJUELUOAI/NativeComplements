@@ -108,6 +108,40 @@ public class LinkedWindowsTest {
         call("forget",new Class<?>[]{session},normal);
         assertEquals(98,get(read().get(0),"taskId"));assertTrue(engine.owns(get(mini,"task")));
     }
+    @Test public void minimizingReplacesMiniWithoutExpandingDisplacedTask()throws Throwable{
+        Object normal=create(97,1),mini=create(98,1);
+        set(mini,"token",Wire.token());set(mini,"frame","mini");save(normal);save(mini);
+        set(engine,"active",normal);set(engine,"pinned",mini);
+        assertSame(mini,call("occupySlot",new Class<?>[]{session,String.class},normal,"mini"));
+        assertSame(normal,get(engine,"active"));assertNull(get(engine,"pinned"));
+        assertEquals("mini",get(mini,"frame"));assertEquals(2,read().size());
+    }
+    @Test public void expandingReplacesNormalWithoutMinimizingDisplacedTask()throws Throwable{
+        Object normal=create(97,1),mini=create(98,1);
+        set(normal,"frame","normal");set(mini,"frame","mini");
+        set(engine,"active",normal);set(engine,"pinned",mini);
+        assertSame(normal,call("occupySlot",new Class<?>[]{session,String.class},mini,"normal"));
+        assertSame(mini,get(engine,"active"));assertNull(get(engine,"pinned"));
+        assertEquals("normal",get(normal,"frame"));
+    }
+    @Test public void emptyDestinationKeepsOnlyTheRequestedWindow()throws Throwable{
+        Object mini=create(97,1);set(mini,"frame","mini");set(engine,"active",mini);
+        assertNull(call("occupySlot",new Class<?>[]{session,String.class},mini,"normal"));
+        assertSame(mini,get(engine,"active"));assertNull(get(engine,"pinned"));
+        assertNull(call("occupySlot",new Class<?>[]{session,String.class},mini,"mini"));
+    }
+    @Test public void entryKeepsTouchGuardAndRetainsFinalResizeCommit()throws Throwable{
+        Object normal=create(97,1);save(normal);set(engine,"active",normal);set(normal,"entering",true);
+        android.content.Intent sample=new android.content.Intent().putExtra("op","RESIZE").putExtra("taskId",97).putExtra("token",token).putExtra("scale",.5f);
+        call("control",new Class<?>[]{android.content.Intent.class},sample);
+        sample.putExtra("op","END_RESIZE").putExtra("scale",.28f);
+        call("control",new Class<?>[]{android.content.Intent.class},sample);
+        android.content.Intent pending=(android.content.Intent)get(normal,"entryControl");
+        assertEquals("END_RESIZE",pending.getStringExtra("op"));assertEquals(.28f,pending.getFloatExtra("scale",0),.001f);
+        android.content.Intent report=new android.content.Intent();call("fillFrame",new Class<?>[]{android.content.Intent.class,session},report,normal);
+        assertTrue(report.getBooleanExtra("inputPending",false));assertFalse(report.getBooleanExtra("presented",true));
+        set(normal,"entering",false);assertEquals(false,call("entryInputPending",new Class<?>[]{session},normal));
+    }
     @Test public void mappedImeDoesNotResizeAgainWhenWindowAlreadyFitsAboveKeyboard()throws Throwable{
         Geometry.Placement p=new Geometry.Placement(1200,2133,.75f,150,55);
         Rect mapped=(Rect)call("logicalInsets",new Class<?>[]{Rect.class,Geometry.Placement.class},new Rect(0,1655,1200,2670),p);

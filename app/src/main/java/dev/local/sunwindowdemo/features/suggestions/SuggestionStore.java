@@ -17,7 +17,7 @@ public final class SuggestionStore {
         for(String key:new String[]{"enabled","torch","bluetooth","otp","links","maps","awake","hide_sms","window"})
             b.putBoolean(key,p.getBoolean(key,!key.equals("enabled")&&!key.equals("hide_sms")&&!key.equals("window")));
         b.putInt("delay",Math.max(50,Math.min(500,p.getInt("delay",100))));
-        b.putBoolean("right",p.getBoolean("right",false));
+        b.putBoolean("right",p.getBoolean("right",true));
         b.putString("bluetooth_app",p.getString("bluetooth_app",""));return b;
     }
     public static void setBoolean(Context c,String key,boolean value){

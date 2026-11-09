@@ -193,7 +193,7 @@ public final class SunWindowModule extends XposedModule {
                 engine.requesting(chain.getArg(0),chain.getArg(1));return chain.proceed();
             }));
             // The target framework asks this before creating predictive-back leashes.
-            // Decline only the linked task's remote preview; keep native app callbacks.
+            // Suppress only an owned root's remote preview; keep internal app callbacks.
             // This is optional so a missing preview API cannot disable window management.
             try{
                 Class<?> adapter=Class.forName("android.window.BackAnimationAdapter",false,p.getClassLoader());

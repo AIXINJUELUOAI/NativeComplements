@@ -15,6 +15,12 @@ public final class WindowPolicyChecks {
         require(WindowPolicy.steadyMiniTransition(true,false,6,true,true,false,false));
         for(int blocker=0;blocker<7;blocker++)require(!WindowPolicy.steadyMiniTransition(
             blocker!=0,blocker==1,blocker==2?1:6,blocker!=3,blocker!=4,blocker==5,blocker==6));
+        require(WindowPolicy.mayRestoreNormalFocus(1,false,1));
+        require(!WindowPolicy.mayRestoreNormalFocus(2011,false,1)); // IME
+        require(!WindowPolicy.mayRestoreNormalFocus(2040,false,1)); // notification shade
+        require(!WindowPolicy.mayRestoreNormalFocus(1,true,1)); // modal permission/dialog
+        require(!WindowPolicy.mayRestoreNormalFocus(1,false,2)); // PiP
+        require(!WindowPolicy.mayRestoreNormalFocus(1,false,5)); // other floating task
         Object owned=new Object();
         require(WindowPolicy.sameLiveTask(owned,owned,10,10,0,0));
         require(!WindowPolicy.sameLiveTask(new Object(),owned,10,10,0,0));
