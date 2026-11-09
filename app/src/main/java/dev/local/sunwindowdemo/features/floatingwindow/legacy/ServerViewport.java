@@ -29,9 +29,10 @@ final class ServerViewport {
     }
     private Configuration configuration(Configuration original)throws Exception{
         Configuration copy=new Configuration(original);
-        // Keep native freeform reporting, as in Demo8.2. Fullscreen reporting alone
-        // does not reproduce SunOS popup layout/insets and changes app title layout.
+        // SunOS popup is floating without multi-window restrictions. Stock Android
+        // has no popup mode: map only the client identity, never native task state.
         Object window=a.field(copy,"windowConfiguration");
+        a.call(window,"setWindowingMode",new Class<?>[]{int.class},1);
         Rect bounds=(Rect)a.call(window,"getBounds");
         if(!bounds.isEmpty()){
             // The app's logical display follows its task, not the physical display rotation.
@@ -82,6 +83,8 @@ final class ServerViewport {
                         if(owned&&types[i]==Configuration.class&&args[i]!=null)args[i]=i==overrideIndex
                             ?policy.configuration((Configuration)args[i]):policy.processConfiguration((Configuration)args[i]);
                         else if(owned&&types[i]==policy.merged&&args[i]!=null)args[i]=policy.merged(args[i]);
+                        else if(owned&&types[i].getName().equals("android.view.InsetsState")&&args[i]!=null)
+                            args[i]=engine.clientInsets(chain.getArg(0),args[i]);
                         if(entry&&(types[i]==Configuration.class||types[i]==policy.merged))
                             engine.trace.transaction((IBinder)chain.getArg(0),name,i,chain.getArg(i),args[i],owned);
                     }
@@ -107,7 +110,7 @@ final class ServerViewport {
         }));
         Class<?> wms=Class.forName("com.android.server.wm.WindowManagerService",false,a.task.getClassLoader());
         Class<?> resultType=Class.forName("android.view.WindowRelayoutResult");
-        Field resultConfig=a.field(resultType,"mergedConfiguration");
+        Field resultConfig=a.field(resultType,"mergedConfiguration"),resultInsets=a.field(resultType,"insetsState");
         int installed=0;
         for(Method method:wms.getDeclaredMethods())if(method.getName().equals("relayoutWindow")){
             Class<?>[] types=method.getParameterTypes();int client=-1,result=-1;
@@ -125,11 +128,23 @@ final class ServerViewport {
                     Object outgoing=resultConfig.get(resultObject);
                     // This out parameter belongs to the Binder response, not WindowState's cache.
                     a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing));
+                    Object insets=resultInsets.get(resultObject);
+                    Object mapped=engine.clientInsets(chain.getArg(clientIndex),insets);
+                    a.call(insets,"set",new Class<?>[]{insets.getClass(),boolean.class},mapped,true);
                 }
                 return value;
             }));installed++;
         }
         if(installed!=1)throw new NoSuchMethodException("expected one relayoutWindow output, found "+installed);
+        // Direct insets-control notifications bypass resize transactions and relayout.
+        Class<?> proxy=Class.forName("android.view.IWindow$Stub$Proxy");
+        Class<?> state=Class.forName("android.view.InsetsState");
+        Class<?> controls=Class.forName("android.view.InsetsSourceControl$Array");
+        Method notify=a.method(proxy,"insetsControlChanged",state,controls);
+        handles.add(module.hook(notify).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+            if(!engine.ownsClientWindow(chain.getThisObject()))return chain.proceed();
+            return chain.proceed(new Object[]{engine.clientInsets(chain.getThisObject(),chain.getArg(0)),chain.getArg(1)});
+        }));
         module.log(4,"SunWindowDemo5","VIEWPORT_READY system-side launch/process/activity/resize/relayout logical-display");
     }
 }

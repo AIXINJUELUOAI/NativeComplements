@@ -66,14 +66,17 @@ final class Wire {
             .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",target.user);
         sendRequest(context,i);
     }
-    static void openIntent(Context context,String pkg,Intent original){
+    static void openIntent(Context context,String pkg,Intent original,ResultReceiver reply){
         if(!allowedPackage(pkg)||original==null||!pkg.equals(original.getPackage()))throw new IllegalArgumentException("suggestion target");
         Intent target=new Intent(original).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        PendingIntent launch=PendingIntent.getActivity(context,UUID.randomUUID().hashCode(),target,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_ONE_SHOT);
+        ActivityOptions options=ActivityOptions.makeBasic();
+        // This capability is created only by an explicit suggestion-button click.
+        options.setPendingIntentCreatorBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS);
+        PendingIntent launch=PendingIntent.getActivity(context,UUID.randomUUID().hashCode(),target,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_ONE_SHOT,options.toBundle());
         Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
             .putExtra("package",pkg).putExtra("taskId",-1).putExtra("token",token())
             .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",android.os.Process.myUserHandle());
-        sendRequest(context,request);
+        request.putExtra("openReply",reply);sendRequest(context,request);
     }
     static void inputDigits(Context context,String digits,int delay,ResultReceiver receiver){
         Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OTP_INPUT")
@@ -86,9 +89,10 @@ final class Wire {
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
     static void send(Context c, String op) { send(c, op, PKG, -1, null, false); }
-    static void control(Context c,String op,String token,float value,float x,float y) {
+    static void control(Context c,String op,String token,float value,float x,float y) { control(c,op,token,-1,value,x,y); }
+    static void control(Context c,String op,String token,int taskId,float value,float x,float y) {
         Intent i=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL)
-            .putExtra("op",op).putExtra("token",token).putExtra("scale",value).putExtra("x",x).putExtra("y",y);
+            .putExtra("op",op).putExtra("token",token).putExtra("taskId",taskId).putExtra("scale",value).putExtra("x",x).putExtra("y",y);
         if(transmit(endpoint,i))return;
         endpoint=null;
         c.sendBroadcast(i,null,BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());

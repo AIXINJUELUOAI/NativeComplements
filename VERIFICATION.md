@@ -1,3 +1,14 @@
+# 0.4.1 验证记录
+
+版本 `0.4.1`，versionCode 41。公共修复覆盖双窗并存和独立恢复、入口强制重建移除与定尺寸淡入、受管任务的非分屏客户端配置、IME 坐标映射、mini 菜单缩放、建议启动回执及左下/右下位置设置。
+
+- Release Java/Kotlin 编译通过。`LinkedWindowsTest` 的 8 项针对性检查通过，覆盖独立窗口记录、任务与 token 控制校验、键盘重复避让和失败回执。
+- `python tests/verify_runtime.py` 和 `python tests/verify_target.py` 通过；新 IME 私有接口依据既有 API37 设备归档核对，记录在 `tests/target/viewport-members.json`。
+- 现场日志已确认：游戏在入口额外 relaunch 后收到 SIGKILL，但发送者尚未确认；建议目标被 BAL 拦截；QQ 的物理键盘顶边与呈现底边已经相接，额外内留白指向逻辑 Insets 坐标不一致。
+- 本轮没有安装、重启或更改 LSPosed。游戏存活、流媒体横屏、输入法视觉布局、双窗转场和建议跳转仍需用户安装后验证；主机检查不代表这些真机效果已经通过。
+
+APK：`deliverables/NativeComplements-0.4.1.apk`
+
 # 0.4.0-preview1 验证记录
 
 当前版本：`0.4.0-preview1`，versionCode 40；原覆盖签名、包名、宿主协议16与三个系统作用域保持不变。

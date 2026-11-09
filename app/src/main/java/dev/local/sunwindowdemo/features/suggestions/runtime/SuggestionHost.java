@@ -40,7 +40,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private View view;
     private final Set<String> litCameras=new HashSet<>();
     private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,inputRunning,chooser;
-    private boolean torchUsed;
+    private boolean torchUsed,opening;
+    private int openGeneration;
     private String lastTorchCamera,requestedTorchCamera;
     private Boolean requestedTorchMode;
     private int imeTop=Integer.MAX_VALUE,renderGeneration,inputGeneration;
@@ -270,7 +271,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             });
             String bluetooth=settings.getString("bluetooth_app","");
             if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&installed(bluetooth))addButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
-                Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);if(open(launch,bluetooth)){bluetoothUsed=true;render();}
+                Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);open(launch,bluetooth,()->{bluetoothUsed=true;render();});
             });
             if(enabled("otp")&&code!=null&&!inputRunning){
                 ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input);
@@ -291,7 +292,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 SuggestionRules.Link target=link;
                 addButton(row,icon(target.packageName()),target.token()?"打开应用识别分享口令":"打开分享链接",()->{
                     Intent launch=target.token()?context.getPackageManager().getLaunchIntentForPackage(target.packageName()):new Intent(Intent.ACTION_VIEW,Uri.parse(target.value())).setPackage(target.packageName());
-                    if(open(launch,target.packageName())){link=null;render();}
+                    open(launch,target.packageName(),()->{if(Objects.equals(link,target))link=null;render();});
                 });
             }
             if(enabled("maps")&&mapText!=null){
@@ -304,25 +305,35 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         row.setOnTouchListener((v,e)->{if(e.getActionMasked()==MotionEvent.ACTION_OUTSIDE&&chooser){chooser=false;render();}return false;});
         WindowManager.LayoutParams p=new WindowManager.LayoutParams(-2,-2,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
-        p.gravity=Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL;p.setFitInsetsTypes(0);p.windowAnimations=0;p.setTitle("NativeComplements-suggestions");SystemUiHost.trust(p);
+        p.gravity=Gravity.BOTTOM|(settings.getBoolean("right")?Gravity.RIGHT:Gravity.LEFT);p.setFitInsetsTypes(0);p.windowAnimations=0;p.setTitle("NativeComplements-suggestions");SystemUiHost.trust(p);
         WindowMetrics metrics=wm.getCurrentWindowMetrics();android.graphics.Rect bounds=metrics.getBounds();
         android.graphics.Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()|WindowInsets.Type.displayCutout());
+        p.x=(settings.getBoolean("right")?bars.right:bars.left)+dp(12);
         p.y=Math.max(bars.bottom,imeTop==Integer.MAX_VALUE?0:Math.max(0,bounds.bottom-imeTop))+dp(12);
         try{view=row;wm.addView(row,p);}catch(RuntimeException e){view=null;status("OVERLAY_UNAVAILABLE");}
     }
-    private boolean open(Intent intent,String pkg){
-        if(intent==null||locked())return false;
+    private void open(Intent intent,String pkg,Runnable completed){
+        if(intent==null||locked()||opening)return;
         try{
             Intent launch=new Intent(intent).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if(launch.resolveActivity(context.getPackageManager())==null)throw new IllegalStateException();
             if(settings.getBoolean("window")){
                 if(!new Config(context).enabled()){
-                    Toast.makeText(context,"请开启小窗控制，或关闭建议中的小窗打开",Toast.LENGTH_SHORT).show();return false;
+                    Toast.makeText(context,"请开启小窗控制，或关闭建议中的小窗打开",Toast.LENGTH_SHORT).show();return;
                 }
-                Wire.openIntent(context,pkg,launch);
-            }else context.startActivity(launch);
-            chooser=false;return true;
-        }catch(Exception e){Toast.makeText(context,"目标应用暂不支持此入口",Toast.LENGTH_SHORT).show();return false;}
+                opening=true;int generation=++openGeneration;
+                ResultReceiver reply=new ResultReceiver(main){
+                    @Override protected void onReceiveResult(int result,Bundle data){
+                        if(closed||generation!=openGeneration||!opening)return;
+                        opening=false;
+                        if(result==1){chooser=false;completed.run();}
+                        else {Toast.makeText(context,"打开未完成，请重试",Toast.LENGTH_SHORT).show();render();}
+                    }
+                };
+                Wire.openIntent(context,pkg,launch,reply);
+                main.postDelayed(()->{if(!closed&&opening&&generation==openGeneration){opening=false;openGeneration++;Toast.makeText(context,"打开超时，请重试",Toast.LENGTH_SHORT).show();render();}},15000);
+            }else {context.startActivity(launch);chooser=false;completed.run();}
+        }catch(Exception e){opening=false;openGeneration++;Toast.makeText(context,"目标应用暂不支持此入口",Toast.LENGTH_SHORT).show();}
     }
     private void openMap(String pkg){
         if(mapText==null)return;
@@ -335,7 +346,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 Toast.makeText(context,"请使用分享链接对应的地图应用",Toast.LENGTH_SHORT).show();return;
             }
         }else target=new Intent(Intent.ACTION_VIEW,Uri.parse("geo:0,0?q="+Uri.encode(text))).setPackage(pkg);
-        if(open(target,pkg)){mapText=null;chooser=false;render();}
+        open(target,pkg,()->{if(Objects.equals(mapText,text))mapText=null;chooser=false;render();});
     }
     private void input(){
         if(inputRunning||code==null||codeUntil<=now()||locked())return;

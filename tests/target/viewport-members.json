@@ -1,0 +1,186 @@
+{
+  "artifacts": [
+    {
+      "name": "framework.jar",
+      "size": 45060595,
+      "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f"
+    },
+    {
+      "name": "services.jar",
+      "size": 24951959,
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    }
+  ],
+  "classes": {
+    "Landroid/app/servertransaction/WindowStateResizeItem;": {
+      "artifact": "framework.jar",
+      "dex": "classes.dex",
+      "superclass": "Landroid/app/servertransaction/WindowStateTransactionItem;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;)V",
+          "access": 65538,
+          "has_code": true
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;Landroid/app/servertransaction/WindowStateResizeItem-IA;)V",
+          "access": 69632,
+          "has_code": true
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/view/IWindow;Landroid/window/ClientWindowFrames;ZLandroid/util/MergedConfiguration;Landroid/view/InsetsState;ZIIZZLandroid/window/ActivityWindowInfo;)V",
+          "access": 65537,
+          "has_code": true
+        }
+      ]
+    },
+    "Landroid/view/IWindow$Stub$Proxy;": {
+      "artifact": "framework.jar",
+      "dex": "classes4.dex",
+      "superclass": "Ljava/lang/Object;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "insetsControlChanged",
+          "descriptor": "(Landroid/view/InsetsState;Landroid/view/InsetsSourceControl$Array;)V",
+          "access": 1,
+          "has_code": true
+        }
+      ]
+    },
+    "Landroid/view/InsetsSource;": {
+      "artifact": "framework.jar",
+      "dex": "classes4.dex",
+      "superclass": "Ljava/lang/Object;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "getType",
+          "descriptor": "(I)I",
+          "access": 9,
+          "has_code": true
+        },
+        {
+          "name": "getFrame",
+          "descriptor": "()Landroid/graphics/Rect;",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "getType",
+          "descriptor": "()I",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "getVisibleFrame",
+          "descriptor": "()Landroid/graphics/Rect;",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "setFrame",
+          "descriptor": "(IIII)Landroid/view/InsetsSource;",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "setFrame",
+          "descriptor": "(Landroid/graphics/Rect;)Landroid/view/InsetsSource;",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "setVisibleFrame",
+          "descriptor": "(Landroid/graphics/Rect;)Landroid/view/InsetsSource;",
+          "access": 1,
+          "has_code": true
+        }
+      ]
+    },
+    "Landroid/view/InsetsState;": {
+      "artifact": "framework.jar",
+      "dex": "classes4.dex",
+      "superclass": "Ljava/lang/Object;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "()V",
+          "access": 65537,
+          "has_code": true
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;)V",
+          "access": 65537,
+          "has_code": true
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/view/InsetsState;)V",
+          "access": 65537,
+          "has_code": true
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/view/InsetsState;Z)V",
+          "access": 65537,
+          "has_code": true
+        },
+        {
+          "name": "set",
+          "descriptor": "(Landroid/view/InsetsState;)V",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "set",
+          "descriptor": "(Landroid/view/InsetsState;I)V",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "set",
+          "descriptor": "(Landroid/view/InsetsState;Z)V",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "sourceAt",
+          "descriptor": "(I)Landroid/view/InsetsSource;",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "sourceSize",
+          "descriptor": "()I",
+          "access": 1,
+          "has_code": true
+        }
+      ]
+    },
+    "Landroid/view/WindowRelayoutResult;": {
+      "artifact": "framework.jar",
+      "dex": "classes4.dex",
+      "superclass": "Ljava/lang/Object;",
+      "fields": [
+        {
+          "name": "insetsState",
+          "type": "Landroid/view/InsetsState;",
+          "access": 17
+        },
+        {
+          "name": "mergedConfiguration",
+          "type": "Landroid/util/MergedConfiguration;",
+          "access": 17
+        }
+      ],
+      "methods": []
+    }
+  }
+}

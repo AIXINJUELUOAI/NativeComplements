@@ -19,6 +19,7 @@ final class WindowControls {
     private final List<View> views=new ArrayList<>();
     private final List<WindowManager.LayoutParams> params=new ArrayList<>();
     private String token,frame="";
+    private int taskId=-1;
     private float x,y,w,h,scale,normalScale=.75f;
     private boolean appLandscape,systemBlocked;
     private String scaleZone="normal";
@@ -80,8 +81,9 @@ final class WindowControls {
         barAlpha=i.getFloatExtra("barAlpha",1);
         // Keep the normal handle visible through normal/mini animation, fading with progress.
         if(transitioning&&i.getBooleanExtra("transitionHandle",false))next="normal";
-        boolean rebuild=!Objects.equals(token,key)||views.isEmpty();
+        boolean rebuild=!Objects.equals(token,key)||taskId!=i.getIntExtra("taskId",-1)||views.isEmpty();
         if(rebuild){hide();token=key;}
+        taskId=i.getIntExtra("taskId",-1);
         Rect display=wm.getCurrentWindowMetrics().getBounds();
         if(miniDragBase!=null&&(!"mini".equals(next)||i.getBooleanExtra("edgeHidden",false)||transitioning||systemBlocked
                 ||display.width()!=displayW||display.height()!=displayH
@@ -237,7 +239,7 @@ final class WindowControls {
                         float end=GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape);
                         frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;dragging=false;
                         // One final sample + commit, rather than stale MOVE, RESIZE and RELEASE messages.
-                        if(token!=null)Wire.control(c,"END_RESIZE",token,end,0,0);return true;
+                        if(token!=null)Wire.control(c,"END_RESIZE",token,taskId,end,0,0);return true;
                     }
                     if(e.getActionMasked()==MotionEvent.ACTION_CANCEL){dragging=false;send("NORMAL",0,0,0);return true;}
                     return true;
@@ -282,7 +284,7 @@ final class WindowControls {
     }
     private void cancelMiniDrag(){
         if(miniDragBase==null)return;
-        stopMiniDrag();if(token!=null)Wire.control(c,"MINI_DRAG_CANCEL",token,0,0,0);
+        stopMiniDrag();if(token!=null)Wire.control(c,"MINI_DRAG_CANCEL",token,taskId,0,0,0);
     }
     private void clearEdgeHold(){
         if(edgeHoldView!=null&&edgeHoldCallback!=null)edgeHoldView.removeCallbacks(edgeHoldCallback);
@@ -291,11 +293,11 @@ final class WindowControls {
     private void stopEdgeDrag(){clearEdgeHold();clearMotion();edgeGesture=0;hideHapticSide=0;dragging=false;edgeBarDragging=false;}
     private void cancelEdgeDrag(){
         clearEdgeHold();if(edgeGesture==0)return;
-        stopEdgeDrag();if(token!=null)Wire.control(c,"EDGE_DRAG_CANCEL",token,0,0,0);
+        stopEdgeDrag();if(token!=null)Wire.control(c,"EDGE_DRAG_CANCEL",token,taskId,0,0,0);
     }
     private void flushMotion(){
         if(motionOp==null)return;String op=motionOp;motionOp=null;
-        if(token!=null)Wire.control(c,op,token,motionScale,motionX,motionY);
+        if(token!=null)Wire.control(c,op,token,taskId,motionScale,motionX,motionY);
     }
     private void sendMove(String op,float px,float py){scheduleMotion(op,0,px,py);}
     private void sendMoveScale(float s){
@@ -308,7 +310,7 @@ final class WindowControls {
         // The touch stream remains captured; the visible bar moves in the task transaction.
         barAlpha=1;scheduleMotion("RESIZE",s,0,0);
     }
-    private void send(String op,float value,float x,float y){flushMotion();if(token!=null)Wire.control(c,op,token,value,x,y);}
+    private void send(String op,float value,float x,float y){flushMotion();if(token!=null)Wire.control(c,op,token,taskId,value,x,y);}
     private void add(View v){
         WindowManager.LayoutParams p=new WindowManager.LayoutParams(1,1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
@@ -388,7 +390,7 @@ final class WindowControls {
         final boolean sound;
         MiniAction(boolean sound){
             super(c);this.sound=sound;setPadding(0,0,0,0);setMinimumWidth(0);setMinimumHeight(0);
-            setScaleType(ImageView.ScaleType.CENTER);setImageTintList(null);
+            setScaleType(ImageView.ScaleType.FIT_CENTER);setImageTintList(null);
             setBackground(new RippleDrawable(ColorStateList.valueOf(0x1f06080a),
                 moduleContext.getDrawable(R.drawable.nc_pinned_window_button_shape),null));
             refresh();
@@ -425,15 +427,17 @@ final class WindowControls {
         WindowManager.LayoutParams p=params.get(0);
         boolean horizontal=p.width>p.height;
         Rect display=wm.getCurrentWindowMetrics().getBounds();
-        int gap=dp(20);
+        float growth=Math.min(1.55f,Math.max(1f,scale/.28f));
+        int gap=Math.round(dp(20)*growth);
         int major=Math.min(horizontal?p.width:p.height,(horizontal?display.width():display.height())/2);
         int minor=Math.min(horizontal?p.height:p.width,(horizontal?display.height():display.width())/2);
-        int side=Math.max(1,Math.min(dp(42),Math.min(minor,(major-gap)/2)));
+        int side=Math.max(1,Math.min(Math.round(dp(42)*growth),Math.min(minor-dp(8),(major-gap)/2)));
         menuActions.setOrientation(horizontal?LinearLayout.HORIZONTAL:LinearLayout.VERTICAL);
         for(int i=0;i<2;i++){
             LinearLayout.LayoutParams action=new LinearLayout.LayoutParams(side,side);
             if(i==0){if(horizontal)action.rightMargin=gap;else action.bottomMargin=gap;}
-            menuActions.getChildAt(i).setLayoutParams(action);
+            View button=menuActions.getChildAt(i);button.setLayoutParams(action);
+            int padding=Math.round(side*12f/42);button.setPadding(padding,padding,padding,padding);
         }
         menuActions.setLayoutParams(new FrameLayout.LayoutParams(horizontal?side*2+gap:side,horizontal?side:side*2+gap,Gravity.CENTER));
         sizeAction.refresh();muteAction.refresh();
@@ -450,7 +454,7 @@ final class WindowControls {
             clearEdgeHold();clearMotion();
             if(edgeGesture!=0)cancelEdgeDrag();
             else if(miniDragBase!=null)cancelMiniDrag();
-            else if(dragging&&token!=null)Wire.control(c,"NORMAL",token,0,0,0);
+            else if(dragging&&token!=null)Wire.control(c,"NORMAL",token,taskId,0,0,0);
             dragging=false;hideMenu();hideDismiss();for(View v:views)v.setVisibility(View.GONE);changed();
         }else if(!views.isEmpty()&&!transitioning)layout();
     }

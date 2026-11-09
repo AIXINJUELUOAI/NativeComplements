@@ -70,6 +70,10 @@ fun SuggestionScreen(controller: WindowController) {
         ToggleRow("地址与地点", "复制地址、店铺或地名后显示地图搜索；安装多个地图时点击选择", config.getBoolean("maps")) { toggle("maps", it) }
     }
     Hint("链接交给目标应用打开；纯分享口令会保留剪贴板并启动应用，由应用自行识别。识别地点后仅展示按钮，点击才搜索或跳转。")
+    GroupTitle("按钮位置")
+    SettingsGroup {
+        ToggleRow("显示在右下角", "关闭时显示在左下角；键盘弹出时沿所选一侧上移", config.getBoolean("right")) { toggle("right", it) }
+    }
     GroupTitle("打开方式")
     SettingsGroup {
         ToggleRow("以小窗打开", "应用、链接和地图使用现有小窗；关闭后全屏打开", config.getBoolean("window")) { toggle("window", it) }

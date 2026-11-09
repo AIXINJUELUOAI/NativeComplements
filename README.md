@@ -1,6 +1,6 @@
 # NativeComplements
 
-类原生 Android 功能补全模块。当前版本为 `0.4.0-preview1`（versionCode 40），包含小窗、电话拦截、边缘防误触与建议。
+类原生 Android 功能补全模块。当前版本为 `0.4.1`（versionCode 41），包含小窗、电话拦截、边缘防误触与建议。
 
 设置界面采用 Compose Material 3 / Material 3 Expressive、系统动态颜色和深色模式。首页按功能独立跳转，功能可用后再加入入口。
 

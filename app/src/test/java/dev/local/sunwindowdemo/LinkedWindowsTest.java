@@ -85,13 +85,45 @@ public class LinkedWindowsTest {
         Files.writeString(journal.getBaseFile().toPath(),legacy.toString());
         List<Object> records=read();assertEquals(1,records.size());assertEquals(96,get(records.get(0),"taskId"));
     }
-    @Test public void rejectsDuplicateOrUnrelatedRecoveryEntries()throws Throwable{
+    @Test public void rejectsDuplicateEntriesAndKeepsIndependentSlotRecords()throws Throwable{
         JSONObject first=(JSONObject)call("encode",new Class<?>[]{session},create(97,1));
         JSONArray entries=new JSONArray().put(first).put(new JSONObject(first.toString()));
         Files.writeString(journal.getBaseFile().toPath(),new JSONObject().put("version",5).put("sessions",entries).toString());
         assertThrows(IOException.class,()->{try{read();}catch(Throwable error){if(error instanceof IOException io)throw io;throw new AssertionError(error);}});
         JSONObject foreign=(JSONObject)call("encode",new Class<?>[]{session},create(98,1));foreign.put("token",Wire.token());
         Files.writeString(journal.getBaseFile().toPath(),new JSONObject().put("version",5).put("sessions",new JSONArray().put(first).put(foreign)).toString());
-        assertThrows(IOException.class,()->{try{read();}catch(Throwable error){if(error instanceof IOException io)throw io;throw new AssertionError(error);}});
+        List<Object> restored=read();assertEquals(2,restored.size());
+        assertNotEquals(get(restored.get(0),"token"),get(restored.get(1),"token"));
+    }
+    @Test public void routesEachSlotByTaskAndTokenAndKeepsOtherRecoveryRecord()throws Throwable{
+        Object normal=create(97,1),mini=create(98,1);
+        set(mini,"token",Wire.token());set(mini,"frame","mini");save(normal);save(mini);
+        set(engine,"active",normal);set(engine,"pinned",mini);
+        android.content.Intent request=new android.content.Intent().putExtra("taskId",98).putExtra("token",(String)get(mini,"token"));
+        assertSame(mini,call("controlled",new Class<?>[]{android.content.Intent.class},request));
+        request.putExtra("token",token);assertNull(call("controlled",new Class<?>[]{android.content.Intent.class},request));
+        android.content.Intent report=new android.content.Intent();call("fillVisibleFrames",new Class<?>[]{android.content.Intent.class},report);
+        assertTrue(report.getBooleanExtra("normalOccupied",false));
+        assertEquals(98,report.getParcelableExtra("pinnedFrame",android.content.Intent.class).getIntExtra("taskId",-1));
+        call("forget",new Class<?>[]{session},normal);
+        assertEquals(98,get(read().get(0),"taskId"));assertTrue(engine.owns(get(mini,"task")));
+    }
+    @Test public void mappedImeDoesNotResizeAgainWhenWindowAlreadyFitsAboveKeyboard()throws Throwable{
+        Geometry.Placement p=new Geometry.Placement(1200,2133,.75f,150,55);
+        Rect mapped=(Rect)call("logicalInsets",new Class<?>[]{Rect.class,Geometry.Placement.class},new Rect(0,1655,1200,2670),p);
+        assertEquals(2133,mapped.top);
+        assertFalse(Rect.intersects(mapped,new Rect(0,0,1200,2133)));
+        Rect tallerKeyboard=(Rect)call("logicalInsets",new Class<?>[]{Rect.class,Geometry.Placement.class},new Rect(0,1400,1200,2670),p);
+        assertTrue(Rect.intersects(tallerKeyboard,new Rect(0,0,1200,2133)));
+    }
+    @Test public void openFailureReportsOnceAndDoesNotBecomeSuccess()throws Throwable{
+        java.util.ArrayList<Integer> results=new java.util.ArrayList<>();
+        android.os.ResultReceiver receiver=new android.os.ResultReceiver(null){
+            @Override protected void onReceiveResult(int code,android.os.Bundle data){results.add(code);}
+        };
+        android.content.Intent request=new android.content.Intent().putExtra("openReply",receiver);
+        call("completeOpen",new Class<?>[]{android.content.Intent.class,boolean.class},request,false);
+        call("completeOpen",new Class<?>[]{android.content.Intent.class,boolean.class},request,true);
+        assertEquals(List.of(0),results);
     }
 }

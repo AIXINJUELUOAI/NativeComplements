@@ -51,3 +51,20 @@ for cls,kind,name,sig in [
  ('Lkotlin/Unit;','fields','INSTANCE','Lkotlin/Unit;')]:
  assert any(x['name']==name and x['descriptor']==sig for x in edge_classes[cls][kind]),(cls,name,sig)
 print('PASS: archived rotation and SystemUI input admission signatures; live behavior still needs device validation')
+
+# API37 outgoing IME boundaries: deep-copy sources before transforming coordinates.
+viewport=json.loads((root/'tests/target/viewport-members.json').read_text())['classes']
+for cls,name,sig in [
+ ('Landroid/view/InsetsState;','<init>','(Landroid/view/InsetsState;Z)V'),
+ ('Landroid/view/InsetsState;','set','(Landroid/view/InsetsState;Z)V'),
+ ('Landroid/view/InsetsState;','sourceSize','()I'),
+ ('Landroid/view/InsetsState;','sourceAt','(I)Landroid/view/InsetsSource;'),
+ ('Landroid/view/InsetsSource;','getType','()I'),
+ ('Landroid/view/InsetsSource;','getFrame','()Landroid/graphics/Rect;'),
+ ('Landroid/view/InsetsSource;','setFrame','(Landroid/graphics/Rect;)Landroid/view/InsetsSource;'),
+ ('Landroid/view/InsetsSource;','getVisibleFrame','()Landroid/graphics/Rect;'),
+ ('Landroid/view/InsetsSource;','setVisibleFrame','(Landroid/graphics/Rect;)Landroid/view/InsetsSource;'),
+ ('Landroid/view/IWindow$Stub$Proxy;','insetsControlChanged','(Landroid/view/InsetsState;Landroid/view/InsetsSourceControl$Array;)V')]:
+ assert any(m['name']==name and m['descriptor']==sig for m in viewport[cls]['methods']),(cls,name,sig)
+assert any(f['name']=='insetsState' and f['type']=='Landroid/view/InsetsState;' for f in viewport['Landroid/view/WindowRelayoutResult;']['fields'])
+print('PASS: archived API37 IME source, relayout and direct notification boundaries')
