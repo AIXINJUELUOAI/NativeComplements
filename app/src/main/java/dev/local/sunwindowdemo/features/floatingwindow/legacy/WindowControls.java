@@ -38,7 +38,9 @@ final class WindowControls {
     private LinearLayout menuActions;
     private Context moduleContext;
     private MiniAction sizeAction,muteAction;
-    private boolean miniLarge,muted;
+    private boolean miniLarge,muted,edgeHidden;
+    private int edgeSide;
+    private float edgeCenterY;
     /** Clear each touch-only buffer explicitly; it must never become a visible backdrop. */
     private class ClearView extends FrameLayout {
         ClearView(){super(c);setBackgroundColor(Color.TRANSPARENT);setWillNotDraw(false);}
@@ -71,7 +73,9 @@ final class WindowControls {
         if(rebuild){hide();token=key;}
         frame=next;
         miniLarge=i.getBooleanExtra("miniLarge",false);muted=i.getBooleanExtra("muted",false);
-        if(!"mini".equals(frame)||transitioning||systemBlocked)hideMenu();
+        edgeHidden=i.getBooleanExtra("edgeHidden",false);edgeSide=i.getIntExtra("edgeSide",1);
+        edgeCenterY=i.getFloatExtra("edgeCenterY",ny+nh/2);
+        if(!"mini".equals(frame)||edgeHidden||transitioning||systemBlocked)hideMenu();
         normalScale=i.getFloatExtra("normalScale",.75f);appLandscape=i.getBooleanExtra("appLandscape",false);
         if(!dragging||transitioning){x=nx;y=ny;w=nw;h=nh;scale=i.getFloatExtra("scale",1);}
         logicalW=i.getIntExtra("logicalW",1200);logicalH=i.getIntExtra("logicalH",2133);
@@ -84,7 +88,17 @@ final class WindowControls {
     private void build(){
         {
             final String boundToken=token;
-            View mini=new ClearView();mini.setContentDescription("迷你窗：单击还原，双击全屏，长按调整大小或静音，拖到顶部关闭");
+            View mini=new ClearView(){
+                final Paint edgePaint=new Paint(Paint.ANTI_ALIAS_FLAG);
+                @Override protected void onDraw(Canvas cv){
+                    super.onDraw(cv);
+                    if(edgeHidden){
+                        edgePaint.setColor(0xfff0f2f2);
+                        float left=edgeSide<0?dp(2):getWidth()-dp(6),top=(getHeight()-dp(48))/2f;
+                        cv.drawRoundRect(left,top,left+dp(4),top+dp(48),dp(2),dp(2),edgePaint);
+                    }
+                }
+            };mini.setContentDescription("迷你窗：单击还原，双击全屏，长按调整大小或静音，拖出侧边隐藏；侧边白条点击或向内拖动还原");
             GestureDetector taps=new GestureDetector(c,new GestureDetector.SimpleOnGestureListener(){
                 @Override public boolean onDown(MotionEvent e){return true;}
                 @Override public boolean onSingleTapConfirmed(MotionEvent e){if(Objects.equals(boundToken,token)&&"mini".equals(frame)){if(menu!=null)hideMenu();else send("NORMAL",0,0,0);}return true;}
@@ -97,8 +111,20 @@ final class WindowControls {
                 }
             });
             mini.setOnTouchListener(new View.OnTouchListener(){
-                float downX,downY,baseX,baseY,endX,endY;boolean moving;
+                float downX,downY,baseX,baseY,endX,endY;boolean moving,edgeTouch,edgeRestored;
                 public boolean onTouch(View v,MotionEvent e){
+                    if(e.getActionMasked()==MotionEvent.ACTION_DOWN){
+                        edgeTouch=edgeHidden;edgeRestored=false;
+                        if(edgeTouch){downX=e.getRawX();downY=e.getRawY();return true;}
+                    }
+                    if(edgeTouch){
+                        float inward=(e.getRawX()-downX)*(edgeSide<0?1:-1);
+                        if(!edgeRestored&&(e.getActionMasked()==MotionEvent.ACTION_MOVE&&inward>dp(20)
+                            ||e.getActionMasked()==MotionEvent.ACTION_UP&&Math.hypot(e.getRawX()-downX,e.getRawY()-downY)<dp(20))){
+                            edgeRestored=true;send("RESTORE_MINI",0,0,0);
+                        }
+                        return true;
+                    }
                     if(e.getActionMasked()==MotionEvent.ACTION_OUTSIDE){hideMenu();return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_DOWN){moving=false;dragging=false;downX=e.getRawX();downY=e.getRawY();baseX=x;baseY=y;endX=x;endY=y;taps.onTouchEvent(e);return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_MOVE){
@@ -209,7 +235,14 @@ final class WindowControls {
         Rect d=layoutMetrics.getBounds();
         if("mini".equals(frame)){
             for(int n=1;n<views.size();n++)views.get(n).setVisibility(View.GONE);
-            rect(0,x,y,w,h);layoutMenu();changed();return;
+            if(edgeHidden){
+                Insets insets=layoutMetrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+                int width=dp(24),height=dp(80);
+                rect(0,edgeSide<0?insets.left:d.width()-insets.right-width,
+                    Math.max(insets.top,Math.min(edgeCenterY-height/2,d.height()-insets.bottom-height)),width,height);
+                views.get(0).invalidate();
+            }else{rect(0,x,y,w,h);views.get(0).invalidate();layoutMenu();}
+            changed();return;
         }
         if(!views.isEmpty())views.get(0).setVisibility(View.GONE);
         rect(1,0,0,d.width(),Math.max(0,y));rect(2,0,y,Math.max(0,x),h);
@@ -226,6 +259,9 @@ final class WindowControls {
         if(systemBlocked||transitioning)return new int[0];
         // Keep the existing one-rectangle GestureGate contract. Protect the
         // compact buttons, rather than the potentially wide landscape preview.
+        if(edgeHidden&&!params.isEmpty()&&views.get(0).getVisibility()==View.VISIBLE){
+            WindowManager.LayoutParams p=params.get(0);return new int[]{p.x,p.y,p.x+p.width,p.y+p.height};
+        }
         if(menuActions!=null&&!params.isEmpty()){
             WindowManager.LayoutParams p=params.get(0);
             int width=menuActions.getLayoutParams().width,height=menuActions.getLayoutParams().height;

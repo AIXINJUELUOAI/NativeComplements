@@ -12,6 +12,8 @@ final class FrameworkAccess {
     final int invisibleFlag,noAnimationFlag;
     final Method systemReady, prepare, changed, freeform, lookup, focused, recentVisible, systemBars;
     final Method requestTransition,finishLayers;
+    private Method playingTransition,freezerLeash;
+    private Field surfaceFreezer;
     private final Map<String, Method> methods = new HashMap<>();
     private final Map<String, Field> fields = new HashMap<>();
     FrameworkAccess(ClassLoader loader) throws Exception {
@@ -117,6 +119,11 @@ final class FrameworkAccess {
         for (String name : new String[]{"mSurfaceControl", "mSurfaceAnimator", "mTransitionController"}) field(wc, name);
         method(field(wc, "mSurfaceAnimator").getType(), "hasLeash");
         method(field(wc, "mTransitionController").getType(), "inTransition", wc);
+        // Optional on a framework fork: absence keeps the previous conservative guard.
+        try{playingTransition=method(field(wc,"mTransitionController").getType(),"inPlayingTransition",wc);}
+        catch(ReflectiveOperationException ignored){}
+        try{surfaceFreezer=field(wc,"mSurfaceFreezer");freezerLeash=method(surfaceFreezer.getType(),"hasLeash");}
+        catch(ReflectiveOperationException ignored){surfaceFreezer=null;freezerLeash=null;}
         TaskDecoration.preflight(this);
         recentVisible=method(Class.forName("com.android.server.wm.RecentTasks",false,loader),"isVisibleRecentTask",task);
         Class<?> win=Class.forName("com.android.server.wm.WindowState",false,loader);
@@ -192,6 +199,22 @@ final class FrameworkAccess {
     boolean animating(Object target) throws Exception {
         return bool(field(target, "mSurfaceAnimator"), "hasLeash")
             || (Boolean) call(field(target, "mTransitionController"), "inTransition", new Class<?>[]{wc}, target);
+    }
+    /** Collection alone does not own the surface. SunOS pauses presentation only for a real leash/playback. */
+    boolean presentationLeashed(Object target) throws Exception {
+        return bool(field(target,"mSurfaceAnimator"),"hasLeash")
+            ||surfaceFreezer!=null&&freezerLeash!=null&&(Boolean)freezerLeash.invoke(surfaceFreezer.get(target))
+            ||(playingTransition!=null?(Boolean)playingTransition.invoke(field(target,"mTransitionController"),target):animating(target));
+    }
+    void presentation(Object target,SurfaceControl.Transaction tx,Geometry.Placement p,Rect parent,Rect crop,float radius,float alpha)throws Exception{
+        SurfaceControl surface=(SurfaceControl)field(target,"mSurfaceControl");
+        if(surface==null||!surface.isValid())return;
+        // One atomic state at both native handoff endpoints; never repair (0,0) a frame later.
+        call(tx,"setScale",new Class<?>[]{SurfaceControl.class,float.class,float.class},surface,p.scale(),p.scale());
+        call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},surface,p.x()-parent.left,p.y()-parent.top);
+        call(tx,"setCrop",new Class<?>[]{SurfaceControl.class,Rect.class},surface,crop);
+        call(tx,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},surface,radius);
+        tx.setAlpha(surface,alpha);
     }
     void opacity(Object target,float alpha) throws Exception {
         call(transaction(target),"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},field(target,"mSurfaceControl"),alpha);

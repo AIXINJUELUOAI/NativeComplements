@@ -31,6 +31,37 @@ final class Geometry {
         float y=top+margin+ratio*Math.max(0,bottom-top-2*margin-p.height()*target.scale());
         return new Placement(p.width(),p.height(),target.scale(),x,y);
     }
+    /** SunOS pinned windows retain their edge and vertical fraction after a display change. */
+    static Placement remapMini(Placement previous,Placement canvas,float normal,
+            int oldLeft,int oldTop,int oldRight,int oldBottom,float oldMargin,
+            int left,int top,int right,int bottom,float margin,boolean large){
+        Placement target=miniTopRight(canvas,normal,left,top,right,bottom,margin,large);
+        float range=oldBottom-oldTop-2*oldMargin-previous.height()*previous.scale();
+        float ratio=range<=0?.5f:clamp((previous.y()-oldTop-oldMargin)/range,0,1);
+        boolean onLeft=previous.x()+previous.width()*previous.scale()/2<(oldLeft+oldRight)/2f;
+        float y=top+margin+ratio*Math.max(0,bottom-top-2*margin-target.height()*target.scale());
+        return new Placement(target.width(),target.height(),target.scale(),onLeft?left+margin:target.x(),y);
+    }
+    static Placement remapNormal(Placement previous,Placement target,
+            int oldLeft,int oldTop,int oldRight,int oldBottom,int left,int top,int right,int bottom,float margin){
+        float cx=clamp((previous.x()+previous.width()*previous.scale()/2-oldLeft)/Math.max(1,oldRight-oldLeft),0,1);
+        float cy=clamp((previous.y()+previous.height()*previous.scale()/2-oldTop)/Math.max(1,oldBottom-oldTop),0,1);
+        float x=left+cx*(right-left)-target.width()*target.scale()/2;
+        float y=top+cy*(bottom-top)-target.height()*target.scale()/2;
+        return new Placement(target.width(),target.height(),target.scale(),
+            clamp(x,left+margin,right-margin-target.width()*target.scale()),
+            clamp(y,top+margin,bottom-margin-target.height()*target.scale()));
+    }
+    static int hideSide(Placement p,float proposedX,int left,int right,float margin){
+        if(!Float.isFinite(proposedX))throw new IllegalArgumentException("position");
+        float center=proposedX+p.width()*p.scale()/2;
+        return center<=left+margin?-1:center>=right-margin?1:0;
+    }
+    static Placement offscreen(Placement p,int side,int left,int right,float gap){
+        if(side!=-1&&side!=1)throw new IllegalArgumentException("edge");
+        return new Placement(p.width(),p.height(),p.scale(),side<0?left-p.width()*p.scale()-gap:right+gap,p.y());
+    }
+    private static float clamp(float v,float low,float high){return Math.max(low,Math.min(v,Math.max(low,high)));}
     static Placement place(int logicalShort, boolean appLandscape,
             int left, int top, int right, int bottom, int margin) {
         if (logicalShort <= 0 || right <= left || bottom <= top || margin < 0)
