@@ -16,7 +16,7 @@ checks={
 'Landroid/view/ViewRootImpl$ViewPostImeInputStage;':{'methods':[('processPointerEvent','(Landroid/view/ViewRootImpl$QueuedInputEvent;)I')],'fields':[('this$0','Landroid/view/ViewRootImpl;')]},
 'Landroid/view/ViewRootImpl$QueuedInputEvent;':{'fields':[('mEvent','Landroid/view/InputEvent;')]},
 'Landroid/view/ViewRootImpl;':{'fields':[('mView','Landroid/view/View;')]},
-'Landroid/view/MotionEvent;':{'methods':[(name,sig) for name in ['getRawX','getRawY'] for sig in ['()F','(I)F']]},
+'Landroid/view/MotionEvent;':{'methods':[(name,sig) for name in ['getRawX','getRawY'] for sig in ['()F','(I)F']]+[('getDisplayId','()I')]},
 'Landroid/view/WindowManager$LayoutParams;':{'methods':[('setTrustedOverlay','()V')]},
 }
 total=0
@@ -26,3 +26,26 @@ for cls,sections in checks.items():
    assert any(x['name']==name and x.get('descriptor' if kind=='methods' else 'type')==descriptor for x in classes[cls][kind]),(cls,name,descriptor)
    total+=1
 print(f'PASS: {total} exact API37 members from archived target artifacts; current-device behavior remains unverified')
+
+# Additional target signatures are preserved separately to retain original inventories.
+rotation=json.loads((root/'tests/target/rotation-members.json').read_text())
+for cls,name,sig in [
+ ('Lcom/android/server/wm/Transition;','collect','(Lcom/android/server/wm/WindowContainer;)V'),
+ ('Lcom/android/server/wm/Transition;','isCollecting','()Z'),
+ ('Lcom/android/server/wm/Transition;','addTransitionEndedListener','(Ljava/lang/Runnable;)V'),
+ ('Lcom/android/server/wm/TransitionController;','inTransition','(Lcom/android/server/wm/WindowContainer;)Z'),
+ ('Lcom/android/server/wm/DisplayContent;','onRequestedOverrideConfigurationChanged','(Landroid/content/res/Configuration;)V'),
+ ('Lcom/android/server/wm/DisplayContent;','getRotation','()I'),
+ ('Lcom/android/server/wm/DisplayContent;','isRotationChanging','()Z')]:
+ assert any(x['name']==name and x['descriptor']==sig for x in rotation['classes'][cls]['methods']),(cls,name,sig)
+edge=json.loads((root/'tests/target/edge-input-members.json').read_text())
+assert edge['apk_sha256']=='a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972'
+edge_classes={x['descriptor']:x for x in edge['classes']}
+for cls,kind,name,sig in [
+ ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;','fields','f$0','Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;'),
+ ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;','methods','invoke','(Ljava/lang/Object;)Ljava/lang/Object;'),
+ ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;','fields','mDisplayBackGestureHandlers','Ljava/util/Map;'),
+ ('Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;','methods','cancelGesture','(Landroid/view/MotionEvent;)V'),
+ ('Lcom/android/systemui/shared/system/InputChannelCompat$InputEventReceiver$1;','methods','onInputEvent','(Landroid/view/InputEvent;)V')]:
+ assert any(x['name']==name and x['descriptor']==sig for x in edge_classes[cls][kind]),(cls,name,sig)
+print('PASS: archived rotation and SystemUI input admission signatures; live behavior still needs device validation')

@@ -118,6 +118,11 @@ fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceCont
                     }
                     drawPath(handset, foreground, style=line)
                 }
+                "edge" -> {
+                    drawRoundRect(foreground, point(.22f,.06f), Size(size.width*.56f,size.height*.88f), CornerRadius(3.dp.toPx()), style=line)
+                    drawLine(foreground,point(.08f,.26f),point(.08f,.74f),3.dp.toPx())
+                    drawLine(foreground,point(.92f,.26f),point(.92f,.74f),3.dp.toPx())
+                }
                 "apps" -> for (x in 0..2) for (y in 0..2) drawCircle(foreground, 2.3.dp.toPx(), point(.2f+x*.3f,.2f+y*.3f))
                 "gesture" -> {
                     drawLine(foreground,point(.16f,.84f),point(.8f,.2f),2.5.dp.toPx())

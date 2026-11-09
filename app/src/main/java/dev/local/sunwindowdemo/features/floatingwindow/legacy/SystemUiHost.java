@@ -137,6 +137,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
 
     }
     private WindowControls controls;
+    private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
+    boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
     private volatile boolean backendReady;
     private volatile String backendState="";
     private final BroadcastReceiver backendReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
@@ -173,6 +175,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         Config.hostPreferences=getSharedPreferences("nativecomplements_corner",Context.MODE_PRIVATE);
         config=new Config(this);wm=getSystemService(WindowManager.class);
         controls=new WindowControls(this);
+        edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
         Wire.send(this,"STATUS");
@@ -192,7 +195,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             main.post(()->{if(!connected||cleaned)return;all=apps;refresh();});
         },"corner-app-catalog").start();
     }
-    private void updateOverlayPriority(){if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);}
+    private void updateOverlayPriority(){
+        if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);
+        if(edgeTouch!=null)edgeTouch.setEnvironment(screenshotVisible||systemFocus,keyboard);
+    }
     private boolean allowed() {
         if(config==null||!settingsReady||!config.enabled()||!backendReady||cleaned||screenshotVisible||systemFocus||!getSystemService(android.os.PowerManager.class).isInteractive())return false;
         KeyguardManager kg=getSystemService(KeyguardManager.class);
@@ -270,7 +276,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             rects[count++]=location[0];rects[count++]=location[1];rects[count++]=location[0]+v.getWidth();rects[count++]=location[1]+v.getHeight();
         }
         int[] handles=controls==null?new int[0]:controls.protectedRects();
-        rects=java.util.Arrays.copyOf(rects,count);enabled=(enabled&&count>0)||handles.length>0;
+        rects=java.util.Arrays.copyOf(rects,count);
+        if(edgeTouch!=null){
+            int[] protectedAreas=java.util.Arrays.copyOf(rects,count+handles.length);
+            System.arraycopy(handles,0,protectedAreas,count,handles.length);
+            edgeTouch.setProtectedRects(protectedAreas);
+        }
+        enabled=(enabled&&count>0)||handles.length>0;
         android.graphics.Rect bounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();
         int hidden=config!=null&&config.hideRecents()?activeTask:-1;
         if(!force&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
@@ -320,5 +332,5 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     @Override public void onConfigurationChanged(Configuration c){hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
+    private void cleanup(){if(cleaned)return;if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
 }

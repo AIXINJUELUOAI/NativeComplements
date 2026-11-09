@@ -21,8 +21,8 @@ import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 
 enum class Page(val title: String) {
-    Calls("电话拦截"), Home("类原生补全"), Window("小窗"), Apps("快捷应用"), Gestures("手势与菜单"),
-    Behavior("窗口与多任务"), Prevention("防误触"), Blocked("禁用应用"), Diagnostics("诊断与恢复"), About("关于")
+    EdgeTouch("边缘防误触"), Calls("电话拦截"), Home("类原生补全"), Window("小窗"), Apps("快捷应用"), Gestures("手势与菜单"),
+    Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"), Diagnostics("诊断与恢复"), About("关于")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,7 +39,7 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
     BackHandler(page != Page.Home) { back() }
     var aboutVisible by remember { mutableStateOf(false) }
     Scaffold(containerColor = MaterialTheme.colorScheme.surfaceContainer, topBar = {
-        if (page != Page.Home && page != Page.Calls) TopAppBar(title = {}, navigationIcon = {
+        if (page != Page.Home && page != Page.Calls && page != Page.EdgeTouch) TopAppBar(title = {}, navigationIcon = {
             IconButton(onClick = { back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
         }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
     }) { insets ->
@@ -49,7 +49,9 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
                 (slideInHorizontally(spring(stiffness = 600f)) { it / 8 * direction } + fadeIn()) togetherWith
                     (slideOutHorizontally { -it / 12 * direction } + fadeOut())
             }) { current ->
-            if (current == Page.Calls) {
+            if (current == Page.EdgeTouch) {
+                dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen(onBack = { back() })
+            } else if (current == Page.Calls) {
                 dev.local.sunwindowdemo.features.callblocking.CallBlockingScreen(onBack = { back() })
             } else if (current == Page.Apps || current == Page.Blocked) {
                 AppPickerScreen(controller, blocked = current == Page.Blocked)
@@ -59,7 +61,7 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
                         Text(current.title, Modifier.padding(start = 12.dp, top = if(current == Page.Home) 42.dp else 4.dp, bottom = 28.dp),
                             style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Normal)
                         when (current) {
-                            Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true }, { navigate(Page.Calls) })
+                            Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true }, { navigate(Page.Calls) }, { navigate(Page.EdgeTouch) })
                             Page.Window -> WindowScreen(controller.preferences, controller.runtime, { navigate(it) }, controller::toggleControl)
                             Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                             Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean)

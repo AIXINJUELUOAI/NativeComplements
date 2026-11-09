@@ -1,0 +1,45 @@
+{
+  "apk_sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972",
+  "classes": [
+    {
+      "descriptor": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
+      "fields": [
+        {
+          "name": "f$0",
+          "descriptor": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;"
+        }
+      ],
+      "methods": [
+        {
+          "name": "invoke",
+          "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
+        }
+      ]
+    },
+    {
+      "descriptor": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+      "fields": [
+        {
+          "name": "mDisplayBackGestureHandlers",
+          "descriptor": "Ljava/util/Map;"
+        }
+      ],
+      "methods": [
+        {
+          "name": "cancelGesture",
+          "descriptor": "(Landroid/view/MotionEvent;)V"
+        }
+      ]
+    },
+    {
+      "descriptor": "Lcom/android/systemui/shared/system/InputChannelCompat$InputEventReceiver$1;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "onInputEvent",
+          "descriptor": "(Landroid/view/InputEvent;)V"
+        }
+      ]
+    }
+  ]
+}

@@ -94,7 +94,7 @@ final class WindowControls {
                     super.onDraw(cv);
                     if(edgeHidden){
                         edgePaint.setColor(0xfff0f2f2);
-                        float left=edgeSide<0?dp(2):getWidth()-dp(6),top=(getHeight()-dp(48))/2f;
+                        float left=edgeSide<0?dp(12):getWidth()-dp(16),top=(getHeight()-dp(48))/2f;
                         cv.drawRoundRect(left,top,left+dp(4),top+dp(48),dp(2),dp(2),edgePaint);
                     }
                 }
@@ -237,11 +237,12 @@ final class WindowControls {
             for(int n=1;n<views.size();n++)views.get(n).setVisibility(View.GONE);
             if(edgeHidden){
                 Insets insets=layoutMetrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
-                int width=dp(24),height=dp(80);
+                int width=dp(48),height=dp(104);
                 rect(0,edgeSide<0?insets.left:d.width()-insets.right-width,
                     Math.max(insets.top,Math.min(edgeCenterY-height/2,d.height()-insets.bottom-height)),width,height);
+                views.get(0).setSystemGestureExclusionRects(List.of(new Rect(0,0,width,height)));
                 views.get(0).invalidate();
-            }else{rect(0,x,y,w,h);views.get(0).invalidate();layoutMenu();}
+            }else{views.get(0).setSystemGestureExclusionRects(List.of());rect(0,x,y,w,h);views.get(0).invalidate();layoutMenu();}
             changed();return;
         }
         if(!views.isEmpty())views.get(0).setVisibility(View.GONE);

@@ -1,0 +1,91 @@
+{
+  "artifacts": [
+    {
+      "name": "framework.jar",
+      "size": 45060595,
+      "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f"
+    },
+    {
+      "name": "services.jar",
+      "size": 24951959,
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    }
+  ],
+  "classes": {
+    "Lcom/android/server/wm/Transition;": {
+      "artifact": "services.jar",
+      "dex": "classes3.dex",
+      "superclass": "Ljava/lang/Object;",
+      "methods": [
+        {
+          "name": "addTransitionEndedListener",
+          "descriptor": "(Ljava/lang/Runnable;)V",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "collect",
+          "descriptor": "(Lcom/android/server/wm/WindowContainer;)V",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "isCollecting",
+          "descriptor": "()Z",
+          "access": 1,
+          "has_code": true
+        }
+      ]
+    },
+    "Lcom/android/server/wm/DisplayContent;": {
+      "artifact": "services.jar",
+      "dex": "classes3.dex",
+      "superclass": "Lcom/android/server/wm/RootDisplayArea;",
+      "methods": [
+        {
+          "name": "getRotation",
+          "descriptor": "()I",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "isRotationChanging",
+          "descriptor": "()Z",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "onRequestedOverrideConfigurationChanged",
+          "descriptor": "(Landroid/content/res/Configuration;)V",
+          "access": 1,
+          "has_code": true
+        }
+      ]
+    },
+    "Lcom/android/server/wm/TransitionController;": {
+      "artifact": "services.jar",
+      "dex": "classes3.dex",
+      "superclass": "Ljava/lang/Object;",
+      "methods": [
+        {
+          "name": "inTransition",
+          "descriptor": "()Z",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "inTransition",
+          "descriptor": "(I)Z",
+          "access": 1,
+          "has_code": true
+        },
+        {
+          "name": "inTransition",
+          "descriptor": "(Lcom/android/server/wm/WindowContainer;)Z",
+          "access": 1,
+          "has_code": true
+        }
+      ]
+    }
+  }
+}

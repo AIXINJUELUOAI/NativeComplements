@@ -1,7 +1,7 @@
 # NativeComplements
 
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
-- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗与电话拦截，不创建其他功能的占位页面或接口。
+- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、电话拦截与边缘防误触，不创建其他功能的占位页面或接口。
 - 单 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。
 - 第一版行为基线是 Demo8.2。基线原有26个Java文件，当前变更清单记录于 tests/runtime-changes.json，代码位于 features/floatingwindow/legacy，包名保持 dev.local.sunwindowdemo。修改小窗时记录原因，不改基线摘要来隐藏差异。
 - applicationId、三个系统作用域、签名权限和 corner 偏好键是覆盖升级兼容点。使用 SystemUI 宿主与协议16，不依赖无障碍，不增加普通应用作用域或包名特判。

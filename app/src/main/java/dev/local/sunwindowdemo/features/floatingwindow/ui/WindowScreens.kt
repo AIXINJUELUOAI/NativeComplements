@@ -25,7 +25,7 @@ fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) 
         SettingRow("快捷应用", "已选择 ${p.apps.size} / 5 · 选择与排序", { navigate(Page.Apps) }, leading = { Glyph("apps") })
         SettingRow("手势与菜单", "触发热区、滑动距离、扇形外观", { navigate(Page.Gestures) }, leading = { Glyph("gesture") })
         SettingRow("窗口与多任务", "空白处关闭、最近任务中的显示", { navigate(Page.Behavior) }, leading = { Glyph("window") })
-        SettingRow("防误触", "横屏、键盘与指定应用", { navigate(Page.Prevention) }, leading = { Glyph("check") })
+        SettingRow("小窗触发限制", "横屏、键盘与指定应用", { navigate(Page.Prevention) }, leading = { Glyph("check") })
     }
     GroupTitle("帮助")
     SettingsGroup { SettingRow("诊断与恢复", "检查连接、测试触摸、恢复原窗口", { navigate(Page.Diagnostics) }, leading = { Glyph("info") }) }

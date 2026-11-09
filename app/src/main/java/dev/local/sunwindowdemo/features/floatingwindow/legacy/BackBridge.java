@@ -41,6 +41,7 @@ public final class BackBridge extends XposedModule {
                     return result;
                 });
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
+        installEdgeTouchAdmission(p.getDefaultClassLoader());
         try{
             ClassLoader cl=p.getDefaultClassLoader();
             Class<?> panel=Class.forName("com.android.systemui.navigationbar.gestural.BackPanelController",false,cl);
@@ -70,6 +71,47 @@ public final class BackBridge extends XposedModule {
             note("BACK_READY hooks=3 version=0.2.0-preview1");
             installScreenshotHooks(cl);
         }catch(Throwable e){for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}note("BACK_DISABLED "+e.getClass().getSimpleName());}
+    }
+    // A transparent blocker consumes application touches, but native InputMonitor also sees DOWN.
+    // Optional target-verified admission gate: leave the outer receiver's finishInputEvent intact.
+    // Runs only inside hooked SystemUI; the hidden getter is optional and API37-preflighted.
+    @android.annotation.SuppressLint("BlockedPrivateApi")
+    private void installEdgeTouchAdmission(ClassLoader cl){
+        try{
+            Class<?> adapter=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler$$ExternalSyntheticLambda20",false,cl);
+            Class<?> handler=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler",false,cl);
+            Field owner=field(adapter,"f$0"),displays=field(handler,"mDisplayBackGestureHandlers");
+            Method invoke=adapter.getDeclaredMethod("invoke",Object.class);
+            Method cancel=handler.getDeclaredMethod("cancelGesture",MotionEvent.class);
+            Method eventDisplay=MotionEvent.class.getDeclaredMethod("getDisplayId");
+            Class<?> unitClass=Class.forName("kotlin.Unit",false,cl);
+            Field instance=unitClass.getField("INSTANCE");
+            if(owner.getType()!=handler||displays.getType()!=Map.class||invoke.getReturnType()!=Object.class
+                ||cancel.getReturnType()!=void.class||eventDisplay.getReturnType()!=int.class||Modifier.isStatic(invoke.getModifiers())
+                ||Modifier.isStatic(cancel.getModifiers())||instance.getType()!=unitClass||!Modifier.isStatic(instance.getModifiers()))
+                throw new NoSuchMethodException("edge admission signature mismatch");
+            Object unit=instance.get(null);if(unit==null)throw new IllegalStateException("missing Unit.INSTANCE");
+            invoke.setAccessible(true);cancel.setAccessible(true);eventDisplay.setAccessible(true);
+            java.util.concurrent.atomic.AtomicBoolean active=new java.util.concurrent.atomic.AtomicBoolean(true);
+            hook(invoke).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object argument=chain.getArg(0);
+                if(active.get()&&argument instanceof MotionEvent event&&event.getActionMasked()==MotionEvent.ACTION_DOWN
+                    &&event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)){
+                    try{
+                        if((Integer)eventDisplay.invoke(event)!=Display.DEFAULT_DISPLAY)return chain.proceed();
+                        SystemUiHost host=SystemUiHost.live;
+                        if(host!=null&&host.blocksEdgeTouch(event.getX(),event.getY())){
+                            Object nativeHandler=owner.get(chain.getThisObject()),map=displays.get(nativeHandler);
+                            if(map instanceof Map<?,?> handlers&&handlers.get(Display.DEFAULT_DISPLAY)!=null){
+                                cancel.invoke(nativeHandler,event);return unit;
+                            }
+                        }
+                    }catch(Throwable failure){active.set(false);note("EDGE_BACK_ADMISSION_DISABLED "+failure.getClass().getSimpleName());}
+                }
+                return chain.proceed();
+            });
+            note("EDGE_BACK_ADMISSION_READY");
+        }catch(Throwable failure){note("EDGE_BACK_ADMISSION_UNAVAILABLE "+failure.getClass().getSimpleName());}
     }
     private synchronized void cancelStroke(Object owner){Stroke s=strokes.remove(owner);if(s!=null)preview(s,0);}
     private synchronized void connect(Context c){

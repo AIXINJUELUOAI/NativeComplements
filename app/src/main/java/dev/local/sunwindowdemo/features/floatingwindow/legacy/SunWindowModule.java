@@ -8,7 +8,7 @@ public final class SunWindowModule extends XposedModule {
     private boolean eligible, attempted;
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
         eligible = p.isSystemServer();
-        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.3.0-preview1");
+        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.3.0-preview2");
     }
     @Override public void onSystemServerStarting(SystemServerStartingParam p) {
         note("SYSTEM_SERVER_START eligible=" + eligible + " attempted=" + attempted);
@@ -138,6 +138,7 @@ public final class SunWindowModule extends XposedModule {
                     return result;
                 }));
             handles.add(hook(a.method(transition,"collect",a.wc)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                engine.displayTransitionCollecting(chain.getThisObject(),chain.getArg(0));
                 Object result=chain.proceed();engine.collected(chain.getThisObject(),chain.getArg(0));return result;
             }));
             handles.add(hook(a.method(a.task,"moveTaskToBackInner",a.task,transition)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
@@ -181,6 +182,16 @@ public final class SunWindowModule extends XposedModule {
                 for(XposedInterface.HookHandle handle:resizeHooks)try{handle.unhook();}catch(Throwable ignored){}
                 note("SCOPED_RESIZE_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));
             }
+            // Early display geometry changes must be hidden before native rotation snapshots.
+            // Optional: a different framework disables only this extra observation point.
+            try{
+                handles.add(hook(a.method(a.dc,"onRequestedOverrideConfigurationChanged",android.content.res.Configuration.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                        engine.displayConfigurationChanging(chain.getThisObject(),(android.content.res.Configuration)chain.getArg(0));
+                        return chain.proceed();
+                    }));
+                note("ROTATION_VISIBILITY_HOOK_READY");
+            }catch(Exception e){note("ROTATION_VISIBILITY_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
             ServerViewport.install(this,a,engine,handles);
             // Diagnostics are optional: missing diagnostic callbacks must not disable windows.
             try{
@@ -213,7 +224,7 @@ public final class SunWindowModule extends XposedModule {
                     try{Object result=chain.proceed();success=result!=null;return result;}
                     finally{engine.activityStartResult(ticket,success);}
                 }));
-            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview1; system scopes only");
+            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview2; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));

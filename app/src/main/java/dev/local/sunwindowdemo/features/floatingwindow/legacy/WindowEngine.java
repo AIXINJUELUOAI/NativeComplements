@@ -79,7 +79,10 @@ final class WindowEngine {
     private static final class Session {
         Session returnTo;
         boolean parked,restoreForeground;
-        TaskVisibilityGuard startMask;
+        TaskVisibilityGuard startMask,rotationMask;
+        final RotationGate rotation=new RotationGate();
+        final java.util.Set<Object> rotationTransitions=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        boolean rotationProbeQueued;
         Object task, parent;
         int taskId, userId, mode, logicalShort, topState;
         int uid=-1;
@@ -722,7 +725,7 @@ final class WindowEngine {
                 if(active!=s||s.restoring||revision!=s.animationRev)return;
                 try{
                     synchronized(lock){
-                        if(s.screenSuspended||a.presentationLeashed(s.task)){
+                        if(s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
                             if(began>=0&&lastFrame>=0)began+=now-lastFrame;
                             lastFrame=now;frames.postFrameCallback(this);return;
                         }
@@ -828,7 +831,7 @@ final class WindowEngine {
                 if(active!=s||s.restoring||s.animationRev!=revision)return;
                 try{
                     synchronized(lock){
-                        if(s.screenSuspended||a.presentationLeashed(s.task)){
+                        if(s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
                             nativeWaits++;
                             if(began>=0&&lastFrame>=0)began+=time-lastFrame;
                             lastFrame=time;frames.postFrameCallback(this);return;
@@ -1251,12 +1254,148 @@ final class WindowEngine {
     // Both WindowState and ActivityRecord input sinks obey the same task state.
     boolean blockContentTouch(Object container){
         try{Session s=sessionFor(a.call(container,"getTask"));
-            return s!=null&&(s.parked||s.restoring||s.screenSuspended||s.closing||"mini".equals(s.frame)
+            return s!=null&&(s.parked||s.restoring||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
                 ||s.startMask!=null&&s.startMask.holding());
         }catch(Exception e){return false;}
     }
     private boolean suppressTransition(Session s){
         return s.restoring?!s.restoreForeground||s.fullTransition:!s.fullTransition||s.closing;
+    }
+    // Before native display collection: hide before it can capture/reparent the old geometry.
+    void displayTransitionCollecting(Object transition,Object container){
+        if(lock==null||handler==null||!a.dc.isInstance(container))return;
+        try{synchronized(lock){
+            Session s=active;
+            if(s==null||s.restoring||s.parked||s.closing||s.fullTransition
+                ||a.call(s.task,"getDisplayContent")!=container)return;
+            if(!(Boolean)a.call(transition,"isCollecting")||!s.rotationTransitions.add(transition))return;
+            beginRotation(s);
+            try{a.call(transition,"addTransitionEndedListener",new Class<?>[]{Runnable.class},(Runnable)()->handler.post(()->{
+                synchronized(lock){s.rotationTransitions.remove(transition);queueRotationProbe(s,0);}
+            }));}catch(Exception e){s.rotationTransitions.remove(transition);log.accept("ROTATION_END_LISTENER_UNAVAILABLE "+FrameworkAccess.reason(e));}
+        }}catch(Throwable e){log.accept("ROTATION_HIDE_FAILED "+FrameworkAccess.reason(e));}
+    }
+    // Also covers display reconfiguration outside a Shell transition. Signature is optional/preflighted.
+    void displayConfigurationChanging(Object display,Configuration next){
+        if(lock==null||handler==null||next==null)return;
+        try{synchronized(lock){
+            Session s=active;
+            if(s==null||s.restoring||s.parked||s.closing||s.fullTransition
+                ||a.call(s.task,"getDisplayContent")!=display)return;
+            Object old=a.windowConfig(display,true),changed=a.field(next,"windowConfiguration");
+            int from=a.integer(old,"getRotation"),to=a.integer(changed,"getRotation");
+            Rect before=(Rect)a.call(old,"getBounds"),after=(Rect)a.call(changed,"getBounds");
+            if(from!=to&&from>=0&&to>=0||!before.equals(after)&&!after.isEmpty())beginRotation(s);
+        }}catch(Throwable e){log.accept("ROTATION_CONFIG_GUARD_FAILED "+FrameworkAccess.reason(e));}
+    }
+    private void beginRotation(Session s){
+        try{
+            if(s.rotationMask==null||!s.rotationMask.holding()){
+                TaskVisibilityGuard previous=s.rotationMask,next=new TaskVisibilityGuard(a,s.task);
+                next.hide();s.rotationMask=next;
+                if(previous!=null)previous.continueWith(next);
+            }else s.rotationMask.hide();
+            s.rotation.begin(SystemClock.elapsedRealtime());
+            s.geometryDirty=true;
+            if(s.decoration!=null)s.decoration.hide(s.task);
+            frameReport("ROTATION_HIDDEN");queueRotationProbe(s,32);
+            log.accept("ROTATION_HIDDEN task="+s.taskId+" frame="+s.frame);
+        }catch(Throwable e){rotationFailure(s,e);}
+    }
+    private void queueRotationProbe(Session s,long delay){
+        if(s.rotationProbeQueued||!s.rotation.active()||s.rotation.fading())return;
+        s.rotationProbeQueued=true;
+        handler.postDelayed(()->{synchronized(lock){s.rotationProbeQueued=false;probeRotation(s);}},delay);
+    }
+    private float presentationAlpha(Session s){
+        return s.parked||s.restoring||s.screenSuspended||s.startMask!=null&&s.startMask.holding()
+            ?0:s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
+    }
+    private TaskVisibilityGuard presentationMask(Session s){
+        return s.rotationMask!=null&&s.rotationMask.holding()?s.rotationMask:s.startMask;
+    }
+    private void probeRotation(Session s){
+        if(!s.rotation.active()||s.rotation.fading())return;
+        try{
+            if(!sessions.contains(s)||s.restoring){s.rotation.clear();return;}
+            if(find(s.taskId)!=s.task||!a.bool(s.task,"isAttached")){
+                endRotation(s,false);return;
+            }
+            long now=SystemClock.elapsedRealtime();
+            if(s.screenSuspended||!context.getSystemService(PowerManager.class).isInteractive()
+                ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()){
+                s.rotation.defer(now);queueRotationProbe(s,250);return;
+            }
+            boolean overlap=s.startMask!=null&&s.startMask.holding();
+            Object display=a.call(s.task,"getDisplayContent");
+            if(display==null){endRotation(s,false);return;}
+            Object controller=a.field(s.task,"mTransitionController");
+            boolean nativeBusy=a.presentationLeashed(s.task)
+                ||(Boolean)a.call(controller,"inTransition",new Class<?>[]{a.wc},display);
+            boolean changing=a.bool(display,"isRotationChanging");
+            Rect bounds=new Rect((Rect)a.call(display,"getBounds")),safe=safeArea(display);
+            int rotation=a.integer(display,"getRotation");
+            boolean ready=!overlap&&!nativeBusy&&!changing&&s.rotationTransitions.isEmpty();
+            // A missing/aborted callback must never leave a live task transparent forever.
+            if(s.rotation.expired(now)&&!overlap){
+                log.accept("ROTATION_TIMEOUT_VISIBLE task="+s.taskId);
+                endRotation(s,true);return;
+            }
+            String sample=rotation+"/"+bounds+"/"+safe;
+            if(!s.rotation.sample(now,ready,sample)){queueRotationProbe(s,32);return;}
+            if(active==s){
+                refresh(s);
+                Geometry.Placement p=s.placement;
+                if(s.geometryDirty||p==null||!new Rect(0,0,p.width(),p.height()).equals(a.call(s.task,"getBounds"))){
+                    queueRotationProbe(s,32);return;
+                }
+            }
+            // Restore wrapper alphas with the task still at zero. The first visible frame
+            // uses the refreshed geometry; its native logical canvas never flashes onscreen.
+            if(s.rotationMask!=null)s.rotationMask.transfer();
+            int generation=s.rotation.startFade(SystemClock.elapsedRealtime());
+            renderFrame(s);frameReport("ROTATION_APPEARING");
+            frames.postFrameCallback(new Choreographer.FrameCallback(){
+                public void doFrame(long time){
+                    synchronized(lock){
+                        if(!s.rotation.active()||s.rotation.generation()!=generation)return;
+                        try{
+                            if(!sessions.contains(s)||s.restoring){s.rotation.clear();return;}
+                            long clock=SystemClock.elapsedRealtime();
+                            if(s.screenSuspended||a.presentationLeashed(s.task)){
+                                beginRotation(s);return;
+                            }
+                            renderFrame(s);frameReport("ROTATION_APPEARING");
+                            if(s.rotation.alpha(clock)<1){frames.postFrameCallback(this);return;}
+                            s.rotation.clear();renderFrame(s);report("ROTATION_VISIBLE");
+                        }catch(Throwable e){rotationFailure(s,e);}
+                    }
+                }
+            });
+        }catch(Throwable e){rotationFailure(s,e);}
+    }
+    private void endRotation(Session s,boolean visible){
+        s.rotation.clear();s.rotationTransitions.clear();
+        if(s.rotationMask!=null){
+            try{if(s.rotationMask.holding())s.rotationMask.transfer();
+                s.rotationMask.afterTransaction(visible?presentationAlpha(s):0);
+            }catch(Throwable e){log.accept("ROTATION_RELEASE_FAILED "+FrameworkAccess.reason(e));}
+        }
+        if(visible)try{
+            // Clear the pending zero as well as the immediate surface. A native leash
+            // can prevent apply() from rewriting the pending transaction after timeout.
+            a.opacity(s.task,presentationAlpha(s));
+            if(!a.presentationLeashed(s.task)){refresh(s);renderFrame(s);}
+            else try(android.view.SurfaceControl.Transaction t=new android.view.SurfaceControl.Transaction()){
+                android.view.SurfaceControl surface=(android.view.SurfaceControl)a.field(s.task,"mSurfaceControl");
+                if(surface!=null&&surface.isValid())t.setAlpha(surface,presentationAlpha(s)).apply();
+            }
+            frameReport("ROTATION_VISIBLE");
+        }catch(Throwable e){log.accept("ROTATION_VISIBLE_FAILED "+FrameworkAccess.reason(e));}
+    }
+    private void rotationFailure(Session s,Throwable e){
+        log.accept("ROTATION_GUARD_FAILED "+FrameworkAccess.reason(e));
+        endRotation(s,true);
     }
     void collected(Object transition,Object container){
         if(sessions.isEmpty())return;
@@ -1290,7 +1429,7 @@ final class WindowEngine {
             java.util.ArrayList<Object> steadyMiniChanges=new java.util.ArrayList<>();
             for(Session s:sessions){
                 if(!suppressTransition(s))continue;
-                TaskVisibilityGuard mask=s.startMask;
+                TaskVisibilityGuard mask=presentationMask(s);
                 boolean touched=false;
                 for(int i=0;i<targets.size();i++){
                     Object container=a.field(targets.get(i),"mContainer"),change=changes.get(i);
@@ -1310,7 +1449,7 @@ final class WindowEngine {
                                     Session owner=sessionFor(s.task);
                                     android.view.SurfaceControl surface=(android.view.SurfaceControl)a.field(s.task,"mSurfaceControl");
                                     if(owner!=null&&surface!=null&&surface.isValid())
-                                        tx.setAlpha(surface,owner.parked||owner.restoring||owner.screenSuspended?0:owner.opacity);
+                                        tx.setAlpha(surface,presentationAlpha(owner));
                                     tx.apply();
                                 }catch(Exception e){failure(s,e);}
                             }
@@ -1319,21 +1458,23 @@ final class WindowEngine {
                     }
                     touched=true;
                 }
-                if(s.parked||s.startMask!=null&&s.startMask.holding()){
+                if(s.parked||mask!=null&&mask.holding()){
                     android.view.SurfaceControl surface=(android.view.SurfaceControl)a.field(s.task,"mSurfaceControl");
                     if(surface!=null&&surface.isValid()){start.setAlpha(surface,0);finish.setAlpha(surface,0);}
                 }
                 if(touched&&!s.restoring&&!s.parked&&!s.screenSuspended&&s.placement!=null
-                    &&(s.startMask==null||!s.startMask.holding())){
+                    &&(mask==null||!mask.holding())){
                     // Native finish resets task position/scale/crop even for a no-animation
                     // foreground transition. Put the owned presentation into that same
                     // transaction instead of allowing an identity frame before a later tick.
                     Rect parent=(Rect)a.call(s.parent,"getBounds");
                     Rect crop=s.lastSurfaceCrop==null?new Rect(0,0,s.placement.width(),s.placement.height()):s.lastSurfaceCrop;
                     float radius=surfaceRadius(s,s.placement,crop);
-                    a.presentation(s.task,finish,s.placement,parent,crop,radius,s.opacity);
+                    a.presentation(s.task,finish,s.placement,parent,crop,radius,presentationAlpha(s));
                 }
-                if(touched){
+                // A display-only target also receives task alpha=0 above. Repair its
+                // late commits even when the task was not an independent Shell change.
+                if(touched||mask!=null&&mask.holding()){
                     start.addTransactionCommittedListener(handler::post,()->repairTransition(s,mask));
                     finish.addTransactionCommittedListener(handler::post,()->repairTransition(s,mask));
                 }
@@ -1378,9 +1519,9 @@ final class WindowEngine {
         try{synchronized(lock){
             Session owner=sessionFor(s.task);
             if(mask!=null){
-                if(owner!=null&&owner.startMask!=null&&owner.startMask!=mask&&owner.startMask.holding())
-                    mask.continueWith(owner.startMask);
-                else mask.afterTransaction(owner==null?1:owner.parked||owner.restoring||owner.screenSuspended?0:owner.opacity);
+                TaskVisibilityGuard next=owner==null?null:presentationMask(owner);
+                if(next!=null&&next!=mask&&next.holding())mask.continueWith(next);
+                else mask.afterTransaction(owner==null?1:presentationAlpha(owner));
             }
             if(owner!=null&&!owner.restoring&&!a.animating(owner.task))renderFrame(owner);
         }}catch(Throwable e){if(sessions.contains(s))failure(s,e);else log.accept("LINKED_LATE_TX_FAILED "+FrameworkAccess.reason(e));}
@@ -1449,6 +1590,11 @@ final class WindowEngine {
         if(s.startMask!=null&&s.startMask.holding()){
             s.startMask.hold();if(s.decoration!=null)s.decoration.hide(s.task);return;
         }
+        if(s.rotation.active()&&!s.rotation.fading()){
+            try{if(s.rotationMask!=null)s.rotationMask.hold();}
+            catch(Throwable e){rotationFailure(s,e);}
+            if(s.decoration!=null)s.decoration.hide(s.task);return;
+        }
         if(a.presentationLeashed(s.task)){
             if(s.entering||s.closing)a.opacity(s.task,0);
             if(s.decoration!=null)s.decoration.hide(s.task);return;
@@ -1474,10 +1620,10 @@ final class WindowEngine {
             s.lastSurfaceCrop=new Rect(crop);
             log.accept("VISIBLE_WINDOW_CROP task="+s.taskId+" crop="+crop+" main="+main);
         }
-        a.opacity(s.task,s.opacity);
+        a.opacity(s.task,presentationAlpha(s));
         if(s.decoration!=null){
             boolean wasPresented=s.presented;
-            s.presented=s.decoration.update(s.task,s.parent,p,a.config(s.task,false).densityDpi/160f,s.displayW>s.displayH,s.barAlpha,!a.inFrame()&&!s.backRequested);
+            s.presented=s.decoration.update(s.task,s.parent,p,a.config(s.task,false).densityDpi/160f,s.displayW>s.displayH,s.barAlpha*s.rotation.alpha(SystemClock.elapsedRealtime()),!a.inFrame()&&!s.backRequested);
             if(s.presented&&!wasPresented)handler.post(()->{
                 if(active!=s||s.restoring||s.closing)return;
                 log.accept("PRESENTED task="+s.taskId+" elapsedMs="+(SystemClock.elapsedRealtime()-s.startedAt));
@@ -1646,6 +1792,11 @@ final class WindowEngine {
             saveHistory();notifyRecents();
             log.accept("HISTORY_FULLSCREEN_RELEASED task="+s.taskId+" source=foreground-restore");
         }
+        s.rotation.clear();s.rotationTransitions.clear();
+        if(s.rotationMask!=null){
+            if(s.rotationMask.holding())s.rotationMask.transfer();
+            s.rotationMask.afterTransaction(1);
+        }
         if(s.decoration!=null)s.decoration.dispose();
         if(s.lease!=null&&s.death!=null)try{s.lease.unlinkToDeath(s.death,0);}catch(RuntimeException ignored){}
         endedTaskId=s.taskId;
@@ -1749,6 +1900,11 @@ final class WindowEngine {
                     if(s.startMask.holding())s.startMask.release();
                     s.startMask.afterTransaction(1);
                 }
+                s.rotation.clear();
+                if(s.rotationMask!=null){
+                    if(s.rotationMask.holding())s.rotationMask.release();
+                    s.rotationMask.afterTransaction(1);
+                }
                 a.opacity(task,1f);
             }
             a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");a.call(wms,"requestTraversal");
@@ -1816,8 +1972,8 @@ final class WindowEngine {
             .putExtra("frame",s.frame).putExtra("x",p.x()).putExtra("y",p.y())
             .putExtra("width",p.width()*p.scale()).putExtra("height",p.height()*p.scale())
             .putExtra("scale",p.scale()).putExtra("normalScale",s.defaultScale).putExtra("appLandscape",s.landscape).putExtra("logicalW",p.width()).putExtra("logicalH",p.height())
-            .putExtra("transitioning",s.transitioning).putExtra("fullTransition",s.fullTransition)
-            .putExtra("transitionHandle",s.transitionHandle).putExtra("presented",s.presented).putExtra("nativeHandle",true)
+            .putExtra("transitioning",s.transitioning||s.rotation.active()).putExtra("fullTransition",s.fullTransition)
+            .putExtra("transitionHandle",s.transitionHandle).putExtra("presented",s.presented&&!s.rotation.active()).putExtra("nativeHandle",true)
             .putExtra("barAlpha",s.barAlpha).putExtra("miniLarge",s.miniLarge)
             .putExtra("edgeHidden",s.edgeHidden).putExtra("edgeSide",s.edgeSide)
             .putExtra("edgeCenterY",s.miniPlacement==null?p.y()+p.height()*p.scale()/2:s.miniPlacement.y()+s.miniPlacement.height()*s.miniPlacement.scale()/2)
