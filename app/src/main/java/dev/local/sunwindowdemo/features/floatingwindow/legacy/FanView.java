@@ -58,8 +58,8 @@ final class FanView extends View {
                     drawable.setAlpha((int)(255*progress));drawable.draw(c);
                 }finally{drawable.setBounds(bounds);drawable.setAlpha(alpha);c.restoreToCount(saved);}
             } else {
-                paint.setColor(Color.WHITE);paint.setAlpha((int)(255*progress));paint.setStrokeWidth(size/18);paint.setStrokeCap(Paint.Cap.ROUND);
-                for(int line=-1;line<=1;line++) {float yy=cy+line*size*.17f;c.drawCircle(cx-size*.23f,yy,size*.035f,paint);c.drawLine(cx-size*.08f,yy,cx+size*.24f,yy,paint);}
+                paint.setColor(Color.WHITE);paint.setAlpha((int)(255*progress));
+                for(int dot=-1;dot<=1;dot++)c.drawCircle(cx+dot*size*.2f,cy,size*.065f,paint);
             }
         }
         // Submit one fully transparent frame before beginning the only entry animation.

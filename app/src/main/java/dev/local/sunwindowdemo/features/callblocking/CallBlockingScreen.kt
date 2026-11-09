@@ -67,7 +67,10 @@ fun CallBlockingScreen(onBack: () -> Unit) {
         refresh()
     }
     DisposableEffect(lifecycle, context, permission) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> refresh() }
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            config = CallBlockingStore.readConfig(context)
+            if (key == null || key == "records") records = CallBlockingStore.readRecords(context).toList()
+        }
         val prefs = CallBlockingStore.preferences(context)
         prefs.registerOnSharedPreferenceChangeListener(listener)
         val simListener = object : SubscriptionManager.OnSubscriptionsChangedListener() {

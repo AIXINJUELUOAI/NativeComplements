@@ -64,6 +64,10 @@ class HostBridgeTest {
         assertEquals("com.android.systemui", signal.`package`)
         store.boolean("enabled", true)
         assertTrue(WindowPreferenceStore(context).read().enabled)
+        store.boolean("doubleClose", true)
+        assertTrue(WindowPreferenceStore(context).read().doubleClose)
+        store.boolean("doubleClose", false)
+        assertFalse(WindowPreferenceStore(context).read().doubleClose)
     }
 
     @Test fun shortcutLibraryPersistsBeyondFanLimitWithoutDroppingOrder() {
@@ -75,7 +79,7 @@ class HostBridgeTest {
         assertEquals(targets, restored.apps)
         assertEquals(2, restored.fanCount)
         store.number("fanCount", 99)
-        assertEquals(4, WindowPreferenceStore(context).read().fanCount)
+        assertEquals(5, WindowPreferenceStore(context).read().fanCount)
         assertEquals(targets, WindowPreferenceStore(context).read().apps)
     }
 

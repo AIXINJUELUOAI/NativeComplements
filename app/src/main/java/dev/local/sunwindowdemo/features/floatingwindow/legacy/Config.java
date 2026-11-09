@@ -21,11 +21,11 @@ final class Config {
     int selectionDistance() { return number("selectionDistance", 90, 50, 100); }
     int radius() { return number("radius", 180, 120, 260); }
     int icon() { return number("icon", 44, 32, 56); }
-    int fanCount() { return number("fanCount",4,1,4); }
+    int fanCount() { return number("fanCount",4,1,5); }
     boolean landscapeOff() { return prefs.getBoolean("landscape", true); }
     boolean keyboardOff() { return prefs.getBoolean("keyboard", true); }
     boolean hideRecents() { return prefs.getBoolean("hideRecents", false); }
-    boolean doubleClose() { return false; }
+    boolean doubleClose() { return prefs.getBoolean("doubleClose", false); }
     boolean showHeat() { return prefs.getBoolean("showHeat", false); }
     List<String> apps() {
         Set<String> unique = new LinkedHashSet<>();

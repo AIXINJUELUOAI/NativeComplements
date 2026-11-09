@@ -51,7 +51,7 @@ final class AppList {
         final ExecutorService worker=Executors.newSingleThreadExecutor();
         final Handler main=new Handler(Looper.getMainLooper());
         final int surface,container,text,secondary,accent,tonal;
-        final TextView manage,selectedTitle,help,empty,bubble;
+        final TextView manage,help,empty,bubble;
         final TextView[] tabs=new TextView[2];
         final ScrollView selectedScroll;
         final LinearLayout selectedRows;
@@ -89,17 +89,16 @@ final class AppList {
             if(cached!=null){shortcutRequested=true;applyShortcuts(cached);}
 
             LinearLayout header=new LinearLayout(c);header.setGravity(Gravity.CENTER_VERTICAL);
-            TextView title=label("更多应用",14,text);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
+            TextView title=label("更多应用",14,text);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));title.setIncludeFontPadding(false);
             header.addView(title,new LinearLayout.LayoutParams(0,dp(compact?36:42),1));
-            manage=button("管理",this::toggleEditing);manage.setBackground(ripple(tonal));
-            header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?32:36)));addView(header);
+            manage=button("管理",this::toggleEditing);manage.setTextColor(text);manage.setIncludeFontPadding(false);manage.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+            header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));addView(header);
 
-            selectedTitle=label("",12,secondary);selectedTitle.setPadding(dp(4),dp(2),0,dp(2));addView(selectedTitle);
-            selectedScroll=new ScrollView(c);selectedScroll.setFillViewport(false);selectedScroll.setClipToPadding(false);selectedScroll.setVerticalScrollBarEnabled(false);
+            selectedScroll=new ScrollView(c);selectedScroll.setFillViewport(false);selectedScroll.setClipToPadding(false);selectedScroll.setVerticalScrollBarEnabled(false);selectedScroll.setPadding(0,0,dp(26),0);
             selectedRows=new LinearLayout(c);selectedRows.setOrientation(VERTICAL);selectedScroll.addView(selectedRows,new ScrollView.LayoutParams(-1,-2));
-            addView(selectedScroll,new LinearLayout.LayoutParams(-1,dp(selectedTileHeight())));
+            addView(selectedScroll,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
             selectedScroll.setOnDragListener((view,event)->drag(event));
-            help=label("长按快捷入口拖动排序；点击下方 + 添加、− 移除，完成后保存",11,secondary);
+            help=label("长按图标拖动排序；点击 + 添加、− 移除，完成后保存",11,secondary);
             help.setPadding(dp(4),dp(2),dp(4),dp(4));help.setMaxLines(2);addView(help);
             View divider=new View(c);divider.setBackgroundColor(blend(container,text,.12f));
             LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));addView(divider,line);
@@ -135,7 +134,7 @@ final class AppList {
                     for(int column=0;column<4;column++){
                         View child;
                         if(column<entry.items.size()){
-                            ShortcutTarget target=entry.items.get(column);child=tile(target,false);
+                            ShortcutTarget target=entry.items.get(column);child=tile(target);
                             child.setOnClickListener(v->{if(!saving){if(editing)toggle(target);else launch.accept(target);}});
                         }else child=new View(c);
                         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(2),0,dp(2),0);row.addView(child,p);
@@ -152,7 +151,6 @@ final class AppList {
             renderSelected();setTab(0);
         }
         int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
-        int selectedTileHeight(){return compact?64:86;}
         int appTileHeight(){return compact?78:92;}
         int sectionHeight(){return compact?22:26;}
         @Override protected void onMeasure(int widthSpec,int heightSpec){
@@ -164,7 +162,7 @@ final class AppList {
                     LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)child.getLayoutParams();fixed+=child.getMeasuredHeight()+p.topMargin+p.bottomMargin;
                 }
                 int room=Math.max(0,MeasureSpec.getSize(heightSpec)-fixed-dp(sectionHeight())-dp(appTileHeight())-dp(4));
-                int rowHeight=dp(selectedTileHeight()),count=Math.max(1,(chosen.size()+3)/4);
+                int rowHeight=dp(appTileHeight()),count=Math.max(1,(chosen.size()+3)/4);
                 int cap=Math.min(room,dp(compact?132:260));
                 int height=Math.min(count*rowHeight,cap<rowHeight?cap:cap/rowHeight*rowHeight);
                 LinearLayout.LayoutParams p=(LinearLayout.LayoutParams)selectedScroll.getLayoutParams();p.height=height;
@@ -210,18 +208,18 @@ final class AppList {
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
             manage.setText(saving?"保存中…":editing?"完成":"管理");manage.setEnabled(!saving);
-            selectedTitle.setText("快捷入口 · "+chosen.size());help.setVisibility(editing&&!compact?VISIBLE:GONE);
+            help.setVisibility(editing&&!compact?VISIBLE:GONE);
             int scrollY=selectedScroll.getScrollY();selectedRows.removeAllViews();
             if(chosen.isEmpty()){
-                TextView hint=label(editing?"点击下方应用或快捷功能添加":"点管理添加常用应用和快捷功能",12,secondary);hint.setGravity(Gravity.CENTER);
-                selectedRows.addView(hint,new LinearLayout.LayoutParams(-1,dp(selectedTileHeight())));
+                TextView hint=label(editing?"点击下方应用或快捷功能添加":"点击管理添加应用或快捷功能",12,secondary);hint.setGravity(Gravity.CENTER);
+                selectedRows.addView(hint,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
             }
             for(int start=0;start<chosen.size();start+=4){
-                LinearLayout row=new LinearLayout(c);selectedRows.addView(row,new LinearLayout.LayoutParams(-1,dp(selectedTileHeight())));
+                LinearLayout row=new LinearLayout(c);selectedRows.addView(row,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
                 for(int column=0;column<4;column++){
                     int position=start+column;View child;
                     if(position<chosen.size()){
-                        ShortcutTarget target=chosen.get(position);child=tile(target,true);child.setTag(position);
+                        ShortcutTarget target=chosen.get(position);child=tile(target);child.setTag(position);
                         child.setOnClickListener(v->{if(!saving){if(editing)toggle(target);else launch.accept(target);}});
                         child.setOnLongClickListener(v->editing&&!saving&&v.startDragAndDrop(ClipData.newPlainText("shortcut-target",target.key()),new View.DragShadowBuilder(v),target.key(),0));
                         child.setContentDescription(target.label+(target.isShortcut()?"，"+target.appLabel:"")+(editing?"，点击移除，长按拖动调整顺序":"，点击打开"));
@@ -281,22 +279,22 @@ final class AppList {
             if(action==DragEvent.ACTION_DRAG_ENDED||action==DragEvent.ACTION_DRAG_EXITED)clearDrag();
             return true;
         }
-        View tile(ShortcutTarget target,boolean selected){
+        View tile(ShortcutTarget target){
             boolean dense=compact;
             LinearLayout cell=new LinearLayout(c);cell.setOrientation(VERTICAL);cell.setGravity(Gravity.CENTER_HORIZONTAL);
-            cell.setPadding(dp(2),dp(dense?2:4),dp(2),dp(2));cell.setBackground(ripple(selected?tonal:Color.TRANSPARENT));
+            cell.setPadding(dp(2),dp(dense?2:4),dp(2),dp(2));cell.setBackground(ripple(Color.TRANSPARENT));
             FrameLayout artwork=new FrameLayout(c);cell.addView(artwork,new LinearLayout.LayoutParams(-1,dp(dense?38:48)));
             ImageView image=new ImageView(c);Drawable icon=target.icon;
             if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
             image.setImageDrawable(icon);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int iconSize=dp(dense?(selected?32:36):selected?36:42);artwork.addView(image,new FrameLayout.LayoutParams(iconSize,iconSize,Gravity.CENTER));
+            int iconSize=dp(dense?36:42);artwork.addView(image,new FrameLayout.LayoutParams(iconSize,iconSize,Gravity.CENTER));
             if(editing) {
                 TextView badge=label(selectedIndex(target.key())>=0?"−":"+",16,accent);badge.setGravity(Gravity.CENTER);badge.setBackground(round(tonal,12));badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
                 FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(22),dp(22),Gravity.TOP|Gravity.RIGHT);artwork.addView(badge,b);
             }
-            TextView title=label(target.label,12,text);title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setMaxLines(dense||target.isShortcut()&&!selected?1:2);title.setEllipsize(TextUtils.TruncateAt.END);
-            cell.addView(title,new LinearLayout.LayoutParams(-1,dense?dp(18):target.isShortcut()&&!selected?dp(17):dp(32)));
-            if(target.isShortcut()&&!selected){TextView owner=label(target.appLabel,10,secondary);owner.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);owner.setSingleLine(true);owner.setEllipsize(TextUtils.TruncateAt.END);cell.addView(owner,new LinearLayout.LayoutParams(-1,dp(15)));}
+            TextView title=label(target.label,12,text);title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setMaxLines(dense||target.isShortcut()?1:2);title.setEllipsize(TextUtils.TruncateAt.END);
+            cell.addView(title,new LinearLayout.LayoutParams(-1,dense?dp(18):target.isShortcut()?dp(17):dp(32)));
+            if(target.isShortcut()){TextView owner=label(target.appLabel,10,secondary);owner.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);owner.setSingleLine(true);owner.setEllipsize(TextUtils.TruncateAt.END);cell.addView(owner,new LinearLayout.LayoutParams(-1,dp(15)));}
             cell.setContentDescription(target.label+(target.isShortcut()?"，"+target.appLabel:"")+(editing?(selectedIndex(target.key())>=0?"，已选，点击移除":"，点击添加"):""));
             return cell;
         }

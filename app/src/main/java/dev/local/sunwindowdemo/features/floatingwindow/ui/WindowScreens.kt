@@ -45,7 +45,7 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
     }
     GroupTitle("菜单外观")
     SettingsGroup {
-        SliderRow("扇区快捷项数量", "按快捷区顺序显示前几项，另保留一个列表入口", p.fanCount, 1..4, " 个") { number("fanCount", it) }
+        SliderRow("扇区快捷项数量", "按快捷区顺序显示前几项，另保留一个列表入口", p.fanCount, 1..5, " 个") { number("fanCount", it) }
         SliderRow("扇形半径", "图标较多时自动适配间距，左右镜像", p.radius, 120..260, " dp") { number("radius", it) }
         SliderRow("图标直径", "应用列表入口固定排在最下面", p.icon, 32..56, " dp") { number("icon", it) }
     }
@@ -59,7 +59,7 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
 @Composable
 fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
     SettingsGroup {
-        SettingRow("空白处关闭方式", "单击空白处关闭普通小窗")
+        ToggleRow("双击空白处关闭", "开启时双击关闭普通小窗，关闭时单击关闭", p.doubleClose) { boolean("doubleClose", it) }
         ToggleRow("在多任务中隐藏小窗应用", "关闭或切换后继续隐藏；真正全屏打开并完成绘制后重新显示", p.hideRecents) { boolean("hideRecents", it) }
     }
     GroupTitle("窗口操作")

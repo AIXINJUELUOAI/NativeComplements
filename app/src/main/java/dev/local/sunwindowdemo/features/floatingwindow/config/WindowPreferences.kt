@@ -32,7 +32,7 @@ class WindowPreferenceStore(private val context: Context) {
     fun number(key: String, value: Int) {
         val range = when (key) {
             "heat" -> 36..72; "distance" -> 24..100; "selectionDistance" -> 50..100
-            "radius" -> 120..260; "icon" -> 32..56; "fanCount" -> 1..4; else -> error("Unknown preference")
+            "radius" -> 120..260; "icon" -> 32..56; "fanCount" -> 1..5; else -> error("Unknown preference")
         }
         preferences.edit().putInt(key, value.coerceIn(range)).apply()
         ConfigProvider.changed(context)

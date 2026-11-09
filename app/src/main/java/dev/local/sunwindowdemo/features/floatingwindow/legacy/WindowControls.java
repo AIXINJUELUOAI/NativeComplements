@@ -209,13 +209,12 @@ final class WindowControls {
         }
         {
             for(int n=0;n<4;n++){
-                View outside=new ClearView();outside.setContentDescription("点击空白处关闭小窗");
+                View outside=new ClearView();
                 GestureDetector closeTaps=new GestureDetector(c,new GestureDetector.SimpleOnGestureListener(){
                     @Override public boolean onDown(MotionEvent e){return true;}
                     @Override public boolean onSingleTapUp(MotionEvent e){if(!new Config(c).doubleClose())send("CLOSE",0,0,0);return true;}
                     @Override public boolean onDoubleTap(MotionEvent e){if(new Config(c).doubleClose())send("CLOSE",0,0,0);return true;}
                 });
-                outside.setContentDescription("单击空白处关闭小窗");
                 outside.setOnTouchListener((v,e)->{closeTaps.onTouchEvent(e);return true;});add(outside);
             }
             View bar=new ClearView(){final Paint p=new Paint(3);@Override protected void onDraw(Canvas cv){
@@ -355,6 +354,8 @@ final class WindowControls {
             changed();return;
         }
         if(!views.isEmpty())views.get(0).setVisibility(View.GONE);
+        String closeDescription=new Config(c).doubleClose()?"双击空白处关闭小窗":"单击空白处关闭小窗";
+        for(int n=1;n<=4;n++)views.get(n).setContentDescription(closeDescription);
         rect(1,0,0,d.width(),Math.max(0,y));rect(2,0,y,Math.max(0,x),h);
         rect(3,x+w,y,Math.max(0,d.width()-x-w),h);rect(4,0,y+h,d.width(),Math.max(0,d.height()-y-h));
         MotionStyle.Bar b=MotionStyle.bar(scale);

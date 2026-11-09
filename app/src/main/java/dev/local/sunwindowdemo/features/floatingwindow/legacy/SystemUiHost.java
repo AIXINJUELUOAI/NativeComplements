@@ -354,16 +354,22 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         FrameLayout outside=new FrameLayout(this){
             @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)hidePanel();return true;}return super.dispatchKeyEvent(e);}
         };
-        outside.setBackgroundColor(0x44000000);outside.setOnClickListener(v->hidePanel());
+        outside.setBackgroundColor(Color.TRANSPARENT);outside.setOnClickListener(v->hidePanel());
         View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key());},this::saveTargets,this::hidePanel);
         content.setOnClickListener(v->{});
-        android.graphics.Rect display=wm.getCurrentWindowMetrics().getBounds();
-        android.graphics.Insets bars=wm.getCurrentWindowMetrics().getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+        WindowMetrics metrics=wm.getCurrentWindowMetrics();
+        android.graphics.Rect display=metrics.getBounds();
         boolean landscape=display.width()>display.height();
-        FrameLayout.LayoutParams card=new FrameLayout.LayoutParams(Math.min(display.width()-bars.left-bars.right-dp(32),dp(landscape?420:400)),
-            Math.min(display.height()-bars.top-bars.bottom-dp(24),dp(680)),Gravity.CENTER_VERTICAL|(landscape?Gravity.LEFT:Gravity.CENTER_HORIZONTAL));
-        card.leftMargin=landscape?bars.left+dp(16):0;outside.addView(content,card);
+        int types=WindowInsets.Type.displayCutout();if(!landscape)types|=WindowInsets.Type.systemBars();
+        android.graphics.Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(types);
+        // The menu is a portrait canvas using the same default placement as an app window.
+        Geometry.Placement placement=Geometry.place(Math.min(display.width(),display.height()),false,
+            display.left+bars.left,display.top+bars.top,display.right-bars.right,display.bottom-bars.bottom,dp(landscape?4:12));
+        FrameLayout.LayoutParams card=new FrameLayout.LayoutParams(Math.round(placement.width()*placement.scale()),
+            Math.round(placement.height()*placement.scale()),Gravity.TOP|Gravity.LEFT);
+        card.leftMargin=Math.round(placement.x()-display.left);card.topMargin=Math.round(placement.y()-display.top);outside.addView(content,card);
         WindowManager.LayoutParams p=params(-1,-1,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+        p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         p.windowAnimations=0;panel=outside;
         outside.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
             public void onViewAttachedToWindow(View v){panelDispatcher=v.findOnBackInvokedDispatcher();if(panelDispatcher!=null)panelDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,panelBack);}

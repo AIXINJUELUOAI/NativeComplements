@@ -23,6 +23,7 @@ public final class CallBlockingModule extends XposedModule {
     private Method managerContext,registrar,account,subscription,incoming,selfManaged,emergency,ecbm,
         hasProperty,target,handle,state,user,builderFrom,allow,reject,addLog,notification,audio,silence,
         blockReason,appName,component,response,build,emergencySms;
+    private Field nativeAllows;
     private final Set<Object> recorded=Collections.newSetFromMap(new WeakHashMap<>());
     private long lastFailure;
 
@@ -37,6 +38,8 @@ public final class CallBlockingModule extends XposedModule {
             Class<?> call=Class.forName("com.android.server.telecom.Call",false,loader);
             Class<?> result=Class.forName("com.android.server.telecom.callfiltering.CallFilteringResult",false,loader);
             Class<?> builder=Class.forName(result.getName()+"$Builder",false,loader);
+            nativeAllows=result.getDeclaredField("shouldAllowCall");nativeAllows.setAccessible(true);
+            if(nativeAllows.getType()!=boolean.class)throw new NoSuchFieldException("CallFilteringResult.shouldAllowCall boolean");
             Class<?> accounts=Class.forName("com.android.server.telecom.PhoneAccountRegistrar",false,loader);
             emergencySms=method(TelephonyManager.class,"isInEmergencySmsMode");
             managerContext=method(manager,"getContext");registrar=method(manager,"getPhoneAccountRegistrar");
@@ -67,7 +70,9 @@ public final class CallBlockingModule extends XposedModule {
             hooks.add(hook(filtering).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object replacement=null;Bundle entry=null;
                 try{
-                    Decision d=decide(chain.getThisObject(),chain.getArg(0));
+                    Object original=chain.getArg(1);
+                    // Preserve native block/ignore decisions and their screening reason/response.
+                    Decision d=original!=null&&nativeAllows.getBoolean(original)?decide(chain.getThisObject(),chain.getArg(0)):null;
                     if(d!=null){
                         Object b=builderFrom.invoke(null,chain.getArg(1));
                         allow.invoke(b,false);reject.invoke(b,true);addLog.invoke(b,true);notification.invoke(b,false);
@@ -113,12 +118,24 @@ public final class CallBlockingModule extends XposedModule {
         try{
             Bundle value=context.getContentResolver().call(CallBlockingProvider.CONFIG,"read",null,null);
             if(value==null)throw new IllegalStateException("empty config");
+            Bundle previous=config;
             config=new Bundle(value);
+            if(previous==Bundle.EMPTY||previous.getLong("updated_at")!=value.getLong("updated_at")
+                ||previous.getBoolean("enabled")!=value.getBoolean("enabled")){
+                note("CALL_BLOCKING_CONFIG version="+BuildConfig.VERSION_NAME+" enabled="+value.getBoolean("enabled")
+                    +" updatedAt="+value.getLong("updated_at")+" sim1RejectAll="+value.getBoolean("sim1_reject_all")
+                    +" sim2RejectAll="+value.getBoolean("sim2_reject_all")+" sim2Follow="+value.getBoolean("sim2_follow_sim1")
+                    +" sim1Rules="+ruleCount(value,"sim1_patterns")+" sim2Rules="+ruleCount(value,"sim2_patterns")
+                    +" wall="+System.currentTimeMillis()+" elapsed="+SystemClock.elapsedRealtime()
+                    +" thread="+Thread.currentThread().getName());
+            }
             Bundle status=new Bundle();status.putString("error","");
             context.getContentResolver().call(CallBlockingProvider.CONFIG,"backend",BuildConfig.VERSION_NAME,status);
         }catch(Throwable e){config=Bundle.EMPTY;failure(e);}
         finally{Binder.restoreCallingIdentity(identity);}
     }
+
+    private static int ruleCount(Bundle value,String key){String[] rules=value.getStringArray(key);return rules==null?0:rules.length;}
 
     private Decision decide(Object manager,Object call)throws Exception{
         Bundle snapshot=config;
@@ -177,7 +194,14 @@ public final class CallBlockingModule extends XposedModule {
     private synchronized void failure(Throwable e){
         long now=SystemClock.elapsedRealtime();
         if(lastFailure!=0&&now-lastFailure<60_000)return;
-        lastFailure=now;note("CALL_BLOCKING_ERROR "+e.getClass().getSimpleName());
+        lastFailure=now;
+        Throwable root=e;
+        while(root instanceof InvocationTargetException&&root.getCause()!=null)root=root.getCause();
+        StackTraceElement[] trace=root.getStackTrace();
+        String where=trace.length==0?"unknown":trace[0].getClassName()+"."+trace[0].getMethodName()+":"+trace[0].getLineNumber();
+        // Do not log exception messages: framework errors can include a caller's phone number.
+        note("CALL_BLOCKING_ERROR type="+e.getClass().getSimpleName()+" cause="+root.getClass().getSimpleName()+" at="+where
+            +" elapsed="+now+" thread="+Thread.currentThread().getName());
     }
     private void note(String text){try{log(android.util.Log.INFO,"NativeComplements",text);}catch(Throwable ignored){}}
 }
