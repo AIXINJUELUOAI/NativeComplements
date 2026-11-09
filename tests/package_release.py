@@ -35,6 +35,12 @@ def main():
         assert archive.testzip() is None, "APK CRC failure"
         assert set(archive.read("META-INF/xposed/scope.list").decode().splitlines()) == SCOPES
         assert "staticScope=true" in archive.read("META-INF/xposed/module.prop").decode()
+        assert set(archive.read("META-INF/xposed/java_init.list").decode().splitlines()) == {
+            "dev.local.sunwindowdemo.SunWindowModule",
+            "dev.local.sunwindowdemo.LauncherGuard",
+            "dev.local.sunwindowdemo.BackBridge",
+            "dev.local.sunwindowdemo.features.callblocking.CallBlockingModule",
+        }, "Module entries differ from the integrated window and Telecom backends"
         assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx"))
                        for name in archive.namelist()), "Signing material in APK"
     signature = run(jdk / "bin/java.exe", "-jar", tools / "lib/apksigner.jar",
