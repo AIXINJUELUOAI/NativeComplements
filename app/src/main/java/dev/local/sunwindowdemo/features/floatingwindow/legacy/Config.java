@@ -25,6 +25,8 @@ final class Config {
     boolean landscapeOff() { return prefs.getBoolean("landscape", true); }
     boolean keyboardOff() { return prefs.getBoolean("keyboard", true); }
     boolean hideRecents() { return prefs.getBoolean("hideRecents", false); }
+    boolean endOnClose() { return prefs.getBoolean("endOnClose", false); }
+    boolean keepEdgeAwake() { return prefs.getBoolean("keepEdgeAwake", false); }
     boolean doubleClose() { return prefs.getBoolean("doubleClose", false); }
     boolean notificationWindow() { return prefs.getBoolean("notificationWindow", true); }
     boolean landscapeShareWindow() { return prefs.getBoolean("landscapeShareWindow", true); }

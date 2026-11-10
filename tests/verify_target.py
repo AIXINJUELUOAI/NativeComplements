@@ -112,3 +112,22 @@ for cls,kind,name,sig in [
  ('Landroid/app/PendingIntent;','methods','sendAndReturnResult','(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;Landroid/os/Bundle;)I')]:
  assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==sig for m in launch_input[cls][kind]),(cls,name,sig)
 print('PASS: archived threshold-only pointer pilfer, original shortcut verdict and result-preserving native task selection')
+
+# 0.5.1: optional edge continuation and native SensorService command gateway.
+for cls,name,sig in [
+ ('Lcom/android/server/wm/TaskFragment;','shouldSleepActivities','()Z'),
+ ('Lcom/android/server/wm/TaskFragment;','sleepIfPossible','(Z)Z'),
+ ('Lcom/android/server/wm/ActivityRecord;','shouldBeVisibleUnchecked','()Z'),
+ ('Lcom/android/server/wm/ActivityRecord;','updateAndCheckVisibility','(ZZ)Z'),
+ ('Lcom/android/server/wm/ActivityRecord;','setState','(Lcom/android/server/wm/ActivityRecord$State;Ljava/lang/String;)V'),
+ ('Lcom/android/server/wm/ActivityRecord;','getPid','()I'),
+ ('Lcom/android/server/wm/ActivityRecord;','getUid','()I'),
+ ('Lcom/android/server/wm/ActivityRecord;','isFocusedActivityOnDisplay','()Z')]:
+ assert any(m['name']==name and m['descriptor']==sig for m in classes[cls]['methods']),(cls,name,sig)
+assert any(f['name']=='mShuttingDown' and f['type']=='Z' for f in classes['Lcom/android/server/wm/ActivityTaskManagerService;']['fields'])
+continuation=json.loads((root/'tests/target/continuation-members.json').read_text())
+assert continuation['sha256']=='89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f'
+assert 'addToTemporaryAllowList(Ljava/lang/String;ILjava/lang/String;J)V' in continuation['classes']['android.os.PowerExemptionManager']
+assert 'forceStopPackageAsUser(Ljava/lang/String;I)V' in continuation['classes']['android.app.ActivityManager']
+assert 'shellCommand(Ljava/io/FileDescriptor;Ljava/io/FileDescriptor;Ljava/io/FileDescriptor;[Ljava/lang/String;Landroid/os/ShellCallback;Landroid/os/ResultReceiver;)V' in continuation['classes']['android.os.IBinder']
+print('PASS: archived optional continuation, foreground observation, power and sensor-command signatures')

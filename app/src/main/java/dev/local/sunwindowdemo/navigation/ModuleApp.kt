@@ -21,7 +21,7 @@ import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 
 enum class Page(val title: String) {
-    Suggestions("建议"), EdgeTouch("边缘防误触"), Calls("电话拦截"), Home("类原生补全"), Window("小窗"), Apps("快捷应用"), Gestures("手势与菜单"),
+    Motion("防摇一摇"), Suggestions("建议"), EdgeTouch("边缘防误触"), Calls("电话拦截"), Home("类原生补全"), Window("小窗"), Apps("快捷应用"), Gestures("手势与菜单"),
     Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"), Diagnostics("诊断与恢复"), About("关于")
 }
 
@@ -53,6 +53,8 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
                 dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen(onBack = { back() })
             } else if (current == Page.Calls) {
                 dev.local.sunwindowdemo.features.callblocking.CallBlockingScreen(onBack = { back() })
+            } else if (current == Page.Motion) {
+                dev.local.sunwindowdemo.features.motion.MotionScreen(controller.apps, controller.catalogLoaded)
             } else if (current == Page.Apps || current == Page.Blocked) {
                 AppPickerScreen(controller, blocked = current == Page.Blocked)
             } else {
@@ -61,7 +63,7 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
                         Text(current.title, Modifier.padding(start = 12.dp, top = if(current == Page.Home) 42.dp else 4.dp, bottom = 28.dp),
                             style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Normal)
                         when (current) {
-                            Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true }, { navigate(Page.Calls) }, { navigate(Page.EdgeTouch) }, { navigate(Page.Suggestions) })
+                            Page.Home -> HomeScreen(controller.runtime, { navigate(Page.Window) }, { navigate(Page.Diagnostics) }, { aboutVisible = true }, { navigate(Page.Calls) }, { navigate(Page.EdgeTouch) }, { navigate(Page.Suggestions) }, { navigate(Page.Motion) })
                             Page.Window -> WindowScreen(controller.preferences, controller.runtime, { navigate(it) }, controller::toggleControl)
                             Page.Suggestions -> dev.local.sunwindowdemo.features.suggestions.SuggestionScreen(controller)
                             Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
@@ -76,6 +78,6 @@ fun ModuleApp(controller: WindowController, startInWindow: Boolean, onExit: () -
         }
     }
     if (aboutVisible) AlertDialog(onDismissRequest = { aboutVisible = false }, title = { Text("类原生补全") },
-        text = { Text("${BuildConfig.VERSION_NAME}\n\n小窗基于 Demo8.2，保留原有手势、窗口和动画。当前为单活动小窗，由 LSPosed / SystemUI 承载，无定时退出。\n\n窗口几何参考 Nameless / SunOS，遵循 Apache 2.0。") },
+        text = { Text("${BuildConfig.VERSION_NAME}\n\n小窗基于 Demo8.2，保留原有手势、窗口和动画。支持普通窗与迷你窗并存，由 LSPosed / SystemUI 承载，无定时退出。\n\n窗口几何参考 Nameless / SunOS，遵循 Apache 2.0。") },
         confirmButton = { TextButton(onClick = { aboutVisible = false }) { Text("知道了") } })
 }

@@ -22,6 +22,13 @@ final class WindowPolicy {
     static boolean initialLandscape(int entryDeclaration,int launcherDeclaration){
         return landscape(entryDeclaration,false)&&landscape(launcherDeclaration,false);
     }
+    static boolean currentLandscape(int orientation,int request,boolean fallback){
+        return orientation==2 || orientation!=1&&landscape(request,fallback);
+    }
+    static int handleColor(boolean horizontal,int appearance,boolean night){
+        if(horizontal)return 0xfff0f2f2;
+        return (appearance>=0?(appearance&16)==0:night)?0xfff0f2f2:0xff303234;
+    }
     static int clientMode(String pkg){return "com.tencent.mm".equals(pkg)?5:1;}
     static boolean landscape(int requested,boolean previous){
         return switch(requested){case 0,6,8,11 -> true;case 1,7,9,12 -> false;default -> previous;};

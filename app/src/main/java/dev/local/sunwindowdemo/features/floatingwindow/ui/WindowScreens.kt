@@ -29,7 +29,7 @@ fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) 
     }
     GroupTitle("帮助")
     SettingsGroup { SettingRow("诊断与恢复", "检查连接、测试触摸、恢复原窗口", { navigate(Page.Diagnostics) }, leading = { Glyph("info") }) }
-    Hint("单个活动小窗，无定时退出。关闭控制会结束当前小窗；禁用模块前请先恢复窗口。")
+    Hint("一个普通小窗与一个迷你窗可同时运行，无定时退出。关闭控制会结束当前小窗；禁用模块前请先恢复窗口。")
 }
 
 @Composable
@@ -62,10 +62,13 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
         ToggleRow("应用间跳转小窗打开", "分享、链接及打开其他应用时，以小窗显示目标页面，保留原有返回关系", p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
         ToggleRow("通知小窗打开", "点击普通应用通知时，用小窗打开对应页面；关闭后沿用系统方式", p.notificationWindow) { boolean("notificationWindow", it) }
         ToggleRow("双击空白处关闭", "开启时双击关闭普通小窗，关闭时单击关闭", p.doubleClose) { boolean("doubleClose", it) }
+        ToggleRow("贴边锁屏继续运行", "贴边隐藏后保持运行，支持锁屏听视频与下载；关闭小窗后结束维持", p.keepEdgeAwake) { boolean("keepEdgeAwake", it) }
+        ToggleRow("关闭小窗时结束应用", "明确关闭或拖到关闭圆环后结束应用，播放和下载也会停止；仍有同应用小窗时保留；切换、贴边与转全屏不清理", p.endOnClose) { boolean("endOnClose", it) }
         ToggleRow("在多任务中隐藏小窗应用", "关闭或切换后继续隐藏；真正全屏打开并完成绘制后重新显示", p.hideRecents) { boolean("hideRecents", it) }
     }
     GroupTitle("窗口操作")
     SettingsGroup {
+        SettingRow("操作条颜色", "竖屏跟随应用窗口的明暗显示深色或浅色；屏幕横屏时固定浅色。")
         SettingRow("普通小窗", "竖屏固定默认位置，横屏固定靠左。底部键盘弹出时，竖屏小窗向上避让。")
         SettingRow("迷你窗", "单击还原、双击全屏；旋转后回到右上角。拖到关闭圆环内松手关闭，推过贴边阈值松手隐藏，两处都有触感提示。")
         SettingRow("返回与截图", "返回先交给应用；应用根页面返回时关闭小窗。截图工具栏出现时优先响应截图操作。")

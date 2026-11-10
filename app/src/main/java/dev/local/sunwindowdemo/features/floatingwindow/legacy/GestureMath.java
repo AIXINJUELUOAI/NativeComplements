@@ -23,6 +23,13 @@ final class GestureMath {
         if(!Float.isFinite(delta)||!Float.isFinite(threshold)||threshold<=0)throw new IllegalArgumentException("distance");
         return delta>=threshold?"full":delta<=-threshold?"mini":"normal";
     }
+    static float horizontalScale(float start,float delta,float threshold,float maximum){
+        if(!Float.isFinite(start)||start<=0||!Float.isFinite(maximum)||maximum<=0)
+            throw new IllegalArgumentException("scale");
+        horizontalRelease(delta,threshold);
+        float progress=Math.max(-1,Math.min(1,delta/threshold));
+        return Math.min(Math.max(start,maximum),start*(1+.025f*progress));
+    }
     static float dragScale(float start, float delta, int logicalAxis) {
         if (logicalAxis<=0) throw new IllegalArgumentException("axis");
         return Math.max(.28f,start+2f*delta/logicalAxis);

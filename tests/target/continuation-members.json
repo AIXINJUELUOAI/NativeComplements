@@ -1,0 +1,25 @@
+{
+  "artifact": "framework.jar",
+  "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f",
+  "classes": {
+    "android.os.PowerExemptionManager": [
+      "addToTemporaryAllowList(Ljava/lang/String;ILjava/lang/String;J)V"
+    ],
+    "android.app.ActivityManager": [
+      "forceStopPackageAsUser(Ljava/lang/String;I)V"
+    ],
+    "android.os.IBinder": [
+      "shellCommand(Ljava/io/FileDescriptor;Ljava/io/FileDescriptor;Ljava/io/FileDescriptor;[Ljava/lang/String;Landroid/os/ShellCallback;Landroid/os/ResultReceiver;)V"
+    ],
+    "android.os.ServiceManager": [
+      "getService(Ljava/lang/String;)Landroid/os/IBinder;"
+    ],
+    "android.app.ActivityThread": [
+      "currentActivityThread()Landroid/app/ActivityThread;",
+      "getSystemContext()Landroid/app/ContextImpl;"
+    ],
+    "android.os.SystemProperties": [
+      "getBoolean(Ljava/lang/String;Z)Z"
+    ]
+  }
+}

@@ -50,10 +50,12 @@ public final class SunWindowModule extends XposedModule {
         if (!eligible || attempted) return;
         attempted = true;
         installUndimSuggestion(p.getClassLoader());
+        dev.local.sunwindowdemo.features.motion.MotionAccess.install(this,p.getClassLoader(),this::note);
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         try {
             FrameworkAccess a = new FrameworkAccess(p.getClassLoader());
             WindowEngine engine = new WindowEngine(a, this::note);
+            WindowContinuation.install(this,a,engine,this::note);
             handles.add(hook(a.systemReady).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed(); note("WMS_READY_SEEN"); engine.attach(chain.getThisObject()); return result;
             }));

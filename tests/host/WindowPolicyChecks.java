@@ -19,6 +19,15 @@ public final class WindowPolicyChecks {
         }
         for(int flexible:new int[]{-1,2,4,5,10,14})require(!WindowPolicy.initialLandscape(flexible,flexible));
         require(!WindowPolicy.initialLandscape(1,1));
+        require(WindowPolicy.currentLandscape(2,1,false));
+        require(!WindowPolicy.currentLandscape(1,0,true));
+        require(WindowPolicy.currentLandscape(0,0,false));
+        require(!WindowPolicy.currentLandscape(0,1,true));
+        require(WindowPolicy.handleColor(false,16,false)==0xff303234);
+        require(WindowPolicy.handleColor(false,0,true)==0xfff0f2f2);
+        require(WindowPolicy.handleColor(false,-1,false)==0xff303234);
+        require(WindowPolicy.handleColor(false,-1,true)==0xfff0f2f2);
+        require(WindowPolicy.handleColor(true,16,false)==0xfff0f2f2);
         require(WindowPolicy.clientMode("com.tencent.mm")==5);
         require(WindowPolicy.clientMode("tv.danmaku.bili")==1);
         require(WindowPolicy.clientMode("com.example.media")==1);

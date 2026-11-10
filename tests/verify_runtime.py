@@ -20,7 +20,7 @@ print(f'PASS: immutable Demo8.2 baseline; {len(manifest)-len(baseline_changes)} 
 jdk=pathlib.Path(os.environ.get('JAVA_HOME',r'C:\Program Files\Android\Android Studio\jbr'))/'bin'
 out=root/'verification/host-classes';out.mkdir(parents=True,exist_ok=True)
 names=['Geometry','GestureMath','Rules','GestureGate','MotionStyle','BackSwipe','WindowHistory','WindowPolicy','RotationGate','MiniMagnet','CornerGesture']
-files=[src/(n+'.java') for n in names]+[root/'app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeTouchGeometry.java']+list((root/'tests/host').glob('*.java'))
+files=[root/'app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionPolicy.java']+[src/(n+'.java') for n in names]+[root/'app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeTouchGeometry.java']+list((root/'tests/host').glob('*.java'))
 subprocess.run([str(jdk/'javac.exe'),'--release','17','-encoding','UTF-8','-d',str(out),*map(str,files)],check=True)
 for n in ['GeometryCheck','StateChecks','GestureGateChecks','GeometryChecks','MotionChecks','DropChecks','HistoryChecks']:
     subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'dev.local.sunwindowdemo.'+n],check=True)
@@ -38,3 +38,5 @@ subprocess.run([str(jdk/'javac.exe'),'--release','17','-encoding','UTF-8','-d',s
 subprocess.run([str(jdk/'java.exe'),'-cp',str(visibility_out),'dev.local.sunwindowdemo.TaskVisibilityGuardChecks'],check=True)
 
 subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'dev.local.sunwindowdemo.CornerGestureChecks'],check=True)
+
+subprocess.run([str(jdk/'java.exe'),'-cp',str(out),'dev.local.sunwindowdemo.MotionPolicyChecks'],check=True)

@@ -23,6 +23,7 @@ final class WindowControls {
     private float x,y,w,h,scale,normalScale=.75f;
     private boolean appLandscape,systemBlocked;
     private String scaleZone="normal";
+    private int barColor=0xfff0f2f2;
     private int logicalW,logicalH;
     private boolean landscape,dragging;
     private long sequence=-1;
@@ -73,6 +74,7 @@ final class WindowControls {
         inputPending=i.getBooleanExtra("inputPending",false);
         if(!i.getBooleanExtra("presented",false)&&!inputPending){hide();return;}
         nativeHandle=i.getBooleanExtra("nativeHandle",false);
+        barColor=i.getIntExtra("barColor",0xfff0f2f2);
         String next=i.getStringExtra("frame"),key=i.getStringExtra("token");
         if(!Wire.validToken(key))return;
         float nx=i.getFloatExtra("x",0),ny=i.getFloatExtra("y",0),nw=i.getFloatExtra("width",0),nh=i.getFloatExtra("height",0);
@@ -221,7 +223,7 @@ final class WindowControls {
                 outside.setOnTouchListener((v,e)->{closeTaps.onTouchEvent(e);return true;});add(outside);
             }
             View bar=new ClearView(){final Paint p=new Paint(3);@Override protected void onDraw(Canvas cv){
-                super.onDraw(cv);p.setColor(0xfff0f2f2);p.setAlpha(Math.round(255*Math.max(0,Math.min(1,barAlpha))));
+                super.onDraw(cv);p.setColor(barColor);p.setAlpha(Math.round(255*Math.max(0,Math.min(1,barAlpha))));
                 if(nativeHandle)return;
                 MotionStyle.Bar b=MotionStyle.bar(scale);float length=dp(b.length()),thickness=dp(b.thickness());
                 float gap=dp(b.margin());float radius=thickness/2;
@@ -233,9 +235,11 @@ final class WindowControls {
                 float start,startScale;int axis;
                 public boolean onTouch(View v,MotionEvent e){
                     if(fullTransition||transitioning&&!inputPending)return true;
-                    if(e.getActionMasked()==MotionEvent.ACTION_DOWN){dragging=true;start=landscape?e.getRawX():e.getRawY();startScale=scale;scaleZone=GestureMath.release(scale,normalScale,appLandscape,landscape);axis=landscape?logicalW:logicalH;return true;}
+                    if(e.getActionMasked()==MotionEvent.ACTION_DOWN){dragging=true;start=landscape?e.getRawX():e.getRawY();startScale=scale;scaleZone=landscape?"normal":GestureMath.release(scale,normalScale,appLandscape,landscape);axis=landscape?logicalW:logicalH;return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_MOVE){float delta=(landscape?e.getRawX():e.getRawY())-start;
-                        if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));if(!next.equals(scaleZone)){scaleZone=next;if(!"normal".equals(next))v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}v.setAlpha("normal".equals(next)?1:.65f);return true;}
+                        if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));if(!next.equals(scaleZone)){scaleZone=next;if(!"normal".equals(next))v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}v.setAlpha("normal".equals(next)?1:.65f);
+                            float maximum=Math.min((displayW-dp(8))/(float)logicalW,(displayH-dp(8))/(float)logicalH);
+                            sendMoveScale(GestureMath.horizontalScale(startScale,delta,dp(48),maximum));return true;}
                         sendMoveScale(GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape));return true;}
                     if(e.getActionMasked()==MotionEvent.ACTION_UP){
                         float delta=(landscape?e.getRawX():e.getRawY())-start;
@@ -309,7 +313,7 @@ final class WindowControls {
         // Track the drag locally for zone feedback; the native transaction draws the bar.
         float cx=x+w/2,cy=y+h/2;scale=s;w=logicalW*s;h=logicalH*s;x=cx-w/2;y=cy-h/2;
         String next=GestureMath.release(s,normalScale,appLandscape,landscape);
-        if(!next.equals(scaleZone)){
+        if(!landscape&&!next.equals(scaleZone)){
             scaleZone=next;if(!"normal".equals(next)&&views.size()>5)views.get(5).performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
         }
         // The touch stream remains captured; the visible bar moves in the task transaction.

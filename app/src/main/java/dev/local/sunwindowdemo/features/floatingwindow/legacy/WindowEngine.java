@@ -34,7 +34,10 @@ final class WindowEngine {
     private IBinder uiLease;
     private long uiSeen;
     private boolean uiReady;
-    private volatile boolean landscapeShareWindow;
+    private volatile boolean landscapeShareWindow,endOnClose,keepEdgeAwake;
+    private WindowContinuation continuation;
+    private boolean continuationReady;
+    void continuationReady(){continuationReady=true;}
     record ShareLaunch(Object request,ActivityOptions options,IBinder lease,Object sourceTask) {}
     private record ShareStarted(Session target,Session displaced) {}
     final ThreadLocal<ShareLaunch> shareLaunch=new ThreadLocal<>();
@@ -126,7 +129,7 @@ final class WindowEngine {
 
     private static final class Session {
         Session returnTo;
-        boolean parked,restoreForeground;
+        boolean parked,restoreForeground,endOnClose;
         TaskVisibilityGuard startMask,rotationMask;
         TaskCover cover;boolean coverDrawn,coverFullscreen;
         final RotationGate rotation=new RotationGate();
@@ -207,6 +210,8 @@ final class WindowEngine {
                             uiLease=extras.getBinder("lease");uiSeen=SystemClock.elapsedRealtime();
                             uiReady=i.getBooleanExtra("hostReady",false);
                             landscapeShareWindow=i.getBooleanExtra("landscapeShareWindow",false);
+                            endOnClose=i.getBooleanExtra("endOnClose",false);keepEdgeAwake=i.getBooleanExtra("keepEdgeAwake",false);
+                            handler.post(WindowEngine.this::updateContinuation);
                             uiTouch=i.getStringExtra("lastTouch");
                             if(extras.getBinder("frameChannel")!=null)frameSink=extras.getBinder("frameChannel");
                         }
@@ -220,6 +225,7 @@ final class WindowEngine {
                 try{if(getSentFromUid()==context.getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid)pushHistory();}
                 catch(Exception ignored){}
             }},new IntentFilter(HISTORY_QUERY),null,handler,Context.RECEIVER_EXPORTED);
+            try{continuation=new WindowContinuation(context,log);}catch(Exception e){log.accept("EDGE_CONTINUATION_UNAVAILABLE "+FrameworkAccess.reason(e));}
             attached = true;
             IntentFilter screen=new IntentFilter(Intent.ACTION_SCREEN_OFF);
             screen.addAction(Intent.ACTION_SCREEN_ON);screen.addAction(Intent.ACTION_USER_PRESENT);
@@ -297,7 +303,13 @@ final class WindowEngine {
             Session previous=active,previousPinned=pinned;
             Session displaced=normalOccupied()?active:null;
             Session s;
-            synchronized (lock) { s = snapshot(i.getIntExtra("taskId", -1), pkg, token); }
+            synchronized (lock) {
+                s = snapshot(i.getIntExtra("taskId", -1), pkg, token);
+                if(i.getBooleanExtra("morphEntry",false)){
+                    s.landscape=WindowPolicy.currentLandscape(a.config(s.task,false).orientation,s.orientationRequest,s.landscape);
+                    log.accept("CONVERT_ORIENTATION task="+s.taskId+" landscape="+s.landscape);
+                }
+            }
             trace.arm(pkg,openGeneration);
             s.entryFade=!i.getBooleanExtra("morphEntry",false);
             s.lease = lease;
@@ -1016,7 +1028,9 @@ final class WindowEngine {
     private void close(Session s){
         if(!visible(s)||s.restoring||s.closing)return;
         log.accept("CLOSE_REQUEST source=control-or-switch task="+s.taskId);
+        s.endOnClose=endOnClose;
         s.closing=true;s.fullTransition=true;s.entering=false;
+        handler.post(WindowEngine.this::updateContinuation);
         visibility(s,false);
     }
     private void visibility(Session s,boolean show){visibility(s,show,null);}
@@ -1640,11 +1654,11 @@ final class WindowEngine {
     boolean keepVisibleResumed(Object fragment,Object resuming){
         Session s;
         try{s=sessionFor(a.call(fragment,"getTask"));}catch(Exception e){return false;}
-        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.screenSuspended||lock==null
+        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.screenSuspended&&!continueHidden(s)||lock==null
             ||!("mini".equals(s.frame)||"normal".equals(s.frame)))return false;
         try{synchronized(lock){
             if(!visible(s)||a.call(fragment,"getTask")!=s.task||!s.lease.isBinderAlive()
-                ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
+                ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()&&!continueHidden(s)
                 ||a.bool(fragment,"shouldSleepOrShutDownActivities"))return false;
             Object top=a.call(fragment,"topRunningActivity");
             // Only retain a live visible top Activity. Native pause still owns
@@ -2189,6 +2203,27 @@ final class WindowEngine {
         s.restoring = true;
         if (handler != null) handler.post(() -> { if (sessions.contains(s)) recover("适配异常：" + FrameworkAccess.reason(e)); });
     }
+    private boolean continueHidden(Session s){
+        return continuationReady&&continuation!=null&&keepEdgeAwake&&visible(s)&&!s.restoring&&!s.closing&&!s.parked
+            &&!s.fullTransition&&s.edgeHidden&&"mini".equals(s.frame)&&s.uid>=10000
+            &&s.lease!=null&&s.lease.isBinderAlive();
+    }
+    boolean continueHiddenTask(Object fragment){
+        try{synchronized(lock){return !(Boolean)a.field(atm,"mShuttingDown")&&continueHidden(sessionFor(a.call(fragment,"getTask")));}}
+        catch(Exception e){return false;}
+    }
+    boolean continueHiddenActivity(Object record){
+        try{synchronized(lock){Object task=a.call(record,"getTask");Session s=sessionFor(task);
+            return !(Boolean)a.field(atm,"mShuttingDown")&&continueHidden(s)&&a.call(task,"topRunningActivity")==record
+                &&!(Boolean)a.field(record,"finishing")&&a.bool(record,"attachedToProcess");}}
+        catch(Exception e){return false;}
+    }
+    private void updateContinuation(){
+        if(continuation==null||lock==null)return;
+        java.util.Map<Integer,String> desired=new java.util.HashMap<>();
+        synchronized(lock){for(Session s:sessions)if(continueHidden(s))desired.put(s.uid,s.pkg);}
+        continuation.update(desired);
+    }
     // Screen/keyguard changes suspend presentation, never restore the fullscreen
     // configuration. Keep frame, placement, return chain and recovery journal.
     private void updateScreenState(Session s)throws Exception {
@@ -2237,7 +2272,11 @@ final class WindowEngine {
                     return;
                 }
                 updateScreenState(s);
-                if(s.screenSuspended){handler.postDelayed(()->tick(s),500);return;}
+                handler.post(this::updateContinuation);
+                if(s.screenSuspended){
+                    if(continueHidden(s)){resumeMini(s);traceVisibleRuntime(s,a.call(s.task,"getDisplayContent"));}
+                    handler.postDelayed(()->tick(s),500);return;
+                }
                 Object display = a.call(s.task, "getDisplayContent");
                 if (display == null) throw new IllegalStateException("任务已离开显示器");
                 if(!a.animating(s.task))resumeMini(s);
@@ -2276,6 +2315,7 @@ final class WindowEngine {
         java.util.ArrayList<Session> next=new java.util.ArrayList<>(sessions);
         if(!next.contains(s))next.add(s);
         writeJournal(next);sessions=java.util.List.copyOf(next);
+        handler.post(WindowEngine.this::updateContinuation);
     }
     private Session decode(JSONObject o)throws Exception{
         Session s=new Session();int version=o.getInt("version");
@@ -2316,6 +2356,7 @@ final class WindowEngine {
     private void forget(Session s)throws Exception{
         java.util.ArrayList<Session> next=new java.util.ArrayList<>(sessions);next.remove(s);
         writeJournal(next);sessions=java.util.List.copyOf(next);
+        handler.post(WindowEngine.this::updateContinuation);
         if(audio!=null&&s.uid>=0)handler.post(()->{
             if(sessions.stream().noneMatch(other->other.uid==s.uid))audio.setMuted(s.uid,false);
         });
@@ -2472,11 +2513,27 @@ final class WindowEngine {
         if(recovering)return;
         try{synchronized(lock){
             Session next=null;for(Session s:group)if(sessions.contains(s)){next=s;break;}
-            if(next==null){report("SLOT_CLOSED");return;}
+            if(next==null){handler.post(()->endClosedApplications(group));report("SLOT_CLOSED");return;}
             if(restoreTask(next,next.restoreForeground)){forget(next);handler.post(()->restoreGroup(group,0));return;}
             if(attempt>=100){note("RECOVERY_PENDING：窗口恢复待完成");return;}
             handler.postDelayed(()->restoreGroup(group,attempt+1),100);
         }}catch(Throwable e){note("RECOVERY_FAILED："+FrameworkAccess.reason(e));}
+    }
+    private void endClosedApplications(java.util.List<Session> group){
+        for(Session s:group)if(s.endOnClose){
+            s.endOnClose=false;
+            try{
+                // A different live window is an explicit reason to keep this UID running.
+                if(s.uid<10000||s.userId!=0||sessions.stream().anyMatch(other->other.uid==s.uid))continue;
+                android.content.pm.ApplicationInfo info=context.getPackageManager().getApplicationInfo(s.pkg,0);
+                if(info.uid!=s.uid||(info.flags&android.content.pm.ApplicationInfo.FLAG_PERSISTENT)!=0)continue;
+                synchronized(lock){Object focused=a.focused.invoke(root);Object top=focused==null?null:a.call(focused,"topRunningActivity");
+                    if(top!=null&&a.integer(top,"getUid")==s.uid){log.accept("CLOSE_END_APP_CANCELLED foreground="+s.pkg);continue;}}
+                Object manager=context.getSystemService(android.app.ActivityManager.class);
+                a.call(manager,"forceStopPackageAsUser",new Class<?>[]{String.class,int.class},s.pkg,s.userId);
+                log.accept("CLOSE_END_APP package="+s.pkg+" uid="+s.uid);
+            }catch(Exception e){log.accept("CLOSE_END_APP_FAILED "+FrameworkAccess.reason(e));}
+        }
     }
     private void recover(String why){
         try{synchronized(lock){
@@ -2541,7 +2598,7 @@ final class WindowEngine {
             .putExtra("scale",p.scale()).putExtra("normalScale",s.defaultScale).putExtra("appLandscape",s.landscape).putExtra("logicalW",p.width()).putExtra("logicalH",p.height())
             .putExtra("transitioning",s.transitioning||s.rotation.active()||s.cover!=null).putExtra("fullTransition",s.fullTransition)
             .putExtra("transitionHandle",s.transitionHandle).putExtra("presented",s.presented&&!s.rotation.active()).putExtra("inputPending",entryInputPending(s)).putExtra("nativeHandle",true)
-            .putExtra("barAlpha",s.barAlpha).putExtra("miniLarge",s.miniLarge)
+            .putExtra("barAlpha",s.barAlpha).putExtra("barColor",s.decoration==null?0xfff0f2f2:s.decoration.color()).putExtra("miniLarge",s.miniLarge)
             .putExtra("edgeHidden",s.edgeHidden).putExtra("edgeSide",s.edgeSide)
             .putExtra("edgeBarDragging",s.edgeBarDragging).putExtra("edgeBarCenterX",s.edgeBarCenterX).putExtra("edgeBarCenterY",s.edgeBarCenterY)
             .putExtra("edgeCenterY",s.miniPlacement==null?p.y()+p.height()*p.scale()/2:s.miniPlacement.y()+s.miniPlacement.height()*s.miniPlacement.scale()/2)

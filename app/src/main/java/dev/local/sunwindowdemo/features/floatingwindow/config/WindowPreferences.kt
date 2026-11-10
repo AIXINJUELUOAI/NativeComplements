@@ -10,6 +10,7 @@ data class WindowPreferences(
     val radius: Int = 180, val icon: Int = 44, val fanCount: Int = 4,
     val hideTopHint: Boolean = false, val showHeat: Boolean = false,
     val landscapeOff: Boolean = true, val keyboardOff: Boolean = true,
+    val endOnClose: Boolean = false, val keepEdgeAwake: Boolean = false,
     val hideRecents: Boolean = false, val doubleClose: Boolean = false, val notificationWindow: Boolean = true, val landscapeShareWindow: Boolean = true,
 )
 
@@ -22,10 +23,11 @@ class WindowPreferenceStore(private val context: Context) {
         heat = config.heat(), distance = config.distance(), selectionDistance = config.selectionDistance(),
         radius = config.radius(), icon = config.icon(), fanCount = config.fanCount(), hideTopHint = config.hideTopHint(),
         showHeat = config.showHeat(), landscapeOff = config.landscapeOff(), keyboardOff = config.keyboardOff(),
+        endOnClose = config.endOnClose(), keepEdgeAwake = config.keepEdgeAwake(),
         hideRecents = config.hideRecents(), doubleClose = config.doubleClose(), notificationWindow = config.notificationWindow(), landscapeShareWindow = config.landscapeShareWindow(),
     )
     fun boolean(key: String, value: Boolean) {
-        require(key in setOf("enabled", "hideTopHint", "showHeat", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow"))
+        require(key in setOf("enabled", "hideTopHint", "showHeat", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "endOnClose", "keepEdgeAwake"))
         preferences.edit().putBoolean(key, value).apply()
         ConfigProvider.changed(context)
     }

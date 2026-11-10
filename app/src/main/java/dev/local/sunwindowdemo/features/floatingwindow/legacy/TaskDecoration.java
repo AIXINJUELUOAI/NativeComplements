@@ -9,6 +9,17 @@ final class TaskDecoration {
     private final FrameworkAccess a;
     private SurfaceControl bar;
     private boolean drawn;
+    private int color;
+    int color(){return color==0?0xfff0f2f2:color;}
+    private int resolveColor(Object task,boolean horizontal){
+        if(horizontal)return WindowPolicy.handleColor(true,-1,false);
+        int appearance=-1;boolean night=false;
+        try{night=(a.config(task,false).uiMode&0x30)==0x20;}catch(Exception ignored){}
+        try{Object window=a.call(task,"getTopVisibleAppMainWindow");
+            if(window!=null)appearance=(Integer)a.field(a.field(a.field(window,"mAttrs"),"insetsFlags"),"appearance");
+        }catch(Exception ignored){}
+        return WindowPolicy.handleColor(false,appearance,night);
+    }
     private Rect parentBounds;
     TaskDecoration(FrameworkAccess access){a=access;}
     static void preflight(FrameworkAccess a) throws Exception {
@@ -57,8 +68,11 @@ final class TaskDecoration {
             a.call(builder,"setParent",new Class<?>[]{SurfaceControl.class},a.field(parent,"mSurfaceControl"));
             a.call(builder,"setColorLayer");a.call(builder,"setHidden",new Class<?>[]{boolean.class},true);
             bar=(SurfaceControl)a.call(builder,"build");
-            tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,new float[]{.941f,.949f,.949f});
+
         }
+        int nextColor=resolveColor(task,landscape);
+        if(color!=nextColor){color=nextColor;tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,
+            new float[]{((color>>16)&255)/255f,((color>>8)&255)/255f,(color&255)/255f});}
         MotionStyle.Bar b=MotionStyle.bar(p.scale());
         float length=b.length()*density,thickness=b.thickness()*density,gap=b.margin()*density;
         Rect pb=parentBounds;
@@ -75,7 +89,7 @@ final class TaskDecoration {
     }
     void hide(Object task) throws Exception {if(bar!=null)tx(a.transaction(task),"hide",new Class<?>[]{SurfaceControl.class},bar);}
     void remove(Object task) throws Exception {
-        if(bar!=null){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},bar);bar.release();bar=null;}
+        if(bar!=null){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},bar);bar.release();bar=null;color=0;}
     }
     void dispose(){
         if(bar==null)return;

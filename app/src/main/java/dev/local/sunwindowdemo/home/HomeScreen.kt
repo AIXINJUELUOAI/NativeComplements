@@ -12,7 +12,7 @@ import dev.local.sunwindowdemo.WindowRuntime
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
-fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -> Unit, onAbout: () -> Unit, onCalls: () -> Unit = {}, onEdgeTouch: () -> Unit = {}, onSuggestions: () -> Unit = {}) {
+fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -> Unit, onAbout: () -> Unit, onCalls: () -> Unit = {}, onEdgeTouch: () -> Unit = {}, onSuggestions: () -> Unit = {}, onMotion: () -> Unit = {}) {
     Surface(onClick = onDiagnostics, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(when {
@@ -43,6 +43,8 @@ fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -
             leading = { Glyph("edge", Color(0xFFF1DDF9), Color(0xFF6A3585)) })
         SettingRow("建议", "手电筒、蓝牙、验证码与复制内容快捷操作", onSuggestions,
             leading = { Glyph("gesture", Color(0xFFFFE4BC), Color(0xFF795500)) })
+        SettingRow("防摇一摇", "按应用控制开屏与持续传感器访问", onMotion,
+            leading = { Glyph("gesture", Color(0xFFFFDAD4), Color(0xFF8C3022)) })
         SettingRow("电话拦截", "双卡来电控制、号码规则与拦截记录", onCalls,
             leading = { Glyph("phone", Color(0xFFD7F0D2), Color(0xFF245328)) })
     }
