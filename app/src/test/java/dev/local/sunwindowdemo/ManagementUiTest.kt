@@ -123,7 +123,7 @@ class ManagementUiTest {
         store.number("heat", 100)
         assertEquals(72, Config(context).heat())
         store.apps(listOf("com.test.one", "com.test.one", "bad", "com.test.two", "com.test.three", "com.test.four", "com.test.five", "com.test.six"))
-        assertEquals(listOf("com.test.one", "com.test.two", "com.test.three", "com.test.four", "com.test.five"), Config(context).apps())
+        assertEquals(listOf("com.test.one", "com.test.two", "com.test.three", "com.test.four", "com.test.five", "com.test.six"), Config(context).apps())
         store.blocked(setOf("com.test.one"))
         assertEquals(setOf("com.test.one"), Config(context).blocked())
     }
