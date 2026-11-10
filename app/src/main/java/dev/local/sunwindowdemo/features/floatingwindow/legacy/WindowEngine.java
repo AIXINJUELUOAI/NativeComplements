@@ -682,9 +682,7 @@ final class WindowEngine {
         if(displaced==null){if(previous!=null)pinned=previous;active=null;}
         try{
             ++openGeneration;trace.arm(pkg,openGeneration);
-            s.startMask=new TaskVisibilityGuard(a,task);s.startMask.hide();
-            activate(s,null);
-            a.call(a.field(task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},task);
+            maskAndActivate(s,task,null);
             log.accept("SHARE_WINDOW_ACQUIRED task="+s.taskId+" package="+pkg);
             return new ShareStarted(s,displaced);
         }catch(Exception error){handler.post(()->recover("分享小窗接管失败"));throw error;}
@@ -696,6 +694,12 @@ final class WindowEngine {
             if(attempt<100)handler.postDelayed(()->presentShared(target,attempt+1),32);
             else log.accept("SHARE_WINDOW_REUSE_PENDING task="+target.taskId);
         }catch(Exception error){log.accept("SHARE_WINDOW_REUSE_FAILED "+FrameworkAccess.reason(error));}
+    }
+    /** Shared by share and linked-task acquisition: hide the native launch, present the session, suppress the native animation. */
+    private void maskAndActivate(Session s,Object task,Geometry.Placement placement)throws Exception{
+        s.startMask=new TaskVisibilityGuard(a,task);s.startMask.hide();
+        activate(s,placement);
+        a.call(a.field(task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},task);
     }
     /** Links the control lease death recipient that recovers this session if the controller exits. */
     private void bindLease(Session s,IBinder lease)throws Exception{
@@ -776,9 +780,7 @@ final class WindowEngine {
             }else if(next.restoring)return null;
             SwitchStart ticket=new SwitchStart(s,next,fresh,openGeneration);
             pendingStart=ticket;
-            next.startMask=new TaskVisibilityGuard(a,target);next.startMask.hide();
-            activate(next,s.placement);
-            a.call(a.field(target,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},target);
+            maskAndActivate(next,target,s.placement);
             handler.postDelayed(()->{
                 if(pendingStart==ticket){cancelStart("start-timeout");recover("关联任务启动超时");}
             },10000);
