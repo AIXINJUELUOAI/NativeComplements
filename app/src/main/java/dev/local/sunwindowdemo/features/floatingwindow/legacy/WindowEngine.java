@@ -372,7 +372,7 @@ final class WindowEngine {
                 refresh(s); note("CANVAS：逻辑画布已切换"); return;
             }
             if (!"START".equals(op)) return;
-            if(recovering||sessions.stream().anyMatch(v->v.restoring)||sessions.isEmpty()&&journal.getBaseFile().exists())
+            if(recovering||sessions.stream().anyMatch(v->v.restoring)||unrecoveredJournal())
                 throw new IllegalStateException("先完成待恢复任务");
             if (Build.VERSION.SDK_INT != 37) throw new IllegalStateException("首版仅验证 Android 17 / API 37");
             KeyguardManager kg = context.getSystemService(KeyguardManager.class);
@@ -496,7 +496,7 @@ final class WindowEngine {
                     request.putExtra("taskId",retained.taskId);completeOpen(request,true);report("REOPEN");return;
                 }
             }
-            if(sessions.isEmpty()&&journal.getBaseFile().exists())throw new IllegalStateException("请先完成待恢复记录");
+            if(unrecoveredJournal())throw new IllegalStateException("请先完成待恢复记录");
             final Object[] candidate={null};final long[] newest={Long.MIN_VALUE};
             if(shortcut){
                 if(request.getBooleanExtra("launched",false)){
@@ -701,6 +701,8 @@ final class WindowEngine {
         activate(s,placement);
         a.call(a.field(task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},task);
     }
+    /** A recovery journal with no live session means a previous window still awaits restoration. */
+    private boolean unrecoveredJournal(){return sessions.isEmpty()&&journal.getBaseFile().exists();}
     /** Links the control lease death recipient that recovers this session if the controller exits. */
     private void bindLease(Session s,IBinder lease)throws Exception{
         s.lease=lease;
@@ -1808,7 +1810,7 @@ final class WindowEngine {
         try{
             if(request.getLongExtra("generation",-1)!=openGeneration)return;
             if(attempt>20)throw new IllegalStateException("桌面转场尚未结束，请重试");
-            if(normalOccupied()||recovering||sessions.isEmpty()&&journal.getBaseFile().exists())throw new IllegalStateException("默认窗已被占用");
+            if(normalOccupied()||recovering||unrecoveredJournal())throw new IllegalStateException("默认窗已被占用");
             synchronized(lock){
                 Object task=find(request.getIntExtra("taskId",-1));
                 if(task==null)throw new IllegalStateException("手势任务已结束");
