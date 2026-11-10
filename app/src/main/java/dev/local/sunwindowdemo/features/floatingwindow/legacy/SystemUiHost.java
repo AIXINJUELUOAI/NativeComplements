@@ -129,15 +129,17 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
                 if(stage<0||stage>2)return false;
                 main.post(()->showSwipeHint(stage));return true;
             }
-            int taskId=data.readInt();String pkg=data.readString();data.enforceNoDataAvail();
+            int taskId=data.readInt();String pkg=data.readString();
+            String backToken=code==android.os.IBinder.FIRST_CALL_TRANSACTION?data.readString():null;data.enforceNoDataAvail();
             if(taskId<0||!Wire.allowedPackage(pkg)||Wire.PKG.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg))return false;
             boolean probe=code==android.os.IBinder.FIRST_CALL_TRANSACTION+2;
+            if(!probe&&!Wire.validToken(backToken))return false;
             boolean accepted=!cleaned&&allowed()&&backendReady&&dropAvailable()
                 &&!config.blocked().contains(pkg)&&(probe?!backPending.get():backPending.compareAndSet(false,true));
             if(probe){if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;}
             if(accepted)main.postDelayed(()->{
                 try{if(!cleaned&&allowed()&&backendReady&&dropAvailable())
-                    Wire.send(SystemUiHost.this,"GESTURE",pkg,taskId,Wire.token(),false);
+                    Wire.back(SystemUiHost.this,pkg,taskId,backToken);
                 }finally{backPending.set(false);}
             },0);
             if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;
@@ -210,7 +212,6 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(i.getStringExtra("event")!=null&&(i.getStringExtra("event").endsWith("FAILED")||"BLOCKED".equals(i.getStringExtra("event"))))Toast.makeText(this,i.getStringExtra("report"),Toast.LENGTH_LONG).show();
     }
     private List<AppCatalog.App> all=List.of();
-    private List<ShortcutTarget> availableShortcuts=List.of();
     private String foreground="";
     private boolean keyboard,cleaned,receiverRegistered;
     private int lastSelection=-1;
@@ -222,25 +223,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final BroadcastReceiver screenReceiver=new BroadcastReceiver(){
         public void onReceive(Context c,Intent i){hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");}
     };
-    private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){AppCatalog.invalidateShortcuts();loadApps();}};
+    private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){loadApps();}};
     private int catalogGeneration;
-    private android.content.pm.LauncherApps shortcutLauncher;
-    private final android.content.pm.LauncherApps.Callback shortcutChanges=new android.content.pm.LauncherApps.Callback(){
-        public void onPackageAdded(String pkg,android.os.UserHandle user){}
-        public void onPackageRemoved(String pkg,android.os.UserHandle user){}
-        public void onPackageChanged(String pkg,android.os.UserHandle user){}
-        public void onPackagesAvailable(String[] packages,android.os.UserHandle user,boolean replacing){refreshShortcutCache();}
-        public void onPackagesUnavailable(String[] packages,android.os.UserHandle user,boolean replacing){refreshShortcutCache();}
-        public void onShortcutsChanged(String pkg,List<android.content.pm.ShortcutInfo> shortcuts,android.os.UserHandle user){refreshShortcutCache();}
-    };
-    private void refreshShortcutCache(){
-        if(cleaned)return;AppCatalog.invalidateShortcuts();
-        settingsWorker.execute(()->{
-            AppCatalog.Shortcuts loaded=AppCatalog.loadShortcuts(this);
-            main.post(()->{if(!cleaned&&loaded.isCurrent())availableShortcuts=loaded.items;});
-        });
-    }
-
     private void initialize() {
         cleaned=false;connected=true;live=this;
         Config.hostPreferences=getSharedPreferences("nativecomplements_corner",Context.MODE_PRIVATE);
@@ -259,16 +243,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         registerReceiver(settingsReceiver,settingsFilter(),null,main,Context.RECEIVER_EXPORTED);
         registerReceiver(queryReceiver,new IntentFilter(LauncherGuard.QUERY),null,main,Context.RECEIVER_EXPORTED);
         getApplicationContext().registerComponentCallbacks(this);
-        try{shortcutLauncher=getSystemService(android.content.pm.LauncherApps.class);if(shortcutLauncher!=null)shortcutLauncher.registerCallback(shortcutChanges,main);}
-        catch(RuntimeException unavailable){shortcutLauncher=null;}
         loadApps();loadSettings();main.post(poll);
     }
     private void loadApps() {
         int generation=++catalogGeneration;
         new Thread(()->{
             List<AppCatalog.App> apps=AppCatalog.load(this);
-            AppCatalog.Shortcuts shortcuts=AppCatalog.loadShortcuts(this);
-            main.post(()->{if(!connected||cleaned||generation!=catalogGeneration)return;all=apps;if(shortcuts.isCurrent())availableShortcuts=shortcuts.items;refresh();});
+            main.post(()->{if(!connected||cleaned||generation!=catalogGeneration)return;all=apps;refresh();});
         },"corner-app-catalog").start();
     }
     private void updateOverlayPriority(){
@@ -366,16 +347,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private List<ShortcutTarget> selectedTargets(){
         List<ShortcutTarget> selected=new ArrayList<>();
-        java.util.Map<String,String> labels=config.targetLabels();
         for(String key:config.targets()){
-            ShortcutTarget target=null;
-            for(ShortcutTarget item:availableShortcuts)if(item.key().equals(key)){target=item;break;}
-            if(target==null){
-                target=ShortcutTarget.fromKey(this,key,all);
-                String label=labels.get(key);
-                if(target!=null&&target.isShortcut()&&label!=null&&!label.isBlank())
-                    target=new ShortcutTarget(target.pkg,target.shortcutId,target.user,target.serialNumber,label,target.appLabel,target.icon,target.section);
-            }
+            ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);
             if(target!=null)selected.add(target);
         }
         return selected;
@@ -478,20 +451,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         main.postDelayed(()->{
             if(cleaned)return;
             if(!backendReady){Wire.send(this,"STATUS");Toast.makeText(this,"后端尚未就绪，请先在模块内预检",Toast.LENGTH_LONG).show();return;}
-            if(WindowShortcutActivity.isCurrent(target.pkg,target.shortcutId)){floatCurrent(0);return;}
-            if(!target.isShortcut()){Wire.send(this,"OPEN",target.pkg,-1,Wire.token(),false);return;}
-            settingsWorker.execute(()->{
-                try{
-                    android.content.pm.LauncherApps launcher=getSystemService(android.content.pm.LauncherApps.class);
-                    if(launcher==null||!launcher.hasShortcutHostPermission())throw new SecurityException("shortcut host");
-                    android.app.PendingIntent pending=launcher.getShortcutIntent(target.pkg,target.shortcutId,null,target.user);
-                    if(pending==null)throw new IllegalStateException("shortcut unavailable");
-                    main.post(()->{if(!cleaned)Wire.openShortcut(this,target,pending);});
-                }catch(Exception e){main.post(()->Toast.makeText(this,"该快捷功能当前不可用",Toast.LENGTH_LONG).show());}
-            });
+            Wire.send(this,"OPEN",target.pkg,-1,Wire.token(),false);
         },180);
     }
     @Override public void onConfigurationChanged(Configuration c){hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;if(shortcutLauncher!=null)try{shortcutLauncher.unregisterCallback(shortcutChanges);}catch(RuntimeException ignored){}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
+    private void cleanup(){if(cleaned)return;if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
 }

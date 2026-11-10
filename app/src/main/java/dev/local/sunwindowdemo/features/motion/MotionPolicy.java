@@ -9,6 +9,10 @@ public final class MotionPolicy {
     private Map<Integer,Integer> rules=Map.of();
     private final Map<Integer,Long> until=new HashMap<>();
     private int foreground=-1,pid=-1;
+    public static int resolve(int fallback,Integer override){
+        int mode=override==null?fallback:override;
+        return mode>=ALLOW&&mode<=ALWAYS?mode:ALLOW;
+    }
     public void configure(Map<Integer,Integer> next,long now){
         for(var e:next.entrySet())if(e.getValue()==FIRST_SCREEN&&foreground==e.getKey()
                 &&rules.getOrDefault(e.getKey(),ALLOW)!=FIRST_SCREEN)until.put(e.getKey(),now+WINDOW);

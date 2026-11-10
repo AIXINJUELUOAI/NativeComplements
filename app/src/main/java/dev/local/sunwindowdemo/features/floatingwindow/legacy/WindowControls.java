@@ -24,6 +24,7 @@ final class WindowControls {
     private boolean appLandscape,systemBlocked;
     private String scaleZone="normal";
     private int barColor=0xfff0f2f2;
+    private HandleContrast contrast;
     private int logicalW,logicalH;
     private boolean landscape,dragging;
     private long sequence=-1;
@@ -107,7 +108,7 @@ final class WindowControls {
         logicalW=i.getIntExtra("logicalW",1200);logicalH=i.getIntExtra("logicalH",2133);
         landscape=display.width()>display.height();
         if(rebuild)build();
-        if(transitioning&&!inputPending||systemBlocked){for(View v:views)v.setVisibility(View.GONE);changed();}
+        if(transitioning&&!inputPending||systemBlocked){if(contrast!=null)contrast.update(null,false);for(View v:views)v.setVisibility(View.GONE);changed();}
         else if(!dragging||edgeGesture==2)layout();
     }
     private void build(){
@@ -230,6 +231,11 @@ final class WindowControls {
                 if(landscape)cv.drawRoundRect(gap,(getHeight()-length)/2,gap+thickness,(getHeight()+length)/2,radius,radius,p);
                 else cv.drawRoundRect((getWidth()-length)/2,gap,(getWidth()+length)/2,gap+thickness,radius,radius,p);
             }};
+            final String boundToken=token;
+            contrast=new HandleContrast(bar,dark->{
+                if(Objects.equals(boundToken,token)&&!landscape&&!transitioning&&!systemBlocked&&"normal".equals(frame))
+                    send("BAR_CONTRAST",dark?1:0,0,0);
+            });
             bar.setContentDescription("小窗缩放白条：向内推缩小，向外拉全屏");
             bar.setOnTouchListener(new View.OnTouchListener(){
                 float start,startScale;int axis;
@@ -348,10 +354,11 @@ final class WindowControls {
         }
     }
     private void layout(){
-        if(systemBlocked){for(View v:views)v.setVisibility(View.GONE);changed();return;}
+        if(systemBlocked){if(contrast!=null)contrast.update(null,false);for(View v:views)v.setVisibility(View.GONE);changed();return;}
         layoutMetrics=wm.getCurrentWindowMetrics();
         Rect d=layoutMetrics.getBounds();
         if("mini".equals(frame)){
+            if(contrast!=null)contrast.update(null,false);
             for(int n=1;n<views.size();n++)views.get(n).setVisibility(View.GONE);
             if(edgeHidden){
                 Insets insets=layoutMetrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
@@ -379,6 +386,8 @@ final class WindowControls {
         if(landscape)rect(5,x+w-dp(12),y+h/2-touchLength/2,touchDepth,touchLength);
         else rect(5,x+w/2-touchLength/2,y+h-dp(12),touchLength,touchDepth);
         if(!nativeHandle&&views.size()>5)views.get(5).invalidate();
+        if(contrast!=null)contrast.update(new Rect(Math.round(x+w/2-dp(56)),Math.round(y+h+dp(6)),
+            Math.round(x+w/2+dp(56)),Math.min(d.height(),Math.round(y+h+dp(24)))),!landscape&&!transitioning&&!dragging);
         changed();
     }
     int[] protectedRects(){
@@ -464,6 +473,7 @@ final class WindowControls {
     void systemOverlay(boolean blocked){
         if(systemBlocked==blocked)return;systemBlocked=blocked;
         if(blocked){
+            if(contrast!=null)contrast.update(null,false);
             clearEdgeHold();clearMotion();
             if(edgeGesture!=0)cancelEdgeDrag();
             else if(miniDragBase!=null)cancelMiniDrag();
@@ -530,7 +540,7 @@ final class WindowControls {
         if(dismiss!=null){try{wm.removeViewImmediate(dismiss);}catch(RuntimeException ignored){}dismiss=null;}
         dismissEntered=false;dismissBounds.setEmpty();
     }
-    private void hideViews(){hideMenu();for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}views.clear();params.clear();hideDismiss();}
+    private void hideViews(){if(contrast!=null){contrast.close();contrast=null;}hideMenu();for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}views.clear();params.clear();hideDismiss();}
     void hide(){cancelEdgeDrag();cancelMiniDrag();clearMotion();hideViews();frame="";token=null;dragging=false;changed();}
     void close(){send("CLOSE",0,0,0);hide();}
     void imeTop(int top){if(imeTop==top)return;imeTop=top;if(!views.isEmpty()&&!transitioning&&!dragging)layout();}

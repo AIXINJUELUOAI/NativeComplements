@@ -13,12 +13,8 @@ import android.graphics.drawable.InsetDrawable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.HashMap;
 import java.util.Locale;
-import android.content.pm.ShortcutInfo;
 import android.icu.text.Transliterator;
-import android.os.Process;
-import android.os.UserHandle;
 import java.util.List;
 
 final class AppCatalog {
@@ -75,76 +71,4 @@ final class AppCatalog {
     }
     static String section(String label) { return sectionFromKey(sortKey(label)); }
 
-    static final class Shortcuts {
-        final List<ShortcutTarget> items;
-        final boolean hostPermission,cacheable;
-        final int revision;
-        final String message;
-        Shortcuts(List<ShortcutTarget> items,boolean permission,String message) {this(items,permission,message,true);}
-        Shortcuts(List<ShortcutTarget> items,boolean permission,String message,boolean cacheable) {
-            this(items,permission,message,cacheable,-1);
-        }
-        private Shortcuts(List<ShortcutTarget> items,boolean permission,String message,boolean cacheable,int revision) {
-            this.items=List.copyOf(items);hostPermission=permission;this.message=message;this.cacheable=cacheable;this.revision=revision;
-        }
-        boolean isCurrent(){return revision==shortcutRevision.get();}
-    }
-    private static final java.util.concurrent.atomic.AtomicInteger shortcutRevision=new java.util.concurrent.atomic.AtomicInteger();
-    private static volatile Shortcuts shortcutCache;
-    static Shortcuts cachedShortcuts(){Shortcuts cached=shortcutCache;return cached!=null&&cached.isCurrent()?cached:null;}
-    static void invalidateShortcuts(){shortcutRevision.incrementAndGet();}
-    /** Worker-thread only. Reuse the process cache until packages or shortcuts change. */
-    static synchronized Shortcuts loadShortcuts(Context c) {
-        Shortcuts cached=cachedShortcuts();if(cached!=null)return cached;
-        int revision=shortcutRevision.get();
-        Shortcuts queried=queryShortcuts(c);
-        Shortcuts result=new Shortcuts(queried.items,queried.hostPermission,queried.message,queried.cacheable,revision);
-        if(result.cacheable&&result.isCurrent())shortcutCache=result;
-        return result;
-    }
-    private static Shortcuts queryShortcuts(Context c) {
-        LauncherApps launcher=c.getSystemService(LauncherApps.class);
-        try {
-            if (launcher==null||!launcher.hasShortcutHostPermission())
-                return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限",false);
-            UserHandle user=Process.myUserHandle();
-            long serial=ShortcutTarget.serial(c,user);
-            if (serial<0) return new Shortcuts(List.of(),true,"暂未取得当前用户的标识，请稍后重试",false);
-            var query=new LauncherApps.ShortcutQuery().setQueryFlags(
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC|LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST
-                            |LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED);
-            List<ShortcutInfo> available=launcher.getShortcuts(query,user);
-            HashMap<String,App> owners=new HashMap<>();
-            ArrayList<ShortcutTarget> result=new ArrayList<>();
-            HashSet<String> seen=new HashSet<>();
-            if(available!=null) for(ShortcutInfo info:available) {
-                if(!info.isEnabled()||info.getPackage().equals(Wire.PKG)&&!WindowShortcutActivity.isCurrent(info.getPackage(),info.getId())) continue;
-                try {
-                    String pkg=info.getPackage(); App owner=owners.get(pkg);
-                    if(owner==null) {
-                        var pm=c.getPackageManager(); var application=pm.getApplicationInfo(pkg,0);
-                        owner=new App(pkg,pm.getApplicationLabel(application).toString(),normalized(c,pm.getApplicationIcon(application)));
-                        owners.put(pkg,owner);
-                    }
-                    CharSequence title=info.getShortLabel();
-                    if(title==null||title.length()==0) title=info.getLongLabel();
-                    if(title==null||title.length()==0) continue;
-                    Drawable icon;
-                    try { icon=launcher.getShortcutBadgedIconDrawable(info,c.getResources().getDisplayMetrics().densityDpi); }
-                    catch(RuntimeException unavailableIcon) { icon=null; }
-                    if(icon==null) icon=owner.icon; else icon=normalized(c,icon);
-                    ShortcutTarget target=new ShortcutTarget(pkg,info.getId(),user,serial,title.toString(),owner.label,icon,owner.section);
-                    if(ShortcutTarget.validKey(target.key())&&seen.add(target.key())) result.add(target);
-                } catch(Exception staleShortcut) { }
-            }
-            result.sort(Comparator.comparing((ShortcutTarget t)->{
-                String sort=sortKey(t.appLabel); return sectionFromKey(sort).equals("#")?"~"+sort:sort;
-            }).thenComparing(t->sortKey(t.label)).thenComparing(ShortcutTarget::key));
-            return new Shortcuts(result,true,result.isEmpty()?"暂无可用的应用快捷功能":"");
-        } catch(SecurityException denied) {
-            return new Shortcuts(List.of(),false,"当前系统界面没有应用快捷功能的宿主权限",false);
-        } catch(RuntimeException failure) {
-            return new Shortcuts(List.of(),true,"应用快捷功能读取失败，请重新打开面板重试",false);
-        }
-    }
 }

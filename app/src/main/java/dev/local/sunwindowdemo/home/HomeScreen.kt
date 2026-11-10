@@ -12,7 +12,7 @@ import dev.local.sunwindowdemo.WindowRuntime
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
-fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -> Unit, onAbout: () -> Unit, onCalls: () -> Unit = {}, onEdgeTouch: () -> Unit = {}, onSuggestions: () -> Unit = {}, onMotion: () -> Unit = {}) {
+fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -> Unit, onAbout: () -> Unit, onCalls: () -> Unit = {}, onEdgeTouch: () -> Unit = {}, onSuggestions: () -> Unit = {}, onMotion: () -> Unit = {}, onIcons: () -> Unit = {}) {
     Surface(onClick = onDiagnostics, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
         Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(when {
@@ -47,6 +47,8 @@ fun HomeScreen(runtime: WindowRuntime, onWindow: () -> Unit, onDiagnostics: () -
             leading = { Glyph("gesture", Color(0xFFFFDAD4), Color(0xFF8C3022)) })
         SettingRow("电话拦截", "双卡来电控制、号码规则与拦截记录", onCalls,
             leading = { Glyph("phone", Color(0xFFD7F0D2), Color(0xFF245328)) })
+        SettingRow("图标补全", "导入本地双层素材，补全桌面图标与原生动画", onIcons,
+            leading = { Glyph("window", Color(0xFFFCE4EC), Color(0xFF743A58)) })
     }
     GroupTitle("应用")
     SettingsGroup {

@@ -83,14 +83,16 @@ class HostBridgeTest {
         assertEquals(targets, WindowPreferenceStore(context).read().apps)
     }
 
-    @Test fun shortcutPayloadIsRejectedBeforeChangingSavedOrder() {
+    @Test fun oldShortcutSelectionsArePrunedWithoutChangingAppOrder() {
         val store = WindowPreferenceStore(context)
         val original = listOf("com.example.first", "com.example.second")
         store.apps(original)
-        val oversized = (0 until 40).map { "shortcut:v1:0:com.example.app$it:${"x".repeat(2000)}" }
-        assertTrue(oversized.all(ShortcutTarget::validKey))
-        assertThrows(IllegalArgumentException::class.java) { dev.local.sunwindowdemo.Config.validateTargets(oversized, oversized.map { "快捷功能" }) }
-        assertThrows(IllegalArgumentException::class.java) { store.apps(oversized) }
+        val oldShortcut = "shortcut:v1:0:com.example.first:scan"
+        assertFalse(ShortcutTarget.validKey(oldShortcut))
+        store.preferences.edit().putString("targets", org.json.JSONArray(listOf(original[0], oldShortcut, original[1])).toString()).commit()
+        assertEquals(original, store.read().apps)
+        assertEquals(org.json.JSONArray(original).toString(), store.preferences.getString("targets", ""))
+        assertThrows(IllegalArgumentException::class.java) { dev.local.sunwindowdemo.Config.validateTargets(listOf(oldShortcut), listOf("Scan")) }
         assertEquals(original, store.read().apps)
     }
 

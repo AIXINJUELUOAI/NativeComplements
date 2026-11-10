@@ -15,7 +15,8 @@ final class TaskCover {
     private final Object task,parent;
     private SurfaceControl background,icon;
     private final RectF from,to;
-    private final float radiusFrom,radiusTo;
+    private final float radiusFrom;
+    private float radiusTo;
     private final int iconSize;
     private final float[] color;
     private long began=SystemClock.elapsedRealtime(),notBefore;
@@ -65,6 +66,7 @@ final class TaskCover {
     }
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
     void target(RectF bounds){if(!exiting)to.set(bounds);}
+    void resumeTo(RectF bounds,float radius){to.set(bounds);radiusTo=radius;began=SystemClock.elapsedRealtime();}
     void delayEntry(long delay){notBefore=SystemClock.elapsedRealtime()+Math.max(0,delay);}
     boolean exiting(){return exiting;}
     long exit(){

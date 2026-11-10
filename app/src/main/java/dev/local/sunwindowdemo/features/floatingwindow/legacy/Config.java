@@ -46,7 +46,16 @@ final class Config {
                 String key=array.optString(n,"");if(ShortcutTarget.validKey(key))unique.add(key);
             }
         }catch(org.json.JSONException ignored){}
-        return new ArrayList<>(unique);
+        List<String> result=new ArrayList<>(unique);
+        String clean=new org.json.JSONArray(result).toString();
+        if(hostPreferences==null&&!clean.equals(prefs.getString("targets","[]"))){
+            org.json.JSONObject labels=new org.json.JSONObject();
+            try{org.json.JSONObject old=new org.json.JSONObject(prefs.getString("targetLabels","{}"));
+                for(String key:result)labels.put(key,old.optString(key,""));
+            }catch(org.json.JSONException ignored){}
+            prefs.edit().putString("targets",clean).putString("apps",String.join(",",result)).putString("targetLabels",labels.toString()).apply();
+        }
+        return result;
     }
     java.util.Map<String,String> targetLabels(){
         java.util.Map<String,String> result=new java.util.HashMap<>();

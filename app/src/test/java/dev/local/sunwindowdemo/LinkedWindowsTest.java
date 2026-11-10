@@ -27,6 +27,7 @@ public class LinkedWindowsTest {
 
     @Before public void setup()throws Exception{
         engine=new WindowEngine(null,message->{});
+        set(engine,"handler",new android.os.Handler(android.os.Looper.getMainLooper()));
         session=Class.forName(WindowEngine.class.getName()+"$Session");
         journal=new AtomicFile(temporary.newFile("linked.json"));
         journal.delete();set(engine,"journal",journal);token=Wire.token();
@@ -159,5 +160,64 @@ public class LinkedWindowsTest {
         call("completeOpen",new Class<?>[]{android.content.Intent.class,boolean.class},request,false);
         call("completeOpen",new Class<?>[]{android.content.Intent.class,boolean.class},request,true);
         assertEquals(List.of(0),results);
+    }
+    public static final class NativeSurfaceTransaction {
+        boolean shown=true;
+        float alpha=1;
+        public NativeSurfaceTransaction hide(android.view.SurfaceControl surface){shown=false;return this;}
+        public NativeSurfaceTransaction show(android.view.SurfaceControl surface){shown=true;return this;}
+        public NativeSurfaceTransaction setAlpha(android.view.SurfaceControl surface,float value){alpha=value;return this;}
+    }
+    public static final class NativeSurfaceTask {
+        public android.view.SurfaceControl mSurfaceControl;
+        public final NativeSurfaceTransaction pending=new NativeSurfaceTransaction();
+        public final Object mSurfaceAnimator=new Object(){public boolean hasLeash(){return true;}};
+        public boolean isAttached(){return true;}
+        public NativeSurfaceTransaction getPendingTransaction(){return pending;}
+    }
+    @Test public void parkedSurfaceUsesNativeHideAndReactivationShowsIt()throws Throwable{
+        // Exercise the real reflection adapter without requiring a system_server in Robolectric.
+        Class<?> unsafeClass=Class.forName("sun.misc.Unsafe");
+        Field singleton=unsafeClass.getDeclaredField("theUnsafe");singleton.setAccessible(true);
+        FrameworkAccess access=(FrameworkAccess)unsafeClass.getMethod("allocateInstance",Class.class)
+            .invoke(singleton.get(null),FrameworkAccess.class);
+        set(access,"methods",new java.util.HashMap<>());set(access,"fields",new java.util.HashMap<>());
+        set(engine,"a",access);
+        Object parked=create(697,1);NativeSurfaceTask task=new NativeSurfaceTask();
+        set(parked,"task",task);set(parked,"parked",true);save(parked);
+        call("apply",new Class<?>[]{session},parked);
+        assertEquals(0,task.pending.alpha,0);
+        assertFalse("Alpha zero still lets embedded input layers receive touches; hide the ancestor",task.pending.shown);
+        task.pending.shown=true; // A later native traversal may show the task again.
+        call("apply",new Class<?>[]{session},parked);assertFalse(task.pending.shown);
+        set(parked,"parked",false);
+        call("apply",new Class<?>[]{session},parked);
+        assertTrue("Reactivation must undo the module's native hide",task.pending.shown);
+        task.pending.shown=false;
+        call("apply",new Class<?>[]{session},parked);
+        assertFalse("Do not override a native hide once the module's hide has been released",task.pending.shown);
+    }
+    @Test @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
+    public void historyBroadcastRunsAfterWindowLockIsReleased()throws Throwable{
+        Object windowLock=new Object();
+        java.util.ArrayList<android.content.Intent> sent=new java.util.ArrayList<>();
+        android.content.Context context=new android.content.ContextWrapper(org.robolectric.RuntimeEnvironment.getApplication()){
+            @Override public void sendBroadcast(android.content.Intent intent,String permission,android.os.Bundle options){
+                assertFalse("Broadcast must not acquire AMS while holding the WM lock",Thread.holdsLock(windowLock));
+                assertNull(permission);assertNotNull(options);
+                sent.add(new android.content.Intent(intent));
+            }
+        };
+        set(engine,"context",context);set(engine,"lock",windowLock);
+        synchronized(windowLock){
+            call("pushHistory",new Class<?>[]{});
+            assertTrue("Broadcast must wait for the current window operation to finish",sent.isEmpty());
+        }
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(1,sent.size());
+        assertEquals(WindowEngine.HISTORY,sent.get(0).getAction());
+        assertEquals(LauncherGuard.PACKAGE,sent.get(0).getPackage());
+        assertEquals(Wire.PROTOCOL,sent.get(0).getIntExtra("protocol",0));
+        assertArrayEquals(new int[0],sent.get(0).getIntArrayExtra("hiddenTaskIds"));
     }
 }

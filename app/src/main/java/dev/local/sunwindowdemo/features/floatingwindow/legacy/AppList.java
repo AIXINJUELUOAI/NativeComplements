@@ -13,7 +13,6 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Process;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.DragEvent;
@@ -26,8 +25,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** A View card inside the existing SystemUI overlay. Never starts an Activity or owns a task. */
 final class AppList {
@@ -43,17 +40,15 @@ final class AppList {
         final Context c;
         final boolean compact;
         final List<AppCatalog.App> apps;
-        final ArrayList<ShortcutTarget> appRows=new ArrayList<>(),chosen=new ArrayList<>(),shortcuts=new ArrayList<>(),visible=new ArrayList<>();
+        final ArrayList<ShortcutTarget> appRows=new ArrayList<>(),chosen=new ArrayList<>(),visible=new ArrayList<>();
         final ArrayList<AppRow> rows=new ArrayList<>();
         final int[] sectionPositions=new int[ALPHABET.length()];
         final Consumer<ShortcutTarget> launch;
         final SaveAction save;
-        final ExecutorService worker=Executors.newSingleThreadExecutor();
         final Handler main=new Handler(Looper.getMainLooper());
         final int surface,container,text,secondary,accent,tonal;
         final TextView manage,help,empty,bubble;
-        final TextView[] tabs=new TextView[2];
-        final LinearLayout selectedScroll,tabRow;
+        final LinearLayout selectedScroll;
         final View divider;
         final LinearLayout selectedRows;
         final ListView list;
@@ -63,10 +58,9 @@ final class AppList {
         final Runnable dragScroll=this::scrollDrag,hideIndex=this::hideIndex;
         boolean scrolling,indexTouching;
         int dragFrom=-1;
-        boolean editing,saving,shortcutRequested,shortcutLoading,disposed;
-        int tab,hover=-1;
+        boolean editing,saving,disposed;
+        int hover=-1;
         float dragX,dragY;
-        String shortcutMessage="正在读取应用快捷功能…";
 
         static final class AppRow {
             final String section;
@@ -85,16 +79,12 @@ final class AppList {
             container=blend(surface,text,.045f);tonal=blend(surface,accent,.13f);
             setOrientation(VERTICAL);setPadding(dp(12),dp(compact?6:10),dp(12),dp(compact?6:14));setBackground(round(container,28));
             setClipToOutline(true);setOnClickListener(v->{});
-            long serial=ShortcutTarget.serial(c,Process.myUserHandle());
-            for(AppCatalog.App app:apps)appRows.add(new ShortcutTarget(app.pkg,null,Process.myUserHandle(),serial,app.label,app.label,app.icon,app.section));
+            for(AppCatalog.App app:apps)appRows.add(ShortcutTarget.app(c,app));
             for(ShortcutTarget item:initial)if(item!=null&&ShortcutTarget.validKey(item.key())&&selectedIndex(item.key())<0&&chosen.size()<Config.MAX_TARGETS)chosen.add(item);
-            AppCatalog.Shortcuts cached=AppCatalog.cachedShortcuts();
-            if(cached!=null){shortcutRequested=true;applyShortcuts(cached);}
-
             LinearLayout header=new LinearLayout(c);header.setGravity(Gravity.CENTER_VERTICAL);
             TextView title=label("更多应用",14,text);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));title.setIncludeFontPadding(false);
             header.addView(title,new LinearLayout.LayoutParams(0,dp(compact?36:42),1));
-            manage=button("管理",this::toggleEditing);manage.setTextColor(text);manage.setIncludeFontPadding(false);manage.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
+            manage=button("管理",this::toggleEditing);manage.setBackground(null);manage.setTextColor(text);manage.setIncludeFontPadding(false);manage.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
             header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));addView(header);
 
             selectedScroll=new LinearLayout(c);selectedScroll.setOrientation(VERTICAL);
@@ -105,13 +95,6 @@ final class AppList {
             divider=new View(c);divider.setBackgroundColor(blend(container,text,.12f));
             LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));selectedScroll.addView(divider,line);
 
-            tabRow=new LinearLayout(c);tabRow.setPadding(0,0,0,dp(compact?4:6));
-            for(int i=0;i<2;i++){
-                final int target=i;tabs[i]=button(i==0?"应用":"快捷功能",()->setTab(target));
-                LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(compact?32:36),1);if(i==0)p.rightMargin=dp(6);
-                tabRow.addView(tabs[i],p);
-            }
-            selectedScroll.addView(tabRow);
             body=new FrameLayout(c);addView(body,new LinearLayout.LayoutParams(-1,0,1));
             list=new ListView(c);list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setPadding(0,dp(2),0,dp(2));
             list.setVerticalScrollBarEnabled(false);list.setSelector(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
@@ -154,7 +137,7 @@ final class AppList {
                 public void onScrollStateChanged(AbsListView v,int state){scrolling=state!=SCROLL_STATE_IDLE;updateIndex();}
                 public void onScroll(AbsListView v,int first,int count,int total){updateIndex();}
             });
-            renderSelected();setTab(0);
+            renderSelected();refreshRows();
         }
         int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
         int appTileHeight(){return compact?66:72;}
@@ -196,7 +179,7 @@ final class AppList {
         }
         void finishSaving(boolean success){
             if(disposed||!saving)return;saving=false;
-            if(success){editing=false;if(tab!=0)setTab(0);}else Toast.makeText(c,"保存失败，请重试",Toast.LENGTH_SHORT).show();
+            if(success){editing=false;}else Toast.makeText(c,"保存失败，请重试",Toast.LENGTH_SHORT).show();
             renderSelected();adapter.notifyDataSetChanged();
         }
         void toggle(ShortcutTarget target){
@@ -210,10 +193,10 @@ final class AppList {
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
             manage.setText(saving?"保存中…":editing?"完成":"管理");manage.setEnabled(!saving);
-            help.setVisibility(editing&&!compact?VISIBLE:GONE);tabRow.setVisibility(editing?VISIBLE:GONE);
+            help.setVisibility(editing&&!compact?VISIBLE:GONE);
             selectedRows.removeAllViews();
             if(chosen.isEmpty()){
-                TextView hint=label(editing?"点击下方应用或快捷功能添加":"点击管理添加应用或快捷功能",12,secondary);hint.setGravity(Gravity.CENTER);
+                TextView hint=label(editing?"点击下方应用添加":"点击管理添加应用",12,secondary);hint.setGravity(Gravity.CENTER);
                 selectedRows.addView(hint,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
             }
             for(int start=0;start<chosen.size();start+=4){
@@ -224,7 +207,7 @@ final class AppList {
                         ShortcutTarget target=chosen.get(position);child=tile(target);child.setTag(position);
                         child.setOnClickListener(v->{if(!saving){if(editing)toggle(target);else launch.accept(target);}});
                         child.setOnLongClickListener(v->editing&&!saving&&v.startDragAndDrop(ClipData.newPlainText("shortcut-target",target.key()),new View.DragShadowBuilder(v),target.key(),0));
-                        child.setContentDescription(target.label+(target.isShortcut()?"，"+target.appLabel:"")+(editing?"，点击移除，长按拖动调整顺序":"，点击打开"));
+                        child.setContentDescription(target.label+(editing?"，点击移除，长按拖动调整顺序":"，点击打开"));
                     }else child=new View(c);
                     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(2),0,dp(2),0);row.addView(child,p);
                 }
@@ -308,29 +291,18 @@ final class AppList {
             if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
             image.setImageDrawable(icon);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
             int iconSize=dp(dense?32:36);artwork.addView(image,new FrameLayout.LayoutParams(iconSize,iconSize,Gravity.CENTER));
-            if(target.isShortcut())for(AppCatalog.App app:apps)if(app.pkg.equals(target.pkg)){
-                ImageView owner=new ImageView(c);Drawable badge=app.icon;
-                if(badge!=null&&badge.getConstantState()!=null)badge=badge.getConstantState().newDrawable(c.getResources()).mutate();
-                owner.setImageDrawable(badge);owner.setScaleType(ImageView.ScaleType.FIT_CENTER);owner.setPadding(dp(1),dp(1),dp(1),dp(1));
-                owner.setBackground(round(container,7));owner.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-                FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(14),dp(14),Gravity.BOTTOM|Gravity.CENTER_HORIZONTAL);b.leftMargin=dp(26);artwork.addView(owner,b);break;
-            }
             if(editing) {
                 TextView badge=label(selectedIndex(target.key())>=0?"−":"+",16,accent);badge.setGravity(Gravity.CENTER);badge.setBackground(round(tonal,12));badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
                 FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(22),dp(22),Gravity.TOP|Gravity.RIGHT);artwork.addView(badge,b);
             }
             TextView title=label(target.label,11,text);title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setSingleLine(true);title.setIncludeFontPadding(false);title.setEllipsize(TextUtils.TruncateAt.END);
             cell.addView(title,new LinearLayout.LayoutParams(-1,dp(17)));
-            cell.setContentDescription(target.label+(target.isShortcut()?"，"+target.appLabel:"")+(editing?(selectedIndex(target.key())>=0?"，已选，点击移除":"，点击添加"):""));
+            cell.setContentDescription(target.label+(editing?(selectedIndex(target.key())>=0?"，已选，点击移除":"，点击添加"):""));
             return cell;
-        }
-        void setTab(int next){
-            tab=next;for(int i=0;i<tabs.length;i++)tabs[i].setBackground(ripple(i==tab?tonal:Color.TRANSPARENT));
-            if(tab==1&&!shortcutRequested)loadShortcuts();refreshRows();list.setSelection(0);
         }
         int sectionIndex(String section){int position=section==null||section.length()!=1?-1:ALPHABET.indexOf(section);return position>=0?position:26;}
         void refreshRows(){
-            visible.clear();for(ShortcutTarget target:tab==0?appRows:shortcuts)if(selectedIndex(target.key())<0)visible.add(target);rows.clear();Arrays.fill(sectionPositions,-1);
+            visible.clear();for(ShortcutTarget target:appRows)if(selectedIndex(target.key())<0)visible.add(target);rows.clear();Arrays.fill(sectionPositions,-1);
             for(int letter=0;letter<ALPHABET.length();letter++){
                 ArrayList<ShortcutTarget> group=new ArrayList<>();for(ShortcutTarget target:visible)if(sectionIndex(target.section)==letter)group.add(target);
                 if(group.isEmpty())continue;
@@ -338,21 +310,10 @@ final class AppList {
                 for(int start=0;start<group.size();start+=4)rows.add(new AppRow(null,List.copyOf(group.subList(start,Math.min(start+4,group.size())))));
             }
             adapter.notifyDataSetChanged();boolean noRows=rows.isEmpty();
-            empty.setText(tab==1?(shortcutLoading?"正在读取应用快捷功能…":shortcutMessage):"暂无可启动的应用");
+            empty.setText("暂无可启动的应用");
             empty.setVisibility(noRows?VISIBLE:GONE);list.setVisibility(VISIBLE);updateIndex();bubble.setVisibility(GONE);
         }
-        void applyShortcuts(AppCatalog.Shortcuts result){
-            shortcuts.clear();shortcuts.addAll(result.items);shortcutMessage=result.message;
-            for(int i=0;i<chosen.size();i++)for(ShortcutTarget real:shortcuts)if(chosen.get(i).key().equals(real.key())){chosen.set(i,real);break;}
-        }
-        void loadShortcuts(){
-            shortcutRequested=true;shortcutLoading=true;
-            worker.execute(()->{
-                AppCatalog.Shortcuts result=AppCatalog.loadShortcuts(c);
-                main.post(()->{if(disposed)return;shortcutLoading=false;if(!result.isCurrent()){loadShortcuts();return;}applyShortcuts(result);renderSelected();refreshRows();});
-            });
-        }
-        @Override protected void onDetachedFromWindow(){disposed=true;main.removeCallbacksAndMessages(null);worker.shutdownNow();super.onDetachedFromWindow();}
+        @Override protected void onDetachedFromWindow(){disposed=true;main.removeCallbacksAndMessages(null);super.onDetachedFromWindow();}
 
         final class IndexBar extends View {
             final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);

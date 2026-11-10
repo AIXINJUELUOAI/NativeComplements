@@ -22,6 +22,7 @@ public final class LauncherGuard extends XposedModule {
     private BroadcastReceiver receiver,historyReceiver;
     private int claims;
     private RecentsFilter recents;
+    private IBinder visualLease;
     @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&(PACKAGE.equals(p.getProcessName())||p.getProcessName().startsWith(PACKAGE+":"));}
     @Override public synchronized void onPackageLoaded(PackageLoadedParam p){
         if(!eligible||attempted||!PACKAGE.equals(p.getPackageName()))return;attempted=true;
@@ -56,6 +57,7 @@ public final class LauncherGuard extends XposedModule {
                 return chain.proceed();
             }));
             note("GUARD_READY hooks=3");
+            BackVisual.install(this,loader);
             try{recents=new RecentsFilter(loader,this::note);recents.install(this);}
             catch(Throwable failure){recents=null;note("RECENTS_DISABLED "+failure.getClass().getSimpleName());}
 
@@ -66,6 +68,7 @@ public final class LauncherGuard extends XposedModule {
     }
     private void connect(Context service){
         disconnect();context=service.getApplicationContext();
+        BackVisual.publish(context);
         receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent intent){
             if(!STATE.equals(intent.getAction()))return;
             try{if(getSentFromUid()!=context.getPackageManager().getApplicationInfo(BackBridge.PACKAGE,0).uid)return;}catch(Exception e){return;}
@@ -73,6 +76,7 @@ public final class LauncherGuard extends XposedModule {
             android.os.Bundle extras=intent.getExtras();
             IBinder lease=extras==null?null:extras.getBinder("lease");
             if(lease==null){gate.disable();return;}
+            if(lease!=visualLease){visualLease=lease;BackVisual.publish(context);}
             boolean accepted=gate.update(intent.getIntExtra("width",0),intent.getIntExtra("height",0),intent.getIntArrayExtra("rects"),intent.getIntArrayExtra("handleRects"),lease::isBinderAlive);
             note(accepted?"GUARD_STATE enabled":"GUARD_STATE rejected-geometry");
         }};
@@ -85,6 +89,6 @@ public final class LauncherGuard extends XposedModule {
             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
         context.sendBroadcast(new Intent(QUERY).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
-    private void disconnect(){gate.disable();if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
+    private void disconnect(){gate.disable();visualLease=null;if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
     private void note(String s){try{log(4,"CornerGuard",s);}catch(Throwable ignored){}}
 }

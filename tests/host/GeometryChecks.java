@@ -4,20 +4,25 @@ public final class GeometryChecks {
     static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
     public static void main(String[] args){
         Geometry.Placement wider=Geometry.place(1200,true,0,0,5000,3000,32);
-        check(Math.abs(wider.width()*wider.scale()-(5000-64))<.01f,"wide canvas fits width when height would overflow");
+        check(Math.abs(wider.width()*wider.scale()-(5000-64)*.95f)<.01f,"wide landscape canvas reserves five percent gesture feedback");
         Geometry.Placement taller=Geometry.place(1200,false,0,0,5000,3000,32);
         check(Math.abs(taller.height()*taller.scale()-(3000-64))<.01f,"portrait canvas fills landscape safe height");
         for(boolean app:new boolean[]{false,true}){
             Geometry.Placement cameraOnly=Geometry.place(1200,app,140,0,2670,1200,12);
             check(cameraOnly.x()==152,"camera-side cutout plus margin");
-            check(Math.abs(cameraOnly.height()*cameraOnly.scale()-1176)<.01f,"camera-only landscape uses 1176px");
-            check(cameraOnly.y()==12,"no hidden status-bar top reservation");
+            check(Math.abs(cameraOnly.height()*cameraOnly.scale()-1176*(app?.95f:1))<.01f,"only landscape canvas reserves feedback space");
+            check(Math.abs(cameraOnly.y()-(1200-cameraOnly.height()*cameraOnly.scale())/2)<.01f,"canvas stays vertically centered");
+            if(app){
+                float feedback=GestureMath.horizontalScale(cameraOnly.scale(),1000,48,Math.min(2662f/cameraOnly.width(),1192f/cameraOnly.height()));
+                check(feedback>cameraOnly.scale(),"rightward gesture visibly enlarges");
+                check(cameraOnly.y()+cameraOnly.height()*feedback<1200,"rightward feedback fits display");
+            }
             check(cameraOnly.y()+cameraOnly.height()*cameraOnly.scale()>1127,"no hidden navigation-bar reservation");
         }
         for(boolean app:new boolean[]{false,true}){
             Geometry.Placement actual=Geometry.place(1200,app,140,126,2670,1127,12);
             check(actual.x()==152,"landscape anchored at safe left");
-            check(Math.abs(actual.height()*actual.scale()-977)<.01f,"977px of 1001px safe height");
+            check(Math.abs(actual.height()*actual.scale()-977*(app?.95f:1))<.01f,"landscape feedback space fits safe height");
             check(actual.y()>=138&&actual.y()+actual.height()*actual.scale()<=1115.01f,"status/navigation safe margins");
         }
         for(boolean app:new boolean[]{false,true})for(boolean display:new boolean[]{false,true}){

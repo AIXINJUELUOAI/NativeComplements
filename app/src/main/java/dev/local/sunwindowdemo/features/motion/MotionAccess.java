@@ -71,14 +71,22 @@ public final class MotionAccess {
             Bundle b=context.getContentResolver().call(MotionStore.URI,"read",null,null);if(b==null)throw new IllegalStateException("motion config missing");
             enabled=b.getBoolean("enabled");Map<Integer,Integer> rules=new HashMap<>();Map<Integer,String> next=new HashMap<>();
             String[] packages=b.getStringArray("packages");int[] modes=b.getIntArray("modes");
-            if(enabled&&packages!=null&&modes!=null)for(int n=0;n<Math.min(300,Math.min(packages.length,modes.length));n++){
-                String pkg=packages[n];if(modes[n]!=1&&modes[n]!=2||pkg==null||!pkg.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+")
-                    ||pkg.equals("dev.local.sunwindowdemo")||pkg.equals("com.android.systemui")||pkg.equals("com.google.android.apps.nexuslauncher"))continue;
-                try{ApplicationInfo info=context.getPackageManager().getApplicationInfo(pkg,0);
-                    if(info.uid<10000||(info.flags&ApplicationInfo.FLAG_PERSISTENT)!=0)continue;
+            Map<String,Integer> overrides=new HashMap<>();
+            if(packages!=null&&modes!=null)for(int n=0;n<Math.min(300,Math.min(packages.length,modes.length));n++)
+                if(packages[n]!=null&&modes[n]>=0&&modes[n]<=2)overrides.put(packages[n],modes[n]);
+            if(enabled){
+                int fallback=MotionPolicy.resolve(b.getInt("default_mode",0),null);
+                List<ApplicationInfo> installed=context.getPackageManager().getInstalledApplications(0);
+                Set<Integer> excluded=new HashSet<>();
+                for(ApplicationInfo info:installed)if(info.uid<10000||(info.flags&ApplicationInfo.FLAG_PERSISTENT)!=0
+                    ||Set.of("dev.local.sunwindowdemo","com.android.systemui","com.google.android.apps.nexuslauncher").contains(info.packageName))excluded.add(info.uid);
+                for(ApplicationInfo info:installed){
+                    if(excluded.contains(info.uid))continue;
+                    int mode=MotionPolicy.resolve(fallback,overrides.get(info.packageName));
+                    if(mode==MotionPolicy.ALLOW)continue;
                     // Shared UIDs cannot be isolated by package. The strongest selected rule wins.
-                    rules.merge(info.uid,modes[n],Math::max);next.put(info.uid,pkg);
-                }catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
+                    rules.merge(info.uid,mode,Math::max);next.put(info.uid,info.packageName);
+                }
             }
             targets.clear();targets.putAll(next);policy.configure(rules,SystemClock.elapsedRealtime());reconcile();
         }catch(Exception e){enabled=false;policy.configure(Map.of(),SystemClock.elapsedRealtime());reconcile();failure(e);status("配置暂不可用，已释放限制");}

@@ -10,12 +10,16 @@ final class TaskDecoration {
     private SurfaceControl bar;
     private boolean drawn;
     private int color;
+    private Boolean backgroundDark;
+    void backgroundDark(boolean dark){backgroundDark=dark;}
     int color(){return color==0?0xfff0f2f2:color;}
     private int resolveColor(Object task,boolean horizontal){
         if(horizontal)return WindowPolicy.handleColor(true,-1,false);
-        int appearance=-1;boolean night=false;
-        try{night=(a.config(task,false).uiMode&0x30)==0x20;}catch(Exception ignored){}
-        try{Object window=a.call(task,"getTopVisibleAppMainWindow");
+        if(backgroundDark!=null)return WindowPolicy.handleColor(false,-1,backgroundDark);
+        int appearance=-1;boolean night=true;
+        try{Object display=a.call(task,"getDisplayContent");
+            Object window=a.field(a.call(display,"getDisplayPolicy"),"mTopFullscreenOpaqueWindowState");
+            if(window!=null&&a.call(window,"getTask")==task)window=null;
             if(window!=null)appearance=(Integer)a.field(a.field(a.field(window,"mAttrs"),"insetsFlags"),"appearance");
         }catch(Exception ignored){}
         return WindowPolicy.handleColor(false,appearance,night);

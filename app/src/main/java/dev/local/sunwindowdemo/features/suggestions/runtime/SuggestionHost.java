@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.hardware.camera2.CameraManager;
 import android.hardware.display.DisplayManager;
 import android.media.*;
@@ -38,6 +39,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private PowerManager.WakeLock awakeLock;
     private Bundle settings=new Bundle();
     private View view;
+    private SuggestionDrag drag;
     private final Set<String> litCameras=new HashSet<>();
     private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,inputRunning,chooser;
     private boolean torchUsed,opening;
@@ -49,7 +51,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private long clipboardTimestamp;
     private String code,smsBody,mapText,displayedSmsBody;
     private long displayedSmsUntil;
-    private long codeUntil,contentUntil,torchUntil,awakeUntil;
+    private long codeUntil,contentUntil,torchUntil,torchOfferUntil,bluetoothUntil,awakeUntil;
     private SuggestionRules.Link link;
     private List<String> maps=List.of();
     private final Map<String,Notice> notices=new LinkedHashMap<>();
@@ -66,7 +68,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             }else if(SuggestionStore.AWAKE.equals(action)){
                 long time=intent.getLongExtra("time",0);
                 if(getSentFromUid()==1000&&enabled("awake")&&!locked()&&SystemClock.uptimeMillis()-time>=0
-                        &&SystemClock.uptimeMillis()-time<2000&&(awakeLock==null||!awakeLock.isHeld())){awakeUntil=now()+15000;render();}
+                        &&SystemClock.uptimeMillis()-time<2000&&(awakeLock==null||!awakeLock.isHeld())){awakeUntil=offerUntil();render();}
             }else if(Intent.ACTION_SCREEN_OFF.equals(action)){awakeUntil=0;releaseAwake();removeView();chooser=false;}
             else render();
         }
@@ -76,7 +78,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             boolean changed=litCameras.contains(camera)!=enabled;
             if(enabled){litCameras.add(camera);lastTorchCamera=camera;}else litCameras.remove(camera);
             if(camera.equals(requestedTorchCamera)&&requestedTorchMode!=null&&requestedTorchMode==enabled){requestedTorchCamera=null;requestedTorchMode=null;}
-            else if(changed){torchUsed=false;torchUntil=0;}
+            else if(changed){torchUsed=false;torchUntil=0;torchOfferUntil=enabled?offerUntil():0;}
             render();
         }
         @Override public void onTorchModeUnavailable(String camera){litCameras.remove(camera);render();}
@@ -93,6 +95,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             Context display=context.createDisplayContext(context.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY));
             windowContext=new android.view.ContextThemeWrapper(display.createWindowContext(WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,null),android.R.style.Theme_DeviceDefault_DayNight);
             moduleContext=context.createPackageContext(Wire.PKG,0);wm=windowContext.getSystemService(WindowManager.class);
+            drag=new SuggestionDrag(windowContext,wm);
             SystemUiHost.trust(new WindowManager.LayoutParams());
             clipboard=context.getSystemService(ClipboardManager.class);cameras=context.getSystemService(CameraManager.class);audio=context.getSystemService(AudioManager.class);
             awakeLock=context.getSystemService(PowerManager.class).newWakeLock(PowerManager.SCREEN_BRIGHT_WAKE_LOCK,"NativeComplements:SuggestionAwake");awakeLock.setReferenceCounted(false);
@@ -117,8 +120,16 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 if(next==null)throw new IllegalStateException();
                 main.post(()->{
                     if(closed)return;
-                    if(!Objects.equals(settings.getString("bluetooth_app"),next.getString("bluetooth_app")))bluetoothUsed=false;
+                    long delta=(next.getInt("duration",60)-settings.getInt("duration",60))*1000L;
+                    long time=now();
+                    if(codeUntil>time)codeUntil+=delta;if(contentUntil>time)contentUntil+=delta;
+                    if(torchOfferUntil>time)torchOfferUntil+=delta;if(bluetoothUntil>time)bluetoothUntil+=delta;if(awakeUntil>time)awakeUntil+=delta;
+                    boolean offerTorch=next.getBoolean("enabled")&&next.getBoolean("torch")&&!enabled("torch");
+                    boolean offerBluetooth=next.getBoolean("enabled")&&next.getBoolean("bluetooth")&&(!enabled("bluetooth")
+                        ||!Objects.equals(settings.getString("bluetooth_app"),next.getString("bluetooth_app")));
                     settings=next;
+                    if(offerTorch&&!litCameras.isEmpty()){torchUsed=false;torchOfferUntil=offerUntil();}
+                    if(offerBluetooth&&audioConnected){bluetoothUsed=false;bluetoothUntil=offerUntil();}
                     if(!enabled("otp")){code=null;smsBody=null;displayedSmsBody=null;notices.clear();}
                     if(!enabled("awake")){awakeUntil=0;releaseAwake();}
                     if(!settings.getBoolean("enabled")){link=null;mapText=null;clipboardTimestamp=0;}
@@ -141,7 +152,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     ||type==AudioDeviceInfo.TYPE_BLE_HEADSET||type==AudioDeviceInfo.TYPE_BLE_SPEAKER
                     ||type==AudioDeviceInfo.TYPE_HEARING_AID)connected=true;
         }}catch(RuntimeException ignored){}
-        if(connected!=audioConnected){audioConnected=connected;bluetoothUsed=false;}render();
+        if(connected!=audioConnected){audioConnected=connected;bluetoothUsed=false;bluetoothUntil=connected?offerUntil():0;}render();
     }
     private void clipboardChanged(){
         if(closed||!settings.getBoolean("enabled")||locked())return;
@@ -153,18 +164,19 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             if(value.isEmpty()||timestamp==clipboardTimestamp&&value.hashCode()==clipboardHash)return;
             clipboardTimestamp=timestamp;clipboardHash=value.hashCode();
             String extracted=enabled("otp")?SuggestionRules.otp(value,true):null;
-            if(extracted!=null){if(!extracted.equals(code))smsBody=null;code=extracted;codeUntil=now()+120000;}
+            if(extracted!=null){if(!extracted.equals(code))smsBody=null;code=extracted;codeUntil=offerUntil();}
             link=enabled("links")?SuggestionRules.link(value):null;
             mapText=enabled("maps")&&link==null&&extracted==null?SuggestionRules.address(value):null;
-            contentUntil=now()+60000;chooser=false;render();
+            contentUntil=offerUntil();chooser=false;render();
         }catch(RuntimeException e){status("CLIPBOARD_UNAVAILABLE");}
     }
     private static long now(){return SystemClock.elapsedRealtime();}
+    private long offerUntil(){return now()+Math.max(5,Math.min(300,settings.getInt("duration",60)))*1000L;}
     private boolean locked(){return !context.getSystemService(PowerManager.class).isInteractive()||context.getSystemService(KeyguardManager.class).isKeyguardLocked();}
     private void sms(String body){
         if(!enabled("otp"))return;
         String value=SuggestionRules.bounded(body),extracted=SuggestionRules.otp(value,false);
-        if(extracted==null)return;code=extracted;smsBody=value;codeUntil=now()+120000;render();
+        if(extracted==null)return;code=extracted;smsBody=value;codeUntil=offerUntil();render();
     }
     void notification(NotificationListenerService source,StatusBarNotification sbn){
         if(closed||!enabled("otp")||!enabled("hide_sms")||sbn==null)return;
@@ -231,16 +243,26 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         }
         return List.copyOf(result);
     }
-    private ImageView addButton(LinearLayout row,Drawable drawable,String description,Runnable click){
+    private int buttonSize(){return Math.max(32,Math.min(80,settings.getInt("size",48)));}
+    private int buttonPadding(float base){int size=buttonSize();return dp((Math.max(48,size)-size)/2f+base*size/48f);}
+    private Drawable buttonBackground(Drawable drawable){int inset=dp((Math.max(48,buttonSize())-buttonSize())/2f);return inset==0?drawable:new InsetDrawable(drawable,inset);}
+    private ImageView addButton(LinearLayout row,Drawable drawable,String description,Runnable click,Runnable dismiss){
         ImageView button=new ImageView(windowContext);button.setImageDrawable(drawable);button.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        button.setPadding(dp(9),dp(9),dp(9),dp(9));button.setBackground(background());button.setElevation(dp(4));
+        int pad=buttonPadding(9);button.setPadding(pad,pad,pad,pad);button.setBackground(buttonBackground(background()));button.setElevation(dp(4));
         button.setContentDescription(description);button.setFocusable(false);button.setClickable(true);
         button.setOnClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.CONFIRM);click.run();});
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(dp(48),dp(48));p.setMargins(dp(5),dp(5),dp(5),dp(5));row.addView(button,p);return button;
+        if(drag!=null)drag.attach(button,()->{dismiss.run();render();});
+        int touch=dp(Math.max(48,buttonSize()));
+        WindowMetrics metrics=wm.getCurrentWindowMetrics();
+        android.graphics.Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()|WindowInsets.Type.displayCutout());
+        int columns=Math.max(1,(metrics.getBounds().width()-bars.left-bars.right-dp(30))/(touch+dp(10)));
+        LinearLayout line=row.getChildCount()==0?null:(LinearLayout)row.getChildAt(row.getChildCount()-1);
+        if(line==null||line.getChildCount()>=columns){line=new LinearLayout(windowContext);row.addView(line);}
+        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(touch,touch);p.setMargins(dp(5),dp(5),dp(5),dp(5));line.addView(button,p);return button;
     }
-    private ImageView addAppButton(LinearLayout row,Drawable drawable,String description,Runnable click){
-        ImageView button=addButton(row,drawable,description,click);
-        button.setBackground(null);button.setElevation(0);button.setPadding(dp(4),dp(4),dp(4),dp(4));return button;
+    private ImageView addAppButton(LinearLayout row,Drawable drawable,String description,Runnable click,Runnable dismiss){
+        ImageView button=addButton(row,drawable,description,click,dismiss);
+        int pad=buttonPadding(4);button.setBackground(null);button.setElevation(0);button.setPadding(pad,pad,pad,pad);return button;
     }
     private void render(){
         try{renderContent();}catch(RuntimeException failure){removeView();status("RENDER_UNAVAILABLE");}
@@ -252,10 +274,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(displayedSmsUntil>now())main.postDelayed(expire,displayedSmsUntil-now());
         for(Notice notice:notices.values())main.postDelayed(expire,Math.max(1,notice.received+60000-now()));
         if(torchUntil>now())main.postDelayed(expire,torchUntil-now());
+        if(torchOfferUntil>now())main.postDelayed(expire,torchOfferUntil-now());
+        if(bluetoothUntil>now())main.postDelayed(expire,bluetoothUntil-now());
         if(awakeUntil>now())main.postDelayed(expire,awakeUntil-now());
         removeView();if(locked()){awakeUntil=0;releaseAwake();return;}
         if(!settings.getBoolean("enabled")||systemOverlay)return;
-        LinearLayout row=new LinearLayout(windowContext);row.setGravity(Gravity.CENTER);row.setPadding(dp(3),dp(3),dp(3),dp(3));
+        LinearLayout row=new LinearLayout(windowContext);row.setOrientation(LinearLayout.VERTICAL);row.setGravity(settings.getBoolean("right")?Gravity.RIGHT:Gravity.LEFT);row.setPadding(dp(3),dp(3),dp(3),dp(3));
         if(chooser&&mapText!=null){
             row.setOrientation(LinearLayout.VERTICAL);row.setBackground(background());
             for(String pkg:maps){
@@ -266,25 +290,25 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 item.setOnClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.CONFIRM);openMap(pkg);});row.addView(item,new LinearLayout.LayoutParams(dp(228),dp(50)));
             }
         }else{
-            if(enabled("torch")&&(!torchUsed&&!litCameras.isEmpty()||torchUntil>now())){
-                ImageView torch=addButton(row,glyph(litCameras.isEmpty()?"ic_suggestion_torch_off":"ic_suggestion_torch"),litCameras.isEmpty()?"打开手电筒":"关闭手电筒",this::toggleTorch);
-                torch.setBackground(circle(litCameras.isEmpty()?0xff73777f:0xffc59618));
+            if(enabled("torch")&&(!torchUsed&&!litCameras.isEmpty()&&torchOfferUntil>now()||torchUntil>now())){
+                ImageView torch=addButton(row,glyph(litCameras.isEmpty()?"ic_suggestion_torch_off":"ic_suggestion_torch"),litCameras.isEmpty()?"打开手电筒":"关闭手电筒",this::toggleTorch,()->{torchUsed=true;torchUntil=0;torchOfferUntil=0;});
+                torch.setBackground(buttonBackground(circle(litCameras.isEmpty()?0xff73777f:0xffc59618)));
                 torch.setEnabled(requestedTorchMode==null);torch.setAlpha(requestedTorchMode==null?1:.5f);
             }
             if(enabled("awake")&&awakeUntil>now()){
                 ImageView awake=addButton(row,glyph("ic_suggestion_awake"),"本次保持屏幕常亮",()->{
                 if(locked())return;
                 try{awakeLock.acquire();awakeUntil=0;render();}catch(RuntimeException e){Toast.makeText(context,"常亮暂不可用",Toast.LENGTH_SHORT).show();}
-                });
-                awake.setBackground(circle(0xfff2d87d));
+                },()->awakeUntil=0);
+                awake.setBackground(buttonBackground(circle(0xfff2d87d)));
             }
             String bluetooth=settings.getString("bluetooth_app","");
-            if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
+            if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&bluetoothUntil>now()&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
                 Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);open(launch,bluetooth,()->{bluetoothUsed=true;render();});
-            });
+            },()->bluetoothUsed=true);
             if(enabled("otp")&&code!=null&&!inputRunning){
-                ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input);
-                otp.setBackground(circle(0xff2866c7));
+                ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input,()->{code=null;smsBody=null;displayedSmsBody=null;displayedSmsUntil=0;});
+                otp.setBackground(buttonBackground(circle(0xff2866c7)));
                 otp.setEnabled(!inputRunning);otp.setAlpha(inputRunning?.5f:1);
                 int generation=renderGeneration;
                 row.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener(){
@@ -303,12 +327,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 addAppButton(row,icon(target.packageName()),target.token()?"打开应用识别分享口令":"打开分享链接",()->{
                     Intent launch=target.token()?context.getPackageManager().getLaunchIntentForPackage(target.packageName()):new Intent(Intent.ACTION_VIEW,Uri.parse(target.value())).setPackage(target.packageName());
                     open(launch,target.packageName(),()->{if(Objects.equals(link,target))link=null;render();});
-                });
+                },()->link=null);
             }
             if(enabled("maps")&&mapText!=null){
                 maps=mapApps();if(!maps.isEmpty()){ImageView map=addButton(row,maps.size()==1?icon(maps.get(0)):glyph("ic_suggestion_navigation"),"用地图搜索地点",()->{
                     if(maps.size()==1)openMap(maps.get(0));else{chooser=true;render();}
-                });if(maps.size()==1){map.setBackground(null);map.setElevation(0);map.setPadding(dp(4),dp(4),dp(4),dp(4));}}
+                },()->{mapText=null;chooser=false;});if(maps.size()==1){int pad=buttonPadding(4);map.setBackground(null);map.setElevation(0);map.setPadding(pad,pad,pad,pad);}}
             }
         }
         if(row.getChildCount()==0)return;
@@ -382,6 +406,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     }
     private void releaseAwake(){if(awakeLock!=null&&awakeLock.isHeld())try{awakeLock.release();}catch(RuntimeException ignored){}}
     private void removeView(){
+        if(drag!=null)drag.cancel();
         renderGeneration++;
         if(view!=null){try{wm.removeViewImmediate(view);}catch(RuntimeException ignored){}view=null;}
     }

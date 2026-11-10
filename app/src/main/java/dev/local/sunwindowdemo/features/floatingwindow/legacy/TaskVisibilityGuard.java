@@ -13,6 +13,7 @@ final class TaskVisibilityGuard {
     private final SurfaceControl surface;
     private volatile boolean finished;
     private final Set<SurfaceControl> leashes=new LinkedHashSet<>();
+    private Boolean backdropOriginal;
 
     TaskVisibilityGuard(FrameworkAccess access,Object task)throws Exception {
         a=access;this.task=task;
@@ -21,6 +22,27 @@ final class TaskVisibilityGuard {
     }
 
     boolean holding(){return !finished;}
+
+    // Alpha alone does not change WM occlusion. Preserve the native underlying
+    // activities before cancelling Back, while its launch-behind is still live.
+    void preserveBackdrop()throws Exception {
+        if(finished)throw new IllegalStateException("mask already released");
+        if(backdropOriginal==null)backdropOriginal=a.bool(task,"isForceTranslucent");
+        a.call(task,"setForceTranslucent",new Class<?>[]{boolean.class},true);
+    }
+
+    boolean originalTranslucent()throws Exception {
+        return backdropOriginal!=null?backdropOriginal:a.bool(task,"isForceTranslucent");
+    }
+
+    // Call only after the Session has durably saved the original value.
+    void adoptBackdrop(){backdropOriginal=null;}
+
+    private void restoreBackdrop()throws Exception {
+        if(backdropOriginal==null)return;
+        a.call(task,"setForceTranslucent",new Class<?>[]{boolean.class},backdropOriginal);
+        backdropOriginal=null;
+    }
 
     void hide()throws Exception {
         if(finished)return;
@@ -40,14 +62,16 @@ final class TaskVisibilityGuard {
     // leash too, and restore it when ownership changes; never mask a display root.
     void inTransaction(SurfaceControl.Transaction transaction,SurfaceControl leash){
         if(finished)return;
-        if(surface.isValid())transaction.setAlpha(surface,0);
         if(leash!=null&&leash.isValid()&&leash!=surface){
-            leashes.add(leash);transaction.setAlpha(leash,0);
+            leashes.add(leash);
         }
+        for(SurfaceControl held:leashes)if(held.isValid())transaction.setAlpha(held,0);
+        if(surface.isValid())transaction.setAlpha(surface,0);
     }
 
-    void transfer(){
+    void transfer()throws Exception {
         if(finished)return;
+        restoreBackdrop();
         restoreLeashes(0);finished=true;
     }
 
@@ -57,6 +81,7 @@ final class TaskVisibilityGuard {
         // Restore only the exact surfaces we changed, never a replacement task.
         float alpha=Float.isFinite(ownerAlpha)?Math.max(0,Math.min(1,ownerAlpha)):0;
         if(surface.isValid())pending(alpha);
+        restoreBackdrop();
         restoreLeashes(alpha);
         finished=true;
     }

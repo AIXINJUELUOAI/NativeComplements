@@ -13,6 +13,7 @@ final class Wire {
     static final Binder LEASE = new Binder();
     static final String CHANNEL = PKG + ".frames.v16";
     static final int MESSAGE = IBinder.FIRST_CALL_TRANSACTION;
+    static final int PREPARE_BACK=MESSAGE+1,CANCEL_BACK=MESSAGE+2,FINISH_BACK=MESSAGE+3;
     private static volatile IBinder endpoint;
     private static java.util.function.Consumer<Intent> listener;
     private static Intent pendingFrame;
@@ -59,13 +60,6 @@ final class Wire {
             .putExtra("token", token).putExtra("landscape", landscape).putExtra("hideRecents",new Config(context).hideRecents());
         sendRequest(context,i);
     }
-    static void openShortcut(Context context,ShortcutTarget target,PendingIntent launch){
-        if(!target.isShortcut()||!launch.isActivity())throw new IllegalArgumentException("shortcut activity");
-        Intent i=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
-            .putExtra("package",target.pkg).putExtra("taskId",-1).putExtra("token",token())
-            .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",target.user);
-        sendRequest(context,i);
-    }
     static void openIntent(Context context,String pkg,Intent original,ResultReceiver reply){
         if(!allowedPackage(pkg)||original==null||!pkg.equals(original.getPackage()))throw new IllegalArgumentException("suggestion target");
         Intent target=new Intent(original).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -103,6 +97,34 @@ final class Wire {
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
     static void send(Context c, String op) { send(c, op, PKG, -1, null, false); }
+    static boolean prepareBack(int task,String pkg,String token,BackVisual.Pose pose,android.view.SurfaceControl leash){
+        IBinder sink=endpoint;if(sink==null)return false;
+        Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+        try{data.writeInterfaceToken(CHANNEL);data.writeInt(task);data.writeString(pkg);data.writeString(token);
+            data.writeTypedObject(pose==null?null:pose.bounds(),0);data.writeFloat(pose==null?0:pose.radius());
+            data.writeTypedObject(leash,0);
+            if(!sink.transact(PREPARE_BACK,data,reply,0))return false;
+            reply.readException();return reply.readBoolean();
+        }catch(Exception e){return false;}finally{data.recycle();reply.recycle();}
+    }
+    static void cancelBack(String token){
+        IBinder sink=endpoint;if(sink==null)return;Parcel data=Parcel.obtain();
+        try{data.writeInterfaceToken(CHANNEL);data.writeString(token);sink.transact(CANCEL_BACK,data,null,IBinder.FLAG_ONEWAY);}
+        catch(Exception ignored){}finally{data.recycle();}
+    }
+    static android.view.SurfaceControl.Transaction finishBack(String token){
+        IBinder sink=endpoint;if(sink==null)return null;
+        Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+        try{data.writeInterfaceToken(CHANNEL);data.writeString(token);
+            if(!sink.transact(FINISH_BACK,data,reply,0))return null;
+            reply.readException();return reply.readTypedObject(android.view.SurfaceControl.Transaction.CREATOR);
+        }catch(Exception e){return null;}finally{data.recycle();reply.recycle();}
+    }
+    static void back(Context c,String pkg,int task,String token){
+        sendRequest(c,new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","GESTURE")
+            .putExtra("package",pkg).putExtra("taskId",task).putExtra("token",token).putExtra("predictiveEntry",true)
+            .putExtra("hideRecents",new Config(c).hideRecents()));
+    }
     static void control(Context c,String op,String token,float value,float x,float y) { control(c,op,token,-1,value,x,y); }
     static void control(Context c,String op,String token,int taskId,float value,float x,float y) {
         Intent i=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL)

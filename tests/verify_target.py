@@ -7,10 +7,11 @@ root=Path(__file__).resolve().parents[1]
 data=json.loads((root/'tests/target/new-members.json').read_text())
 classes=data['classes']
 checks={
+'Landroid/view/SurfaceControl$Transaction;':{'methods':[(name,'(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;') for name in ['hide','show']]},
 'Lcom/android/server/wm/RootWindowContainer;':{'methods':[('getDefaultDisplay','()Lcom/android/server/wm/DisplayContent;')]},
 'Lcom/android/server/wm/DisplayContent;':{'methods':[('getImeWindow','()Lcom/android/server/wm/WindowState;')],'fields':[('mCurrentFocus','Lcom/android/server/wm/WindowState;')]},
 'Lcom/android/server/wm/WindowContainer;':{'methods':[('assignChildLayers','(Landroid/view/SurfaceControl$Transaction;)V'),('forAllActivities','(Ljava/util/function/Consumer;)V')]},
-'Lcom/android/server/wm/TaskFragment;':{'methods':[('topRunningActivity','()Lcom/android/server/wm/ActivityRecord;')]},
+'Lcom/android/server/wm/TaskFragment;':{'methods':[('topRunningActivity','()Lcom/android/server/wm/ActivityRecord;'),('isForceTranslucent','()Z'),('setForceTranslucent','(Z)Z')]},
 'Lcom/android/server/wm/ActivityRecord;':{'methods':[('getRequestedOrientation','()I'),('getUid','()I')],'fields':[('packageName','Ljava/lang/String;')]},
 'Lcom/android/server/wm/WindowState;':{'methods':[('finishDrawing','(Landroid/view/SurfaceControl$Transaction;I)Z')]},
 'Landroid/app/Activity;':{'methods':[('onResume','()V'),('isInMultiWindowMode','()Z'),('dispatchMultiWindowModeChanged','(ZLandroid/content/res/Configuration;)V')]},
@@ -131,3 +132,17 @@ assert 'addToTemporaryAllowList(Ljava/lang/String;ILjava/lang/String;J)V' in con
 assert 'forceStopPackageAsUser(Ljava/lang/String;I)V' in continuation['classes']['android.app.ActivityManager']
 assert 'shellCommand(Ljava/io/FileDescriptor;Ljava/io/FileDescriptor;Ljava/io/FileDescriptor;[Ljava/lang/String;Landroid/os/ShellCallback;Landroid/os/ResultReceiver;)V' in continuation['classes']['android.os.IBinder']
 print('PASS: archived optional continuation, foreground observation, power and sensor-command signatures')
+
+# 0.5.3: patch the native Shell finish already sent before predictive preparation.
+back_finish=json.loads((root/'tests/target/back-finish-members.json').read_text())
+assert back_finish['sha256']==edge['apk_sha256']
+back_classes=back_finish['classes']
+assert any(m['signature']=='onFinish(IBinder, WindowContainerTransaction): void'
+           for m in back_classes['com.android.wm.shell.transition.Transitions']['methods'])
+for cls,name,kind in [
+ ('Transitions','mKnownTransitions','ArrayMap'),('Transitions','mMixpatchAnimations','ArrayList'),
+ ('Transitions.ActiveTransition','mStartT','SurfaceControl$Transaction'),
+ ('Transitions.ActiveTransition','mFinishT','SurfaceControl$Transaction'),
+ ('Transitions.ActiveTransition','mMerged','ArrayList'),('Transitions.ActiveTransition','mInfo','TransitionInfo')]:
+ assert any(f['name']==name and f['type']==kind for f in back_classes['com.android.wm.shell.transition.'+cls]['fields']),(cls,name,kind)
+print('PASS: archived Shell cached/merged finish transaction boundary; live flash-frame result remains unverified')

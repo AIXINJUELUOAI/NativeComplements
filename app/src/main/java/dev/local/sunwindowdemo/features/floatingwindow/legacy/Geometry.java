@@ -79,6 +79,8 @@ final class Geometry {
         if (availableW <= 0 || availableH <= 0) throw new IllegalArgumentException("safe area");
         float fit=Math.min((float)availableW/w,(float)availableH/h);
         scale=displayPortrait?Math.min(scale,fit):fit;
+        // Leave room for the rightward +2.5% handle feedback on a landscape canvas.
+        if(!displayPortrait&&appLandscape)scale*=.95f;
         if (!Float.isFinite(scale) || scale <= 0) throw new IllegalArgumentException("scale");
         return new Placement(w, h, scale,
             displayPortrait ? left + (right - left - w * scale) / 2f : left + margin,

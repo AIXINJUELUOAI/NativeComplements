@@ -19,6 +19,7 @@
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" />
         <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.local.sunwindowdemo.callblocking" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.motion.MotionProvider" android:authorities="dev.local.sunwindowdemo.motion" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.local.sunwindowdemo.iconlayers" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.local.sunwindowdemo.edgetouch" android:exported="true" android:directBootAware="true" />
         <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>

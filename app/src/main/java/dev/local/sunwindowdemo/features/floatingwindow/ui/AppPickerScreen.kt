@@ -42,9 +42,8 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
                 item { GroupTitle("菜单顺序 · ${selected.size} 项") }
                 if (selected.isEmpty()) item { Hint("从下方选择快捷应用，固定的全部应用入口始终保留。") }
                 items(selected, key = { "selected:$it" }) { pkg ->
-                    val targetPackage = if (pkg.startsWith("shortcut:v1:")) android.net.Uri.decode(pkg.split(':').getOrElse(3) { "" }) else pkg
-                    val app = catalog.firstOrNull { it.packageName == targetPackage }
-                    val label = if (pkg.startsWith("shortcut:v1:")) controller.preferences.targetLabels[pkg] ?: "${app?.label ?: targetPackage} · 快捷功能" else app?.label ?: pkg
+                    val app = catalog.firstOrNull { it.packageName == pkg }
+                    val label = app?.label ?: pkg
                     Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         Column(Modifier.fillMaxWidth().padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -87,7 +86,7 @@ fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
                     }
                 }
             }
-            item { Hint(if (blocked) "选中后，这些应用处于前台时不触发新的手势唤起。更改立即保存。" else "菜单顶部可保存多个应用和快捷功能；扇区显示前 ${controller.preferences.fanCount} 项。可在上方调整顺序，快捷功能在手势面板管理中添加。") }
+            item { Hint(if (blocked) "选中后，这些应用处于前台时不触发新的手势唤起。更改立即保存。" else "菜单顶部可保存多个应用；扇区显示前 ${controller.preferences.fanCount} 项。可在上方调整顺序，点击后直接打开应用小窗。") }
         }
     }
 }

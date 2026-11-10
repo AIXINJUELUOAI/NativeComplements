@@ -22,9 +22,11 @@ final class SensorCommand {
             ResultReceiver receiver=new ResultReceiver(null){@Override protected void onReceiveResult(int code,Bundle data){result.set(code);done.open();}};
             FileDescriptor fd=sink.getFileDescriptor();shell.invoke(binder,fd,fd,fd,args,null,receiver);
             if(!done.block(1500))throw new IllegalStateException("sensorservice command timeout");
-            if(result.get()!=0)throw new IllegalStateException("sensorservice status="+result.get());
+            if(!succeeded(args[0],result.get()))throw new IllegalStateException("sensorservice status="+result.get());
         }finally{Binder.restoreCallingIdentity(identity);}
     }
+    // get-uid-state returns dprintf's byte count ("active\n" = 7), rather than NO_ERROR.
+    static boolean succeeded(String command,int status){return status==0||"get-uid-state".equals(command)&&(status==5||status==7);}
     void restrict(String pkg)throws Exception{execute("set-uid-state",pkg,"idle","--user","0");}
     void restore(String pkg)throws Exception{execute("reset-uid-state",pkg,"--user","0");}
 }

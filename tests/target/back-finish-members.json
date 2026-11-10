@@ -1,0 +1,53 @@
+{
+  "artifact": "SystemUI.apk",
+  "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972",
+  "classes": {
+    "com.android.wm.shell.transition.Transitions": {
+      "methods": [
+        {
+          "name": "onFinish",
+          "signature": "onFinish(IBinder, WindowContainerTransaction): void",
+          "is_constructor": false,
+          "def_pos": 0
+        }
+      ],
+      "fields": [
+        {
+          "name": "mKnownTransitions",
+          "type": "ArrayMap",
+          "def_pos": 0
+        },
+        {
+          "name": "mMixpatchAnimations",
+          "type": "ArrayList",
+          "def_pos": 0
+        }
+      ]
+    },
+    "com.android.wm.shell.transition.Transitions.ActiveTransition": {
+      "methods": [],
+      "fields": [
+        {
+          "name": "mFinishT",
+          "type": "SurfaceControl$Transaction",
+          "def_pos": 5046
+        },
+        {
+          "name": "mInfo",
+          "type": "TransitionInfo",
+          "def_pos": 5131
+        },
+        {
+          "name": "mMerged",
+          "type": "ArrayList",
+          "def_pos": 5206
+        },
+        {
+          "name": "mStartT",
+          "type": "SurfaceControl$Transaction",
+          "def_pos": 5258
+        }
+      ]
+    }
+  }
+}

@@ -26,9 +26,10 @@ public final class BackBridge extends XposedModule {
     private final Handler main=new Handler(Looper.getMainLooper());
     private Field viewField,callbackField;
     private Method cancelBack;
+    private volatile Stroke settling;
     private static final class Stroke {
         float x,threshold,density;boolean left,armed;
-        long down;int stage,task,revision;String pkg;Object controller;
+        long down;int stage,task,revision;String pkg,token;Object controller;
     }
     @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&PACKAGE.equals(p.getProcessName());}
     @Override public synchronized void onPackageLoaded(PackageLoadedParam p){
@@ -45,6 +46,7 @@ public final class BackBridge extends XposedModule {
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         installSuggestionNotifications(p.getDefaultClassLoader());
         NotificationWindow.install(this,p.getDefaultClassLoader(),this::note);
+        installBackFinish(p.getDefaultClassLoader());
         try{
             ClassLoader cl=p.getDefaultClassLoader();
             Class<?> panel=Class.forName("com.android.systemui.navigationbar.gestural.BackPanelController",false,cl);
@@ -65,7 +67,7 @@ public final class BackBridge extends XposedModule {
                 // Cancel predictive back before the parent dispatches this physical UP to Shell.
                 Stroke committed=pending;pending=null;
                 try{cancelBack.invoke(callbackField.get(owner));}
-                catch(Exception ex){note("BACK_CANCEL_FAILED "+ex.getClass().getSimpleName());return chain.proceed();}
+                catch(Exception ex){if(committed!=null)Wire.cancelBack(committed.token);note("BACK_CANCEL_FAILED "+ex.getClass().getSimpleName());return chain.proceed();}
                 MotionEvent cancel=MotionEvent.obtain(e);cancel.setAction(MotionEvent.ACTION_CANCEL);
                 try{return chain.proceed(new Object[]{cancel});}finally{
                     cancel.recycle();if(committed!=null)main.post(()->waitForNativeBack(committed,0));
@@ -74,6 +76,55 @@ public final class BackBridge extends XposedModule {
             note("BACK_READY hooks=3 version=0.2.0-preview1");
             installScreenshotHooks(cl);
         }catch(Throwable e){for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}note("BACK_DISABLED "+e.getClass().getSimpleName());}
+    }
+    // Runs in hooked SystemUI only; optional exact target signatures are checked first.
+    @android.annotation.SuppressLint("BlockedPrivateApi")
+    private void installBackFinish(ClassLoader loader){
+        try{
+            Class<?> transitions=Class.forName("com.android.wm.shell.transition.Transitions",false,loader);
+            Class<?> active=Class.forName("com.android.wm.shell.transition.Transitions$ActiveTransition",false,loader);
+            Class<?> info=Class.forName("android.window.TransitionInfo",false,loader);
+            Class<?> change=Class.forName("android.window.TransitionInfo$Change",false,loader);
+            Field known=field(transitions,"mKnownTransitions"),mix=field(transitions,"mMixpatchAnimations");
+            Field start=field(active,"mStartT"),finish=field(active,"mFinishT"),merged=field(active,"mMerged"),details=field(active,"mInfo");
+            Method changes=info.getDeclaredMethod("getChanges"),task=change.getDeclaredMethod("getTaskInfo");
+            Method end=transitions.getDeclaredMethod("onFinish",IBinder.class,Class.forName("android.window.WindowContainerTransaction",false,loader));
+            if(end.getReturnType()!=void.class||start.getType()!=SurfaceControl.Transaction.class||finish.getType()!=SurfaceControl.Transaction.class
+                ||details.getType()!=info||!Map.class.isAssignableFrom(known.getType())||!List.class.isAssignableFrom(mix.getType())
+                ||!List.class.isAssignableFrom(merged.getType())||!List.class.isAssignableFrom(changes.getReturnType())
+                ||task.getReturnType()!=ActivityManager.RunningTaskInfo.class)throw new NoSuchMethodException("back finish signatures");
+            hook(end).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Stroke s=settling;
+                try{if(s!=null&&live()&&s.revision==generation&&s.controller!=null
+                        &&field(s.controller.getClass(),"mTransitions").get(s.controller)==chain.getThisObject()
+                        &&((List<?>)mix.get(chain.getThisObject())).isEmpty()){
+                    Object running=((Map<?,?>)known.get(chain.getThisObject())).get(chain.getArg(0));
+                    if(running!=null){
+                        List<Object> group=new ArrayList<>();group.add(running);
+                        List<?> joined=(List<?>)merged.get(running);if(joined!=null)group.addAll(joined);
+                        SurfaceControl.Transaction tail=(SurfaceControl.Transaction)finish.get(running);boolean matches=false;
+                        for(Object item:group){
+                            Object description=details.get(item);
+                            if(description!=null)for(Object c:(List<?>)changes.invoke(description)){
+                                ActivityManager.RunningTaskInfo t=(ActivityManager.RunningTaskInfo)task.invoke(c);
+                                if(t!=null&&t.taskId==s.task)matches=true;
+                            }
+                            if(item!=running){
+                                SurfaceControl.Transaction first=(SurfaceControl.Transaction)start.get(item),last=(SurfaceControl.Transaction)finish.get(item);
+                                if(first!=null)tail=first;if(last!=null)tail=last;
+                            }
+                        }
+                        // onFinish merges main finish, then each merged start/finish, in that order.
+                        // Append to the last native transaction so no earlier alpha=1 can win.
+                        if(matches&&tail!=null)try(SurfaceControl.Transaction mask=Wire.finishBack(s.token)){
+                            if(mask!=null){tail.merge(mask);note("BACK_FINISH_MASKED task="+s.task+" merged="+(group.size()-1));}
+                        }
+                    }
+                }}catch(Throwable error){note("BACK_FINISH_MASK_FAILED "+error.getClass().getSimpleName());}
+                return chain.proceed();
+            });
+            note("BACK_FINISH_HOOK_READY");
+        }catch(Throwable unavailable){note("BACK_FINISH_HOOK_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
     }
     // A transparent blocker consumes application touches, but native InputMonitor also sees DOWN.
     // Optional target-verified admission gate: leave the outer receiver's finishInputEvent intact.
@@ -165,6 +216,8 @@ public final class BackBridge extends XposedModule {
     private synchronized void cancelStroke(Object owner){Stroke s=strokes.remove(owner);if(s!=null)preview(s,0);}
     private synchronized void connect(Context c){
         if(context!=null)return;context=c.getApplicationContext();
+        context.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){BackVisual.receive(context,i,getSentFromUid());}},
+            new IntentFilter(BackVisual.STATE),null,main,Context.RECEIVER_EXPORTED);
         context.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){
             if(getSentFromUid()==android.os.Process.myUid())configure(i);
         }},new IntentFilter(LauncherGuard.STATE),null,main,Context.RECEIVER_EXPORTED);
@@ -226,6 +279,7 @@ public final class BackBridge extends XposedModule {
         View view=(View)viewField.get(owner);connect(view.getContext());
         int action=e.getActionMasked();
         if(action==MotionEvent.ACTION_DOWN){
+            if(settling!=null){Wire.cancelBack(settling.token);settling=null;}
             generation++;
             Stroke old=strokes.remove(owner);if(old!=null)preview(old,0);
             if(!live()||e.getPointerCount()!=1||e.getToolType(0)!=MotionEvent.TOOL_TYPE_FINGER||view.getDisplay()==null||view.getDisplay().getDisplayId()!=0)return false;
@@ -259,19 +313,36 @@ public final class BackBridge extends XposedModule {
             data.writeInterfaceToken(CHANNEL);data.writeInt(s.task);data.writeString(s.pkg);
             if(!sink.transact(IBinder.FIRST_CALL_TRANSACTION+2,data,reply,0))return false;
             reply.readException();boolean accepted=reply.readBoolean();
-            if(accepted)pending=s;note(accepted?"BACK_ADMITTED":"BACK_REJECTED");return accepted;
+            if(accepted){
+                s.token=Wire.token();BackVisual.Pose pose=BackVisual.pose(s.task);android.view.SurfaceControl leash=null;
+                try{Object[] apps=s.controller==null?null:(Object[])field(s.controller.getClass(),"mApps").get(s.controller);
+                    if(apps!=null)for(Object target:apps)if(target!=null&&field(target.getClass(),"taskId").getInt(target)==s.task){
+                        leash=(android.view.SurfaceControl)field(target.getClass(),"leash").get(target);break;
+                    }
+                }catch(Exception ignored){}
+                if(!Wire.prepareBack(s.task,s.pkg,s.token,pose,leash)){note("BACK_PREPARE_REJECTED");return false;}
+                BackVisual.claim(s.task);pending=s;settling=s;
+            }
+            note(accepted?"BACK_ADMITTED":"BACK_REJECTED");return accepted;
         }finally{data.recycle();reply.recycle();}
     }
     private void waitForNativeBack(Stroke s,int attempt){
-        if(!live()||s.revision!=generation)return;
-        if(attempt>=40){note("BACK_CANCEL_TIMEOUT");return;}
+        if(!live()||s.revision!=generation){Wire.cancelBack(s.token);return;}
+        if(attempt>=40){Wire.cancelBack(s.token);note("BACK_CANCEL_TIMEOUT");return;}
         try{
             Runnable check=()->{
                 try{
                     boolean busy=s.controller!=null&&(field(s.controller.getClass(),"mBackNavigationInfo").get(s.controller)!=null
                         ||field(s.controller.getClass(),"mPostCommitAnimationInProgress").getBoolean(s.controller));
-                    main.post(()->{if(busy)main.postDelayed(()->waitForNativeBack(s,attempt+1),40);else commit(s);});
-                }catch(Exception e){note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
+                    if(busy)main.postDelayed(()->waitForNativeBack(s,attempt+1),40);
+                    else if(s.controller==null)main.post(()->commit(s));
+                    else{
+                        Object transitions=field(s.controller.getClass(),"mTransitions").get(s.controller);
+                        Method idle=transitions.getClass().getDeclaredMethod("runOnIdle",Runnable.class);idle.setAccessible(true);
+                        idle.invoke(transitions,(Runnable)()->main.post(()->{if(settling==s)commit(s);}));
+                        main.postDelayed(()->{if(settling==s){settling=null;Wire.cancelBack(s.token);note("BACK_TRANSITION_TIMEOUT");}},650);
+                    }
+                }catch(Exception e){Wire.cancelBack(s.token);note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
             };
             // Read Shell-owned state on its own executor after it has received physical UP.
             if(s.controller==null)check.run();
@@ -279,11 +350,11 @@ public final class BackBridge extends XposedModule {
         }catch(Exception e){note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
     }
     private void commit(Stroke s){
-        if(!live()||s.revision!=generation)return;Parcel data=Parcel.obtain(),reply=Parcel.obtain();
-        try{data.writeInterfaceToken(CHANNEL);data.writeInt(s.task);data.writeString(s.pkg);
+        if(!live()||s.revision!=generation){Wire.cancelBack(s.token);return;}settling=null;Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+        try{data.writeInterfaceToken(CHANNEL);data.writeInt(s.task);data.writeString(s.pkg);data.writeString(s.token);
             if(!sink.transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0)){note("BACK_COMMIT_FAILED");return;}
-            reply.readException();note(reply.readBoolean()?"BACK_HANDOFF":"BACK_COMMIT_REJECTED");
-        }catch(RemoteException e){note("BACK_COMMIT_FAILED");}finally{data.recycle();reply.recycle();}
+            reply.readException();boolean accepted=reply.readBoolean();if(!accepted)Wire.cancelBack(s.token);note(accepted?"BACK_HANDOFF":"BACK_COMMIT_REJECTED");
+        }catch(RemoteException e){Wire.cancelBack(s.token);note("BACK_COMMIT_FAILED");}finally{data.recycle();reply.recycle();}
     }
     private void preview(Stroke s,int stage){
         if(s.stage==stage)return;s.stage=stage;if(sink==null)return;
