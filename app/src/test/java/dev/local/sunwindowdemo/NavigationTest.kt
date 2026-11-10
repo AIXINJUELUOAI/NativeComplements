@@ -40,11 +40,11 @@ class NavigationTest {
         compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithText("快捷应用").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("关于").assertIsDisplayed()
+        compose.onNodeWithText("关于").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("检查模块状态").performClick()
         compose.onNodeWithText("系统后端").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("关于").assertIsDisplayed()
+        compose.onNodeWithText("关于").performScrollTo().assertIsDisplayed()
         compose.runOnIdle { assertTrue(!compose.activity.isFinishing) }
     }
 }

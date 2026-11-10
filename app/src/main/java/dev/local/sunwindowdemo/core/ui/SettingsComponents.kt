@@ -136,6 +136,22 @@ fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceCont
                     drawCircle(container,3.dp.toPx(),point(if(y==1).65f else .35f,py))
                     drawCircle(foreground,3.dp.toPx(),point(if(y==1).65f else .35f,py),style=line)
                 }
+                "shake" -> {
+                    drawRoundRect(foreground, point(.3f,.1f), Size(size.width*.4f,size.height*.8f), CornerRadius(3.dp.toPx()), style=line)
+                    drawLine(foreground,point(.12f,.3f),point(.12f,.7f),2.dp.toPx())
+                    drawLine(foreground,point(.88f,.3f),point(.88f,.7f),2.dp.toPx())
+                }
+                "spark" -> {
+                    val star = androidx.compose.ui.graphics.Path().apply {
+                        moveTo(size.width*.5f, size.height*.06f)
+                        quadraticBezierTo(size.width*.56f, size.height*.44f, size.width*.94f, size.height*.5f)
+                        quadraticBezierTo(size.width*.56f, size.height*.56f, size.width*.5f, size.height*.94f)
+                        quadraticBezierTo(size.width*.44f, size.height*.56f, size.width*.06f, size.height*.5f)
+                        quadraticBezierTo(size.width*.44f, size.height*.44f, size.width*.5f, size.height*.06f)
+                        close()
+                    }
+                    drawPath(star, foreground, style=line)
+                }
                 "check" -> {
                     drawCircle(foreground,size.width*.39f,style=line)
                     drawLine(foreground,point(.27f,.5f),point(.44f,.67f),2.dp.toPx())

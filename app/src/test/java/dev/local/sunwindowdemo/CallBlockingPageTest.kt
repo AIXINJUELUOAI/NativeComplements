@@ -39,6 +39,6 @@ class CallBlockingPageTest {
             assertFalse(value.getBoolean("sim1_reject_all"))
         }
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("关于").assertIsDisplayed()
+        compose.onNodeWithText("关于").performScrollTo().assertIsDisplayed()
     }
 }
