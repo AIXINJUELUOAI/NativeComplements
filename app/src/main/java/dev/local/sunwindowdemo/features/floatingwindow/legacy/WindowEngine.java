@@ -99,8 +99,7 @@ final class WindowEngine {
         synchronized(lock){try{
             if(!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000
                 ||normalOccupied()||recovering||pendingStart!=null||sessions.stream().anyMatch(s->s.restoring)
-                ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-                ||!context.getSystemService(PowerManager.class).isInteractive())return false;
+                ||screenBlocked())return false;
             Object task=find(id);if(task==null||task!=a.focused.invoke(root)||owns(task)||a.integer(task,"getWindowingMode")!=1)return false;
             ComponentName component=(ComponentName)a.field(task,"realActivity");
             if(component==null||!pkg.equals(component.getPackageName()))return false;
@@ -625,8 +624,7 @@ final class WindowEngine {
             ||!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000)return null;
         synchronized(lock){
             if(recovering||pendingStart!=null||sessions.stream().anyMatch(s->s.restoring)
-                ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-                ||!context.getSystemService(PowerManager.class).isInteractive())return null;
+                ||screenBlocked())return null;
             if(source==null){
                 // Application-context starts have no source token. Admit only the
                 // actual foreground app calling for itself, not a delegated sender.
@@ -700,6 +698,11 @@ final class WindowEngine {
         s.startMask=new TaskVisibilityGuard(a,task);s.startMask.hide();
         activate(s,placement);
         a.call(a.field(task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},task);
+    }
+    /** True while the keyguard is showing or the screen is not interactive. */
+    private boolean screenBlocked(){
+        return context.getSystemService(KeyguardManager.class).isKeyguardLocked()
+            ||!context.getSystemService(PowerManager.class).isInteractive();
     }
     /** Shared entry precondition: opening or starting a window requires an unlocked keyguard. */
     private void requireUnlocked(String message){
@@ -888,8 +891,7 @@ final class WindowEngine {
     }
     private void activate(Session next,Geometry.Placement placement)throws Exception{
         if(recovering||next.restoring||!sessions.contains(next))throw new IllegalStateException("关联任务已退出");
-        if(context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-            ||!context.getSystemService(PowerManager.class).isInteractive())throw new IllegalStateException("解锁后再切换小窗");
+        if(screenBlocked())throw new IllegalStateException("解锁后再切换小窗");
         next.screenSuspended=false;
         Session previous=active;
         long entryDelay=previous!=null&&previous!=next&&!previous.parked?exitCover(previous):0;
@@ -938,8 +940,7 @@ final class WindowEngine {
             Runnable select=new Runnable(){public void run(){
                 try{synchronized(lock){
                     if(active!=s||recovering)return;
-                    if(context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-                        ||!context.getSystemService(PowerManager.class).isInteractive()){
+                    if(screenBlocked()){
                         handler.postDelayed(this,250);return;
                     }
                     if(!live(target))throw new IllegalStateException("主应用任务已结束");
@@ -1844,8 +1845,7 @@ final class WindowEngine {
             if(active!=s||!"normal".equals(s.frame)||!s.presented||s.restoring||s.closing||s.parked
                 ||s.screenSuspended||s.transitioning||s.fullTransition||s.cover!=null||s.rotation.active()
                 ||pendingStart!=null||!s.lease.isBinderAlive()||a.animating(s.task)
-                ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-                ||!context.getSystemService(PowerManager.class).isInteractive())return;
+                ||screenBlocked())return;
             Object display=a.call(s.task,"getDisplayContent"),focus=display==null?null:a.field(display,"mCurrentFocus");
             if(focus==null)return;
             Object background=a.call(focus,"getTask");if(background==null||background==s.task)return;
