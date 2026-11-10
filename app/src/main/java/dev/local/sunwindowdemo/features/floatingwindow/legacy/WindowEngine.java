@@ -476,7 +476,7 @@ final class WindowEngine {
                 if(recovering||!sessions.isEmpty())throw new IllegalStateException("旧任务仍待恢复："+last);
             }
             if(anyRestoring()){
-                openPhase(request,"wait-recovery",-1);handler.postDelayed(()->open(request,attempt+1),32);return;
+                waitOpen(request,attempt,"wait-recovery",-1);return;
             }
             boolean shortcut=request.hasExtra("shortcutLaunch");
             android.app.PendingIntent shortcutLaunch=request.getParcelableExtra("shortcutLaunch",android.app.PendingIntent.class);
@@ -489,7 +489,7 @@ final class WindowEngine {
                 synchronized(lock){for(Session s:sessions)if(pkg.equals(s.pkg)&&live(s)){retained=s;break;}}
                 if(retained!=null){
                     if(!presentExisting(retained,request.getBooleanExtra("wakeStep",false))){
-                        openPhase(request,"wait-session",retained.taskId);handler.postDelayed(()->open(request,attempt+1),32);return;
+                        waitOpen(request,attempt,"wait-session",retained.taskId);return;
                     }
                     request.putExtra("taskId",retained.taskId);completeOpen(request,true);report("REOPEN");return;
                 }
@@ -549,19 +549,19 @@ final class WindowEngine {
             if(shortcut){
                 WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
                 if(ticket==null||ticket.generation!=generation)throw new IllegalStateException("快捷功能启动请求已失效");
-                if(!ticket.dispatched){openPhase(request,"wait-shortcut",-1);handler.postDelayed(()->open(request,attempt+1),32);return;}
+                if(!ticket.dispatched){waitOpen(request,attempt,"wait-shortcut",-1);return;}
             }
             // A delegated launch may finish its intermediate task before opening the target.
             // Keep observing this exact send until the common bounded launch deadline.
-            if(candidate[0]==null){openPhase(request,"wait-task",-1);handler.postDelayed(()->open(request,attempt+1),32);return;}
+            if(candidate[0]==null){waitOpen(request,attempt,"wait-task",-1);return;}
             synchronized(lock){if(a.animating(candidate[0])||a.integer(candidate[0],"getRelativeDisplayRotation")!=0){
-                openPhase(request,"wait-native",id);handler.postDelayed(()->open(request,attempt+1),32);return;}
+                waitOpen(request,attempt,"wait-native",id);return;}
             }
             request.putExtra("taskId",id);
             Session retained=sessionFor(candidate[0]);
             if(retained!=null&&!retained.restoring){
                 if(!presentExisting(retained,false)){
-                    openPhase(request,"wait-session",id);handler.postDelayed(()->open(request,attempt+1),32);return;
+                    waitOpen(request,attempt,"wait-session",id);return;
                 }
                 completeOpen(request,true);clearShortcutLaunch(generation);report("INTENT_REUSED");return;
             }
@@ -605,6 +605,10 @@ final class WindowEngine {
             }
             log.accept("WINDOW_LAUNCH_BOUND generation="+ticket.generation+" source="+ticket.hint+" package="+ticket.targetPackage+" task="+ticket.taskId);
         }}catch(Exception e){log.accept("SHORTCUT_TASK_BIND_FAILED "+FrameworkAccess.reason(e));}
+    }
+    /** One bounded retry step of open(): record the phase, then poll again in 32ms. */
+    private void waitOpen(Intent request,int attempt,String phase,int id){
+        openPhase(request,phase,id);handler.postDelayed(()->open(request,attempt+1),32);
     }
     private void openPhase(Intent request,String phase,int id){
         if(phase.equals(request.getStringExtra("phase")))return;request.putExtra("phase",phase);
