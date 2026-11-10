@@ -678,12 +678,8 @@ final class WindowEngine {
             }
             throw error;
         }
-        s.entryFade=true;s.lease=launch.lease;
-        s.death=()->handler.post(()->{if(sessions.contains(s))recover("控制进程退出");});s.lease.linkToDeath(s.death,0);
-        try{save(s);}catch(Exception error){
-            s.lease.unlinkToDeath(s.death,0);
-            releaseToFullscreen(task);throw error;
-        }
+        s.entryFade=true;
+        try{bindAndSave(s,launch.lease);}catch(Exception error){releaseToFullscreen(task);throw error;}
         Session previous=active,displaced=normalOccupied()?previous:null;
         if(displaced==null){if(previous!=null)pinned=previous;active=null;}
         try{
@@ -702,6 +698,13 @@ final class WindowEngine {
             if(attempt<100)handler.postDelayed(()->presentShared(target,attempt+1),32);
             else log.accept("SHARE_WINDOW_REUSE_PENDING task="+target.taskId);
         }catch(Exception error){log.accept("SHARE_WINDOW_REUSE_FAILED "+FrameworkAccess.reason(error));}
+    }
+    /** Shared by task acquisition: bind the control lease and persist the original state before any task mutation. */
+    private void bindAndSave(Session s,IBinder lease)throws Exception{
+        s.lease=lease;
+        s.death=()->handler.post(()->{if(sessions.contains(s))recover("控制进程退出");});
+        lease.linkToDeath(s.death,0);
+        try{save(s);}catch(Exception error){lease.unlinkToDeath(s.death,0);throw error;}
     }
     /** One native-fullscreen exit for a freeform task the module does not (or no longer) manage. */
     private void releaseToFullscreen(Object task)throws Exception{
@@ -765,11 +768,8 @@ final class WindowEngine {
             if(fresh){
                 if(sessions.size()>=MAX_LINKED_TASKS)throw new IllegalStateException("关联小窗数量已达上限");
                 next=snapshot((Integer)a.field(target,"mTaskId"),component.getPackageName(),s.token,true);
-                next.returnTo=s;next.lease=s.lease;
-                final Session child=next;
-                next.death=()->handler.post(()->{if(sessions.contains(child))recover("控制进程退出");});
-                next.lease.linkToDeath(next.death,0);
-                try{save(next);}catch(Exception e){next.lease.unlinkToDeath(next.death,0);throw e;}
+                next.returnTo=s;
+                bindAndSave(next,s.lease);
                 created=next;
             }else if(next.restoring)return null;
             SwitchStart ticket=new SwitchStart(s,next,fresh,openGeneration);
