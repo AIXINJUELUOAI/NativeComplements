@@ -11,7 +11,7 @@ import java.util.function.Consumer;
 /** Optional early native routing: keep the real Intent, grants, result chain and start verdict. */
 final class ShareWindow {
     // Runs inside system_server; the optional hook preflights this exact API37 member.
-    @android.annotation.SuppressLint("BlockedPrivateApi")
+    @android.annotation.SuppressLint({"BlockedPrivateApi","SoonBlockedPrivateApi"})
     static ActivityOptions launchOptions(ActivityOptions original,Rect bounds)throws Exception{
         ActivityOptions copy=original==null?ActivityOptions.makeBasic():(ActivityOptions)
             ActivityOptions.class.getDeclaredMethod("fromBundle",Bundle.class).invoke(null,original.toBundle());
@@ -21,14 +21,21 @@ final class ShareWindow {
     static boolean eligibleIntent(Intent intent,boolean chooser){
         if(intent==null)return false;
         String action=intent.getAction();
-        if(Intent.ACTION_SEND.equals(action)||Intent.ACTION_SEND_MULTIPLE.equals(action))return true;
-        if(!chooser||!Intent.ACTION_VIEW.equals(action)||intent.getData()==null)return false;
-        String scheme=intent.getData().getScheme();
-        return "http".equalsIgnoreCase(scheme)||"https".equalsIgnoreCase(scheme)
-            ||"content".equalsIgnoreCase(scheme)||"file".equalsIgnoreCase(scheme);
+        if(intent.hasCategory(Intent.CATEGORY_HOME)||Intent.ACTION_CHOOSER.equals(action)
+            ||Intent.ACTION_OPEN_DOCUMENT.equals(action)||Intent.ACTION_OPEN_DOCUMENT_TREE.equals(action)
+            ||Intent.ACTION_CREATE_DOCUMENT.equals(action)||Intent.ACTION_GET_CONTENT.equals(action)
+            ||Intent.ACTION_PICK.equals(action)||Intent.ACTION_PICK_ACTIVITY.equals(action)
+            ||"android.provider.action.PICK_IMAGES".equals(action)
+            ||Intent.ACTION_DIAL.equals(action)||Intent.ACTION_CALL.equals(action)
+            ||"android.intent.action.CALL_EMERGENCY".equals(action)||"android.intent.action.CALL_PRIVILEGED".equals(action)
+            ||"android.content.pm.action.REQUEST_PERMISSIONS".equals(action)
+            ||"android.intent.action.INSTALL_PACKAGE".equals(action)||"android.intent.action.UNINSTALL_PACKAGE".equals(action)
+            ||action!=null&&action.startsWith("android.settings."))return false;
+        String scheme=intent.getData()==null?null:intent.getData().getScheme();
+        return !"tel".equalsIgnoreCase(scheme)&&!"voicemail".equalsIgnoreCase(scheme);
     }
     static void install(XposedModule module,FrameworkAccess a,WindowEngine engine,Consumer<String> log){
-        XposedInterface.HookHandle handle=null;
+        java.util.List<XposedInterface.HookHandle> handles=new java.util.ArrayList<>();
         try{
             ClassLoader loader=a.task.getClassLoader();
             String[] names={"com.android.server.wm.ActivityRecord","com.android.server.wm.ActivityRecord",
@@ -43,12 +50,30 @@ final class ShareWindow {
             if(method.getReturnType()!=int.class)throw new NoSuchMethodException("share start result");
             a.field(starter,"mLastStartActivityRecord");
             a.method(a.activity,"isResolverOrDelegateActivity");
+            a.method(android.content.pm.PackageManager.class,"getPermissionControllerPackageName");
             a.method(ActivityOptions.class,"fromBundle",Bundle.class);
             a.method(ActivityOptions.class,"getLaunchWindowingMode");a.method(ActivityOptions.class,"setLaunchWindowingMode",int.class);
-            handle=module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+            java.lang.reflect.Field starting=a.field(starter,"mStartActivity");
+            Method targetTask=a.method(starter,"computeTargetTask");
+            if(targetTask.getReturnType()!=a.task)throw new NoSuchMethodException("handoff target task");
+            Method reusable=a.method(starter,"resolveReusableTask",boolean.class);
+            if(reusable.getReturnType()!=a.task)throw new NoSuchMethodException("handoff reusable task");
+            handles.add(module.hook(reusable).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object result=chain.proceed();WindowEngine.ShareLaunch selected=engine.shareLaunch.get();
+                // Shared affinities must not move the caller's fullscreen task into freeform.
+                return selected!=null&&starting.get(chain.getThisObject())==selected.request()&&result==selected.sourceTask()?null:result;
+            }));
+            handles.add(module.hook(targetTask).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                WindowEngine.ShareLaunch selected=engine.shareLaunch.get();
+                // Use native setNewTask without injecting NEW_TASK into the Intent:
+                // that flag would cancel startActivityForResult before task selection.
+                if(selected!=null&&starting.get(chain.getThisObject())==selected.request())return null;
+                return chain.proceed();
+            }));
+            handles.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 WindowEngine.ShareLaunch selected=null;
                 if(chain.getArg(6)==null&&chain.getArg(7)==null){
-                    try{selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5));}
+                    try{selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(10));}
                     catch(Exception error){log.accept("SHARE_WINDOW_NATIVE "+FrameworkAccess.reason(error));}
                 }
                 if(selected==null)return chain.proceed();
@@ -59,8 +84,8 @@ final class ShareWindow {
                     engine.shareFinished(selected,chain.getThisObject());
                     if(previous==null)engine.shareLaunch.remove();else engine.shareLaunch.set(previous);
                 }
-            });
-            log.accept("SHARE_WINDOW_READY");
-        }catch(Throwable error){if(handle!=null)try{handle.unhook();}catch(Throwable ignored){}log.accept("SHARE_WINDOW_UNAVAILABLE "+FrameworkAccess.reason(error));}
+            }));
+            log.accept("SHARE_WINDOW_READY inter-app source/result/URI chain preserved");
+        }catch(Throwable error){for(XposedInterface.HookHandle handle:handles)try{handle.unhook();}catch(Throwable ignored){}log.accept("SHARE_WINDOW_UNAVAILABLE "+FrameworkAccess.reason(error));}
     }
 }

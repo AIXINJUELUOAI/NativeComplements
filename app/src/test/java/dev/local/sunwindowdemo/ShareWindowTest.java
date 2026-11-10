@@ -13,16 +13,29 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35)
 public class ShareWindowTest {
-    @Test public void sharesAndChooserContentAreEligibleButSystemActionsAreNot(){
+    @Test public void ordinaryCrossAppIntentsAreEligibleButSystemInteractionsAreNot(){
         assertTrue(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_SEND),false));
         assertTrue(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_SEND_MULTIPLE),false));
         Intent view=new Intent(Intent.ACTION_VIEW,Uri.parse("https://example.test/item"));
-        assertTrue(ShareWindow.eligibleIntent(view,true));assertFalse(ShareWindow.eligibleIntent(view,false));
+        assertTrue(ShareWindow.eligibleIntent(view,true));assertTrue(ShareWindow.eligibleIntent(view,false));
         assertTrue(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_VIEW,Uri.parse("content://example.test/item")),true));
         assertFalse(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_DIAL,Uri.parse("tel:123")),true));
         assertFalse(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_VIEW,Uri.parse("tel:123")),true));
-        assertFalse(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_MAIN),true));
+        assertTrue(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),false));
+        assertTrue(ShareWindow.eligibleIntent(new Intent("sample.app.OPEN_FILE").putExtra("caller",42),false));
+        assertFalse(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),false));
+        assertFalse(ShareWindow.eligibleIntent(new Intent(Intent.ACTION_CHOOSER),true));
+        assertFalse(ShareWindow.eligibleIntent(new Intent("android.settings.APPLICATION_DETAILS_SETTINGS"),false));
+        assertFalse(ShareWindow.eligibleIntent(new Intent("android.content.pm.action.REQUEST_PERMISSIONS"),false));
+        for(String picker:new String[]{Intent.ACTION_OPEN_DOCUMENT,Intent.ACTION_OPEN_DOCUMENT_TREE,
+            Intent.ACTION_CREATE_DOCUMENT,Intent.ACTION_GET_CONTENT,Intent.ACTION_PICK_ACTIVITY})
+            assertFalse(ShareWindow.eligibleIntent(new Intent(picker),false));
         assertFalse(ShareWindow.eligibleIntent(null,true));
+        Intent content=new Intent(Intent.ACTION_VIEW,Uri.parse("content://sample/doc/1"))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra("original",73);
+        Intent saved=new Intent(content);assertTrue(ShareWindow.eligibleIntent(content,false));
+        assertTrue(content.filterEquals(saved));assertEquals(saved.getFlags(),content.getFlags());
+        assertEquals(73,content.getIntExtra("original",0));
     }
     @Test public void earlyRoutingCopiesOptionsWithoutChangingTheOriginal()throws Exception{
         ActivityOptions original=ActivityOptions.makeBasic().setLaunchBounds(new Rect(10,20,110,220));

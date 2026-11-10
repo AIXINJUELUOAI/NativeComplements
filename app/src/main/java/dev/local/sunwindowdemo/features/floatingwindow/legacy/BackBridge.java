@@ -14,6 +14,7 @@ public final class BackBridge extends XposedModule {
     static final String PACKAGE="com.android.systemui";
     static final String CHANNEL=Wire.PKG+".backLong.v1";
     private boolean eligible,attempted;
+    static volatile boolean cornerReady;
     private volatile boolean enabled;
     private volatile boolean preserveBars;
     private boolean screenshotShown;
@@ -93,10 +94,34 @@ public final class BackBridge extends XposedModule {
                 ||Modifier.isStatic(cancel.getModifiers())||instance.getType()!=unitClass||!Modifier.isStatic(instance.getModifiers()))
                 throw new NoSuchMethodException("edge admission signature mismatch");
             Object unit=instance.get(null);if(unit==null)throw new IllegalStateException("missing Unit.INSTANCE");
+            Class<?> displayHandler=Class.forName("com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl",false,cl);
+            Class<?> compatType=Class.forName("com.android.systemui.shared.system.InputMonitorCompat",false,cl);
+            Class<?> monitorType=Class.forName("android.view.InputMonitor");
+            Field compat=field(displayHandler,"inputMonitorCompat"),monitor=field(compatType,"mInputMonitor");
+            Method pilfer=monitorType.getDeclaredMethod("pilferPointers");
+            if(compat.getType()!=compatType||monitor.getType()!=monitorType||pilfer.getReturnType()!=void.class)
+                throw new NoSuchMethodException("corner input monitor signature mismatch");
+            pilfer.setAccessible(true);
             invoke.setAccessible(true);cancel.setAccessible(true);eventDisplay.setAccessible(true);
             java.util.concurrent.atomic.AtomicBoolean active=new java.util.concurrent.atomic.AtomicBoolean(true);
             hook(invoke).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object argument=chain.getArg(0);
+                if(cornerReady&&active.get()&&argument instanceof MotionEvent event){
+                    try{
+                        if((Integer)eventDisplay.invoke(event)==Display.DEFAULT_DISPLAY){
+                            SystemUiHost host=SystemUiHost.live;
+                            Object map=displays.get(owner.get(chain.getThisObject()));
+                            Object display=map instanceof Map<?,?> handlers?handlers.get(Display.DEFAULT_DISPLAY):null;
+                            if(host!=null&&display!=null&&host.cornerInput(event,()->{
+                                try{pilfer.invoke(monitor.get(compat.get(display)));}
+                                catch(Exception error){throw new IllegalStateException("corner pilfer",error);}
+                            }))return unit;
+                        }
+                    }catch(Throwable failure){
+                        cornerReady=false;note("CORNER_INPUT_DISABLED "+failure.getClass().getSimpleName());
+                        // Keep the native receiver alive; a later native DOWN resets its state.
+                    }
+                }
                 if(active.get()&&argument instanceof MotionEvent event&&event.getActionMasked()==MotionEvent.ACTION_DOWN
                     &&event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)){
                     try{
@@ -112,6 +137,8 @@ public final class BackBridge extends XposedModule {
                 }
                 return chain.proceed();
             });
+            cornerReady=true;
+            note("CORNER_INPUT_READY native monitor; pilfer only after diagonal threshold");
             note("EDGE_BACK_ADMISSION_READY");
         }catch(Throwable failure){note("EDGE_BACK_ADMISSION_UNAVAILABLE "+failure.getClass().getSimpleName());}
     }

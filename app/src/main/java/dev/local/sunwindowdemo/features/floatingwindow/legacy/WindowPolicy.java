@@ -19,6 +19,10 @@ final class WindowPolicy {
         return launcher&&attached&&!relaunching&&!finishing&&!editing
             &&("RESUMED".equals(lifecycle)||"PAUSED".equals(lifecycle)||"STOPPED".equals(lifecycle));
     }
+    static boolean initialLandscape(int entryDeclaration,int launcherDeclaration){
+        return landscape(entryDeclaration,false)&&landscape(launcherDeclaration,false);
+    }
+    static int clientMode(String pkg){return "com.tencent.mm".equals(pkg)?5:1;}
     static boolean landscape(int requested,boolean previous){
         return switch(requested){case 0,6,8,11 -> true;case 1,7,9,12 -> false;default -> previous;};
     }

@@ -30,12 +30,14 @@ final class ServerViewport {
         a.method(state,"setDisplayFrame",Rect.class);a.method(state,"setDisplayCutout",android.view.DisplayCutout.class);
         a.field(android.view.DisplayCutout.class,"NO_CUTOUT");a.method(source,"setVisible",boolean.class);
     }
-    private Configuration configuration(Configuration original)throws Exception{
+    private Configuration configuration(Configuration original,int mode)throws Exception{
         Configuration copy=new Configuration(original);
         // SunOS popup is floating without multi-window restrictions. Stock Android
         // has no popup mode: map only the client identity, never native task state.
+        // WeChat compatibility trial: retain the original demo's floating client
+        // identity instead of the fullscreen facade. Other apps keep mode 1.
         Object window=a.field(copy,"windowConfiguration");
-        a.call(window,"setWindowingMode",new Class<?>[]{int.class},1);
+        a.call(window,"setWindowingMode",new Class<?>[]{int.class},mode);
         Rect bounds=(Rect)a.call(window,"getBounds");
         if(!bounds.isEmpty()){
             // The app's logical display follows its task, not the physical display rotation.
@@ -49,16 +51,16 @@ final class ServerViewport {
         }
         return copy;
     }
-    private Configuration processConfiguration(Configuration original)throws Exception{
+    private Configuration processConfiguration(Configuration original,int mode)throws Exception{
         // A real display-wide configuration must never be rewritten. WPC's task-derived
         // override carries freeform mode; the caller separately verifies its source task.
         return a.integer(a.field(original,"windowConfiguration"),"getWindowingMode")==5
-            ?configuration(original):original;
+            ?configuration(original,mode):original;
     }
-    private Object merged(Object original)throws Exception{
+    private Object merged(Object original,int mode)throws Exception{
         Object copy=mergedCopy.newInstance(original);
-        a.call(copy,"setGlobalConfiguration",new Class<?>[]{Configuration.class},processConfiguration((Configuration)a.call(copy,"getGlobalConfiguration")));
-        a.call(copy,"setOverrideConfiguration",new Class<?>[]{Configuration.class},configuration((Configuration)a.call(copy,"getOverrideConfiguration")));
+        a.call(copy,"setGlobalConfiguration",new Class<?>[]{Configuration.class},processConfiguration((Configuration)a.call(copy,"getGlobalConfiguration"),mode));
+        a.call(copy,"setOverrideConfiguration",new Class<?>[]{Configuration.class},configuration((Configuration)a.call(copy,"getOverrideConfiguration"),mode));
         return copy;
     }
     static void install(XposedModule module,FrameworkAccess a,WindowEngine engine,List<XposedInterface.HookHandle> handles)throws Exception{
@@ -78,14 +80,15 @@ final class ServerViewport {
                     boolean owned=window?engine.ownsClientWindow(chain.getArg(0)):engine.ownsActivityToken((IBinder)chain.getArg(0));
                     boolean entry=name.equals("LaunchActivityItem")||name.equals("ActivityRelaunchItem");
                     if(!owned&&!entry)return chain.proceed();
+                    int mode=owned?engine.clientMode(chain.getArg(0),!window):1;
                     Object[] args=new Object[types.length];
                     for(int i=0;i<args.length;i++){
                         args[i]=chain.getArg(i);
                         // Launch carries both process and activity config. Mapping only the
                         // activity left Application resources with the native freeform value.
                         if(owned&&types[i]==Configuration.class&&args[i]!=null)args[i]=i==overrideIndex
-                            ?policy.configuration((Configuration)args[i]):policy.processConfiguration((Configuration)args[i]);
-                        else if(owned&&types[i]==policy.merged&&args[i]!=null)args[i]=policy.merged(args[i]);
+                            ?policy.configuration((Configuration)args[i],mode):policy.processConfiguration((Configuration)args[i],mode);
+                        else if(owned&&types[i]==policy.merged&&args[i]!=null)args[i]=policy.merged(args[i],mode);
                         else if(owned&&types[i].getName().equals("android.view.InsetsState")&&args[i]!=null)
                             args[i]=engine.clientInsets(chain.getArg(0),args[i]);
                         if(entry&&(types[i]==Configuration.class||types[i]==policy.merged))
@@ -106,7 +109,7 @@ final class ServerViewport {
             Object outgoing=chain.getArg(1),source=configActivity.get(chain.getThisObject());
             if(item.isInstance(outgoing)&&source!=null&&engine.owns(a.call(source,"getTask"))){
                 Configuration original=(Configuration)itemConfig.get(outgoing);
-                Configuration mapped=policy.processConfiguration(original);
+                Configuration mapped=policy.processConfiguration(original,engine.activityClientMode(source));
                 if(mapped!=original)return chain.proceed(new Object[]{chain.getArg(0),newItem.newInstance(mapped,itemDevice.getInt(outgoing))});
             }
             return chain.proceed();
@@ -130,7 +133,7 @@ final class ServerViewport {
                 if(resultObject!=null&&engine.ownsClientWindow(chain.getArg(clientIndex))){
                     Object outgoing=resultConfig.get(resultObject);
                     // This out parameter belongs to the Binder response, not WindowState's cache.
-                    a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing));
+                    a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing,engine.clientMode(chain.getArg(clientIndex),false)));
                     Object insets=resultInsets.get(resultObject);
                     Object mapped=engine.clientInsets(chain.getArg(clientIndex),insets);
                     a.call(insets,"set",new Class<?>[]{insets.getClass(),boolean.class},mapped,true);

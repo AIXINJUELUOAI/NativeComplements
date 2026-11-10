@@ -237,6 +237,12 @@ public final class SunWindowModule extends XposedModule {
                 note("ROTATION_VISIBILITY_HOOK_READY");
             }catch(Exception e){note("ROTATION_VISIBILITY_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
             ServerViewport.install(this,a,engine,handles);
+            try{
+                handles.add(hook(a.method(a.activity,"setRequestedOrientation",int.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                        Object result=chain.proceed();engine.orientationRequested(chain.getThisObject(),(Integer)chain.getArg(0));return result;
+                    }));
+            }catch(Exception error){note("APP_ORIENTATION_OBSERVER_UNAVAILABLE "+FrameworkAccess.reason(error));}
             // Diagnostics are optional: missing diagnostic callbacks must not disable windows.
             try{
                 handles.add(hook(a.method(a.activity,"finishRelaunching")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{

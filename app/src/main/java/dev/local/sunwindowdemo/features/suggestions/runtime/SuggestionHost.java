@@ -213,12 +213,13 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         android.util.TypedValue v=new android.util.TypedValue();
         try{if(windowContext.getTheme().resolveAttribute(attr,v,true))return v.resourceId!=0?windowContext.getColor(v.resourceId):v.data;}catch(RuntimeException ignored){}return fallback;
     }
+    private Drawable circle(int color){GradientDrawable bg=new GradientDrawable();bg.setShape(GradientDrawable.OVAL);bg.setColor(color);return bg;}
     private Drawable background(){GradientDrawable bg=new GradientDrawable();bg.setColor(color(android.R.attr.colorBackground,0xfff6f3fa));bg.setCornerRadius(dp(28));return bg;}
     private Drawable icon(String pkg){
         try{return AppCatalog.normalized(windowContext,context.getPackageManager().getApplicationIcon(pkg));}catch(Exception e){return null;}
     }
     private Drawable glyph(String name){
-        try{int id=moduleContext.getResources().getIdentifier(name,"drawable",Wire.PKG);Drawable d=moduleContext.getDrawable(id).mutate();d.setTint(switch(name){case "ic_suggestion_torch"->0xffbb8700;case "ic_suggestion_torch_off"->0xff80868b;case "ic_suggestion_awake"->0xffe9bc54;case "ic_suggestion_otp"->Color.WHITE;default->color(android.R.attr.colorAccent,0xff6750a4);});return d;}catch(RuntimeException e){return context.getDrawable(android.R.drawable.ic_menu_compass);}
+        try{int id=moduleContext.getResources().getIdentifier(name,"drawable",Wire.PKG);Drawable d=moduleContext.getDrawable(id).mutate();d.setTint(switch(name){case "ic_suggestion_torch","ic_suggestion_awake"->0xff302600;case "ic_suggestion_torch_off"->Color.WHITE;case "ic_suggestion_otp"->Color.WHITE;default->color(android.R.attr.colorAccent,0xff6750a4);});return d;}catch(RuntimeException e){return context.getDrawable(android.R.drawable.ic_menu_compass);}
     }
     private boolean installed(String pkg){try{return context.getPackageManager().getLaunchIntentForPackage(pkg)!=null;}catch(RuntimeException e){return false;}}
     private List<String> mapApps(){
@@ -267,19 +268,23 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         }else{
             if(enabled("torch")&&(!torchUsed&&!litCameras.isEmpty()||torchUntil>now())){
                 ImageView torch=addButton(row,glyph(litCameras.isEmpty()?"ic_suggestion_torch_off":"ic_suggestion_torch"),litCameras.isEmpty()?"打开手电筒":"关闭手电筒",this::toggleTorch);
+                torch.setBackground(circle(litCameras.isEmpty()?0xff73777f:0xffc59618));
                 torch.setEnabled(requestedTorchMode==null);torch.setAlpha(requestedTorchMode==null?1:.5f);
             }
-            if(enabled("awake")&&awakeUntil>now())addButton(row,glyph("ic_suggestion_awake"),"本次保持屏幕常亮",()->{
+            if(enabled("awake")&&awakeUntil>now()){
+                ImageView awake=addButton(row,glyph("ic_suggestion_awake"),"本次保持屏幕常亮",()->{
                 if(locked())return;
                 try{awakeLock.acquire();awakeUntil=0;render();}catch(RuntimeException e){Toast.makeText(context,"常亮暂不可用",Toast.LENGTH_SHORT).show();}
-            });
+                });
+                awake.setBackground(circle(0xfff2d87d));
+            }
             String bluetooth=settings.getString("bluetooth_app","");
             if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
                 Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);open(launch,bluetooth,()->{bluetoothUsed=true;render();});
             });
             if(enabled("otp")&&code!=null&&!inputRunning){
                 ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input);
-                GradientDrawable blue=new GradientDrawable();blue.setShape(GradientDrawable.OVAL);blue.setColor(0xff2866c7);otp.setBackground(blue);
+                otp.setBackground(circle(0xff2866c7));
                 otp.setEnabled(!inputRunning);otp.setAlpha(inputRunning?.5f:1);
                 int generation=renderGeneration;
                 row.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener(){

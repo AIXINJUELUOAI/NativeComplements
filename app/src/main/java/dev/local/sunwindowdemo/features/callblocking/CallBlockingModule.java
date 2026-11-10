@@ -159,7 +159,9 @@ public final class CallBlockingModule extends XposedModule {
             if(pa==null||!pa.hasCapabilities(PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION))return null;
             int sub=(Integer)subscription.invoke(registry,pah);
             SubscriptionManager sm=context.getSystemService(SubscriptionManager.class);
-            SubscriptionInfo info=sm==null?null:sm.getActiveSubscriptionInfo(sub);
+            SubscriptionInfo info;
+            try{info=sm==null?null:sm.getActiveSubscriptionInfo(sub);}
+            catch(SecurityException unavailable){note("SIM_LOOKUP_UNAVAILABLE");return null;}
             if(info==null)return null;
             int slot=info.getSimSlotIndex();
             if(slot<0||slot>1)return null;

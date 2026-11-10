@@ -30,6 +30,9 @@ final class WindowAudio {
     private final AudioManager.AudioPlaybackCallback callback=new AudioManager.AudioPlaybackCallback(){
         @Override public void onPlaybackConfigChanged(List<AudioPlaybackConfiguration> configs){sync(configs);}
     };
+    // This helper executes only in hooked system_server, which may use these
+    // archived API37 volume-shaper members; the app process never invokes them.
+    @android.annotation.SuppressLint({"BlockedPrivateApi","SoonBlockedPrivateApi"})
     private WindowAudio(Context context,Handler worker,Consumer<String> logger)throws Exception{
         audio=context.getSystemService(AudioManager.class);handler=worker;log=logger;
         if(audio==null)throw new IllegalStateException("AudioManager missing");

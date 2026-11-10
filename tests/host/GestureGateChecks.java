@@ -48,6 +48,9 @@ public final class GestureGateChecks {
         handle[0]=0;check(!event(g,0,100,2300,22),"handle defensively copied");
         check(!g.update(1200,2670,new int[0],new int[]{0,0,1200,2670},()->true),"full display handle rejected");
         check(!event(g,0,600,2300,23),"invalid handle clears next ownership");
+        check(g.update(1200,2670,RECTS,new int[]{450,2200,750,2400,900,100,1150,300},()->true),"dual-window handles and corners accepted");
+        check(event(g,0,20,2620,24),"corners stay protected when both windows exist");
+        check(event(g,1,20,2620,24),"dual-window corner release");
         System.out.println("PASS: corner/handle stream ownership, central navigation, cancellation, device/display isolation, bounds and defensive copies");
     }
 }

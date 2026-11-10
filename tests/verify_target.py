@@ -97,3 +97,18 @@ for cls,name,sig in [
  assert any(m['name']==name and m['descriptor']==sig for m in handoff[cls]['methods']),(cls,name,sig)
 assert any(f['name']=='NO_CUTOUT' and f['type']=='Landroid/view/DisplayCutout;' for f in handoff['Landroid/view/DisplayCutout;']['fields'])
 print('PASS: archived early share launch and local viewport Insets signatures')
+
+launch_input=json.loads((root/'tests/target/launch-input-members.json').read_text())['classes']
+for cls,kind,name,sig in [
+ ('Landroid/view/InputMonitor;','methods','pilferPointers','()V'),
+ ('Landroid/content/pm/PackageManager;','methods','getPermissionControllerPackageName','()Ljava/lang/String;'),
+ ('Lcom/android/server/wm/ActivityStarter;','methods','resolveReusableTask','(Z)Lcom/android/server/wm/Task;'),
+ ('Lcom/android/systemui/navigationbar/gestural/DisplayBackGestureHandlerImpl;','fields','inputMonitorCompat','Lcom/android/systemui/shared/system/InputMonitorCompat;'),
+ ('Lcom/android/systemui/shared/system/InputMonitorCompat;','fields','mInputMonitor','Landroid/view/InputMonitor;'),
+ ('Lcom/android/server/wm/ActivityRecord;','fields','info','Landroid/content/pm/ActivityInfo;'),
+ ('Lcom/android/server/wm/ActivityRecord;','methods','setRequestedOrientation','(I)V'),
+ ('Lcom/android/server/wm/ActivityStarter;','fields','mStartActivity','Lcom/android/server/wm/ActivityRecord;'),
+ ('Lcom/android/server/wm/ActivityStarter;','methods','computeTargetTask','()Lcom/android/server/wm/Task;'),
+ ('Landroid/app/PendingIntent;','methods','sendAndReturnResult','(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;Landroid/os/Bundle;)I')]:
+ assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==sig for m in launch_input[cls][kind]),(cls,name,sig)
+print('PASS: archived threshold-only pointer pilfer, original shortcut verdict and result-preserving native task selection')

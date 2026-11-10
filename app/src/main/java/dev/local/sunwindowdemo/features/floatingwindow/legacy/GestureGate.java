@@ -23,7 +23,7 @@ public final class GestureGate {
             int l=rects[i],t=rects[i+1],r=rects[i+2],b=rects[i+3];
             if(l<0||t<0||r>width||b!=height||l>=r||t>=b||r-l>width/4||b-t>height/4||(l!=0&&r!=width))return false;
         }
-        if(controls.length>4||controls.length%4!=0)return false;
+        if(controls.length>8||controls.length%4!=0)return false;
         for(int i=0;i<controls.length;i+=4){
             int l=controls[i],t=controls[i+1],r=controls[i+2],b=controls[i+3];
             if(l<0||t<0||r>width||b>height||l>=r||t>=b||r-l>width/2||b-t>height/2)return false;

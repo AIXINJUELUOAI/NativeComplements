@@ -74,6 +74,42 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final android.window.OnBackInvokedCallback panelBack=()->hidePanel();
     void controlsChanged(){main.post(()->publish(false));}
     private int publishedWidth,publishedHeight;
+    private final CornerGesture cornerGesture=new CornerGesture();
+    private volatile CornerGesture.Area cornerArea;
+    private long cornerUiDown;
+    boolean cornerInput(MotionEvent event,Runnable pilfer){
+        CornerGesture.Area area=cornerArea;
+        int stage=cornerGesture.event(event.getActionMasked(),event.getX(),event.getY(),
+            event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)&&event.getToolType(0)==MotionEvent.TOOL_TYPE_FINGER,
+            event.getPointerCount(),Display.DEFAULT_DISPLAY,event.getDeviceId(),event.getDownTime(),event.getEventTime(),area);
+        if(stage==CornerGesture.PASS)return false;
+        if(stage==CornerGesture.CLAIM){
+            try{pilfer.run();}catch(RuntimeException failed){cornerGesture.abandon();main.post(this::hideFan);throw failed;}
+        }
+        if(stage!=CornerGesture.TRACK){
+            boolean isRight=cornerGesture.right();float x=event.getX(),y=event.getY();long down=event.getDownTime();
+            main.post(()->cornerUi(stage,isRight,x,y,down,area));
+        }
+        return true;
+    }
+    private void cornerUi(int stage,boolean isRight,float x,float y,long down,CornerGesture.Area area){
+        if(stage==CornerGesture.BEGIN){cornerUiDown=down;hideFan();}
+        if(cornerUiDown!=down)return;
+        View hot=isRight?right:left;
+        if(cleaned||area==null||!area.equals(cornerArea)||!allowed()){
+            hideFan();if(hot instanceof HotspotView view)view.mark(0);return;
+        }
+        if(stage==CornerGesture.BEGIN&&hot instanceof HotspotView view)view.mark(1);
+        if(stage==CornerGesture.CLAIM&&hot!=null&&fan==null){touchLog("斜向滑动达标，接管输入");showFan(isRight,hot);}
+        if(fan!=null&&(stage==CornerGesture.CLAIM||stage==CornerGesture.MOVE||stage==CornerGesture.FINISH)){
+            int hit=fan.pointer(x,y);if(hit!=lastSelection){lastSelection=hit;if(hit>=0)fan.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}
+        }
+        if(stage==CornerGesture.FINISH||stage==CornerGesture.END||stage==CornerGesture.CANCEL){
+            String target=stage==CornerGesture.FINISH&&fan!=null?fan.picked():null;
+            hideFan();if(hot instanceof HotspotView view)view.mark(0);
+            if(target!=null){if(target.isEmpty())showPanel();else launch(target);}
+        }
+    }
     private boolean publishedEnabled;
     private boolean publishedDrop,publishedImmersive;
     private int activeTask=-1,publishedHidden=-2;
@@ -261,41 +297,21 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void refresh() {
         if(!allowed()){hideFan();if(panel!=null&&!(screenshotVisible||systemFocus))hidePanel();removeHot();return;}
-        if(left==null)addHot(false);if(right==null)addHot(true);
+        if(BackBridge.cornerReady){if(left==null)addHot(false);if(right==null)addHot(true);}
+        else removeHot();
         publish(false);
     }
     private void addHot(boolean isRight) {
         HotspotView hot=new HotspotView(this,isRight,config.showHeat());
         hot.setContentDescription(isRight?"右侧角落启动热区":"左侧角落启动热区");
         hot.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        WindowManager.LayoutParams p=params(dp(config.heat()),dp(config.heat()),WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);
+        WindowManager.LayoutParams p=params(dp(config.heat()),dp(config.heat()),WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
         // Cover the actual display corner, not a square above the navigation bar.
         p.gravity=Gravity.BOTTOM|(isRight?Gravity.RIGHT:Gravity.LEFT);p.y=0;
         p.flags |= WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
         p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-        hot.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->{
-            v.setSystemGestureExclusionRects(List.of(new android.graphics.Rect(0,0,r-l,b-t)));publish(false);
-        });
-        hot.setOnTouchListener(new View.OnTouchListener(){
-            float startX,startY;boolean opened;
-            public boolean onTouch(View v,MotionEvent e) {
-                if(e.getActionMasked()==MotionEvent.ACTION_DOWN){opened=false;hot.mark(1);startX=e.getRawX();startY=e.getRawY();v.requestUnbufferedDispatch(e);touchLog((isRight?"右":"左")+"热区收到按下");return true;}
-                if(e.getActionMasked()==MotionEvent.ACTION_MOVE) {
-                    if(!allowed()){hideFan();return true;}
-                    if(fan==null&&!opened&&Rules.triggered(e.getRawX()-startX,e.getRawY()-startY,isRight,dp(config.distance()))){opened=true;touchLog("斜向滑动达标");showFan(isRight,hot);}
-                    if(fan!=null){int hit=fan.pointer(e.getRawX(),e.getRawY());if(hit!=lastSelection){lastSelection=hit;if(hit>=0)v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}}
-                    return true;
-                }
-                if(e.getActionMasked()==MotionEvent.ACTION_UP) {
-                    if(fan!=null)fan.pointer(e.getRawX(),e.getRawY());
-                    hot.mark(0);String target=fan==null?null:fan.picked();touchLog(target==null?"松手取消（未选中）":"松手已选中菜单项");hideFan();
-                    if(target!=null&&allowed()){if(target.isEmpty())showPanel();else launch(target);}
-                    return true;
-                }
-                if(e.getActionMasked()==MotionEvent.ACTION_CANCEL){hot.mark(2);touchLog("触摸被系统取消");hideFan();}
-                return true;
-            }
-        });
+        // Visual indicator only: native InputMonitor observes the app's real touch stream.
+        hot.addOnLayoutChangeListener((v,l,t,r,b,ol,ot,or,ob)->publish(false));
         try {wm.addView(hot,p);if(isRight)right=hot;else left=hot;}
         catch(RuntimeException failure){android.util.Log.w("CornerLauncher","hot-zone-add-failed");}
     }
@@ -312,7 +328,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void hideFan(){if(fan!=null){remove(fan);fan=null;}lastSelection=-1;}
     private void remove(View v){try{if(wm!=null)wm.removeViewImmediate(v);}catch(RuntimeException ignored){}}
-    private void removeHot(){if(left!=null){remove(left);left=null;}if(right!=null){remove(right);right=null;}publish(false);}
+    private void removeHot(){cornerArea=null;cornerGesture.abandon();if(left!=null){remove(left);left=null;}if(right!=null){remove(right);right=null;}publish(false);}
     void publish(boolean force){
         int[] rects=new int[8];int count=0;
         boolean enabled=allowed()&&panel==null;
@@ -322,6 +338,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             int[] location=new int[2];v.getLocationOnScreen(location);
             rects[count++]=location[0];rects[count++]=location[1];rects[count++]=location[0]+v.getWidth();rects[count++]=location[1]+v.getHeight();
         }
+        android.graphics.Rect cornerBounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();
+        cornerArea=enabled&&count==8&&BackBridge.cornerReady
+            ?new CornerGesture.Area(cornerBounds.width(),cornerBounds.height(),dp(config.heat()),dp(config.distance()),ViewConfiguration.getLongPressTimeout()):null;
         int[] handles=controls==null?new int[0]:controls.protectedRects();
         int[] miniHandles=miniControls==null?new int[0]:miniControls.protectedRects();
         int primaryLength=handles.length;handles=java.util.Arrays.copyOf(handles,primaryLength+miniHandles.length);
@@ -416,12 +435,18 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     void openNotification(android.service.notification.StatusBarNotification notice,android.app.PendingIntent pending,Intent fill){
         if(Looper.myLooper()!=main.getLooper()){main.post(()->openNotification(notice,pending,fill));return;}
         hideFan();hidePanel();
-        ResultReceiver reply=new ResultReceiver(main){protected void onReceiveResult(int result,Bundle data){
+        ResultReceiver reply=new ResultReceiver(main){
+            // Runs in SystemUI, whose actual permission is checked below. The
+            // module APK's manifest does not describe this host UID's grants.
+            @android.annotation.SuppressLint("MissingPermission")
+            protected void onReceiveResult(int result,Bundle data){
             if(result==1||data!=null&&data.getBoolean("superseded"))return;
             try{
                 if(data!=null&&data.getBoolean("dispatched")){
                     int task=data.getInt("taskId",-1);
-                    if(task>=0){getSystemService(android.app.ActivityManager.class).moveTaskToFront(task,0);return;}
+                    if(task>=0&&checkSelfPermission(android.Manifest.permission.REORDER_TASKS)==android.content.pm.PackageManager.PERMISSION_GRANTED){
+                        getSystemService(android.app.ActivityManager.class).moveTaskToFront(task,0);return;
+                    }
                     throw new IllegalStateException("notification target unavailable after dispatch");
                 }
                 android.app.ActivityOptions options=android.app.ActivityOptions.makeBasic();
