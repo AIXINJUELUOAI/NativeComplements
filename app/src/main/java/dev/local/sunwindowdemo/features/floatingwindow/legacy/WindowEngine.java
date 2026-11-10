@@ -674,8 +674,7 @@ final class WindowEngine {
         catch(Exception error){
             // An unsupported target keeps its native launch rather than an unmanaged freeform task.
             if(a.integer(task,"getWindowingMode")==5&&!owns(task)){
-                a.call(task,"setWindowingMode",new Class<?>[]{int.class},1);
-                a.call(task,"setBounds",new Class<?>[]{Rect.class},new Rect());
+                releaseToFullscreen(task);
             }
             throw error;
         }
@@ -683,7 +682,7 @@ final class WindowEngine {
         s.death=()->handler.post(()->{if(sessions.contains(s))recover("控制进程退出");});s.lease.linkToDeath(s.death,0);
         try{save(s);}catch(Exception error){
             s.lease.unlinkToDeath(s.death,0);
-            a.call(task,"setWindowingMode",new Class<?>[]{int.class},1);a.call(task,"setBounds",new Class<?>[]{Rect.class},new Rect());throw error;
+            releaseToFullscreen(task);throw error;
         }
         Session previous=active,displaced=normalOccupied()?previous:null;
         if(displaced==null){if(previous!=null)pinned=previous;active=null;}
@@ -704,6 +703,13 @@ final class WindowEngine {
             else log.accept("SHARE_WINDOW_REUSE_PENDING task="+target.taskId);
         }catch(Exception error){log.accept("SHARE_WINDOW_REUSE_FAILED "+FrameworkAccess.reason(error));}
     }
+    /** One native-fullscreen exit for a freeform task the module does not (or no longer) manage. */
+    private void releaseToFullscreen(Object task)throws Exception{
+        a.call(task,"setWindowingMode",new Class<?>[]{int.class},1);
+        a.call(task,"setBounds",new Class<?>[]{Rect.class},new Rect());
+        try{restoreFloatingCompat(task);}
+        catch(Exception error){log.accept("FULLSCREEN_COMPAT_RELEASE_FAILED "+FrameworkAccess.reason(error));}
+    }
     void shareFinished(ShareLaunch launch,Object starter){
         try{synchronized(lock){
             Object started=a.field(starter,"mLastStartActivityRecord");
@@ -712,8 +718,7 @@ final class WindowEngine {
             ComponentName component=(ComponentName)a.field(task,"realActivity");
             if(component==null||!component.getPackageName().equals(a.field(launch.request,"packageName")))return;
             // A failed/unsupported acquisition must not leave a raw freeform task behind.
-            a.call(task,"setWindowingMode",new Class<?>[]{int.class},1);
-            a.call(task,"setBounds",new Class<?>[]{Rect.class},new Rect());
+            releaseToFullscreen(task);
             log.accept("SHARE_WINDOW_NATIVE_FALLBACK task="+a.field(task,"mTaskId"));
         }}catch(Exception error){log.accept("SHARE_WINDOW_FALLBACK_FAILED "+FrameworkAccess.reason(error));}
     }
