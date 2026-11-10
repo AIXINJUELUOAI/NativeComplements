@@ -119,7 +119,7 @@ class ManagementUiTest {
         assertEquals(listOf("com.test.two", "com.test.one"), store.read().apps)
         assertTrue(store.read().hideRecents)
         assertEquals(90, store.read().selectionDistance)
-        assertTrue(store.read().doubleClose)
+        assertEquals(false, store.read().doubleClose)
         store.number("heat", 100)
         assertEquals(72, Config(context).heat())
         store.apps(listOf("com.test.one", "com.test.one", "bad", "com.test.two", "com.test.three", "com.test.four", "com.test.five", "com.test.six"))
