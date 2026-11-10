@@ -33,8 +33,29 @@ public final class IconImages {
         float inset=.25f;
         try{inset=(Float)android.graphics.drawable.AdaptiveIconDrawable.class.getDeclaredMethod("getExtraInsetFraction").invoke(null);}catch(Exception ignored){}
         float viewport=1f/(1+2*inset);
+        if(cut==null&&roundedShape(square)){
+            // A self-contained rounded-shape icon: its own fill becomes the background and the shape fills the viewport instead of shrinking inside a second plate.
+            Rect bounds=contentBounds(square);
+            return new Layers(solid(insideEdgeColor(square,bounds),square.getWidth()),fit(square,square.getWidth(),viewport));
+        }
         Bitmap foreground = fit(cut != null ? cut : square,square.getWidth(),viewport*.80f);
         return new Layers(solid(color,square.getWidth()),foreground);
+    }
+    static boolean roundedShape(Bitmap b){
+        int w=b.getWidth(),h=b.getHeight();
+        if(Color.alpha(b.getPixel(0,0))>=24||Color.alpha(b.getPixel(w-1,0))>=24||Color.alpha(b.getPixel(0,h-1))>=24||Color.alpha(b.getPixel(w-1,h-1))>=24)return false;
+        Rect r=contentBounds(b);return r.width()>=w*.6f&&r.height()>=h*.6f;
+    }
+    static int insideEdgeColor(Bitmap b,Rect r){
+        int[] rs=new int[32],gs=new int[32],bs=new int[32];int n=0;
+        for(int i=0;i<8;i++){float t=(i+1)/9f;
+            int x=r.left+Math.round(r.width()*t),y=r.top+Math.round(r.height()*t);
+            int[][] pts={{x,r.top+3},{x,r.bottom-4},{r.left+3,y},{r.right-4,y}};
+            for(int[] p:pts){int c=b.getPixel(Math.min(b.getWidth()-1,Math.max(0,p[0])),Math.min(b.getHeight()-1,Math.max(0,p[1])));if(Color.alpha(c)<128)continue;rs[n]=Color.red(c);gs[n]=Color.green(c);bs[n]=Color.blue(c);n++;}
+        }
+        if(n==0)return dominant(b);
+        Arrays.sort(rs,0,n);Arrays.sort(gs,0,n);Arrays.sort(bs,0,n);
+        return Color.rgb(rs[n/2],gs[n/2],bs[n/2]);
     }
     static Bitmap compactSolid(Bitmap source){
         int color=source.getPixel(0,0);
