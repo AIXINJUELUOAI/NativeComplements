@@ -98,7 +98,7 @@ final class WindowEngine {
         if(lock==null||handler==null||context==null||!Wire.allowedPackage(pkg)||!Wire.validToken(token))return false;
         synchronized(lock){try{
             if(!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000
-                ||normalOccupied()||recovering||pendingStart!=null||sessions.stream().anyMatch(s->s.restoring)
+                ||normalOccupied()||recovering||pendingStart!=null||anyRestoring()
                 ||screenBlocked())return false;
             Object task=find(id);if(task==null||task!=a.focused.invoke(root)||owns(task)||a.integer(task,"getWindowingMode")!=1)return false;
             ComponentName component=(ComponentName)a.field(task,"realActivity");
@@ -371,7 +371,7 @@ final class WindowEngine {
                 refresh(s); note("CANVAS：逻辑画布已切换"); return;
             }
             if (!"START".equals(op)) return;
-            if(recovering||sessions.stream().anyMatch(v->v.restoring)||unrecoveredJournal())
+            if(recovering||anyRestoring()||unrecoveredJournal())
                 throw new IllegalStateException("先完成待恢复任务");
             if (Build.VERSION.SDK_INT != 37) throw new IllegalStateException("首版仅验证 Android 17 / API 37");
             KeyguardManager kg = context.getSystemService(KeyguardManager.class);
@@ -476,7 +476,7 @@ final class WindowEngine {
                 recoveryWaits=0;recover("重新检查待恢复任务");
                 if(recovering||!sessions.isEmpty())throw new IllegalStateException("旧任务仍待恢复："+last);
             }
-            if(sessions.stream().anyMatch(s->s.restoring)){
+            if(anyRestoring()){
                 openPhase(request,"wait-recovery",-1);handler.postDelayed(()->open(request,attempt+1),32);return;
             }
             boolean shortcut=request.hasExtra("shortcutLaunch");
@@ -623,7 +623,7 @@ final class WindowEngine {
         if(lock==null||handler==null||context==null||request==null||!landscapeShareWindow
             ||!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000)return null;
         synchronized(lock){
-            if(recovering||pendingStart!=null||sessions.stream().anyMatch(s->s.restoring)
+            if(recovering||pendingStart!=null||anyRestoring()
                 ||screenBlocked())return null;
             if(source==null){
                 // Application-context starts have no source token. Admit only the
@@ -699,6 +699,8 @@ final class WindowEngine {
         activate(s,placement);
         a.call(a.field(task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},task);
     }
+    /** True while any retained session is still being restored to its original task state. */
+    private boolean anyRestoring(){return sessions.stream().anyMatch(s->s.restoring);}
     /** True while the keyguard is showing or the screen is not interactive. */
     private boolean screenBlocked(){
         return context.getSystemService(KeyguardManager.class).isKeyguardLocked()
