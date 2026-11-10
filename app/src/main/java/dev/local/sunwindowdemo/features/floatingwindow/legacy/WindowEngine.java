@@ -395,9 +395,7 @@ final class WindowEngine {
             }
             trace.arm(pkg,openGeneration);
             s.entryFade=i.getBooleanExtra("predictiveEntry",false)||!i.getBooleanExtra("morphEntry",false);
-            s.lease = lease;
-            s.death = () -> handler.post(() -> { if (sessions.contains(s)) recover("控制进程退出"); });
-            lease.linkToDeath(s.death, 0);
+            bindLease(s,lease);
             try {
                 save(s); // Durable original state BEFORE the first task mutation.
                 synchronized (lock) {
@@ -699,11 +697,15 @@ final class WindowEngine {
             else log.accept("SHARE_WINDOW_REUSE_PENDING task="+target.taskId);
         }catch(Exception error){log.accept("SHARE_WINDOW_REUSE_FAILED "+FrameworkAccess.reason(error));}
     }
-    /** Shared by task acquisition: bind the control lease and persist the original state before any task mutation. */
-    private void bindAndSave(Session s,IBinder lease)throws Exception{
+    /** Links the control lease death recipient that recovers this session if the controller exits. */
+    private void bindLease(Session s,IBinder lease)throws Exception{
         s.lease=lease;
         s.death=()->handler.post(()->{if(sessions.contains(s))recover("控制进程退出");});
         lease.linkToDeath(s.death,0);
+    }
+    /** Shared by task acquisition: bind the control lease and persist the original state before any task mutation. */
+    private void bindAndSave(Session s,IBinder lease)throws Exception{
+        bindLease(s,lease);
         try{save(s);}catch(Exception error){lease.unlinkToDeath(s.death,0);throw error;}
     }
     /** One native-fullscreen exit for a freeform task the module does not (or no longer) manage. */
