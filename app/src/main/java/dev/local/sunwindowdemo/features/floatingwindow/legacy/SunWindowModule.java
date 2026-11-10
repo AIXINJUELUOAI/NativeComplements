@@ -250,10 +250,14 @@ public final class SunWindowModule extends XposedModule {
                 handles.add(hook(a.method(a.activity,"finishRelaunching")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object result=chain.proceed();engine.trace.state("SERVER_FINISH_RELAUNCH",chain.getThisObject());return result;
                 }));
-                handles.add(hook(a.method(a.activity,"activityResumedLocked",android.os.IBinder.class,boolean.class)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                    Object result=chain.proceed();engine.trace.resumed((android.os.IBinder)chain.getArg(0));return result;
-                }));
             }catch(Exception e){note("ENTRY_LAYOUT_CALLBACK_UNAVAILABLE "+FrameworkAccess.reason(e));}
+            try{
+                handles.add(hook(a.method(a.activity,"activityResumedLocked",android.os.IBinder.class,boolean.class)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();
+                    android.os.IBinder token=(android.os.IBinder)chain.getArg(0);
+                    engine.trace.resumed(token);engine.iconAppResumed(token);return result;
+                }));
+            }catch(Exception e){note("ACTIVITY_RESUME_OBSERVER_UNAVAILABLE "+FrameworkAccess.reason(e));}
             ShareWindow.install(this,a,engine,this::note);
             // Target Android 17 signature, checked against the connected device's
             // services.jar. Configure related tasks before handleStartResult requests Shell playback; preserve flags.
@@ -262,18 +266,31 @@ public final class SunWindowModule extends XposedModule {
             java.lang.reflect.Field lastStarted=a.field(starter,"mLastStartActivityRecord");
             java.lang.reflect.Field realCallingUid=a.field(starter,"mRealCallingUid");
             java.lang.reflect.Field activityIntent=a.field(a.activity,"intent");
+            // Optional exact-PendingIntent attribution. Missing members affect explicit jumps only.
+            java.lang.reflect.Field[] launchOrigin=new java.lang.reflect.Field[2];
+            try{
+                Class<?> requestType=Class.forName("com.android.server.wm.ActivityStarter$Request",false,p.getClassLoader());
+                launchOrigin[0]=a.field(starter,"mRequest");
+                launchOrigin[1]=a.field(requestType,"originatingPendingIntent");
+                android.app.PendingIntent.class.getDeclaredMethod("getTarget");
+                engine.launchRoutingReady();note("WINDOW_LAUNCH_IDENTITY_READY");
+            }catch(Exception error){note("WINDOW_LAUNCH_IDENTITY_UNAVAILABLE "+FrameworkAccess.reason(error));}
             handles.add(hook(a.method(starter,"handleStartResult",a.activity,android.app.ActivityOptions.class,
                 int.class,boolean.class,Class.forName("android.window.RemoteTransition"),transition,int.class))
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object ticket=null;
                     int code=(Integer)chain.getArg(2);
+                    Object shortcutTicket=null;
+                    if(code>=0&&code<=3&&launchOrigin[0]!=null&&launchOrigin[1]!=null)try{
+                        Object request=launchOrigin[0].get(chain.getThisObject());
+                        shortcutTicket=engine.shortcutLaunchTicket(request==null?null:launchOrigin[1].get(request),sourceRecord.get(chain.getThisObject()));
+                    }catch(Exception error){note("WINDOW_LAUNCH_OBSERVE_FAILED "+FrameworkAccess.reason(error));}
                     if(code>=0&&code<=3){
                         try{
                             android.content.Intent intent=(android.content.Intent)activityIntent.get(chain.getArg(0));
-                            ticket=engine.activityStarting(sourceRecord.get(chain.getThisObject()),chain.getArg(0),lastStarted.get(chain.getThisObject()),intent==null?0:intent.getFlags(),realCallingUid.getInt(chain.getThisObject()));
+                            if(shortcutTicket==null)ticket=engine.activityStarting(sourceRecord.get(chain.getThisObject()),chain.getArg(0),lastStarted.get(chain.getThisObject()),intent==null?0:intent.getFlags(),realCallingUid.getInt(chain.getThisObject()));
                         }catch(Exception e){note("HANDOFF_OBSERVE_FAILED "+FrameworkAccess.reason(e));}
                     }
-                    Object shortcutTicket=code>=0&&code<=3?engine.shortcutLaunchTicket():null;
                     boolean success=false;
                     try{
                         Object result=chain.proceed();success=result!=null;

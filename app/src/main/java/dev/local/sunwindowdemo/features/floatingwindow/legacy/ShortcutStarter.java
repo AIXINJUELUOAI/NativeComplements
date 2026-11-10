@@ -11,6 +11,11 @@ import java.lang.reflect.Method;
 
 /** The real LauncherApps PendingIntent, with the user's sender admission and native verdict. */
 final class ShortcutStarter {
+    @android.annotation.SuppressLint({"BlockedPrivateApi","SoonBlockedPrivateApi"})
+    static android.os.IBinder sender(PendingIntent pending)throws Exception{
+        Object target=PendingIntent.class.getDeclaredMethod("getTarget").invoke(pending);
+        return ((android.os.IInterface)target).asBinder();
+    }
     // System-server only, exact API37 method recorded in launch-input-members.json.
     @android.annotation.SuppressLint({"BlockedPrivateApi","SoonBlockedPrivateApi"})
     static int send(PendingIntent pending,Context context,Intent fillIn,PendingIntent.OnFinished finished,

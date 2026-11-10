@@ -4,6 +4,7 @@ import android.app.KeyguardManager;
 import android.app.ActivityOptions;
 import android.content.*;
 import android.content.res.Configuration;
+import android.view.WindowManager;
 import android.graphics.*;
 import android.os.*;
 import android.util.AtomicFile;
@@ -21,6 +22,10 @@ final class WindowEngine {
     final FrameworkAccess a;
     private final Consumer<String> log;
     private final AtomicFile journal = new AtomicFile(new File("/data/system/sunwindow-demo5.json"));
+    private final WindowOrientation orientations=new WindowOrientation(new File("/data/system/nativecomplements-window-orientation.json"));
+    private final java.util.concurrent.atomic.AtomicBoolean orientationSaveQueued=new java.util.concurrent.atomic.AtomicBoolean();
+    private boolean launchRoutingReady;
+    void launchRoutingReady(){launchRoutingReady=true;}
     private Context context;
     private Object wms, root, lock, atm;
     private Handler handler;
@@ -40,6 +45,7 @@ final class WindowEngine {
     void continuationReady(){continuationReady=true;}
     record ShareLaunch(Object request,ActivityOptions options,IBinder lease,Object sourceTask) {}
     private record ShareStarted(Session target,Session displaced) {}
+    private record ShareReused(Session target) {}
     final ThreadLocal<ShareLaunch> shareLaunch=new ThreadLocal<>();
     private String uiTouch="尚未收到角落触摸";
     private boolean controlUid(int uid){return uid>=0&&(uid==clientUid||uid==uiUid);}
@@ -177,7 +183,7 @@ final class WindowEngine {
         request.removeExtra("openReply");
         if(reply!=null){
             Bundle result=new Bundle();result.putBoolean("dispatched",request.getBooleanExtra("launchDispatched",false));result.putBoolean("superseded",request.getLongExtra("generation",-1)!=openGeneration);
-            ShortcutLaunch ticket=pendingShortcutLaunch.get();
+            WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
             result.putInt("taskId",ticket!=null&&ticket.generation==request.getLongExtra("generation",-1)?ticket.taskId:request.getIntExtra("taskId",-1));
             reply.send(success?1:0,result);
         }
@@ -194,20 +200,8 @@ final class WindowEngine {
     private int recoveryWaits;
     private int endedTaskId=-1;
     private volatile long openGeneration;
-    private final java.util.concurrent.atomic.AtomicReference<ShortcutLaunch> pendingShortcutLaunch=
+    private final java.util.concurrent.atomic.AtomicReference<WindowNavigation.Launch> pendingShortcutLaunch=
         new java.util.concurrent.atomic.AtomicReference<>();
-    private static final class ShortcutLaunch {
-        final long generation;
-        final String pkg;
-        final int userId;
-        volatile Object task;
-        volatile int taskId=-1;
-        volatile boolean dispatched;
-        final long sentAt=SystemClock.elapsedRealtime();
-        ShortcutLaunch(long generation,String pkg,int userId){
-            this.generation=generation;this.pkg=pkg;this.userId=userId;
-        }
-    }
     private volatile boolean refreshQueued;
     private String last = "后端正在初始化";
     private boolean attached;
@@ -226,7 +220,7 @@ final class WindowEngine {
         boolean miniLarge,edgeHidden,geometryDirty,refreshingGeometry,resizing;
         int edgeSide;
         float placementMargin;
-        Rect safeBounds;
+        Rect safeBounds,miniBounds;
         Geometry.Placement miniPlacement;
         String lastRuntimeState;
         Rect lastSurfaceCrop;
@@ -276,6 +270,8 @@ final class WindowEngine {
             HandlerThread worker = new HandlerThread("SunWindowDemo5",android.os.Process.THREAD_PRIORITY_DISPLAY); worker.start();
             handler = new Handler(worker.getLooper());
             handler.post(()->{
+                try{dev.local.sunwindowdemo.features.iconlayers.IconAssets.connect(context);}
+                catch(RuntimeException unavailable){log.accept("ICON_ASSETS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
                 audio=WindowAudio.create(context,handler,log);
                 try{suggestionInput=new SuggestionInput(a,context,root,lock,handler);log.accept("SUGGESTIONS_INPUT_READY");}
                 catch(Exception unavailable){log.accept("SUGGESTIONS_INPUT_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
@@ -322,6 +318,7 @@ final class WindowEngine {
                 }
             },screen,null,handler,Context.RECEIVER_NOT_EXPORTED);
             handler.post(() -> {
+                try{orientations.load();}catch(Exception error){log.accept("ORIENTATION_MEMORY_LOAD_FAILED "+FrameworkAccess.reason(error));}
                 loadHistory();historyTick();pushHistory();
                 note("READY: Android " + Build.VERSION.SDK_INT + "；仅系统框架；默认无窗口改动\n" + capabilities());
                 if (journal.getBaseFile().exists()) recover("初始化恢复");
@@ -387,9 +384,10 @@ final class WindowEngine {
             if (lease == null || !lease.isBinderAlive()) throw new IllegalStateException("控制进程已退出");
             Session previous=active,previousPinned=pinned;
             Session displaced=normalOccupied()?active:null;
+            rememberOrientation(previous);
             Session s;
             synchronized (lock) {
-                s = snapshot(i.getIntExtra("taskId", -1), pkg, token);
+                s = snapshot(i.getIntExtra("taskId", -1), pkg, token,i.getBooleanExtra("allowInheritedFreeform",false));
                 if(i.getBooleanExtra("morphEntry",false)){
                     s.landscape=WindowPolicy.currentLandscape(a.config(s.task,false).orientation,s.orientationRequest,s.landscape);
                     log.accept("CONVERT_ORIENTATION task="+s.taskId+" landscape="+s.landscape);
@@ -489,45 +487,30 @@ final class WindowEngine {
             if(shortcut&&(shortcutLaunch==null||!shortcutLaunch.isActivity()||!android.os.Process.myUserHandle().equals(request.getParcelableExtra("shortcutUser",UserHandle.class))))
                 throw new IllegalArgumentException("shortcut identity");
             final int shortcutUser=shortcut?(Integer)a.call(request.getParcelableExtra("shortcutUser",UserHandle.class),"getIdentifier"):-1;
-            if(active!=null){
-                if(!shortcut){
-                // Sessions retain creation order: reopen the app's main task before its children.
-                for(Session retained:sessions)if(!retained.restoring&&pkg.equals(retained.pkg)){
-                    synchronized(lock){
-                        if(!live(retained))continue;
-                        if(retained==active)break;
-                        if(retained==pinned){state(retained,"normal");completeOpen(request,true);return;}
-                        if(pinned!=null&&pinned.token.equals(retained.token))state(pinned,"normal");
-                        activate(retained,active.placement);
-                        a.call(retained.task,"moveToFront",new Class<?>[]{String.class},"NativeComplements-reopen");
-                        a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
-                        focusExpanded(retained);renderFrame(retained);
+            if(!shortcut){
+                // Package opens intentionally select the main task before retained mini-programs.
+                Session retained=null;
+                synchronized(lock){for(Session s:sessions)if(pkg.equals(s.pkg)&&live(s)){retained=s;break;}}
+                if(retained!=null){
+                    if(!presentExisting(retained,request.getBooleanExtra("wakeStep",false))){
+                        openPhase(request,"wait-session",retained.taskId);handler.postDelayed(()->open(request,attempt+1),32);return;
                     }
-                    completeOpen(request,true);report("REOPEN");return;
-                }
-                if(pkg.equals(active.pkg)&&!active.restoring&&!active.closing){
-                    synchronized(lock){
-                        a.call(active.task,"setFocusable",new Class<?>[]{boolean.class},true);
-                        a.call(active.task,"moveToFront",new Class<?>[]{String.class},"SunWindowDemo8.2-reopen");
-                        a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
-                    }
-                    state(active,"normal");completeOpen(request,true);return;
-                }
+                    request.putExtra("taskId",retained.taskId);completeOpen(request,true);report("REOPEN");return;
                 }
             }
             if(sessions.isEmpty()&&journal.getBaseFile().exists())throw new IllegalStateException("请先完成待恢复记录");
             final Object[] candidate={null};final long[] newest={Long.MIN_VALUE};
             if(shortcut){
                 if(request.getBooleanExtra("launched",false)){
-                    ShortcutLaunch ticket=pendingShortcutLaunch.get();
-                    if(ticket==null||ticket.generation!=generation||!pkg.equals(ticket.pkg)||shortcutUser!=ticket.userId)
+                    WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
+                    if(ticket==null||ticket.generation!=generation||!pkg.equals(ticket.hint)||shortcutUser!=ticket.userId)
                         throw new IllegalStateException("快捷功能启动请求已失效");
                     if(ticket.dispatched&&ticket.taskId>=0)synchronized(lock){
                         Object task=find(ticket.taskId);
                         ComponentName component=task==null?null:(ComponentName)a.field(task,"realActivity");
-                        if(task==null||task!=ticket.task||(Integer)a.field(task,"mUserId")!=ticket.userId
-                            ||component==null||!pkg.equals(component.getPackageName())
-                            ||!a.bool(task,"isRootTask")||!a.bool(task,"isLeafTask"))
+                        if(task!=null&&(task!=ticket.task||(Integer)a.field(task,"mUserId")!=ticket.userId
+                            ||component==null||!component.getPackageName().equals(ticket.targetPackage)
+                            ||!a.bool(task,"isRootTask")||!a.bool(task,"isLeafTask")))
                             throw new IllegalStateException("快捷功能目标任务已改变");
                         candidate[0]=task;
                     }
@@ -548,7 +531,9 @@ final class WindowEngine {
                 if(shortcut){
                     // The system-issued shortcut PendingIntent preserves its real intent stack.
                     // Do not replace it with the launcher activity or force it into the old task.
-                    ShortcutLaunch ticket=new ShortcutLaunch(generation,pkg,shortcutUser);
+                    if(!launchRoutingReady)throw new IllegalStateException("原始跳转任务识别尚未就绪");
+                    WindowNavigation.Launch ticket=new WindowNavigation.Launch(generation,pkg,
+                        request.getBooleanExtra("notificationLaunch",false)?null:pkg,shortcutUser,ShortcutStarter.sender(shortcutLaunch),SystemClock.elapsedRealtime());
                     pendingShortcutLaunch.set(ticket);
                     int result=ShortcutStarter.send(shortcutLaunch,context,request.getParcelableExtra("launchFillIn",Intent.class),(pi,intent,code,data,extras)->{
                         synchronized(ticket){
@@ -566,63 +551,63 @@ final class WindowEngine {
                 handler.postDelayed(()->open(request,attempt+1),32);return;
             }
             if(shortcut){
-                ShortcutLaunch ticket=pendingShortcutLaunch.get();
+                WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
                 if(ticket==null||ticket.generation!=generation)throw new IllegalStateException("快捷功能启动请求已失效");
                 if(!ticket.dispatched){openPhase(request,"wait-shortcut",-1);handler.postDelayed(()->open(request,attempt+1),32);return;}
             }
-            if(candidate[0]==null&&shortcut){
-                ShortcutLaunch ticket=pendingShortcutLaunch.get();
-                if(ticket!=null&&ticket.dispatched&&SystemClock.elapsedRealtime()-ticket.sentAt>1500)
-                    throw new IllegalStateException("系统未返回快捷功能目标任务，请检查该快捷功能的启动限制");
-            }
+            // A delegated launch may finish its intermediate task before opening the target.
+            // Keep observing this exact send until the common bounded launch deadline.
             if(candidate[0]==null){openPhase(request,"wait-task",-1);handler.postDelayed(()->open(request,attempt+1),32);return;}
             synchronized(lock){if(a.animating(candidate[0])||a.integer(candidate[0],"getRelativeDisplayRotation")!=0){
                 openPhase(request,"wait-native",id);handler.postDelayed(()->open(request,attempt+1),32);return;}
             }
-            clearShortcutLaunch(generation);
+            request.putExtra("taskId",id);
             Session retained=sessionFor(candidate[0]);
             if(retained!=null&&!retained.restoring){
-                synchronized(lock){
-                    if(retained==pinned)state(retained,"normal");
-                    else if(retained!=active){
-                        if(pinned!=null&&pinned.token.equals(retained.token))state(pinned,"normal");
-                        activate(retained,retained.placement);
-                        a.call(retained.task,"moveToFront",new Class<?>[]{String.class},"NativeComplements-intent-reuse");
-                        a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
-                        focusExpanded(retained);renderFrame(retained);
-                    }else if("mini".equals(retained.frame))state(retained,"normal");
+                if(!presentExisting(retained,false)){
+                    openPhase(request,"wait-session",id);handler.postDelayed(()->open(request,attempt+1),32);return;
                 }
-                completeOpen(request,true);report("INTENT_REUSED");return;
+                completeOpen(request,true);clearShortcutLaunch(generation);report("INTENT_REUSED");return;
             }
-            openPhase(request,"start",id);command(new Intent(request).putExtra("op","START").putExtra("taskId",id).putExtra("fadeEntry",true));
+            WindowNavigation.Launch resolved=pendingShortcutLaunch.get();
+            String actual=shortcut&&resolved!=null&&resolved.targetPackage!=null?resolved.targetPackage:pkg;
+            clearShortcutLaunch(generation);
+            openPhase(request,"start",id);command(new Intent(request).putExtra("package",actual).putExtra("op","START")
+                .putExtra("taskId",id).putExtra("fadeEntry",true).putExtra("allowInheritedFreeform",shortcut));
         }catch(Throwable e){completeOpen(request,false);clearShortcutLaunch(generation);note("OPEN_FAILED："+pkg+"："+FrameworkAccess.reason(e));}
     }
     private void clearShortcutLaunch(long generation){
-        ShortcutLaunch ticket=pendingShortcutLaunch.get();
+        WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
         if(ticket!=null&&ticket.generation==generation)pendingShortcutLaunch.compareAndSet(ticket,null);
     }
-    Object shortcutLaunchTicket(){
-        ShortcutLaunch ticket=pendingShortcutLaunch.get();
+    Object shortcutLaunchTicket(Object originating,Object source){
+        WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
         if(ticket!=null&&ticket.generation!=openGeneration){pendingShortcutLaunch.compareAndSet(ticket,null);return null;}
-        return ticket;
+        if(ticket==null)return null;
+        try{
+            IBinder sender=originating instanceof IBinder binder?binder:null;
+            Object sourceTask=source==null?null:a.call(source,"getTask");
+            return ticket.accepts(openGeneration,sender,sourceTask)?ticket:null;
+        }catch(Exception error){log.accept("WINDOW_LAUNCH_MATCH_FAILED "+FrameworkAccess.reason(error));return null;}
     }
     /** The existing start-result hook calls this only after a successful native start.
      * Keep the last matching activity in a shortcut's real intent stack, including
      * singleTask/onNewIntent reuse; never guess from the package's recent tasks. */
     void shortcutActivityStarted(Object value,Object started){
-        if(!(value instanceof ShortcutLaunch ticket)||started==null||lock==null)return;
+        if(!(value instanceof WindowNavigation.Launch ticket)||started==null||lock==null)return;
         try{synchronized(lock){
             if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration)return;
             Object task=a.call(started,"getTask");
-            if(task==null||!ticket.pkg.equals(a.field(started,"packageName"))
-                ||(Integer)a.field(task,"mUserId")!=ticket.userId)return;
+            if(task==null||(Integer)a.field(task,"mUserId")!=ticket.userId)return;
             ComponentName component=(ComponentName)a.field(task,"realActivity");
-            if(component==null||!ticket.pkg.equals(component.getPackageName()))return;
+            if(component==null||!ticket.targetAllowed(component.getPackageName(),(Integer)a.field(task,"mUserId"))
+                ||Wire.PKG.equals(component.getPackageName())||BackBridge.PACKAGE.equals(component.getPackageName())
+                ||LauncherGuard.PACKAGE.equals(component.getPackageName())||a.integer(task,"getActivityType")!=1)return;
             synchronized(ticket){
-                if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration||ticket.dispatched)return;
-                ticket.task=task;ticket.taskId=(Integer)a.field(task,"mTaskId");
+                if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration)return;
+                ticket.task=task;ticket.taskId=(Integer)a.field(task,"mTaskId");ticket.targetPackage=component.getPackageName();
             }
-            log.accept("SHORTCUT_TASK_BOUND generation="+ticket.generation+" package="+ticket.pkg+" task="+ticket.taskId);
+            log.accept("WINDOW_LAUNCH_BOUND generation="+ticket.generation+" source="+ticket.hint+" package="+ticket.targetPackage+" task="+ticket.taskId);
         }}catch(Exception e){log.accept("SHORTCUT_TASK_BIND_FAILED "+FrameworkAccess.reason(e));}
     }
     private void openPhase(Intent request,String phase,int id){
@@ -630,6 +615,13 @@ final class WindowEngine {
         log.accept("OPEN_PHASE package="+request.getStringExtra("package")+" phase="+phase+" task="+id);
     }
 
+    void iconAppResumed(IBinder token){
+        if(lock==null)return;
+        try{synchronized(lock){
+            Object record=a.method(a.activity,"forTokenLocked",IBinder.class).invoke(null,token);
+            if(record!=null)dev.local.sunwindowdemo.features.iconlayers.IconAssets.started((String)a.field(record,"packageName"));
+        }}catch(Exception error){log.accept("ICON_LAUNCH_OBSERVER_FAILED "+FrameworkAccess.reason(error));}
+    }
     ShareLaunch prepareShare(Object request,Object source,ActivityOptions options,int realCallingUid)throws Exception{
         if(lock==null||handler==null||context==null||request==null||!landscapeShareWindow
             ||!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000)return null;
@@ -649,8 +641,7 @@ final class WindowEngine {
             if((Boolean)a.call(request,"isResolverOrDelegateActivity")||a.integer(request,"getUid")<10000)return null;
             String pkg=(String)a.field(request,"packageName");
             if(!Wire.allowedPackage(pkg)||Wire.PKG.equals(pkg)||BackBridge.PACKAGE.equals(pkg)
-                ||LauncherGuard.PACKAGE.equals(pkg)||!UserHandle.getUserHandleForUid(a.integer(request,"getUid")).equals(android.os.Process.myUserHandle())
-                ||sessions.stream().anyMatch(s->pkg.equals(s.pkg)))return null;
+                ||LauncherGuard.PACKAGE.equals(pkg)||!UserHandle.getUserHandleForUid(a.integer(request,"getUid")).equals(android.os.Process.myUserHandle()))return null;
             Intent intent=(Intent)a.field(request,"intent");boolean chooser=(Boolean)a.call(source,"isResolverOrDelegateActivity");
             String sourcePkg=(String)a.field(source,"packageName");
             if(!chooser&&(a.integer(source,"getUid")<10000||Wire.PKG.equals(sourcePkg)||BackBridge.PACKAGE.equals(sourcePkg)||LauncherGuard.PACKAGE.equals(sourcePkg)))return null;
@@ -662,7 +653,7 @@ final class WindowEngine {
             Object display=a.call(sourceTask,"getDisplayContent");Rect bounds=(Rect)a.call(display,"getBounds");
             if((Integer)a.field(display,"mDisplayId")!=0||a.integer(sourceTask,"getActivityType")!=1)return null;
             if(options!=null){int mode=(Integer)a.call(options,"getLaunchWindowingMode");if(mode!=0&&mode!=1)return null;}
-            boolean horizontal=initialLandscape(request,pkg);
+            boolean horizontal=initialLandscape(request,pkg,0);
             Geometry.Placement p=Geometry.place(Math.min(bounds.width(),bounds.height()),horizontal,0,0,bounds.width(),bounds.height(),0);
             ActivityOptions next=ShareWindow.launchOptions(options,new Rect(0,0,p.width(),p.height()));
             log.accept("SHARE_WINDOW_PREPARE package="+pkg+" landscape="+horizontal);
@@ -671,7 +662,13 @@ final class WindowEngine {
     }
     private Object startShare(Object request,Object started,ShareLaunch launch)throws Exception{
         Object task=a.call(started,"getTask");
-        if(task==null||owns(task)||!launch.lease.isBinderAlive())return null;
+        if(task==null||!launch.lease.isBinderAlive())return null;
+        Session retained=sessionFor(task);
+        if(retained!=null){
+            // Native ActivityStarter has already delivered the real Intent/grants/result chain.
+            // Re-present that exact task; never substitute the package's launcher page.
+            return new ShareReused(retained);
+        }
         String pkg=(String)a.field(request,"packageName");Session s;
         try{s=snapshot((Integer)a.field(task,"mTaskId"),pkg,Wire.token(),true);}
         catch(Exception error){
@@ -698,6 +695,14 @@ final class WindowEngine {
             log.accept("SHARE_WINDOW_ACQUIRED task="+s.taskId+" package="+pkg);
             return new ShareStarted(s,displaced);
         }catch(Exception error){handler.post(()->recover("分享小窗接管失败"));throw error;}
+    }
+    private void presentShared(Session target,int attempt){
+        try{
+            if(!sessions.contains(target)||target.restoring)return;
+            if(presentExisting(target,false)){report("SHARE_WINDOW_REUSED");return;}
+            if(attempt<100)handler.postDelayed(()->presentShared(target,attempt+1),32);
+            else log.accept("SHARE_WINDOW_REUSE_PENDING task="+target.taskId);
+        }catch(Exception error){log.accept("SHARE_WINDOW_REUSE_FAILED "+FrameworkAccess.reason(error));}
     }
     void shareFinished(ShareLaunch launch,Object starter){
         try{synchronized(lock){
@@ -779,6 +784,10 @@ final class WindowEngine {
         }
     }
     void activityStartResult(Object value,boolean success){
+        if(value instanceof ShareReused reused){
+            if(success)handler.post(()->presentShared(reused.target,0));
+            return;
+        }
         if(value instanceof ShareStarted shared){shareResult(shared,success);return;}
         if(!(value instanceof SwitchStart ticket))return;
         handler.post(()->{
@@ -827,6 +836,40 @@ final class WindowEngine {
         for(Session s:sessions)if(s!=from&&s.token.equals(from.token)&&live(s))return s;
         return null;
     }
+    /** Every package open and original-intent reuse goes through the same presentation path. */
+    private boolean presentExisting(Session next,boolean step)throws Exception{
+        synchronized(lock){
+            if(!live(next)||next.closing||next.fullTransition||next.returning||next.entering||next.transitioning||pendingStart!=null)return false;
+            if(updateOrientation(next)&&visible(next))refresh(next);
+            String target=WindowNavigation.wakeForm(next.frame,next.edgeHidden,step);
+            if(visible(next)){
+                if("restore-mini".equals(target)){changeForm(next,target);return true;}
+                if("mini".equals(next.frame))changeForm(next,"normal");
+            }else{
+                Session previous=active;
+                Session displaced=normalOccupied()&&previous!=next&&!previous.token.equals(next.token)?previous:null;
+                if(pinned!=null&&pinned!=next&&pinned.token.equals(next.token)){
+                    pinned.parked=true;pinned.animationRev++;pinned.opacity=0;
+                    a.call(pinned.task,"setFocusable",new Class<?>[]{boolean.class},false);
+                    if(pinned.decoration!=null)pinned.decoration.hide(pinned.task);
+                    renderFrame(pinned);pinned=null;
+                }
+                if(next==pinned)pinned=null;
+                if(previous!=null&&previous!=next&&"mini".equals(previous.frame)&&!previous.token.equals(next.token)){
+                    pinned=previous;active=null;
+                }
+                activate(next,next.placement);
+                if(displaced!=null)finishGroup(displaced,false,"切换目标替换默认窗");
+            }
+            a.call(next.task,"setAlwaysOnTop",new Class<?>[]{boolean.class},true);
+            a.call(next.task,"moveToFront",new Class<?>[]{String.class},"NativeComplements-present");
+            a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
+            if(!next.transitioning&&!next.entering&&!entryInputPending(next))focusExpanded(next);
+            renderFrame(next);rememberOrientation(next);
+            log.accept("WINDOW_PRESENT task="+next.taskId+" frame="+next.frame+" landscape="+next.landscape);
+            return true;
+        }
+    }
     private void activate(Session next,Geometry.Placement placement)throws Exception{
         if(recovering||next.restoring||!sessions.contains(next))throw new IllegalStateException("关联任务已退出");
         if(context.getSystemService(KeyguardManager.class).isKeyguardLocked()
@@ -836,6 +879,7 @@ final class WindowEngine {
         long entryDelay=previous!=null&&previous!=next&&!previous.parked?exitCover(previous):0;
         endCover(next);
         if(previous!=null&&previous!=next){
+            rememberOrientation(previous);
             previous.animationRev++;previous.transitioning=false;previous.entering=false;
             previous.fullTransition=false;previous.parked=true;previous.opacity=0;
             a.call(previous.task,"setFocusable",new Class<?>[]{boolean.class},false);
@@ -843,7 +887,8 @@ final class WindowEngine {
             a.opacity(previous.task,0);
         }
         next.parked=false;next.closing=false;next.returning=false;next.backRequested=false;next.backComplete=false;
-        next.frame="normal";next.animationRev++;next.entering=true;next.entryStarted=false;next.entryFade=true;
+        next.frame="normal";next.edgeHidden=false;next.edgeBarDragging=false;
+        next.animationRev++;next.entering=true;next.entryStarted=false;next.entryFade=true;
         next.transitioning=true;next.fullTransition=false;next.presented=false;next.opacity=0;next.barAlpha=0;
         active=next;
         a.call(atm,"deferWindowLayout");
@@ -975,10 +1020,10 @@ final class WindowEngine {
         }
         s.resizing="RESIZE".equals(op);
         s.animationRev++;s.transitioning=false;s.radiusFactor=1;
-        if("CLOSE".equals(op)){s.miniDragBase=null;close(s);return;}
+        if("CLOSE".equals(op)){s.miniDragBase=null;changeForm(s,"closed");return;}
         if("DOCK".equals(op))endMiniDrag(s,false);
-        if("FULL".equals(op)){fullscreen(s);return;}
-        if("MINI".equals(op)||"NORMAL".equals(op)){state(s,"MINI".equals(op)?"mini":"normal");return;}
+        if("FULL".equals(op)){changeForm(s,"full");return;}
+        if("MINI".equals(op)||"NORMAL".equals(op)){changeForm(s,"MINI".equals(op)?"mini":"normal");return;}
         Geometry.Placement p=s.placement;
         if(p==null)return;
         synchronized(lock){
@@ -991,18 +1036,17 @@ final class WindowEngine {
                 s.placement=new Geometry.Placement(p.width(),p.height(),scale,cx-p.width()*scale/2,cy-p.height()*scale/2);
                 if("END_RESIZE".equals(op)){
                     String target=GestureMath.release(scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
-                    if("full".equals(target))fullscreen(s);else state(s,target);
+                    changeForm(s,target);
                     return;
                 }
             } else if("RELEASE".equals(op)) {
                 String target=GestureMath.release(p.scale(),s.defaultScale,s.landscape,s.displayW>s.displayH);
-                if("full".equals(target)){fullscreen(s);return;}
-                state(s,target);return;
+                changeForm(s,target);return;
             } else if("MOVE".equals(op)||"DOCK".equals(op)) {
                 if(!"mini".equals(s.frame)||s.edgeHidden)return;
                 float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
                 if(!Float.isFinite(x)||!Float.isFinite(y))throw new IllegalArgumentException("position");
-                Rect safe=s.safeBounds==null?safeArea(a.call(s.task,"getDisplayContent")):new Rect(s.safeBounds);
+                Rect safe=s.miniBounds==null?safeArea(a.call(s.task,"getDisplayContent"),false):new Rect(s.miniBounds);
                 float margin=s.placementMargin;
                 if("DOCK".equals(op)){
                     int side=Geometry.hideSide(p,x,s.displayW);
@@ -1038,7 +1082,7 @@ final class WindowEngine {
             if(s.edgeDragBase==null){s.edgeDragBase=p;s.edgeDragMini=s.miniPlacement;s.edgeDragSide=s.edgeSide;}
             float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
             if(!Float.isFinite(x)||!Float.isFinite(y))return;
-            Rect safe=s.safeBounds==null?safeArea(a.call(s.task,"getDisplayContent")):new Rect(s.safeBounds);
+            Rect safe=s.miniBounds==null?safeArea(a.call(s.task,"getDisplayContent"),false):new Rect(s.miniBounds);
             float margin=s.placementMargin;
             if("EDGE_BAR_DRAG".equals(op)){
                 s.edgeBarDragging=true;s.edgeBarCenterX=x;s.edgeBarCenterY=y;
@@ -1130,10 +1174,21 @@ final class WindowEngine {
     private void close(Session s){
         if(!visible(s)||s.restoring||s.closing)return;
         log.accept("CLOSE_REQUEST source=control-or-switch task="+s.taskId);
+        rememberOrientation(s);
         s.endOnClose=endOnClose;
         s.closing=true;s.fullTransition=true;s.entering=false;
         handler.post(WindowEngine.this::updateContinuation);
         visibility(s,false);
+    }
+    /** All handle/gesture/button form requests share these endpoints and their slot rules. */
+    private void changeForm(Session s,String target)throws Exception{
+        switch(target){
+            case "closed" -> close(s);
+            case "full" -> fullscreen(s);
+            case "restore-mini" -> restoreMini(s);
+            case "normal","mini" -> state(s,target);
+            default -> throw new IllegalArgumentException("unknown window form");
+        }
     }
     private void visibility(Session s,boolean show){visibility(s,show,null);}
     private void visibility(Session s,boolean show,Runnable afterHide){
@@ -1190,7 +1245,7 @@ final class WindowEngine {
         Geometry.Placement start=s.placement;
         if(start==null){refresh(s);report("STATE");return;}
         Rect safe=new Rect();
-        synchronized(lock){safe.set(safeArea(a.call(s.task,"getDisplayContent")));}
+        synchronized(lock){safe.set(safeArea(a.call(s.task,"getDisplayContent"),false));}
         float margin=s.placementMargin;
         Geometry.Placement end=normalForIme(s);
         if("mini".equals(target)) {
@@ -1221,7 +1276,7 @@ final class WindowEngine {
     private void resizeMini(Session s)throws Exception{
         synchronized(lock){
             Geometry.Placement start=s.placement;if(start==null)return;
-            Rect safe=safeArea(a.call(s.task,"getDisplayContent"));
+            Rect safe=safeArea(a.call(s.task,"getDisplayContent"),false);
             float margin=s.placementMargin;
             s.miniLarge=!s.miniLarge;s.animationRev++;s.radiusFactor=1;
             Geometry.Placement end=Geometry.resizeMini(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
@@ -1229,6 +1284,7 @@ final class WindowEngine {
         }
     }
     private void fullscreen(Session s) throws Exception {
+        rememberOrientation(s);
         Geometry.Placement start=s.placement;
         Rect bounds;
         synchronized(lock){bounds=new Rect((Rect)a.call(a.call(s.task,"getDisplayContent"),"getBounds"));}
@@ -1347,7 +1403,7 @@ final class WindowEngine {
             ?prepared.mask.originalTranslucent():a.bool(task,"isForceTranslucent");s.restoreTranslucent=true;
         Rect display = (Rect) a.call(a.call(task, "getDisplayContent"), "getBounds");
         s.logicalShort = Math.min(display.width(), display.height());
-        s.landscape=initialLandscape(top,pkg);
+        s.landscape=initialLandscape(top,pkg,s.userId);
         s.orientationActivity=top;
         s.orientationRequest=top==null?-1:a.integer(top,"getRequestedOrientation");
         s.orientationBaseline=true;
@@ -1388,7 +1444,7 @@ final class WindowEngine {
             && s.component.equals(real.flattenToString()) && s.pkg.equals(real.getPackageName());
     }
 
-    private boolean initialLandscape(Object activity,String pkg)throws Exception{
+    private boolean initialLandscape(Object activity,String pkg,int userId)throws Exception{
         if(activity==null)return false;
         android.content.pm.ActivityInfo entry=(android.content.pm.ActivityInfo)a.field(activity,"info");
         Intent launch=context.getPackageManager().getLaunchIntentForPackage(pkg);
@@ -1397,16 +1453,29 @@ final class WindowEngine {
             try{launcher=context.getPackageManager().getActivityInfo(launch.getComponent(),0).screenOrientation;}
             catch(android.content.pm.PackageManager.NameNotFoundException missing){return false;}
         }
-        return WindowPolicy.initialLandscape(entry.screenOrientation,launcher);
+        Boolean remembered=orientations.get(userId,pkg,entry.name);
+        return WindowPolicy.initialLandscape(entry.screenOrientation,launcher,a.integer(activity,"getRequestedOrientation"),remembered);
+    }
+    private void rememberOrientation(Session s){
+        if(s==null||s.restoring||s.orientationActivity==null||handler==null)return;
+        try{
+            android.content.pm.ActivityInfo info=(android.content.pm.ActivityInfo)a.field(s.orientationActivity,"info");
+            if(!orientations.remember(s.userId,s.pkg,info.name,s.landscape)||!orientationSaveQueued.compareAndSet(false,true))return;
+            handler.post(()->{
+                orientationSaveQueued.set(false);
+                try{orientations.flush();}catch(Exception error){log.accept("ORIENTATION_MEMORY_SAVE_FAILED "+FrameworkAccess.reason(error));}
+            });
+        }catch(Exception error){log.accept("ORIENTATION_MEMORY_UPDATE_FAILED "+FrameworkAccess.reason(error));}
     }
     void orientationRequested(Object activity,int request){
         if(lock==null)return;
         try{synchronized(lock){
             Session s=sessionFor(a.call(activity,"getTask"));
-            if(s==null||s.restoring||s.entering||s.placement==null||a.call(s.task,"topRunningActivity")!=activity)return;
+            if(s==null||s.restoring||s.placement==null||a.call(s.task,"topRunningActivity")!=activity)return;
             // A fresh in-window request is meaningful even when it repeats the pre-entry value.
             s.orientationBaseline=false;s.orientationActivity=activity;s.orientationRequest=request;
             s.landscape=WindowPolicy.landscape(request,s.landscape);
+            rememberOrientation(s);
         }}catch(Exception error){log.accept("APP_ORIENTATION_OBSERVE_FAILED "+FrameworkAccess.reason(error));}
     }
     private boolean updateOrientation(Session s)throws Exception{
@@ -1420,16 +1489,19 @@ final class WindowEngine {
             log.accept("APP_ORIENTATION task="+s.taskId+" request="+request+" landscape="+next+" activity="+activity);
             s.landscape=next;
         }
+        rememberOrientation(s);
         // A native transition can defer refresh; retry until the actual canvas matches.
         return s.placement!=null&&(s.placement.width()>s.placement.height())!=s.landscape;
     }
-    private Rect safeArea(Object display) throws Exception {
+    private Rect safeArea(Object display) throws Exception {return safeArea(display,true);}
+    private Rect safeArea(Object display,boolean avoidCutout) throws Exception {
         Rect bounds=(Rect)a.call(display,"getBounds"),safe=new Rect(bounds);
         boolean horizontal=bounds.width()>bounds.height();
-        if(!horizontal)a.call(display,"getStableRect",new Class<?>[]{Rect.class},safe);
-        Object state=a.call(a.call(display,"getInsetsStateController"),"getRawInsetsState");
-        int types=android.view.WindowInsets.Type.displayCutout();
+        if(!horizontal&&avoidCutout)a.call(display,"getStableRect",new Class<?>[]{Rect.class},safe);
+        int types=avoidCutout?android.view.WindowInsets.Type.displayCutout():0;
         if(!horizontal)types|=android.view.WindowInsets.Type.systemBars();
+        if(types==0)return safe;
+        Object state=a.call(a.call(display,"getInsetsStateController"),"getRawInsetsState");
         Insets insets=(Insets)a.call(state,"calculateInsets",new Class<?>[]{Rect.class,Rect.class,int.class,boolean.class},bounds,bounds,types,true);
         safe.left=Math.max(safe.left,bounds.left+insets.left);safe.top=Math.max(safe.top,bounds.top+insets.top);
         safe.right=Math.min(safe.right,bounds.right-insets.right);safe.bottom=Math.min(safe.bottom,bounds.bottom-insets.bottom);
@@ -1439,14 +1511,15 @@ final class WindowEngine {
             Object display = a.call(s.task, "getDisplayContent");
             Rect displayBounds = (Rect) a.call(display, "getBounds");
             Rect safe = safeArea(display);
+            Rect mini = safeArea(display,false);
             int margin = Math.round(a.config(display, false).densityDpi / 160f * (displayBounds.width()>displayBounds.height()?4:12));
             Geometry.Placement p = Geometry.place(s.logicalShort, s.landscape,
                 safe.left, safe.top, safe.right, safe.bottom, margin);
             s.defaultScale=p.scale();s.normalPlacement=p;
-            s.miniPlacement=Geometry.miniTopRight(p,p.scale(),safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
+            s.miniPlacement=Geometry.miniTopRight(p,p.scale(),mini.left,mini.top,mini.right,mini.bottom,margin,s.miniLarge);
             s.placement="mini".equals(s.frame)?s.miniPlacement:p;
             s.displayW=displayBounds.width();s.displayH=displayBounds.height();s.displayRotation=a.integer(display,"getRotation");
-            s.safeBounds=new Rect(safe);s.placementMargin=margin;
+            s.safeBounds=new Rect(safe);s.miniBounds=mini;s.placementMargin=margin;
     }
     private Geometry.Placement normalForIme(Session s)throws Exception{
         Geometry.Placement normal=s.normalPlacement;
@@ -1475,6 +1548,7 @@ final class WindowEngine {
             Geometry.Placement previous=s.placement,oldMini=s.miniPlacement;
             boolean completingMorph=s.transitioning;
             Rect oldSafe=s.safeBounds==null?null:new Rect(s.safeBounds);
+            Rect oldMiniSafe=s.miniBounds==null?null:new Rect(s.miniBounds);
             float oldMargin=s.placementMargin;
             int oldW=s.displayW,oldH=s.displayH,oldRotation=s.displayRotation;
             prepareGeometry(s);
@@ -1483,11 +1557,12 @@ final class WindowEngine {
                 beginCover(s,previous,s.placement,false);
             boolean unchanged=!rotated&&previous!=null&&oldW==s.displayW&&oldH==s.displayH
                 &&java.util.Objects.equals(oldSafe,s.safeBounds)
+                &&java.util.Objects.equals(oldMiniSafe,s.miniBounds)
                 &&previous.width()==s.placement.width()&&previous.height()==s.placement.height();
             if(unchanged){s.placement=previous;if(oldMini!=null)s.miniPlacement=oldMini;}
             else{
-                Rect safe=s.safeBounds;
-                if(oldSafe!=null&&previous!=null){
+                Rect safe=s.miniBounds;
+                if(oldMiniSafe!=null&&previous!=null){
                     Geometry.Placement mini="mini".equals(s.frame)&&!s.edgeHidden?previous:oldMini;
                     if(rotated){
                         s.resizing=false;s.edgeHidden=false;s.edgeSide=0;
@@ -1495,7 +1570,7 @@ final class WindowEngine {
                         s.miniDragBase=null;s.edgeDragBase=null;s.edgeBarDragging=false;
                     }
                     else if(mini!=null)s.miniPlacement=Geometry.remapMini(mini,s.normalPlacement,s.defaultScale,
-                        oldSafe.left,oldSafe.top,oldSafe.right,oldSafe.bottom,oldMargin,
+                        oldMiniSafe.left,oldMiniSafe.top,oldMiniSafe.right,oldMiniSafe.bottom,oldMargin,
                         safe.left,safe.top,safe.right,safe.bottom,s.placementMargin,s.miniLarge);
                     s.placement="mini".equals(s.frame)?s.miniPlacement:s.normalPlacement;
                     if(s.placement==null)s.placement=previous;
@@ -1551,6 +1626,7 @@ final class WindowEngine {
         }catch(Throwable error){log.accept("COVER_SKIPPED "+FrameworkAccess.reason(error));endCover(s);}
     }
     private boolean coverConfigurationMatches(Session s,Object window)throws Exception{
+        if(((WindowManager.LayoutParams)a.field(window,"mAttrs")).type==WindowManager.LayoutParams.TYPE_APPLICATION_STARTING)return false;
         if(a.integer(s.task,"getWindowingMode")!=(s.coverFullscreen?1:5))return false;
         Configuration reported=(Configuration)a.call(a.field(window,"mLastReportedConfiguration"),"getMergedConfiguration");
         Object wc=a.field(reported,"windowConfiguration"),display=a.call(s.task,"getDisplayContent");
@@ -1576,6 +1652,10 @@ final class WindowEngine {
                 boolean attached=a.bool(s.task,"isAttached");
                 if(!attached||s.parked&&!cover.exiting()||s.restoring&&!s.restoreForeground){endCover(s);return;}
                 Object main=a.call(s.task,"getTopVisibleAppMainWindow");
+                // A hot/onNewIntent launch can reuse an already drawn window without
+                // another finishDrawing callback. Native draw state and current config
+                // still have to match; a starting snapshot never counts as app content.
+                if(main!=null&&a.bool(main,"isDrawn")&&coverConfigurationMatches(s,main))s.coverDrawn=true;
                 boolean ready=s.coverDrawn&&main!=null&&a.bool(main,"isDrawn")&&a.bool(main,"isVisible")
                     &&coverConfigurationMatches(s,main)&&!a.presentationLeashed(s.task);
                 if(s.coverFullscreen){
@@ -2166,6 +2246,7 @@ final class WindowEngine {
             boolean geometry=s.placement!=null&&displayBounds!=null&&top!=null&&s.displayW==displayBounds.width()&&s.displayH==displayBounds.height()
                 &&new Rect(0,0,s.placement.width(),s.placement.height()).equals(bounds)
                 &&java.util.Objects.equals(s.safeBounds,safeArea(display))
+                &&java.util.Objects.equals(s.miniBounds,safeArea(display,false))
                 &&(s.orientationBaseline&&top==s.orientationActivity||WindowPolicy.landscape(a.integer(top,"getRequestedOrientation"),s.landscape)==s.landscape)
                 &&(s.placement.width()>s.placement.height())==s.landscape
                 &&a.call(change,"getStartAbsBounds").equals(a.call(change,"getEndAbsBounds"));
@@ -2515,6 +2596,24 @@ final class WindowEngine {
             if(previous!=null)previous.continueWith(mask);
         }else s.startMask.hold();
     }
+    /** A non-resizable activity first launched in freeform freezes that viewport.
+     * Restoring its Task alone does not release Android's activity size-compat cache.
+     * Use the native reset only for floating caches, preserving pre-existing full-screen letterboxing. */
+    void restoreFloatingCompat(Object task)throws Exception{
+        a.call(task,"forAllActivities",new Class<?>[]{Consumer.class},(Consumer<Object>)activity->{
+            try{
+                Object policy=a.call(a.field(activity,"mAppCompatController"),"getSizeCompatModePolicy");
+                Object insets=a.call(policy,"getAppCompatDisplayInsets");
+                if(insets==null||!(Boolean)a.field(insets,"mIsFloating"))return;
+                a.call(policy,"clearSizeCompatMode");
+                Object remaining=a.call(policy,"getAppCompatDisplayInsets");
+                if(remaining!=null&&(Boolean)a.field(remaining,"mIsFloating"))
+                    throw new IllegalStateException("浮动页面兼容配置尚未释放");
+                log.accept("FULLSCREEN_COMPAT_RELEASED task="+a.field(task,"mTaskId")
+                    +" page="+a.field(activity,"mActivityComponent")+" bounds="+a.call(a.windowConfig(activity,false),"getBounds"));
+            }catch(Exception e){throw new IllegalStateException(e);}
+        });
+    }
     private boolean manualRecoveryReady(Session s)throws Exception{
         if(s.task!=null||!"手动恢复".equals(s.recoveryReason)
             ||!context.getSystemService(UserManager.class).isUserUnlocked())return false;
@@ -2590,6 +2689,7 @@ final class WindowEngine {
             Configuration restored=new Configuration(s.originalConfig!=null?s.originalConfig:a.config(task,true));
             a.call(a.field(restored,"windowConfiguration"),"setAlwaysOnTop",new Class<?>[]{int.class},s.topState);
             a.call(task,"onRequestedOverrideConfigurationChanged",new Class<?>[]{Configuration.class},restored);
+            restoreFloatingCompat(task);
             Object requested=a.windowConfig(task,true);
             if(a.integer(requested,"getWindowingMode")!=s.mode||!s.bounds.equals(a.call(requested,"getBounds"))
                 ||(Integer)a.field(requested,"mAlwaysOnTop")!=s.topState)throw new IllegalStateException("原请求配置尚未恢复");
@@ -2625,6 +2725,7 @@ final class WindowEngine {
             if(active!=null&&active.token.equals(selected.token)){active=pinned;pinned=null;}
             if(pinned!=null&&pinned.token.equals(selected.token))pinned=null;
             for(Session s:group){
+                rememberOrientation(s);
                 s.restoreForeground=foreground&&s==selected;s.restoring=true;s.animationRev++;
                 s.entering=false;s.transitioning=false;s.recoveryReason=why;s.backRequested=false;
                 if(s.task!=null&&a.bool(s.task,"isAttached")){

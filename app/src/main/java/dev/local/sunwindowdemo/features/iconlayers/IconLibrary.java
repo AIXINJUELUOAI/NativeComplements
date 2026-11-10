@@ -135,8 +135,7 @@ public final class IconLibrary {
                 var restore = restorePackages(c);
                 if (!IconLayerStore.prefs(c).edit().putString("generation", destination.getName())
                     .putString("title", source.title).putInt("count", packages.size()).putBoolean("enabled", true)
-                    .putStringSet("restore", restore)
-                    .putStringSet("originals", new HashSet<>()).commit()) {
+                    .putStringSet("restore", restore).commit()) {
                     IconArchive.delete(destination); throw new IOException("保存图标设置失败");
                 }
             }
@@ -169,7 +168,7 @@ public final class IconLibrary {
     public static synchronized void remove(Context c) {
         var restore = restorePackages(c);
         IconLayerStore.prefs(c).edit().remove("generation").remove("title").remove("count")
-            .remove("originals").putStringSet("restore", restore).putBoolean("enabled", false).commit();
+            .putStringSet("restore", restore).commit();
         // Old files stay readable until the launcher has restored its cached original icons.
         IconLayerStore.refresh(c);
     }

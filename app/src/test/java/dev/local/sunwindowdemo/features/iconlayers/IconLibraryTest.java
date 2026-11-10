@@ -107,13 +107,23 @@ public class IconLibraryTest {
         IconLayerStore.original(context, "com.example.one", false);
         assertTrue(IconLayerStore.read(context).getStringArrayList("originals").isEmpty());
         IconLibrary.remove(context);
-        assertFalse(IconLayerStore.read(context).getBoolean("enabled"));
+        assertTrue(IconLayerStore.read(context).getBoolean("enabled")); // Removing a source keeps algorithm/manual choices active.
         assertTrue(IconLayerStore.read(context).getStringArrayList("restore").contains("com.example.one"));
         assertTrue(IconLibrary.generation(context, generation).exists());
         IconLibrary.acknowledge(context, "old-generation");
         assertTrue(IconLibrary.generation(context, generation).exists());
         IconLibrary.acknowledge(context, "");
         assertFalse(IconLibrary.generation(context, generation).exists());
+    }
+    @Test public void changingLibrariesKeepsManualPoliciesAndOriginalOverrides() throws Exception {
+        installOne();
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.MANUAL;p.monochrome=IconPolicy.UNCHANGED;p.notification=IconPolicy.UNCHANGED;
+        p.background="a".repeat(64);p.foreground="b".repeat(64);IconPolicy.save(context,"com.example.one",p);
+        IconLayerStore.original(context,"com.example.other",true);
+        installOne();
+        assertEquals("a".repeat(64),IconPolicy.read(context,"com.example.one").background);
+        assertEquals(IconPolicy.MANUAL,IconPolicy.read(context,"com.example.one").color);
+        assertEquals(IconPolicy.ORIGINAL,IconPolicy.read(context,"com.example.other").color);
     }
     @Test public void importedDrawableCopiesRetainIndependentLayersAndCanvas() {
         Bitmap bg = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888); bg.eraseColor(Color.RED);

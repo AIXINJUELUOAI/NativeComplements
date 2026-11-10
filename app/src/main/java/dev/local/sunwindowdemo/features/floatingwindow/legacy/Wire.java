@@ -72,12 +72,17 @@ final class Wire {
             .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch).putExtra("shortcutUser",android.os.Process.myUserHandle());
         request.putExtra("openReply",reply);sendRequest(context,request);
     }
+    static void openApp(Context context,String pkg,boolean wakeStep){
+        sendRequest(context,new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
+            .putExtra("package",pkg).putExtra("taskId",-1).putExtra("token",token())
+            .putExtra("wakeStep",wakeStep).putExtra("hideRecents",new Config(context).hideRecents()));
+    }
     static void openNotification(Context context,String pkg,PendingIntent launch,Intent fill,ResultReceiver reply){
         if(!allowedPackage(pkg)||launch==null||!launch.isActivity())throw new IllegalArgumentException("notification activity");
         Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
             .putExtra("package",pkg).putExtra("taskId",-1).putExtra("token",token())
             .putExtra("hideRecents",new Config(context).hideRecents()).putExtra("shortcutLaunch",launch)
-            .putExtra("shortcutUser",launch.getCreatorUserHandle()).putExtra("openReply",reply);
+            .putExtra("shortcutUser",launch.getCreatorUserHandle()).putExtra("openReply",reply).putExtra("notificationLaunch",true);
         if(fill!=null)request.putExtra("launchFillIn",new Intent(fill));
         sendRequest(context,request);
     }

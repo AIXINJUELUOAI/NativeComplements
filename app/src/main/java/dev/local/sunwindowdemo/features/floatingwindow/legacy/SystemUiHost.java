@@ -107,7 +107,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(stage==CornerGesture.FINISH||stage==CornerGesture.END||stage==CornerGesture.CANCEL){
             String target=stage==CornerGesture.FINISH&&fan!=null?fan.picked():null;
             hideFan();if(hot instanceof HotspotView view)view.mark(0);
-            if(target!=null){if(target.isEmpty())showPanel();else launch(target);}
+            if(target!=null){if(target.isEmpty())showPanel();else launch(target,true);}
         }
     }
     private boolean publishedEnabled;
@@ -375,7 +375,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)hidePanel();return true;}return super.dispatchKeyEvent(e);}
         };
         outside.setBackgroundColor(Color.TRANSPARENT);outside.setOnClickListener(v->hidePanel());
-        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key());},this::saveTargets,this::hidePanel);
+        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key(),false);},this::saveTargets,this::hidePanel);
         content.setOnClickListener(v->{});
         WindowMetrics metrics=wm.getCurrentWindowMetrics();
         android.graphics.Rect display=metrics.getBounds();
@@ -445,13 +445,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             Wire.send(this,"GESTURE",pkg,task.taskId,Wire.token(),false);
         }catch(Exception error){Toast.makeText(this,"当前应用转换失败，请稍后重试",Toast.LENGTH_SHORT).show();}
     }
-    private void launch(String key) {
+    private void launch(String key,boolean wakeStep) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
         ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
         main.postDelayed(()->{
             if(cleaned)return;
             if(!backendReady){Wire.send(this,"STATUS");Toast.makeText(this,"后端尚未就绪，请先在模块内预检",Toast.LENGTH_LONG).show();return;}
-            Wire.send(this,"OPEN",target.pkg,-1,Wire.token(),false);
+            Wire.openApp(this,target.pkg,wakeStep);
         },180);
     }
     @Override public void onConfigurationChanged(Configuration c){hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}

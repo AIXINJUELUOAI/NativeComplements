@@ -41,6 +41,7 @@ def main():
             "dev.local.sunwindowdemo.BackBridge",
             "dev.local.sunwindowdemo.features.callblocking.CallBlockingModule",
             "dev.local.sunwindowdemo.features.iconlayers.IconLayerModule",
+            "dev.local.sunwindowdemo.features.iconlayers.SystemIconModule",
         }, "Module entries differ from the integrated window and Telecom backends"
         assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx"))
                        for name in archive.namelist()), "Signing material in APK"

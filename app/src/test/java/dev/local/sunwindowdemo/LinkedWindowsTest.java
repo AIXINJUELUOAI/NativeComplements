@@ -175,6 +175,46 @@ public class LinkedWindowsTest {
         public boolean isAttached(){return true;}
         public NativeSurfaceTransaction getPendingTransaction(){return pending;}
     }
+    public static final class CompatInsets {
+        public final boolean mIsFloating;
+        CompatInsets(boolean floating){mIsFloating=floating;}
+    }
+    public static final class CompatPolicy {
+        CompatInsets insets;int clears;
+        CompatPolicy(CompatInsets value){insets=value;}
+        public CompatInsets getAppCompatDisplayInsets(){return insets;}
+        public void clearSizeCompatMode(){clears++;insets=new CompatInsets(false);}
+    }
+    public static final class CompatController {
+        final CompatPolicy policy;
+        CompatController(CompatPolicy value){policy=value;}
+        public CompatPolicy getSizeCompatModePolicy(){return policy;}
+    }
+    public static final class CompatActivity {
+        public final CompatController mAppCompatController;
+        public final String mActivityComponent="com.example.app/Page";
+        CompatActivity(CompatPolicy value){mAppCompatController=new CompatController(value);}
+        public android.content.res.Configuration getConfiguration(){return new android.content.res.Configuration();}
+    }
+    public static final class CompatTask {
+        public final int mTaskId=700;
+        final java.util.List<CompatActivity> activities;
+        CompatTask(CompatActivity... values){activities=java.util.List.of(values);}
+        public void forAllActivities(java.util.function.Consumer<Object> action){activities.forEach(action);}
+    }
+    @Test public void fullscreenRestorationReleasesOnlyFloatingCompatCaches()throws Throwable{
+        Class<?> unsafeClass=Class.forName("sun.misc.Unsafe");
+        Field singleton=unsafeClass.getDeclaredField("theUnsafe");singleton.setAccessible(true);
+        FrameworkAccess access=(FrameworkAccess)unsafeClass.getMethod("allocateInstance",Class.class)
+            .invoke(singleton.get(null),FrameworkAccess.class);
+        set(access,"methods",new java.util.HashMap<>());set(access,"fields",new java.util.HashMap<>());set(engine,"a",access);
+        CompatPolicy floating=new CompatPolicy(new CompatInsets(true)),fullscreen=new CompatPolicy(new CompatInsets(false)),absent=new CompatPolicy(null);
+        CompatInsets original=fullscreen.insets;
+        engine.restoreFloatingCompat(new CompatTask(new CompatActivity(floating),new CompatActivity(fullscreen),new CompatActivity(absent)));
+        assertEquals(1,floating.clears);assertFalse(floating.insets.mIsFloating);
+        assertEquals(0,fullscreen.clears);assertSame(original,fullscreen.insets);
+        assertEquals(0,absent.clears);assertNull(absent.insets);
+    }
     @Test public void parkedSurfaceUsesNativeHideAndReactivationShowsIt()throws Throwable{
         // Exercise the real reflection adapter without requiring a system_server in Robolectric.
         Class<?> unsafeClass=Class.forName("sun.misc.Unsafe");

@@ -1,0 +1,163 @@
+package dev.local.sunwindowdemo.features.iconlayers;
+
+import android.content.Context;
+import android.content.pm.*;
+import android.graphics.*;
+import android.graphics.drawable.*;
+import android.net.Uri;
+import org.junit.*;
+import org.junit.runner.RunWith;
+import org.robolectric.*;
+import org.robolectric.annotation.*;
+import java.io.*;
+import java.nio.file.Files;
+import java.util.*;
+import static org.junit.Assert.*;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk=35)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+public class IconImagesTest {
+    private Context c;
+    private static final String PKG="com.example.uncovered";
+    @Before public void setup(){
+        c=RuntimeEnvironment.getApplication();IconLayerStore.prefs(c).edit().clear().commit();
+        PackageInfo pkg=new PackageInfo();pkg.packageName=PKG;pkg.applicationInfo=new ApplicationInfo();
+        pkg.applicationInfo.packageName=PKG;pkg.applicationInfo.uid=android.os.Process.myUid();
+        Shadows.shadowOf(c.getPackageManager()).installPackage(pkg);
+    }
+    @After public void cleanup(){IconArchive.delete(IconOverrides.root(c));IconArchive.delete(IconLibrary.root(c));}
+
+    @Test public void uniformBackgroundSeparatesWithoutDroppingTheSubject(){
+        Bitmap source=IconImages.solid(Color.WHITE,96);
+        Paint paint=new Paint();paint.setColor(Color.RED);new Canvas(source).drawRect(30,20,66,76,paint);
+        IconImages.Layers result=IconImages.separate(source);
+        assertEquals(0,Color.alpha(result.foreground().getPixel(0,0)));
+        assertEquals(Color.RED,result.foreground().getPixel(48,48));
+        assertTrue(IconImages.contentBounds(result.foreground()).height()<=65);
+        assertEquals(255,Color.alpha(result.background().getPixel(0,0)));
+    }
+    @Test public void notificationUsesAContentNormalizedWhiteMask(){
+        Bitmap foreground=Bitmap.createBitmap(192,192,Bitmap.Config.ARGB_8888);
+        Paint paint=new Paint();paint.setColor(Color.BLUE);new Canvas(foreground).drawRect(80,60,112,132,paint);
+        Bitmap mono=IconImages.monochrome(foreground,false),notice=IconImages.monochrome(foreground,true);
+        assertEquals(192,mono.getWidth());assertEquals(64,notice.getWidth());
+        assertEquals(Color.WHITE,mono.getPixel(96,96));
+        assertTrue(IconImages.contentBounds(notice).height()>=50);
+        assertTrue(IconImages.contentBounds(notice).width()<IconImages.contentBounds(notice).height());
+        assertEquals(Color.BLUE,foreground.getPixel(96,96)); // Pixels never mutate while another host uses them.
+    }
+    @Test public void aSolidFieldDoesNotBecomeAMeaninglessMonochromeBlock(){
+        assertNull(IconImages.monochrome(IconImages.solid(Color.RED,64),false));
+    }
+    @Test public void defaultRetainsNativeColorsMonochromeAndNotificationWithoutAnImportedLibrary()throws Exception{
+        var nativeIcon=new AdaptiveIconDrawable(new ColorDrawable(Color.MAGENTA),new ColorDrawable(Color.GREEN));
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,nativeIcon);
+        var result=IconAssets.resolve(c,PKG,new IconPolicy(),"",96,true);
+        assertNull(result);
+        assertEquals(IconPolicy.UNCHANGED,new IconPolicy().notification);
+        assertEquals(IconPolicy.UNCHANGED,IconPolicy.parse("{\"com.example.uncovered\":{}}").get(PKG).notification);
+    }
+    @Test public void manualImagesAndIndependentModesSurviveAnEmptyLibrary()throws Exception{
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new AdaptiveIconDrawable(new ColorDrawable(Color.BLACK),new ColorDrawable(Color.WHITE)));
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.MANUAL;p.monochrome=IconPolicy.UNCHANGED;p.notification=IconPolicy.UPLOAD;
+        p.background=upload(IconImages.solid(Color.YELLOW,32));
+        Bitmap foreground=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);Paint ink=new Paint();ink.setColor(Color.RED);new Canvas(foreground).drawRect(12,12,20,20,ink);
+        p.foreground=upload(foreground);p.notificationImage=p.foreground;
+        IconPolicy.save(c,PKG,p);
+        var result=IconAssets.resolve(c,PKG,IconPolicy.read(c,PKG),"",64,true);
+        assertEquals(Color.YELLOW,result.background().getPixel(0,0));assertFalse(result.monoChanged());assertNotNull(result.notification());
+        IconLibrary.remove(c);
+        IconPolicy restored=IconPolicy.read(c,PKG);
+        assertEquals(p.background,restored.background);assertEquals(p.foreground,restored.foreground);
+        assertEquals(IconPolicy.UPLOAD,restored.notification);
+    }
+    @Test public void customProviderReadsOnlyPublishedImageIds()throws Exception{
+        String id=upload(IconImages.solid(Color.BLUE,16));
+        IconLayerProvider provider=Robolectric.buildContentProvider(IconLayerProvider.class).create().get();
+        Uri uri=Uri.parse("content://dev.local.sunwindowdemo.iconlayers/custom/"+id+".png");
+        assertThrows(FileNotFoundException.class,()->provider.openFile(uri,"r"));
+        IconPolicy p=new IconPolicy();p.background=id;IconPolicy.save(c,PKG,p);
+        try(var file=provider.openFile(uri,"r")){assertTrue(file.getStatSize()>0);}
+        assertThrows(SecurityException.class,()->provider.openFile(uri,"w"));
+        assertThrows(FileNotFoundException.class,()->provider.openFile(Uri.parse("content://dev.local.sunwindowdemo.iconlayers/custom/../../outside.png"),"r"));
+    }
+    @Test public void customImagesAreContentAddressedAndFailedImportsPreservePolicies()throws Exception{
+        String first=upload(IconImages.solid(Color.BLUE,16));assertEquals(first,upload(IconImages.solid(Color.BLUE,16)));
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.MANUAL;p.background=first;IconPolicy.save(c,PKG,p);
+        File corrupt=new File(c.getCacheDir(),"bad.png");Files.write(corrupt.toPath(),new byte[]{1,2,3});
+        assertThrows(IOException.class,()->IconOverrides.importImage(c,Uri.fromFile(corrupt)));
+        assertEquals(first,IconPolicy.read(c,PKG).background);
+    }
+    @Test public void monochromeCopiesStayIndependent(){
+        var icon=new ImportedIcon(c.getResources(),IconImages.solid(Color.RED,32),IconImages.solid(Color.BLUE,32),IconImages.solid(Color.WHITE,32));
+        var copy=(ImportedIcon)icon.getConstantState().newDrawable();
+        assertNotSame(icon.getMonochrome(),copy.getMonochrome());copy.getMonochrome().setAlpha(1);
+        assertEquals(255,icon.getMonochrome().getAlpha());
+    }
+    @Test public void noLibrarySnapshotLoadsAndCancelledReloadKeepsPreviousPixels()throws Exception{
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new AdaptiveIconDrawable(new ColorDrawable(Color.MAGENTA),new ColorDrawable(Color.GREEN)));
+        android.os.Bundle config=new android.os.Bundle();config.putBoolean("enabled",true);config.putStringArrayList("targets",new ArrayList<>(List.of(PKG)));
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.MANUAL;
+        p.background=upload(IconImages.solid(Color.MAGENTA,32));p.foreground=upload(IconImages.solid(Color.GREEN,32));IconPolicy.save(c,PKG,p);
+        config.putString("policies",IconLayerStore.prefs(c).getString("policies","{}"));
+        Robolectric.buildContentProvider(IconLayerProvider.class).create();
+        assertTrue(IconAssets.load(c,config,()->false));
+        IconAssets.Entry first=IconAssets.snapshot().entries().get(PKG);assertNotNull(first);
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new AdaptiveIconDrawable(new ColorDrawable(Color.BLUE),new ColorDrawable(Color.RED)));
+        assertFalse(IconAssets.load(c,config,()->true));
+        IconAssets.Entry after=IconAssets.snapshot().entries().get(PKG);
+        assertEquals(Color.MAGENTA,after.background().getPixel(0,0));assertSame(first,after);
+        assertNotNull(IconAssets.colored(c,PKG));
+        config.putBoolean("enabled",false);IconAssets.load(c,config,()->false);assertNull(IconAssets.colored(c,PKG));
+    }
+    @Test public void everyChannelCanOptOutWithoutChangingOtherApplications()throws Exception{
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.ORIGINAL;p.monochrome=IconPolicy.UNCHANGED;p.notification=IconPolicy.UNCHANGED;
+        IconPolicy.save(c,PKG,p);
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.GREEN)));
+        var result=IconAssets.resolve(c,PKG,IconPolicy.read(c,PKG),"",64,true);
+        assertNull(result);assertEquals(IconPolicy.AUTO,IconPolicy.read(c,"com.example.another").color);
+    }
+    @Test public void algorithmRequiresOptInAndLaunchThenReusesItsCache()throws Exception{
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new BitmapDrawable(c.getResources(),IconImages.solid(Color.BLUE,96)));
+        IconLayerProvider provider=Robolectric.buildContentProvider(IconLayerProvider.class).create().get();
+        IconLayerStore.enabled(c,true);
+        provider.generate(PKG);assertEquals("",IconPolicy.read(c,PKG).generatedVersion);
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.ALGORITHM;IconPolicy.save(c,PKG,p);
+        assertNull("Selecting algorithm or opening preview must not calculate pixels",IconAssets.resolve(c,PKG,p,"",256,true));
+        provider.generate(PKG);p=IconPolicy.read(c,PKG);assertFalse(p.generatedVersion.isEmpty());
+        File foreground=IconOverrides.image(c,p.generatedForeground);assertTrue(foreground.isFile());
+        assertTrue(foreground.setLastModified(123456000));
+        assertNotNull(IconAssets.resolve(c,PKG,p,"",256,true));
+        provider.generate(PKG);assertEquals("A resume does not regenerate valid cache files",123456000,foreground.lastModified());
+        p.color=IconPolicy.ORIGINAL;IconPolicy.save(c,PKG,p);
+        assertNull(IconAssets.resolve(c,PKG,p,"",256,true));
+    }
+    @Test public void importedLayersKeepTargetResolutionAndNativeMonochromeSurvives()throws Exception{
+        var nativeIcon=new AdaptiveIconDrawable(new ColorDrawable(Color.MAGENTA),new ColorDrawable(Color.GREEN),new ColorDrawable(Color.WHITE));
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,nativeIcon);
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.MANUAL;p.monochrome=IconPolicy.UNCHANGED;
+        p.background=upload(IconImages.solid(Color.BLUE,384));
+        Bitmap foreground=Bitmap.createBitmap(384,384,Bitmap.Config.ARGB_8888);Paint paint=new Paint();paint.setColor(Color.RED);new Canvas(foreground).drawRect(140,100,244,284,paint);
+        p.foreground=upload(foreground);
+        var result=IconAssets.resolve(c,PKG,p,"",256,true);
+        assertEquals(256,result.foreground().getWidth());assertFalse(result.monoChanged());
+        assertEquals(Color.WHITE,result.mono().getPixel(128,128));assertNull(result.notification());
+    }
+    @Test public void nonSquareArtworkKeepsItsAspectAndGeneratedSubjectFitsTheAdaptiveViewport(){
+        Bitmap wide=IconImages.solid(Color.RED,200);
+        Bitmap crop=Bitmap.createBitmap(wide,0,0,200,100);
+        Bitmap rendered=IconImages.render(new BitmapDrawable(c.getResources(),crop),96);
+        Rect bounds=IconImages.contentBounds(rendered);assertEquals(96,bounds.width());assertEquals(48,bounds.height());
+        var layers=IconImages.separate(rendered);
+        var icon=new ImportedIcon(c.getResources(),layers.background(),layers.foreground());
+        Rect finalBounds=IconImages.contentBounds(layers.foreground());
+        assertTrue(finalBounds.width()<=53);assertEquals(2f,(float)finalBounds.width()/finalBounds.height(),.15f);
+        assertNotNull(IconImages.render(icon,96));
+    }
+    private String upload(Bitmap b)throws Exception{
+        File file=File.createTempFile("test-user-image-",".png",c.getCacheDir());
+        try(OutputStream out=new FileOutputStream(file)){b.compress(Bitmap.CompressFormat.PNG,100,out);}
+        return IconOverrides.importImage(c,Uri.fromFile(file));
+    }
+}

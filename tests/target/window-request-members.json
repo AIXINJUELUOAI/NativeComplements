@@ -1,0 +1,870 @@
+{
+  "artifacts": [
+    {
+      "name": "framework.jar",
+      "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f"
+    },
+    {
+      "name": "services.jar",
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    }
+  ],
+  "classes": {
+    "Landroid/app/PendingIntent;": {
+      "superclass": "Ljava/lang/Object;",
+      "fields": [
+        {
+          "name": "BLOCK_MUTABLE_IMPLICIT_PENDING_INTENT",
+          "type": "J",
+          "access": 25
+        },
+        {
+          "name": "CREATOR",
+          "type": "Landroid/os/Parcelable$Creator;",
+          "access": 25
+        },
+        {
+          "name": "FLAG_ALLOW_UNSAFE_IMPLICIT_INTENT",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_CANCEL_CURRENT",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_IMMUTABLE",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_MUTABLE",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_MUTABLE_UNAUDITED",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_NO_CREATE",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_ONE_SHOT",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "FLAG_UPDATE_CURRENT",
+          "type": "I",
+          "access": 25
+        },
+        {
+          "name": "PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED",
+          "type": "J",
+          "access": 24
+        },
+        {
+          "name": "PENDING_INTENT_OPTIONS_CHECK",
+          "type": "J",
+          "access": 25
+        },
+        {
+          "name": "TAG",
+          "type": "Ljava/lang/String;",
+          "access": 26
+        },
+        {
+          "name": "sOnMarshaledListener",
+          "type": "Ljava/lang/ThreadLocal;",
+          "access": 26
+        },
+        {
+          "name": "mCachedInfo",
+          "type": "Landroid/app/ActivityManager$PendingIntentInfo;",
+          "access": 2
+        },
+        {
+          "name": "mCancelListerInfo",
+          "type": "Landroid/app/PendingIntent$CancelListerInfo;",
+          "access": 2
+        },
+        {
+          "name": "mTarget",
+          "type": "Landroid/content/IIntentSender;",
+          "access": 18
+        },
+        {
+          "name": "mWhitelistToken",
+          "type": "Landroid/os/IBinder;",
+          "access": 2
+        }
+      ],
+      "methods": [
+        {
+          "name": "$r8$lambda$r7K6LfnhQPYIpj9V-bXhSOGH9Eo",
+          "descriptor": "(Landroid/app/PendingIntent;Landroid/util/Pair;)V",
+          "access": 4105
+        },
+        {
+          "name": "-$$Nest$mnotifyCancelListeners",
+          "descriptor": "(Landroid/app/PendingIntent;)V",
+          "access": 4168
+        },
+        {
+          "name": "<clinit>",
+          "descriptor": "()V",
+          "access": 65544
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/content/IIntentSender;)V",
+          "access": 65537
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/IBinder;Ljava/lang/Object;)V",
+          "access": 65536
+        },
+        {
+          "name": "addOnMarshaledListener",
+          "descriptor": "(Landroid/app/PendingIntent$OnMarshaledListener;)V",
+          "access": 8
+        },
+        {
+          "name": "buildServicePendingIntent",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;II)Landroid/app/PendingIntent;",
+          "access": 10
+        },
+        {
+          "name": "checkPendingIntent",
+          "descriptor": "(ILandroid/content/Intent;Landroid/content/Context;Z)V",
+          "access": 10
+        },
+        {
+          "name": "getActivities",
+          "descriptor": "(Landroid/content/Context;I[Landroid/content/Intent;I)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getActivities",
+          "descriptor": "(Landroid/content/Context;I[Landroid/content/Intent;ILandroid/os/Bundle;)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getActivitiesAsUser",
+          "descriptor": "(Landroid/content/Context;I[Landroid/content/Intent;ILandroid/os/Bundle;Landroid/os/UserHandle;)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getActivity",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;I)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getActivity",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;ILandroid/os/Bundle;)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getActivityAsUser",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;ILandroid/os/Bundle;Landroid/os/UserHandle;)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getBroadcast",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;I)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getBroadcastAsUser",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;ILandroid/os/UserHandle;)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getCachedInfo",
+          "descriptor": "()Landroid/app/ActivityManager$PendingIntentInfo;",
+          "access": 2
+        },
+        {
+          "name": "getForegroundService",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;I)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "getService",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;I)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "isNewMutableDisallowedImplicitPendingIntent",
+          "descriptor": "(ILandroid/content/Intent;Z)Z",
+          "access": 9
+        },
+        {
+          "name": "lambda$notifyCancelListeners$0",
+          "descriptor": "(Landroid/util/Pair;)V",
+          "access": 4098
+        },
+        {
+          "name": "notifyCancelListeners",
+          "descriptor": "()V",
+          "access": 2
+        },
+        {
+          "name": "readPendingIntentOrNullFromParcel",
+          "descriptor": "(Landroid/os/Parcel;)Landroid/app/PendingIntent;",
+          "access": 9
+        },
+        {
+          "name": "removeOnMarshaledListener",
+          "descriptor": "(Landroid/app/PendingIntent$OnMarshaledListener;)V",
+          "access": 8
+        },
+        {
+          "name": "setOnMarshaledListener",
+          "descriptor": "(Landroid/app/PendingIntent$OnMarshaledListener;)V",
+          "access": 9
+        },
+        {
+          "name": "writePendingIntentOrNullToParcel",
+          "descriptor": "(Landroid/app/PendingIntent;Landroid/os/Parcel;)V",
+          "access": 9
+        },
+        {
+          "name": "addCancelListener",
+          "descriptor": "(Ljava/util/concurrent/Executor;Landroid/app/PendingIntent$CancelListener;)Z",
+          "access": 1
+        },
+        {
+          "name": "cancel",
+          "descriptor": "()V",
+          "access": 1
+        },
+        {
+          "name": "describeContents",
+          "descriptor": "()I",
+          "access": 1
+        },
+        {
+          "name": "dumpDebug",
+          "descriptor": "(Landroid/util/proto/ProtoOutputStream;J)V",
+          "access": 1
+        },
+        {
+          "name": "equals",
+          "descriptor": "(Ljava/lang/Object;)Z",
+          "access": 1
+        },
+        {
+          "name": "getCreatorPackage",
+          "descriptor": "()Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "getCreatorUid",
+          "descriptor": "()I",
+          "access": 1
+        },
+        {
+          "name": "getCreatorUserHandle",
+          "descriptor": "()Landroid/os/UserHandle;",
+          "access": 1
+        },
+        {
+          "name": "getIntent",
+          "descriptor": "()Landroid/content/Intent;",
+          "access": 1
+        },
+        {
+          "name": "getIntentSender",
+          "descriptor": "()Landroid/content/IntentSender;",
+          "access": 1
+        },
+        {
+          "name": "getTag",
+          "descriptor": "(Ljava/lang/String;)Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "getTarget",
+          "descriptor": "()Landroid/content/IIntentSender;",
+          "access": 1
+        },
+        {
+          "name": "getTargetPackage",
+          "descriptor": "()Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "getWhitelistToken",
+          "descriptor": "()Landroid/os/IBinder;",
+          "access": 1
+        },
+        {
+          "name": "hashCode",
+          "descriptor": "()I",
+          "access": 1
+        },
+        {
+          "name": "intentFilterEquals",
+          "descriptor": "(Landroid/app/PendingIntent;)Z",
+          "access": 1
+        },
+        {
+          "name": "isActivity",
+          "descriptor": "()Z",
+          "access": 1
+        },
+        {
+          "name": "isBroadcast",
+          "descriptor": "()Z",
+          "access": 1
+        },
+        {
+          "name": "isForegroundService",
+          "descriptor": "()Z",
+          "access": 1
+        },
+        {
+          "name": "isImmutable",
+          "descriptor": "()Z",
+          "access": 1
+        },
+        {
+          "name": "isService",
+          "descriptor": "()Z",
+          "access": 1
+        },
+        {
+          "name": "isTargetedToPackage",
+          "descriptor": "()Z",
+          "access": 1
+        },
+        {
+          "name": "queryIntentComponents",
+          "descriptor": "(I)Ljava/util/List;",
+          "access": 1
+        },
+        {
+          "name": "registerCancelListener",
+          "descriptor": "(Landroid/app/PendingIntent$CancelListener;)V",
+          "access": 1
+        },
+        {
+          "name": "removeCancelListener",
+          "descriptor": "(Landroid/app/PendingIntent$CancelListener;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "()V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(I)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(ILandroid/app/PendingIntent$OnFinished;Landroid/os/Handler;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;Landroid/os/Bundle;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(Landroid/os/Bundle;)V",
+          "access": 1
+        },
+        {
+          "name": "sendAndReturnResult",
+          "descriptor": "(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;Landroid/os/Bundle;)I",
+          "access": 1
+        },
+        {
+          "name": "toString",
+          "descriptor": "()Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "unregisterCancelListener",
+          "descriptor": "(Landroid/app/PendingIntent$CancelListener;)V",
+          "access": 1
+        },
+        {
+          "name": "writeToParcel",
+          "descriptor": "(Landroid/os/Parcel;I)V",
+          "access": 1
+        }
+      ]
+    },
+    "Lcom/android/server/am/PendingIntentRecord;": {
+      "superclass": "Landroid/content/IIntentSender$Stub;",
+      "fields": [
+        {
+          "name": "cancelReason",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "canceled",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "controller",
+          "type": "Lcom/android/server/am/PendingIntentController;",
+          "access": 17
+        },
+        {
+          "name": "key",
+          "type": "Lcom/android/server/am/PendingIntentRecord$Key;",
+          "access": 17
+        },
+        {
+          "name": "lastTag",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "lastTagPrefix",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "mAllowBgActivityStartsForActivitySender",
+          "type": "Landroid/util/ArraySet;",
+          "access": 1
+        },
+        {
+          "name": "mAllowBgActivityStartsForBroadcastSender",
+          "type": "Landroid/util/ArraySet;",
+          "access": 1
+        },
+        {
+          "name": "mAllowBgActivityStartsForServiceSender",
+          "type": "Landroid/util/ArraySet;",
+          "access": 1
+        },
+        {
+          "name": "mAllowlistDuration",
+          "type": "Landroid/util/ArrayMap;",
+          "access": 1
+        },
+        {
+          "name": "mCancelCallbacks",
+          "type": "Landroid/os/RemoteCallbackList;",
+          "access": 1
+        },
+        {
+          "name": "ref",
+          "type": "Ljava/lang/ref/WeakReference;",
+          "access": 17
+        },
+        {
+          "name": "sent",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "stringName",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "uid",
+          "type": "I",
+          "access": 17
+        }
+      ],
+      "methods": [
+        {
+          "name": "$r8$lambda$n7a96RwVvewtpifhQ2aQt1qSbXo",
+          "descriptor": "(Lcom/android/server/am/PendingIntentRecord;)V",
+          "access": 4105
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Lcom/android/server/am/PendingIntentController;Lcom/android/server/am/PendingIntentRecord$Key;I)V",
+          "access": 65537
+        },
+        {
+          "name": "cancelReasonToString",
+          "descriptor": "(I)Ljava/lang/String;",
+          "access": 9
+        },
+        {
+          "name": "getBackgroundStartPrivilegesAllowedByCaller",
+          "descriptor": "(Landroid/app/ActivityOptions;ILjava/lang/String;)Landroid/app/BackgroundStartPrivileges;",
+          "access": 9
+        },
+        {
+          "name": "getBackgroundStartPrivilegesAllowedByCaller",
+          "descriptor": "(Landroid/os/Bundle;ILjava/lang/String;)Landroid/app/BackgroundStartPrivileges;",
+          "access": 9
+        },
+        {
+          "name": "getDefaultBackgroundStartPrivileges",
+          "descriptor": "(ILjava/lang/String;)Landroid/app/BackgroundStartPrivileges;",
+          "access": 9
+        },
+        {
+          "name": "clearAllowBgActivityStarts",
+          "descriptor": "(Landroid/os/IBinder;)V",
+          "access": 1
+        },
+        {
+          "name": "completeFinalize",
+          "descriptor": "()V",
+          "access": 17
+        },
+        {
+          "name": "createSafeActivityOptionsBundle",
+          "descriptor": "(Landroid/os/Bundle;)Landroid/os/Bundle;",
+          "access": 17
+        },
+        {
+          "name": "detachCancelListenersLocked",
+          "descriptor": "()Landroid/os/RemoteCallbackList;",
+          "access": 1
+        },
+        {
+          "name": "dump",
+          "descriptor": "(Ljava/io/PrintWriter;Ljava/lang/String;)V",
+          "access": 1
+        },
+        {
+          "name": "finalize",
+          "descriptor": "()V",
+          "access": 1
+        },
+        {
+          "name": "getAllowlistDurationLocked",
+          "descriptor": "(Landroid/os/IBinder;)Lcom/android/server/am/PendingIntentRecord$TempAllowListDuration;",
+          "access": 1
+        },
+        {
+          "name": "getBackgroundStartPrivilegesForActivitySender",
+          "descriptor": "(Landroid/os/IBinder;)Landroid/app/BackgroundStartPrivileges;",
+          "access": 1
+        },
+        {
+          "name": "getBackgroundStartPrivilegesForActivitySender",
+          "descriptor": "(Landroid/util/ArraySet;Landroid/os/IBinder;Landroid/os/Bundle;I)Landroid/app/BackgroundStartPrivileges;",
+          "access": 17
+        },
+        {
+          "name": "getPackageName",
+          "descriptor": "()Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "registerCancelListenerLocked",
+          "descriptor": "(Lcom/android/internal/os/IResultReceiver;)V",
+          "access": 1
+        },
+        {
+          "name": "send",
+          "descriptor": "(ILandroid/content/Intent;Ljava/lang/String;Landroid/os/IBinder;Landroid/content/IIntentReceiver;Ljava/lang/String;Landroid/os/Bundle;)V",
+          "access": 1
+        },
+        {
+          "name": "sendInner",
+          "descriptor": "(Landroid/app/IApplicationThread;ILandroid/content/Intent;Ljava/lang/String;Landroid/os/IBinder;Landroid/content/IIntentReceiver;Ljava/lang/String;Landroid/os/IBinder;Ljava/lang/String;IIILandroid/os/Bundle;)I",
+          "access": 1
+        },
+        {
+          "name": "sendWithResult",
+          "descriptor": "(Landroid/app/IApplicationThread;ILandroid/content/Intent;Ljava/lang/String;Landroid/os/IBinder;Landroid/content/IIntentReceiver;Ljava/lang/String;Landroid/os/Bundle;)I",
+          "access": 1
+        },
+        {
+          "name": "setAllowBgActivityStarts",
+          "descriptor": "(Landroid/os/IBinder;I)V",
+          "access": 1
+        },
+        {
+          "name": "setAllowlistDurationLocked",
+          "descriptor": "(Landroid/os/IBinder;JIILjava/lang/String;)V",
+          "access": 1
+        },
+        {
+          "name": "toString",
+          "descriptor": "()Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "unregisterCancelListenerLocked",
+          "descriptor": "(Lcom/android/internal/os/IResultReceiver;)V",
+          "access": 1
+        }
+      ]
+    },
+    "Lcom/android/server/wm/ActivityStarter$Request;": {
+      "superclass": "Ljava/lang/Object;",
+      "fields": [
+        {
+          "name": "activityInfo",
+          "type": "Landroid/content/pm/ActivityInfo;",
+          "access": 1
+        },
+        {
+          "name": "activityOptions",
+          "type": "Lcom/android/server/wm/SafeActivityOptions;",
+          "access": 1
+        },
+        {
+          "name": "allowBalExemptionForSystemProcess",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "allowPendingRemoteAnimationRegistryLookup",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "avoidMoveToFront",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "caller",
+          "type": "Landroid/app/IApplicationThread;",
+          "access": 1
+        },
+        {
+          "name": "callingFeatureId",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "callingPackage",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "callingPid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "callingUid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "componentSpecified",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "ephemeralIntent",
+          "type": "Landroid/content/Intent;",
+          "access": 1
+        },
+        {
+          "name": "errorCallbackToken",
+          "type": "Landroid/os/IBinder;",
+          "access": 1
+        },
+        {
+          "name": "filterCallingUid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "freezeScreen",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "globalConfig",
+          "type": "Landroid/content/res/Configuration;",
+          "access": 1
+        },
+        {
+          "name": "ignoreTargetSecurity",
+          "type": "Z",
+          "access": 1
+        },
+        {
+          "name": "inTask",
+          "type": "Lcom/android/server/wm/Task;",
+          "access": 1
+        },
+        {
+          "name": "inTaskFragment",
+          "type": "Lcom/android/server/wm/TaskFragment;",
+          "access": 1
+        },
+        {
+          "name": "intent",
+          "type": "Landroid/content/Intent;",
+          "access": 1
+        },
+        {
+          "name": "intentCreatorPackage",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "intentCreatorUid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "intentGrants",
+          "type": "Lcom/android/server/uri/NeededUriGrants;",
+          "access": 1
+        },
+        {
+          "name": "logMessage",
+          "type": "Ljava/lang/StringBuilder;",
+          "access": 17
+        },
+        {
+          "name": "mOriginalCallerUid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "originatingPendingIntent",
+          "type": "Lcom/android/server/am/PendingIntentRecord;",
+          "access": 1
+        },
+        {
+          "name": "outActivity",
+          "type": "[Lcom/android/server/wm/ActivityRecord;",
+          "access": 1
+        },
+        {
+          "name": "profilerInfo",
+          "type": "Landroid/app/ProfilerInfo;",
+          "access": 1
+        },
+        {
+          "name": "realCallingPid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "realCallingUid",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "reason",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "requestCode",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "resolveInfo",
+          "type": "Landroid/content/pm/ResolveInfo;",
+          "access": 1
+        },
+        {
+          "name": "resolvedType",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "resultTo",
+          "type": "Landroid/os/IBinder;",
+          "access": 1
+        },
+        {
+          "name": "resultWho",
+          "type": "Ljava/lang/String;",
+          "access": 1
+        },
+        {
+          "name": "startFlags",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "userAllowlistStatus",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "userId",
+          "type": "I",
+          "access": 1
+        },
+        {
+          "name": "voiceInteractor",
+          "type": "Lcom/android/internal/app/IVoiceInteractor;",
+          "access": 1
+        },
+        {
+          "name": "voiceSession",
+          "type": "Landroid/service/voice/IVoiceInteractionSession;",
+          "access": 1
+        },
+        {
+          "name": "waitResult",
+          "type": "Landroid/app/WaitResult;",
+          "access": 1
+        }
+      ],
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "()V",
+          "access": 65537
+        },
+        {
+          "name": "reset",
+          "descriptor": "()V",
+          "access": 1
+        },
+        {
+          "name": "resolveActivity",
+          "descriptor": "(Lcom/android/server/wm/ActivityTaskSupervisor;)V",
+          "access": 1
+        },
+        {
+          "name": "resolveIntentForLockedOrStoppedProfiles",
+          "descriptor": "(Lcom/android/server/wm/ActivityTaskSupervisor;)Landroid/content/pm/ResolveInfo;",
+          "access": 1
+        },
+        {
+          "name": "set",
+          "descriptor": "(Lcom/android/server/wm/ActivityStarter$Request;)V",
+          "access": 1
+        }
+      ]
+    }
+  }
+}

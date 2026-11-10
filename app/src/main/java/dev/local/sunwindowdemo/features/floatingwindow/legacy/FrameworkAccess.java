@@ -106,6 +106,10 @@ final class FrameworkAccess {
                 "getConfiguration", "getRequestedOverrideConfiguration", "getBounds", "isAlwaysOnTop",
                 "isOverrideBoundsAllowed", "isOverrideWindowingModeAllowed"}) method(task, name);
         method(task, "onRequestedOverrideConfigurationChanged", Configuration.class);
+        Class<?> compatController=field(activity,"mAppCompatController").getType();
+        Class<?> sizeCompat=method(compatController,"getSizeCompatModePolicy").getReturnType();
+        method(sizeCompat,"getAppCompatDisplayInsets");method(sizeCompat,"clearSizeCompatMode");
+        field(method(sizeCompat,"getAppCompatDisplayInsets").getReturnType(),"mIsFloating");
         Class<?> winConfig = Class.forName("android.app.WindowConfiguration", false, loader);
         method(winConfig, "setAlwaysOnTop", int.class); method(winConfig, "getWindowingMode"); method(winConfig, "getBounds");
         field(winConfig, "mAlwaysOnTop"); field(Configuration.class, "windowConfiguration");

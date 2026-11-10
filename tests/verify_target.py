@@ -29,6 +29,30 @@ for cls,sections in checks.items():
    total+=1
 print(f'PASS: {total} exact API37 members from archived target artifacts; current-device behavior remains unverified')
 
+# Native notification creators may launch another package; correlate the original sender binder.
+requests=json.loads((root/'tests/target/window-request-members.json').read_text())['classes']
+assert any(m['name']=='getTarget' and m['descriptor']=='()Landroid/content/IIntentSender;'
+           for m in requests['Landroid/app/PendingIntent;']['methods'])
+assert any(f['name']=='originatingPendingIntent' and f['type']=='Lcom/android/server/am/PendingIntentRecord;'
+           for f in requests['Lcom/android/server/wm/ActivityStarter$Request;']['fields'])
+assert requests['Lcom/android/server/am/PendingIntentRecord;']['superclass']=='Landroid/content/IIntentSender$Stub;'
+print('PASS: native PendingIntent sender and originating launch request signatures')
+
+compat=json.loads((root/'tests/target/size-compat-members.json').read_text())
+assert compat['sha256']=='3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9'
+for cls,kind,name,sig in [
+ ('AppCompatController','methods','getSizeCompatModePolicy','()Lcom/android/server/wm/AppCompatSizeCompatModePolicy;'),
+ ('AppCompatSizeCompatModePolicy','methods','getAppCompatDisplayInsets','()Lcom/android/server/wm/AppCompatDisplayInsets;'),
+ ('AppCompatSizeCompatModePolicy','methods','clearSizeCompatMode','()V'),
+ ('AppCompatDisplayInsets','fields','mIsFloating','Z')]:
+ assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==sig
+            for m in compat['classes']['Lcom/android/server/wm/'+cls+';'][kind]),(cls,name,sig)
+assert any(f['name']=='mAppCompatController' and f['type']=='Lcom/android/server/wm/AppCompatController;'
+           for f in classes['Lcom/android/server/wm/ActivityRecord;']['fields'])
+print('PASS: native floating size-compat cache release members; on-device restored layout remains unverified')
+import runpy
+runpy.run_path(str(root/'tests/verify_icon_target.py'),run_name='__main__')
+
 # Additional target signatures are preserved separately to retain original inventories.
 rotation=json.loads((root/'tests/target/rotation-members.json').read_text())
 for cls,name,sig in [

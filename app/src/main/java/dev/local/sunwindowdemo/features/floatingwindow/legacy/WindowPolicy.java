@@ -22,6 +22,10 @@ final class WindowPolicy {
     static boolean initialLandscape(int entryDeclaration,int launcherDeclaration){
         return landscape(entryDeclaration,false)&&landscape(launcherDeclaration,false);
     }
+    static boolean initialLandscape(int entryDeclaration,int launcherDeclaration,int requested,Boolean remembered){
+        if(initialLandscape(entryDeclaration,launcherDeclaration))return true;
+        return remembered==null?false:landscape(requested,remembered);
+    }
     static boolean currentLandscape(int orientation,int request,boolean fallback){
         return orientation==2 || orientation!=1&&landscape(request,fallback);
     }

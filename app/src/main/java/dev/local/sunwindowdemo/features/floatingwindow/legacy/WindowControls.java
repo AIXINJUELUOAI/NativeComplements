@@ -331,18 +331,21 @@ final class WindowControls {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
         p.gravity=Gravity.TOP|Gravity.LEFT;p.setFitInsetsTypes(0);p.setTitle("NativeComplements-controls");
         p.dimAmount=0;p.windowAnimations=0;
-        if(views.isEmpty())p.flags|=WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+        if(views.isEmpty()){
+            p.flags|=WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
+            p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+        }
         SystemUiHost.trust(p);
         wm.addView(v,p);views.add(v);params.add(p);
     }
     private void rect(int index,float x,float y,float w,float h){
         if(index>=views.size())return;WindowManager.LayoutParams p=params.get(index);
         WindowMetrics metrics=layoutMetrics==null?wm.getCurrentWindowMetrics():layoutMetrics;
-        int avoid=WindowInsets.Type.displayCutout();
-        // Normal app input is native. In landscape its mini/handle controls follow
-        // camera-only geometry too; outside-dismiss overlays still leave bars usable.
+        int avoid=index==0&&"mini".equals(frame)?0:WindowInsets.Type.displayCutout();
+        // Only normal-window controls avoid the camera; mini content and edge handles
+        // may reach the physical edge. Portrait controls still leave system bars usable.
         if(!landscape||(index!=0&&index!=5))avoid|=WindowInsets.Type.systemBars();
-        Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(avoid);
+        Insets bars=avoid==0?Insets.NONE:metrics.getWindowInsets().getInsetsIgnoringVisibility(avoid);
         float right=Math.min(x+w,metrics.getBounds().width()-bars.right);
         float bottom=Math.min(y+h,Math.min(imeTop,metrics.getBounds().height()-bars.bottom));
         x=Math.max(x,bars.left);y=Math.max(y,bars.top);w=Math.max(0,right-x);h=Math.max(0,bottom-y);
@@ -361,7 +364,7 @@ final class WindowControls {
             if(contrast!=null)contrast.update(null,false);
             for(int n=1;n<views.size();n++)views.get(n).setVisibility(View.GONE);
             if(edgeHidden){
-                Insets insets=layoutMetrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+                Insets insets=landscape?Insets.NONE:layoutMetrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars());
                 int width=dp(48),height=dp(104);
                 if(edgeBarDragging)rect(0,edgeBarCenterX-width/2f,edgeBarCenterY-height/2f,width,height);
                 else rect(0,edgeSide<0?insets.left:d.width()-insets.right-width,

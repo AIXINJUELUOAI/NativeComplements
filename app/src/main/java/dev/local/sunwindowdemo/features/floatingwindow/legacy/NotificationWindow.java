@@ -42,7 +42,7 @@ final class NotificationWindow {
         SystemUiHost host=SystemUiHost.live;if(host==null||!host.notificationWindowReady()||entry==null)return null;
         StatusBarNotification notice=(StatusBarNotification)sbn.get(entry);
         if(notice==null||!contentLaunch(notice.getNotification(),pending)||!Process.myUserHandle().equals(notice.getUser())
-            ||!Process.myUserHandle().equals(pending.getCreatorUserHandle())||!notice.getPackageName().equals(pending.getCreatorPackage())
+            ||!Process.myUserHandle().equals(pending.getCreatorUserHandle())
             ||Wire.PKG.equals(notice.getPackageName())||BackBridge.PACKAGE.equals(notice.getPackageName())||"android".equals(notice.getPackageName()))return null;
         return new Click(notice,pending);
     }

@@ -40,9 +40,11 @@ final class TaskCover {
         try{
             background=build("NativeComplements-cover",0);
             icon=build("NativeComplements-cover-icon",iconSize);
-            Drawable drawable;
-            try{drawable=context.getPackageManager().getApplicationIcon(pkg);}
-            catch(android.content.pm.PackageManager.NameNotFoundException missing){drawable=context.getPackageManager().getDefaultActivityIcon();}
+            Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(context,pkg);
+            if(drawable==null){
+                try{drawable=context.getPackageManager().getApplicationIcon(pkg);}
+                catch(android.content.pm.PackageManager.NameNotFoundException missing){drawable=context.getPackageManager().getDefaultActivityIcon();}
+            }
             Surface canvasSurface=new Surface(icon);
             try{
                 Canvas canvas=canvasSurface.lockCanvas(null);

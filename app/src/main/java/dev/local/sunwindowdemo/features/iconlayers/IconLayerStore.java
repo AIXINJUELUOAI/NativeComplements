@@ -11,6 +11,7 @@ import android.os.SystemClock;
 public final class IconLayerStore {
     public static final String TARGET = "dev.local.nativecomplements.lab";
     public static final String LAUNCHER = "com.google.android.apps.nexuslauncher";
+    public static final String SYSTEM_UI = "com.android.systemui";
     public static final String REFRESH = "dev.local.sunwindowdemo.ICON_LAYERS_REFRESH";
     public static final String CONTROL = "dev.local.sunwindowdemo.CONTROL";
     public static final Uri URI = Uri.parse("content://dev.local.sunwindowdemo.iconlayers/config");
@@ -24,6 +25,8 @@ public final class IconLayerStore {
         Bundle b = new Bundle();
         b.putInt("mode", p.getInt("mode", 0));
         b.putBoolean("enabled", p.getBoolean("enabled", false));
+        b.putBoolean("notifications",p.getBoolean("notifications",false));
+        b.putString("policies", p.getString("policies", "{}"));
         b.putString("generation", p.getString("generation", ""));
         b.putString("title", p.getString("title", ""));
         b.putInt("count", p.getInt("count", 0));
@@ -47,14 +50,21 @@ public final class IconLayerStore {
     }
 
     public static void refresh(Context c) {
-        c.sendBroadcast(new Intent(REFRESH).setPackage(LAUNCHER).addFlags(Intent.FLAG_RECEIVER_FOREGROUND));
+        broadcast(c,false);
     }
     public static void refreshAll(Context c) {
-        c.sendBroadcast(new Intent(REFRESH).setPackage(LAUNCHER).putExtra("all", true).addFlags(Intent.FLAG_RECEIVER_FOREGROUND));
+        broadcast(c,true);
+    }
+    private static void broadcast(Context c,boolean all) {
+        for(String host:new String[]{LAUNCHER,SYSTEM_UI,"android"})
+            c.sendBroadcast(new Intent(REFRESH).setPackage(host).putExtra("all",all).addFlags(Intent.FLAG_RECEIVER_FOREGROUND));
     }
 
     public static void enabled(Context c, boolean enabled) {
         prefs(c).edit().putBoolean("enabled", enabled).apply(); refresh(c);
+    }
+    public static void notifications(Context c,boolean enabled){
+        prefs(c).edit().putBoolean("notifications",enabled).apply();refresh(c);
     }
     public static void original(Context c, String pkg, boolean original) {
         if (!IconArchive.validPackage(pkg)) throw new IllegalArgumentException("package");

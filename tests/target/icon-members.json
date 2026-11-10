@@ -1,0 +1,108 @@
+{
+  "artifacts": [
+    {
+      "name": "SystemUI.apk",
+      "size": 48329834,
+      "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
+    }
+  ],
+  "note": "Exact DEX symbol references from archived target; runtime behavior remains unverified.",
+  "classes": {
+    "Lcom/android/internal/statusbar/StatusBarIcon;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes2.dex",
+      "fields": [
+        {
+          "name": "icon",
+          "type": "Landroid/graphics/drawable/Icon;"
+        }
+      ],
+      "methods": []
+    },
+    "Lcom/android/systemui/statusbar/StatusBarIconView;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes2.dex",
+      "fields": [
+        {
+          "name": "mNotification",
+          "type": "Landroid/service/notification/StatusBarNotification;"
+        },
+        {
+          "name": "mShowsConversation",
+          "type": "Z"
+        }
+      ],
+      "methods": [
+        {
+          "name": "getIcon",
+          "descriptor": "(Lcom/android/internal/statusbar/StatusBarIcon;)Landroid/graphics/drawable/Drawable;"
+        },
+        {
+          "name": "updateDrawable",
+          "descriptor": "(Z)Z"
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/ScalingDrawableWrapper;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes2.dex",
+      "fields": [],
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/graphics/drawable/Drawable;F)V"
+        }
+      ]
+    },
+    "Lcom/android/wm/shell/startingsurface/SplashscreenContentDrawer$SplashScreenWindowAttrs;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes3.dex",
+      "fields": [
+        {
+          "name": "mIconBgColor",
+          "type": "I"
+        },
+        {
+          "name": "mSplashScreenIcon",
+          "type": "Landroid/graphics/drawable/Drawable;"
+        }
+      ],
+      "methods": []
+    },
+    "Lcom/android/wm/shell/startingsurface/SplashscreenContentDrawer$SplashViewBuilder;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes3.dex",
+      "fields": [
+        {
+          "name": "mActivityInfo",
+          "type": "Landroid/content/pm/ActivityInfo;"
+        },
+        {
+          "name": "mSuggestType",
+          "type": "I"
+        },
+        {
+          "name": "this$0",
+          "type": "Lcom/android/wm/shell/startingsurface/SplashscreenContentDrawer;"
+        }
+      ],
+      "methods": [
+        {
+          "name": "build",
+          "descriptor": "()Landroid/window/SplashScreenView;"
+        }
+      ]
+    },
+    "Lcom/android/wm/shell/startingsurface/SplashscreenContentDrawer;": {
+      "artifact": "SystemUI.apk",
+      "dex": "classes3.dex",
+      "fields": [
+        {
+          "name": "mTmpAttrs",
+          "type": "Lcom/android/wm/shell/startingsurface/SplashscreenContentDrawer$SplashScreenWindowAttrs;"
+        }
+      ],
+      "methods": []
+    }
+  }
+}

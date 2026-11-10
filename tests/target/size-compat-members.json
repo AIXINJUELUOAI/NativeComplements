@@ -1,0 +1,44 @@
+{
+  "artifact": "services.jar",
+  "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9",
+  "classes": {
+    "Lcom/android/server/wm/AppCompatController;": {
+      "superclass": "Ljava/lang/Object;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "getSizeCompatModePolicy",
+          "descriptor": "()Lcom/android/server/wm/AppCompatSizeCompatModePolicy;",
+          "access": 1
+        }
+      ]
+    },
+    "Lcom/android/server/wm/AppCompatDisplayInsets;": {
+      "superclass": "Ljava/lang/Object;",
+      "fields": [
+        {
+          "name": "mIsFloating",
+          "type": "Z",
+          "access": 17
+        }
+      ],
+      "methods": []
+    },
+    "Lcom/android/server/wm/AppCompatSizeCompatModePolicy;": {
+      "superclass": "Ljava/lang/Object;",
+      "fields": [],
+      "methods": [
+        {
+          "name": "clearSizeCompatMode",
+          "descriptor": "()V",
+          "access": 1
+        },
+        {
+          "name": "getAppCompatDisplayInsets",
+          "descriptor": "()Lcom/android/server/wm/AppCompatDisplayInsets;",
+          "access": 1
+        }
+      ]
+    }
+  }
+}
