@@ -376,7 +376,7 @@ final class WindowEngine {
                 throw new IllegalStateException("先完成待恢复任务");
             if (Build.VERSION.SDK_INT != 37) throw new IllegalStateException("首版仅验证 Android 17 / API 37");
             KeyguardManager kg = context.getSystemService(KeyguardManager.class);
-            if (kg == null || kg.isKeyguardLocked()) throw new IllegalStateException("先解锁屏幕");
+            requireUnlocked("先解锁屏幕");
             String pkg = i.getStringExtra("package"), token = i.getStringExtra("token");
             if (!Wire.allowedPackage(pkg) || !Wire.validToken(token)) throw new IllegalArgumentException("目标或标识不匹配");
             Bundle extras = i.getExtras();
@@ -472,7 +472,7 @@ final class WindowEngine {
             if(began==0){began=SystemClock.elapsedRealtime();request.putExtra("began",began);}
             if(SystemClock.elapsedRealtime()-began>12000)throw new IllegalStateException("等待应用/转场超时，phase="+request.getStringExtra("phase"));
             if(!Wire.allowedPackage(pkg)||Wire.PKG.equals(pkg))throw new IllegalArgumentException("请选择可启动应用");
-            if(context.getSystemService(KeyguardManager.class).isKeyguardLocked())throw new IllegalStateException("请先解锁");
+            requireUnlocked("请先解锁");
             if(recovering||active!=null&&active.restoring){
                 recoveryWaits=0;recover("重新检查待恢复任务");
                 if(recovering||!sessions.isEmpty())throw new IllegalStateException("旧任务仍待恢复："+last);
@@ -700,6 +700,11 @@ final class WindowEngine {
         s.startMask=new TaskVisibilityGuard(a,task);s.startMask.hide();
         activate(s,placement);
         a.call(a.field(task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},task);
+    }
+    /** Shared entry precondition: opening or starting a window requires an unlocked keyguard. */
+    private void requireUnlocked(String message){
+        KeyguardManager keyguard=context.getSystemService(KeyguardManager.class);
+        if(keyguard==null||keyguard.isKeyguardLocked())throw new IllegalStateException(message);
     }
     /** A recovery journal with no live session means a previous window still awaits restoration. */
     private boolean unrecoveredJournal(){return sessions.isEmpty()&&journal.getBaseFile().exists();}
