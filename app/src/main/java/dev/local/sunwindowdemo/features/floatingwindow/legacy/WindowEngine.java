@@ -374,7 +374,6 @@ final class WindowEngine {
             if(recovering||anyRestoring()||unrecoveredJournal())
                 throw new IllegalStateException("先完成待恢复任务");
             if (Build.VERSION.SDK_INT != 37) throw new IllegalStateException("首版仅验证 Android 17 / API 37");
-            KeyguardManager kg = context.getSystemService(KeyguardManager.class);
             requireUnlocked("先解锁屏幕");
             String pkg = i.getStringExtra("package"), token = i.getStringExtra("token");
             if (!Wire.allowedPackage(pkg) || !Wire.validToken(token)) throw new IllegalArgumentException("目标或标识不匹配");
