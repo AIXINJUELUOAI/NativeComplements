@@ -18,6 +18,7 @@ final class TaskCover {
     private final float radiusFrom;
     private float radiusTo;
     private final int iconSize;
+    private final float splashPx;
     private final float[] color;
     private long began=SystemClock.elapsedRealtime(),notBefore;
     private final long duration,fadeDuration;
@@ -31,8 +32,9 @@ final class TaskCover {
         this.radiusFrom=radiusFrom;this.radiusTo=radiusTo;this.ownerAlpha=ownerAlpha;this.fadeIn=fadeIn;
         float density=context.getResources().getDisplayMetrics().density;
         float shade=(context.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES?.09f:.94f;
-        color=new float[]{shade,shade,shade};
-        iconSize=Math.max(48,Math.min(256,Math.round(64*density)));
+        color=splashColor(context,pkg,shade);
+        splashPx=288*density;
+        iconSize=Math.max(48,Math.min(512,Math.round(splashPx)));
         float animationScale=android.provider.Settings.Global.getFloat(context.getContentResolver(),
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f);
         duration=Math.max(0,Math.round(320*animationScale));fadeDuration=Math.max(0,Math.round(150*animationScale));
@@ -53,6 +55,24 @@ final class TaskCover {
             }finally{canvasSurface.release();}
             paint(0,fadeIn?0:1);mask.hide();
         }catch(Throwable error){close();throw error;}
+    }
+    /** Same source as the native splash: the application theme's splash background, then its window background. */
+    private static float[] splashColor(Context context,String pkg,float fallback){
+        try{
+            android.content.pm.ApplicationInfo info=context.getPackageManager().getApplicationInfo(pkg,0);
+            Context owner=context.createPackageContext(pkg,0);
+            android.content.res.Resources.Theme theme=owner.getResources().newTheme();
+            theme.applyStyle(info.theme!=0?info.theme:android.R.style.Theme_DeviceDefault_DayNight,true);
+            android.util.TypedValue value=new android.util.TypedValue();
+            int[] attrs={android.R.attr.windowSplashScreenBackground,android.R.attr.windowBackground};
+            for(int attr:attrs){
+                if(theme.resolveAttribute(attr,value,true)&&value.type>=android.util.TypedValue.TYPE_FIRST_COLOR_INT
+                    &&value.type<=android.util.TypedValue.TYPE_LAST_COLOR_INT){
+                    int c=value.data;if(Color.alpha(c)==255)return new float[]{Color.red(c)/255f,Color.green(c)/255f,Color.blue(c)/255f};
+                }
+            }
+        }catch(Exception ignored){}
+        return new float[]{fallback,fallback,fallback};
     }
     private SurfaceControl build(String name,int size)throws Exception{
         Object b=Class.forName("android.view.SurfaceControl$Builder").getDeclaredConstructor().newInstance();
@@ -110,7 +130,7 @@ final class TaskCover {
     private void paint(float p,float alpha)throws Exception{
         float x=from.left+(to.left-from.left)*p,y=from.top+(to.top-from.top)*p;
         float w=Math.max(1,from.width()+(to.width()-from.width())*p),h=Math.max(1,from.height()+(to.height()-from.height())*p);
-        float size=Math.min(1,Math.min(w,h)/(iconSize*2f));
+        float size=Math.min(splashPx,Math.min(w,h)*.7f)/iconSize;
         Rect pb=(Rect)a.call(parent,"getBounds");
         SurfaceControl anchor=(SurfaceControl)a.field(task,"mSurfaceControl");
         if(anchor==null||!anchor.isValid()||background==null||!background.isValid()||icon==null||!icon.isValid())throw new IllegalStateException("cover surface detached");
