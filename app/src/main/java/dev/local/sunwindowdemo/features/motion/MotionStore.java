@@ -7,7 +7,7 @@ import org.json.JSONObject;
 import java.util.*;
 
 public final class MotionStore {
-    public static final Uri URI=Uri.parse("content://dev.local.sunwindowdemo.motion/config");
+    public static final Uri URI=Uri.parse("content://dev.nativecomplements.module.motion/config");
     public static SharedPreferences prefs(Context c){return c.createDeviceProtectedStorageContext().getSharedPreferences("motion_access",0);}
     public static Bundle read(Context c){
         SharedPreferences p=prefs(c);Bundle b=new Bundle();b.putBoolean("enabled",p.getBoolean("enabled",false));

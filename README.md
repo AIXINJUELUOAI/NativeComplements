@@ -1,8 +1,10 @@
 # NativeComplements
 
-类原生 Android 功能补全模块。当前版本为 `0.5.10`（versionCode 60），包含小窗、电话拦截、边缘防误触、建议与图标补全。
+类原生 Android 功能补全模块。模块名“类原生补全计划”，当前版本为 `0.6.0`（versionCode 61），包含小窗、电话拦截、边缘防误触、建议、防摇一摇与图标补全。
 
 设置界面采用 Compose Material 3 / Material 3 Expressive、系统动态颜色和深色模式。首页按功能独立跳转，功能可用后再加入入口。
+
+0.6.0 更换应用身份为 `dev.nativecomplements.module`，与旧版不能覆盖升级：需卸载旧版、在 LSPosed 重新启用并勾选原有三个作用域、重新配置各功能。小窗“接管、回全屏、前置校验”收为共用入口，分享失败回退也释放尺寸兼容缓存；小窗遮罩底色与图标尺寸对齐系统启动页；自带圆角底板的平面图标在算法补全时以自身底色铺满视口；首页按健康状态着色并分组，新增开源许可页。
 
 0.5.10 在共用全屏恢复路径释放小窗遗留的 Activity 尺寸兼容缓存，修正通知打开后转全屏的页面黑边；跨应用再次跳转复用实际目标任务，温启动遮罩接受已绘制且配置匹配的原生窗口。图标默认采用图标包，未命中保留应用原图；算法仅逐应用主动选择后、启动该应用时生成缓存，通知图标默认不处理。沿用三个系统作用域；构建、针对性检查与归档接口核对不代表真机效果已通过。
 
@@ -134,7 +136,7 @@ python tests/package_release.py
 - `com.android.systemui`
 - `com.google.android.apps.nexuslauncher`
 
-包名保持 `dev.local.sunwindowdemo`，宿主协议为 16。安装和重启由用户自行安排。
+应用 ID 为 `dev.nativecomplements.module`（0.6.0 起，源码包路径仍为 `dev.local.sunwindowdemo`），宿主协议为 16。安装和重启由用户自行安排。
 
 ## 项目结构
 

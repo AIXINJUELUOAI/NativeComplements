@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <permission android:name="dev.local.sunwindowdemo.CONTROL" android:protectionLevel="signature" />
-    <uses-permission android:name="dev.local.sunwindowdemo.CONTROL" />
+    <permission android:name="dev.nativecomplements.module.CONTROL" android:protectionLevel="signature" />
+    <uses-permission android:name="dev.nativecomplements.module.CONTROL" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -13,19 +13,19 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-        <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="dev.local.sunwindowdemo.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
-        <activity android:name=".WindowShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="dev.local.sunwindowdemo.shortcut">
+        <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="dev.nativecomplements.module.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
+        <activity android:name=".WindowShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="dev.nativecomplements.module.shortcut">
             <intent-filter><action android:name="android.intent.action.CREATE_SHORTCUT" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" />
-        <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.local.sunwindowdemo.callblocking" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.motion.MotionProvider" android:authorities="dev.local.sunwindowdemo.motion" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.local.sunwindowdemo.iconlayers" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.local.sunwindowdemo.edgetouch" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.nativecomplements.module.callblocking" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.motion.MotionProvider" android:authorities="dev.nativecomplements.module.motion" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.nativecomplements.module.iconlayers" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.nativecomplements.module.edgetouch" android:exported="true" android:directBootAware="true" />
         <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
         </receiver>
-        <provider android:name=".features.suggestions.SuggestionProvider" android:authorities="dev.local.sunwindowdemo.suggestions" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".ConfigProvider" android:authorities="dev.local.sunwindowdemo.settings" android:exported="true" />
+        <provider android:name=".features.suggestions.SuggestionProvider" android:authorities="dev.nativecomplements.module.suggestions" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".ConfigProvider" android:authorities="dev.nativecomplements.module.settings" android:exported="true" />
     </application>
 </manifest>

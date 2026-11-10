@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">类原生补全</string>
+    <string name="app_name">类原生补全计划</string>
     <string name="shortcut_window">当前应用小窗</string>
     <string name="shortcut_window_long">将当前应用变成小窗</string>
     <string name="description">类原生补全 · 小窗、建议、电话拦截与防误触</string>

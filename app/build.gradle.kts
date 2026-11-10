@@ -8,11 +8,11 @@ android {
     compileSdkVersion("android-37.0")
     defaultConfig {
         // Preserve Demo8.2 data, permissions, LSPosed scope and runtime identity.
-        applicationId = "dev.local.sunwindowdemo"
+        applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 60
-        versionName = "0.5.10"
+        versionCode = 61
+        versionName = "0.6.0"
     }
     signingConfigs {
         create("demoUpdate") {

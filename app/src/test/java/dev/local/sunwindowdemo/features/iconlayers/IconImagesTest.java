@@ -75,12 +75,12 @@ public class IconImagesTest {
     @Test public void customProviderReadsOnlyPublishedImageIds()throws Exception{
         String id=upload(IconImages.solid(Color.BLUE,16));
         IconLayerProvider provider=Robolectric.buildContentProvider(IconLayerProvider.class).create().get();
-        Uri uri=Uri.parse("content://dev.local.sunwindowdemo.iconlayers/custom/"+id+".png");
+        Uri uri=Uri.parse("content://dev.nativecomplements.module.iconlayers/custom/"+id+".png");
         assertThrows(FileNotFoundException.class,()->provider.openFile(uri,"r"));
         IconPolicy p=new IconPolicy();p.background=id;IconPolicy.save(c,PKG,p);
         try(var file=provider.openFile(uri,"r")){assertTrue(file.getStatSize()>0);}
         assertThrows(SecurityException.class,()->provider.openFile(uri,"w"));
-        assertThrows(FileNotFoundException.class,()->provider.openFile(Uri.parse("content://dev.local.sunwindowdemo.iconlayers/custom/../../outside.png"),"r"));
+        assertThrows(FileNotFoundException.class,()->provider.openFile(Uri.parse("content://dev.nativecomplements.module.iconlayers/custom/../../outside.png"),"r"));
     }
     @Test public void customImagesAreContentAddressedAndFailedImportsPreservePolicies()throws Exception{
         String first=upload(IconImages.solid(Color.BLUE,16));assertEquals(first,upload(IconImages.solid(Color.BLUE,16)));

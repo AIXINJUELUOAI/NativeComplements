@@ -49,7 +49,7 @@ def main():
                     "verify", "--print-certs", apk)
     assert re.search(r"certificate SHA-256 digest: (\w+)", signature)[1] == CERTIFICATE
     badging = run(tools / "aapt2.exe", "dump", "badging", apk).splitlines()[0]
-    for expected in ("name='dev.local.sunwindowdemo'", f"versionCode='{code}'",
+    for expected in ("name='dev.nativecomplements.module'", f"versionCode='{code}'",
                      f"versionName='{version}'"):
         assert expected in badging, badging
     manifest = run(tools / "aapt2.exe", "dump", "xmltree", apk,

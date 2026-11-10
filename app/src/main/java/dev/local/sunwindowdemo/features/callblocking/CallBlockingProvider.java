@@ -7,7 +7,7 @@ import android.os.*;
 
 /** Separate from window settings: only the owner and the system Telecom may use this bridge. */
 public final class CallBlockingProvider extends ContentProvider {
-    public static final String AUTHORITY="dev.local.sunwindowdemo.callblocking";
+    public static final String AUTHORITY="dev.nativecomplements.module.callblocking";
     public static final Uri CONFIG=Uri.parse("content://"+AUTHORITY+"/config");
     @Override public boolean onCreate(){return true;}
     @Override public Bundle call(String method,String arg,Bundle extras){

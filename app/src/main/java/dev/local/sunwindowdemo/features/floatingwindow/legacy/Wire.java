@@ -6,7 +6,7 @@ import android.os.*;
 import java.util.UUID;
 
 final class Wire {
-    static final String PKG = "dev.local.sunwindowdemo";
+    static final String PKG = "dev.nativecomplements.module";
     static final String COMMAND = PKG + ".COMMAND", RESULT = PKG + ".RESULT";
     static final String PERMISSION = PKG + ".CONTROL";
     static final int PROTOCOL = 16;

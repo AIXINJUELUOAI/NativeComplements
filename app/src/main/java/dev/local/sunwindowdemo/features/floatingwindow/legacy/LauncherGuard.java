@@ -14,8 +14,8 @@ import java.util.List;
 /** Prevents the launcher swipe monitor from claiming explicitly owned corner streams. */
 public final class LauncherGuard extends XposedModule {
     static final String PACKAGE="com.google.android.apps.nexuslauncher";
-    static final String STATE="dev.local.sunwindowdemo.GUARD_STATE";
-    static final String QUERY="dev.local.sunwindowdemo.QUERY_GUARD_STATE";
+    static final String STATE="dev.nativecomplements.module.GUARD_STATE";
+    static final String QUERY="dev.nativecomplements.module.QUERY_GUARD_STATE";
     private final GestureGate gate=new GestureGate();
     private boolean eligible,attempted;
     private Context context;

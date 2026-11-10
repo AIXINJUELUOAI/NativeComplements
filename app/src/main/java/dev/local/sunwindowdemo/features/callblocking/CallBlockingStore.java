@@ -11,8 +11,8 @@ import java.util.LinkedHashSet;
 
 /** App/Provider-side storage only. System hooks obtain a snapshot through the authenticated provider. */
 public final class CallBlockingStore {
-    public static final Uri CONFIG_URI = Uri.parse("content://dev.local.sunwindowdemo.callblocking/config");
-    public static final Uri RECORDS_URI = Uri.parse("content://dev.local.sunwindowdemo.callblocking/records");
+    public static final Uri CONFIG_URI = Uri.parse("content://dev.nativecomplements.module.callblocking/config");
+    public static final Uri RECORDS_URI = Uri.parse("content://dev.nativecomplements.module.callblocking/records");
     private static final int MAX_RECORDS = 200;
     private CallBlockingStore() {}
 

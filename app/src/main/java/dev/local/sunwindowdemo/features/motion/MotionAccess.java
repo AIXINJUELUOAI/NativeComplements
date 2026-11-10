@@ -79,7 +79,7 @@ public final class MotionAccess {
                 List<ApplicationInfo> installed=context.getPackageManager().getInstalledApplications(0);
                 Set<Integer> excluded=new HashSet<>();
                 for(ApplicationInfo info:installed)if(info.uid<10000||(info.flags&ApplicationInfo.FLAG_PERSISTENT)!=0
-                    ||Set.of("dev.local.sunwindowdemo","com.android.systemui","com.google.android.apps.nexuslauncher").contains(info.packageName))excluded.add(info.uid);
+                    ||Set.of("dev.nativecomplements.module","com.android.systemui","com.google.android.apps.nexuslauncher").contains(info.packageName))excluded.add(info.uid);
                 for(ApplicationInfo info:installed){
                     if(excluded.contains(info.uid))continue;
                     int mode=MotionPolicy.resolve(fallback,overrides.get(info.packageName));

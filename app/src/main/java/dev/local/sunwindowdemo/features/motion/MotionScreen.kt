@@ -40,7 +40,7 @@ fun MotionScreen(apps: List<LaunchableApp>, loaded: Boolean) {
     val defaultMode = config.getInt("default_mode", 0)
     val enabled = config.getBoolean("enabled")
     val visible = remember(apps, query, selected, defaultMode) {
-        apps.filter { it.packageName !in setOf("dev.local.sunwindowdemo", "com.android.systemui", "com.google.android.apps.nexuslauncher") &&
+        apps.filter { it.packageName !in setOf("dev.nativecomplements.module", "com.android.systemui", "com.google.android.apps.nexuslauncher") &&
             (it.label.contains(query, true) || it.packageName.contains(query, true)) }
             .sortedByDescending { selected[it.packageName] ?: defaultMode }
     }

@@ -8,8 +8,8 @@ import android.os.Bundle;
 
 /** Own settings; deliberately independent of the floating-window enabled switch. */
 public final class EdgeTouchStore {
-    public static final String AUTHORITY = "dev.local.sunwindowdemo.edgetouch";
-    public static final String CHANGED = "dev.local.sunwindowdemo.EDGE_TOUCH_CHANGED";
+    public static final String AUTHORITY = "dev.nativecomplements.module.edgetouch";
+    public static final String CHANGED = "dev.nativecomplements.module.EDGE_TOUCH_CHANGED";
     public static final String SYSTEM_UI = "com.android.systemui";
     private EdgeTouchStore() {}
 

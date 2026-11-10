@@ -142,7 +142,7 @@ public class IconLibraryTest {
     @Test public void providerAllowsOnlyIndexedPngReads() throws Exception {
         installOne(); String generation = IconLayerStore.read(context).getString("generation");
         IconLayerProvider provider = Robolectric.buildContentProvider(IconLayerProvider.class).create().get();
-        String prefix = "content://dev.local.sunwindowdemo.iconlayers/layers/" + generation;
+        String prefix = "content://dev.nativecomplements.module.iconlayers/layers/" + generation;
         try (var fd = provider.openFile(Uri.parse(prefix + "/com.example.one/0.png"), "r")) { assertTrue(fd.getStatSize() > 0); }
         assertThrows(SecurityException.class, () -> provider.openFile(Uri.parse(prefix + "/com.example.one/0.png"), "w"));
         assertThrows(FileNotFoundException.class, () -> provider.openFile(Uri.parse(prefix + "/com.example.one/index.json"), "r"));

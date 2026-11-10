@@ -7,10 +7,10 @@ import android.content.SharedPreferences;
 import android.os.Bundle;
 
 public final class SuggestionStore {
-    public static final String AUTHORITY="dev.local.sunwindowdemo.suggestions";
-    public static final String CHANGED="dev.local.sunwindowdemo.SUGGESTIONS_CHANGED";
-    public static final String SMS="dev.local.sunwindowdemo.SUGGESTION_SMS";
-    public static final String AWAKE="dev.local.sunwindowdemo.SUGGESTION_AWAKE";
+    public static final String AUTHORITY="dev.nativecomplements.module.suggestions";
+    public static final String CHANGED="dev.nativecomplements.module.SUGGESTIONS_CHANGED";
+    public static final String SMS="dev.nativecomplements.module.SUGGESTION_SMS";
+    public static final String AWAKE="dev.nativecomplements.module.SUGGESTION_AWAKE";
     public static SharedPreferences preferences(Context c){return c.createDeviceProtectedStorageContext().getSharedPreferences("suggestions",0);}
     public static Bundle read(Context c){
         SharedPreferences p=preferences(c);Bundle b=new Bundle();

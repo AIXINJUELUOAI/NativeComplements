@@ -89,7 +89,7 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
         @Override public void onReceive(Context c, Intent intent) {
             if (EdgeTouchStore.CHANGED.equals(intent.getAction())) {
                 try {
-                    if (getSentFromUid() == context.getPackageManager().getApplicationInfo("dev.local.sunwindowdemo", 0).uid) loadSettings();
+                    if (getSentFromUid() == context.getPackageManager().getApplicationInfo("dev.nativecomplements.module", 0).uid) loadSettings();
                 } catch (Exception ignored) { }
             } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
                 removeWindows(); state = "screen_off";
