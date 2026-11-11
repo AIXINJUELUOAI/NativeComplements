@@ -12,6 +12,9 @@ import android.view.SurfaceControl;
 final class TaskCover {
     final TaskVisibilityGuard mask;
     private final FrameworkAccess a;
+    private final Context iconContext;
+    private final String pkg;
+    private boolean iconDrawn;
     private final Object task,parent;
     private SurfaceControl background,icon;
     private final RectF from,to;
@@ -26,14 +29,21 @@ final class TaskCover {
     private boolean closed,exiting;
     private float ownerAlpha;
     private final boolean fadeIn;
+    private TaskDecoration decoration;
+    private Geometry.Placement decorationCanvas;
+    private final RectF decorationBounds=new RectF();
+    private float decorationDensity,decorationAlpha,exitAlpha=1;
+    private long decorationAt=-1;
+    private boolean decorationLandscape,decorationEntry,presentationVisible=true;
     TaskCover(FrameworkAccess a,Context context,Object task,Object parent,String pkg,
             RectF from,RectF to,float radiusFrom,float radiusTo,float ownerAlpha,boolean fadeIn)throws Exception{
         this.a=a;this.task=task;this.parent=parent;this.from=new RectF(from);this.to=new RectF(to);
+        iconContext=context;this.pkg=pkg;
         this.radiusFrom=radiusFrom;this.radiusTo=radiusTo;this.ownerAlpha=ownerAlpha;this.fadeIn=fadeIn;
         float density=context.getResources().getDisplayMetrics().density;
         float shade=(context.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES?.09f:.94f;
-        color=splashColor(context,pkg,shade);
-        splashPx=288*density;
+        color=new float[]{shade,shade,shade};
+        splashPx=162*density;
         iconSize=Math.max(48,Math.min(512,Math.round(splashPx)));
         float animationScale=android.provider.Settings.Global.getFloat(context.getContentResolver(),
             android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,1f);
@@ -42,37 +52,25 @@ final class TaskCover {
         try{
             background=build("NativeComplements-cover",0);
             icon=build("NativeComplements-cover-icon",iconSize);
-            Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(context,pkg);
-            if(drawable==null){
-                try{drawable=context.getPackageManager().getApplicationIcon(pkg);}
-                catch(android.content.pm.PackageManager.NameNotFoundException missing){drawable=context.getPackageManager().getDefaultActivityIcon();}
-            }
-            Surface canvasSurface=new Surface(icon);
-            try{
-                Canvas canvas=canvasSurface.lockCanvas(null);
-                try{canvas.drawColor(Color.TRANSPARENT,PorterDuff.Mode.CLEAR);drawable.setBounds(0,0,iconSize,iconSize);drawable.draw(canvas);}
-                finally{canvasSurface.unlockCanvasAndPost(canvas);}
-            }finally{canvasSurface.release();}
             paint(0,fadeIn?0:1);mask.hide();
         }catch(Throwable error){close();throw error;}
     }
-    /** Same source as the native splash: the application theme's splash background, then its window background. */
-    private static float[] splashColor(Context context,String pkg,float fallback){
+    private void drawIcon()throws Exception{
+        if(iconDrawn)return;
+        // An unknown snapshot is not an explicit choice to use the application original.
+        if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return;
+        Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(iconContext,pkg);
+        if(drawable==null){
+            try{drawable=iconContext.getPackageManager().getApplicationIcon(pkg);}
+            catch(android.content.pm.PackageManager.NameNotFoundException missing){drawable=iconContext.getPackageManager().getDefaultActivityIcon();}
+        }
+        Surface canvasSurface=new Surface(icon);
         try{
-            android.content.pm.ApplicationInfo info=context.getPackageManager().getApplicationInfo(pkg,0);
-            Context owner=context.createPackageContext(pkg,0);
-            android.content.res.Resources.Theme theme=owner.getResources().newTheme();
-            theme.applyStyle(info.theme!=0?info.theme:android.R.style.Theme_DeviceDefault_DayNight,true);
-            android.util.TypedValue value=new android.util.TypedValue();
-            int[] attrs={android.R.attr.windowSplashScreenBackground,android.R.attr.windowBackground};
-            for(int attr:attrs){
-                if(theme.resolveAttribute(attr,value,true)&&value.type>=android.util.TypedValue.TYPE_FIRST_COLOR_INT
-                    &&value.type<=android.util.TypedValue.TYPE_LAST_COLOR_INT){
-                    int c=value.data;if(Color.alpha(c)==255)return new float[]{Color.red(c)/255f,Color.green(c)/255f,Color.blue(c)/255f};
-                }
-            }
-        }catch(Exception ignored){}
-        return new float[]{fallback,fallback,fallback};
+            Canvas canvas=canvasSurface.lockCanvas(null);
+            try{canvas.drawColor(Color.TRANSPARENT,PorterDuff.Mode.CLEAR);drawable.setBounds(0,0,iconSize,iconSize);drawable.draw(canvas);}
+            finally{canvasSurface.unlockCanvasAndPost(canvas);}
+        }finally{canvasSurface.release();}
+        iconDrawn=true;
     }
     private SurfaceControl build(String name,int size)throws Exception{
         Object b=Class.forName("android.view.SurfaceControl$Builder").getDeclaredConstructor().newInstance();
@@ -87,6 +85,26 @@ final class TaskCover {
         return (SurfaceControl)a.call(b,"build");
     }
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
+    void entryDecorations(boolean entering){decorationEntry=entering;}
+    boolean decorate(TaskDecoration value,Geometry.Placement canvas,float density,boolean landscape,float alpha,boolean structural)throws Exception{
+        decoration=value;decorationCanvas=canvas;decorationDensity=density;decorationLandscape=landscape;decorationAlpha=alpha;
+        return decorate(a.transaction(task),structural);
+    }
+    private boolean decorate(Object tx,boolean structural)throws Exception{
+        if(decoration==null)return false;
+        float scale=decorationBounds.width()/decorationCanvas.width();
+        Geometry.Placement pose=new Geometry.Placement(decorationCanvas.width(),Math.max(1,Math.round(decorationBounds.height()/scale)),
+            scale,decorationBounds.left,decorationBounds.top);
+        MotionStyle.Decoration entry=decorationEntry?MotionStyle.entryDecoration(decorationProgress(),fadeIn):new MotionStyle.Decoration(1,1);
+        float alpha=presentationVisible?decorationAlpha*exitAlpha:0;
+        boolean drawn=decoration.update(task,parent,pose,decorationDensity,decorationLandscape,alpha*entry.handle(),alpha*entry.dim(),structural,tx);
+        // Start once the app can present its decorations, including slow cold starts.
+        if(decorationEntry&&drawn&&decorationAt<0)decorationAt=SystemClock.elapsedRealtime();
+        return drawn;
+    }
+    private float decorationProgress(){
+        return decorationAt<0?0:duration==0?1:Math.min(1,(SystemClock.elapsedRealtime()-decorationAt)/(float)duration);
+    }
     void target(RectF bounds){if(!exiting)to.set(bounds);}
     void resumeTo(RectF bounds,float radius){to.set(bounds);radiusTo=radius;began=SystemClock.elapsedRealtime();}
     void delayEntry(long delay){notBefore=SystemClock.elapsedRealtime()+Math.max(0,delay);}
@@ -99,6 +117,7 @@ final class TaskCover {
     }
     boolean step(boolean ready,boolean visible)throws Exception{
         if(closed)return false;
+        presentationVisible=visible;
         long now=SystemClock.elapsedRealtime();
         if(!visible){
             if(hiddenAt<0)hiddenAt=now;
@@ -108,6 +127,7 @@ final class TaskCover {
         if(hiddenAt>=0){
             long paused=now-hiddenAt;
             began+=paused;if(entryAt>=0)entryAt+=paused;if(fadeAt>=0)fadeAt+=paused;
+            if(decorationAt>=0)decorationAt+=paused;
             if(notBefore>0)notBefore+=paused;
             hiddenAt=-1;
         }
@@ -120,7 +140,7 @@ final class TaskCover {
         if(fadeIn&&visible&&entryAt<0&&now>=notBefore)entryAt=now;
         long elapsed=fadeIn?(entryAt<0?0:now-entryAt):now-began;
         float p=duration==0?1:Math.min(1,elapsed/(float)duration);
-        if(ready&&p==1&&fadeAt<0){mask.release(ownerAlpha);fadeAt=now;}
+        if(ready&&p==1&&(!decorationEntry||decorationProgress()==1)&&fadeAt<0){mask.release(ownerAlpha);fadeAt=now;}
         if(fadeAt>=0&&now-fadeAt>=fadeDuration){close();return false;}
         if(mask.holding())mask.hold();
         float alpha=fadeAt<0?(fadeIn&&fadeDuration>0?Math.min(1,elapsed/(float)fadeDuration):1):1-(now-fadeAt)/(float)fadeDuration;
@@ -128,9 +148,12 @@ final class TaskCover {
         return true;
     }
     private void paint(float p,float alpha)throws Exception{
+        drawIcon();
+        if(exiting)exitAlpha=alpha;
         float x=from.left+(to.left-from.left)*p,y=from.top+(to.top-from.top)*p;
         float w=Math.max(1,from.width()+(to.width()-from.width())*p),h=Math.max(1,from.height()+(to.height()-from.height())*p);
-        float size=Math.min(splashPx,Math.min(w,h)*.7f)/iconSize;
+        decorationBounds.set(x,y,x+w,y+h);
+        float size=Math.min(splashPx,Math.min(w,h)*.405f)/iconSize;
         Rect pb=(Rect)a.call(parent,"getBounds");
         SurfaceControl anchor=(SurfaceControl)a.field(task,"mSurfaceControl");
         if(anchor==null||!anchor.isValid()||background==null||!background.isValid()||icon==null||!icon.isValid())throw new IllegalStateException("cover surface detached");
@@ -147,6 +170,7 @@ final class TaskCover {
             tx.setAlpha(background,alpha).setAlpha(icon,alpha);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},background);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},icon);
+            decorate(tx,false);
             tx.apply();
         }
     }

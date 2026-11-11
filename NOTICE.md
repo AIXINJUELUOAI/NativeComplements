@@ -1,5 +1,9 @@
 # Source attribution
 
+Game panel icons: Google Material Symbols Rounded, filled 24px Android vectors, Apache-2.0.
+Source: https://github.com/google/material-design-icons/tree/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android
+Assets are stored as ic_game_*.xml; Compose supplies dynamic theme tint.
+
 Geometry.java adapts the mini-window scale constants, 9:16 canvas ratio and opposite-orientation scale factor from WindowResizingAlgorithm.java, Copyright (C) 2023-2024 The Nameless-AOSP Project, SPDX-License-Identifier: Apache-2.0.
 
 Source: https://github.com/SunOS-Project/android_sun-sdk/blob/1f4bd2d7494dc2c317d86d156dcb3fc234a88aae/services/src/com/android/server/wm/WindowResizingAlgorithm.java
@@ -44,3 +48,5 @@ preview5: native root-launcher layout refresh; current-request caller-identity t
 0.2.0-preview7: original freeform adaptations for explicit expansion focus, visible mini lifecycle eligibility and final transition flags/start-finish surface masking with late-commit recovery. Reviewed SunOS PopUpWindowController focus routing and target Android 17 framework behavior; no SunOS popup-mode transplant or app-process hooks.
 
 Preview20: mini menu vector icons, circle/menu shapes, colors, 42dp buttons and 20dp spacing reuse frameworks/res from SunOS android_sun-sdk commit 1f4bd2d7494dc2c317d86d156dcb3fc234a88aae (The Nameless-AOSP Project, Apache-2.0); resource names are prefixed nc_ and loaded from the module APK. The paired mini lifecycle predicates adapt ActivityRecord.isFocusableOrPopUpView usage in shouldBeResumed and shouldPauseActivity from android_frameworks_base_old commit f9314eb17e9db7d37350e153d2b0993b7501f31b; native task/input focus remains unchanged.
+
+0.7.8: fixed #FFF0F2F2 handle and .4 normal-window background dim amount follow MiniWindowEdgeBarHelper.java and DimmerWindow.java from SunOS android_sun-sdk commit 1f4bd2d7494dc2c317d86d156dcb3fc234a88aae (The Nameless-AOSP Project, Apache-2.0). The below-task SurfaceControl color-layer adapter, shared WM-lock frame guard, and removal of sampled handle contrast are module changes, not a transplant of TYPE_MINI_WINDOW_DIMMER.

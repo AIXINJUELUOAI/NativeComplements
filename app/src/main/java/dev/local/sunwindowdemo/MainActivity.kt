@@ -7,15 +7,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import dev.local.sunwindowdemo.core.ui.ComplementsTheme
 import dev.local.sunwindowdemo.navigation.ModuleApp
+import dev.local.sunwindowdemo.navigation.Page
 
 open class MainActivity : ComponentActivity() {
     private lateinit var controller: WindowController
-    protected open val startInWindowSettings = false
+    protected open val initialPage: Page get() = Page.Home
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         controller = WindowController(this)
-        setContent { ComplementsTheme { ModuleApp(controller, startInWindowSettings, onExit = { finish() }) } }
+        setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish) } }
         if (intent.action == "recover") controller.restore()
     }
     override fun onResume() { super.onResume(); if (::controller.isInitialized) controller.resume() }
@@ -24,7 +25,15 @@ open class MainActivity : ComponentActivity() {
         if (intent.action == "recover") controller.restore()
     }
     override fun onDestroy() { if (::controller.isInitialized) controller.close(); super.onDestroy() }
+    private fun openPage(page: Page) {
+        startActivity(Intent(this, SettingsActivity::class.java).putExtra(PAGE_EXTRA, page.name))
+    }
+
+    companion object { const val PAGE_EXTRA = "settingsPage" }
 }
 
 // Preserve the component referenced by Android accessibility settings and the existing fan panel.
-class SettingsActivity : MainActivity() { override val startInWindowSettings = true }
+class SettingsActivity : MainActivity() {
+    override val initialPage: Page
+        get() = Page.entries.firstOrNull { it.name == intent.getStringExtra(PAGE_EXTRA) } ?: Page.Window
+}

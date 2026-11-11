@@ -21,10 +21,13 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.*;
+import androidx.core.view.NestedScrollingChild3;
+import androidx.core.view.NestedScrollingChildHelper;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /** A View card inside the existing SystemUI overlay. Never starts an Activity or owns a task. */
 final class AppList {
@@ -34,12 +37,172 @@ final class AppList {
             Consumer<ShortcutTarget> launch,SaveAction save,Runnable close) {
         return new Panel(c,all,selected,launch,save);
     }
+    static View create(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
+            Consumer<ShortcutTarget> launch,SaveAction save,View quick) {
+        return new Tabs(c,new Panel(c,all,selected,launch,save),quick);
+    }
+    static boolean back(View content){
+        if(content instanceof Tabs tabs&&tabs.quickShown){
+            tabs.select(false);
+            return true;
+        }
+        return false;
+    }
+
+    static View createPage(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
+            Consumer<ShortcutTarget> launch,SaveAction save,int[] colors) {
+        return new Panel(c,all,selected,launch,save,colors);
+    }
+    static View createPage(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
+            Consumer<ShortcutTarget> launch,SaveAction save,int[] colors,BiConsumer<Boolean,Boolean> editState) {
+        Panel page=new Panel(c,all,selected,launch,save,colors);page.editState=editState;
+        editState.accept(page.editing,page.saving);return page;
+    }
+    static void edit(View page){((Panel)page).toggleEditing();}
+    static void updateApps(View view,List<AppCatalog.App> apps){
+        Panel panel=view instanceof Tabs tabs?tabs.apps:(Panel)view;
+        int first=panel.list.getFirstVisiblePosition();View top=panel.list.getChildAt(0);int offset=top==null?0:top.getTop();
+        panel.apps=List.copyOf(apps);
+        panel.appRows.clear();for(AppCatalog.App app:apps)panel.appRows.add(ShortcutTarget.app(panel.c,app));
+        panel.chosen.replaceAll(target->{ShortcutTarget updated=ShortcutTarget.fromKey(panel.c,target.key(),apps);return updated!=null?updated:target;});
+        panel.renderSelected();panel.refreshRows();panel.list.setSelectionFromTop(first,offset);
+    }
+    /** Shared safe-area placement for the application and quick-function menu. */
+    static Geometry.Placement placement(Context c,android.view.WindowMetrics metrics) {
+        android.graphics.Rect display=metrics.getBounds();
+        boolean landscape=display.width()>display.height();
+        int types=android.view.WindowInsets.Type.displayCutout();
+        if(!landscape)types|=android.view.WindowInsets.Type.systemBars();
+        android.graphics.Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(types);
+        int margin=Math.round((landscape?4:12)*c.getResources().getDisplayMetrics().density);
+        return Geometry.place(Math.min(display.width(),display.height()),false,
+            display.left+bars.left,display.top+bars.top,display.right-bars.right,display.bottom-bars.bottom,margin);
+    }
+    static void bottomInset(View view,int bottom) {
+        Panel panel=(Panel)view;
+        panel.list.setPadding(0,panel.dp(2),0,panel.dp(2)+Math.max(0,bottom));
+    }
+    static void blur(View view,boolean enabled) {
+        Panel panel=view instanceof Tabs tabs?tabs.apps:(Panel)view;
+        if(panel.page)return;
+        dev.local.sunwindowdemo.core.ui.MenuBackground.bind(view,enabled,panel.container,panel.dp(28));
+    }
+
+    record QuickEntry(String id,String label,Drawable icon,Boolean checked) {}
+    static View quickPage(Context c,List<QuickEntry> entries,Consumer<String> action){return new QuickPage(c,entries,action);}
+    static void updateQuick(View page,List<QuickEntry> entries){((QuickPage)page).update(entries);}
+    private static int pixels(Context c,float value){return Math.round(value*c.getResources().getDisplayMetrics().density);}
+    private static int themeColor(Context c,int attr,int fallback){
+        TypedValue value=new TypedValue();
+        try{if(c.getTheme().resolveAttribute(attr,value,true))return value.resourceId!=0?c.getColor(value.resourceId):value.data;}
+        catch(RuntimeException ignored){}
+        return fallback;
+    }
+
+    /** The same icon, caption, padding and touch feedback for applications and quick actions. */
+    private static final class IconTile extends LinearLayout {
+        final FrameLayout artwork;final ImageView image;final TextView title;
+        IconTile(Context c,boolean compact,String label,Drawable icon,int text,int accent){
+            this(c,compact,false,label,icon,text,accent);
+        }
+        IconTile(Context c,boolean compact,boolean page,String label,Drawable icon,int text,int accent){
+            super(c);setOrientation(VERTICAL);setGravity(Gravity.CENTER_HORIZONTAL);
+            setPadding(pixels(c,2),pixels(c,page?6:compact?2:4),pixels(c,2),pixels(c,2));
+            GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(pixels(c,22));
+            setBackground(new RippleDrawable(ColorStateList.valueOf((accent&0x00ffffff)|0x26000000),null,mask));
+            artwork=new FrameLayout(c);addView(artwork,new LinearLayout.LayoutParams(-1,pixels(c,page?60:compact?36:40)));
+            image=new ImageView(c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
+            image.setImageDrawable(icon);int size=pixels(c,page?52:compact?32:36);
+            artwork.addView(image,new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
+            title=new TextView(c);title.setText(label);title.setTextSize(page?13:11);title.setTextColor(text);
+            title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setSingleLine(true);title.setIncludeFontPadding(false);title.setEllipsize(TextUtils.TruncateAt.END);
+            addView(title,new LinearLayout.LayoutParams(-1,pixels(c,page?20:17)));setContentDescription(label);
+        }
+    }
+
+    private static final class QuickPage extends ScrollView {
+        final LinearLayout rows;final Consumer<String> action;final boolean compact;
+        final int text,accent;final ArrayList<IconTile> cells=new ArrayList<>();List<String> keys=List.of();
+        QuickPage(Context c,List<QuickEntry> entries,Consumer<String> action){
+            super(c);this.action=action;compact=c.getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
+            text=themeColor(c,android.R.attr.textColorPrimary,0xff1d1b20);accent=themeColor(c,android.R.attr.colorAccent,0xff6750a4);
+            setFillViewport(true);setVerticalScrollBarEnabled(false);setVerticalFadingEdgeEnabled(false);setClipToPadding(false);
+            setPadding(pixels(c,12),0,pixels(c,12),0);
+            rows=new LinearLayout(c);rows.setOrientation(LinearLayout.VERTICAL);addView(rows,new ScrollView.LayoutParams(-1,-2));update(entries);
+        }
+        void update(List<QuickEntry> entries){
+            List<String> next=entries.stream().map(QuickEntry::id).toList();Context c=getContext();
+            if(!keys.equals(next)){
+                keys=next;cells.clear();rows.removeAllViews();LinearLayout row=null;
+                for(int i=0;i<entries.size();i++){
+                    if(i%4==0){row=new LinearLayout(c);rows.addView(row,new LinearLayout.LayoutParams(-1,pixels(c,compact?66:72)));}
+                    QuickEntry entry=entries.get(i);IconTile cell=new IconTile(c,compact,entry.label(),entry.icon(),text,accent);
+                    cell.setOnClickListener(v->action.accept(entry.id()));cells.add(cell);
+                    LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(pixels(c,2),0,pixels(c,2),0);row.addView(cell,p);
+                }
+                if(row!=null)while(row.getChildCount()<4){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(pixels(c,2),0,pixels(c,2),0);row.addView(new View(c),p);}
+            }
+            for(int i=0;i<entries.size();i++){
+                QuickEntry entry=entries.get(i);IconTile cell=cells.get(i);
+                cell.title.setText(entry.label());cell.image.setImageDrawable(entry.icon());
+                cell.image.setImageTintList(ColorStateList.valueOf(Boolean.TRUE.equals(entry.checked())?accent:text));
+                cell.setContentDescription(entry.label());cell.setStateDescription(entry.checked()==null?null:entry.checked()?"已开启":"已关闭");
+            }
+        }
+    }
+
+    private static final class Tabs extends LinearLayout {
+        final Panel apps;final View quick;
+        final TextView appTab,quickTab;boolean quickShown;
+        Tabs(Context c,Panel apps,View quick){
+            super(c);this.apps=apps;this.quick=quick;setOrientation(VERTICAL);setClipToOutline(true);
+            apps.setBackgroundColor(Color.TRANSPARENT);apps.setClipToOutline(false);
+            LinearLayout tabs=new LinearLayout(c);tabs.setPadding(apps.dp(12),apps.dp(8),apps.dp(12),apps.dp(4));
+            appTab=apps.button("应用",()->select(false));quickTab=apps.button("快捷功能",()->select(true));
+            tabs.addView(appTab,new LinearLayout.LayoutParams(0,apps.dp(40),1));tabs.addView(quickTab,new LinearLayout.LayoutParams(0,apps.dp(40),1));addView(tabs);
+            FrameLayout pages=new FrameLayout(c);addView(pages,new LinearLayout.LayoutParams(-1,0,1));
+            pages.addView(apps,new FrameLayout.LayoutParams(-1,-1));pages.addView(quick,new FrameLayout.LayoutParams(-1,-1));select(false);
+        }
+        void select(boolean show){
+            if(apps.saving)return;
+            quickShown=show;apps.setVisibility(show?GONE:VISIBLE);quick.setVisibility(show?VISIBLE:GONE);
+            for(TextView tab:new TextView[]{appTab,quickTab}){
+                boolean active=(tab==quickTab)==show;tab.setSelected(active);tab.setTextColor(active?apps.accent:apps.secondary);
+                tab.setBackground(active?apps.round(apps.tonal,20):null);
+            }
+        }
+    }
+
+    /** Bridge platform ListView's untyped scroll calls to AndroidView's type-aware parent. */
+    private static final class MenuList extends ListView implements NestedScrollingChild3 {
+        private final NestedScrollingChildHelper scrolling=new NestedScrollingChildHelper(this);
+        MenuList(Context c){super(c);setNestedScrollingEnabled(true);}
+        @Override public void setNestedScrollingEnabled(boolean enabled){
+            super.setNestedScrollingEnabled(enabled);
+            if(scrolling!=null)scrolling.setNestedScrollingEnabled(enabled);
+        }
+        @Override public boolean isNestedScrollingEnabled(){return scrolling!=null&&scrolling.isNestedScrollingEnabled();}
+        @Override public boolean startNestedScroll(int axes){return startNestedScroll(axes,0);}
+        @Override public boolean startNestedScroll(int axes,int type){return scrolling.startNestedScroll(axes,type);}
+        @Override public void stopNestedScroll(){stopNestedScroll(0);}
+        @Override public void stopNestedScroll(int type){scrolling.stopNestedScroll(type);}
+        @Override public boolean hasNestedScrollingParent(){return hasNestedScrollingParent(0);}
+        @Override public boolean hasNestedScrollingParent(int type){return scrolling.hasNestedScrollingParent(type);}
+        @Override public boolean dispatchNestedPreScroll(int dx,int dy,int[] consumed,int[] offset){return dispatchNestedPreScroll(dx,dy,consumed,offset,0);}
+        @Override public boolean dispatchNestedPreScroll(int dx,int dy,int[] consumed,int[] offset,int type){return scrolling.dispatchNestedPreScroll(dx,dy,consumed,offset,type);}
+        @Override public boolean dispatchNestedScroll(int dx,int dy,int ux,int uy,int[] offset){return dispatchNestedScroll(dx,dy,ux,uy,offset,0);}
+        @Override public boolean dispatchNestedScroll(int dx,int dy,int ux,int uy,int[] offset,int type){return scrolling.dispatchNestedScroll(dx,dy,ux,uy,offset,type);}
+        @Override public void dispatchNestedScroll(int dx,int dy,int ux,int uy,int[] offset,int type,int[] consumed){scrolling.dispatchNestedScroll(dx,dy,ux,uy,offset,type,consumed);}
+        @Override public boolean dispatchNestedPreFling(float x,float y){return scrolling.dispatchNestedPreFling(x,y);}
+        @Override public boolean dispatchNestedFling(float x,float y,boolean consumed){return scrolling.dispatchNestedFling(x,y,consumed);}
+    }
 
     private static final class Panel extends LinearLayout {
         static final String ALPHABET="ABCDEFGHIJKLMNOPQRSTUVWXYZ#";
         final Context c;
-        final boolean compact;
-        final List<AppCatalog.App> apps;
+        final boolean compact,page;
+        List<AppCatalog.App> apps;
         final ArrayList<ShortcutTarget> appRows=new ArrayList<>(),chosen=new ArrayList<>(),visible=new ArrayList<>();
         final ArrayList<AppRow> rows=new ArrayList<>();
         final int[] sectionPositions=new int[ALPHABET.length()];
@@ -59,6 +222,7 @@ final class AppList {
         boolean scrolling,indexTouching;
         int dragFrom=-1;
         boolean editing,saving,disposed;
+        BiConsumer<Boolean,Boolean> editState;
         int hover=-1;
         float dragX,dragY;
 
@@ -70,22 +234,30 @@ final class AppList {
 
         Panel(Context context,List<AppCatalog.App> all,List<ShortcutTarget> initial,
                 Consumer<ShortcutTarget> launch,SaveAction save) {
+            this(context,all,initial,launch,save,null);
+        }
+        Panel(Context context,List<AppCatalog.App> all,List<ShortcutTarget> initial,
+                Consumer<ShortcutTarget> launch,SaveAction save,int[] colors) {
             super(context);c=context;apps=List.copyOf(all);this.launch=launch;this.save=save;
+            page=colors!=null;
             compact=context.getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
-            surface=color(android.R.attr.colorBackground,0xfff8f7fc);
-            text=color(android.R.attr.textColorPrimary,0xff1d1b20);
-            secondary=color(android.R.attr.textColorSecondary,0xff625f68);
-            accent=color(android.R.attr.colorAccent,0xff6750a4);
+            surface=colors==null?color(android.R.attr.colorBackground,0xfff8f7fc):colors[0];
+            text=colors==null?color(android.R.attr.textColorPrimary,0xff1d1b20):colors[1];
+            secondary=colors==null?color(android.R.attr.textColorSecondary,0xff625f68):colors[2];
+            accent=colors==null?color(android.R.attr.colorAccent,0xff6750a4):colors[3];
             container=blend(surface,text,.045f);tonal=blend(surface,accent,.13f);
-            setOrientation(VERTICAL);setPadding(dp(12),dp(compact?6:10),dp(12),dp(compact?6:14));setBackground(round(container,28));
-            setClipToOutline(true);setOnClickListener(v->{});
+            setOrientation(VERTICAL);setPadding(page?0:dp(12),0,page?0:dp(12),0);
+            if(!page)setBackground(round(container,28));
+            setClipToOutline(!page);setClipToPadding(false);setOnClickListener(v->{});
+            setNestedScrollingEnabled(colors!=null);
             for(AppCatalog.App app:apps)appRows.add(ShortcutTarget.app(c,app));
             for(ShortcutTarget item:initial)if(item!=null&&ShortcutTarget.validKey(item.key())&&selectedIndex(item.key())<0&&chosen.size()<Config.MAX_TARGETS)chosen.add(item);
             LinearLayout header=new LinearLayout(c);header.setGravity(Gravity.CENTER_VERTICAL);
-            TextView title=label("更多应用",14,text);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));title.setIncludeFontPadding(false);
-            header.addView(title,new LinearLayout.LayoutParams(0,dp(compact?36:42),1));
             manage=button("管理",this::toggleEditing);manage.setBackground(null);manage.setTextColor(text);manage.setIncludeFontPadding(false);manage.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
-            header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));addView(header);
+            if(!page){
+                header.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+                header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));addView(header);
+            }
 
             selectedScroll=new LinearLayout(c);selectedScroll.setOrientation(VERTICAL);
             selectedRows=new LinearLayout(c);selectedRows.setOrientation(VERTICAL);selectedScroll.addView(selectedRows,new LinearLayout.LayoutParams(-1,-2));
@@ -95,8 +267,10 @@ final class AppList {
             divider=new View(c);divider.setBackgroundColor(blend(container,text,.12f));
             LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));selectedScroll.addView(divider,line);
 
-            body=new FrameLayout(c);addView(body,new LinearLayout.LayoutParams(-1,0,1));
-            list=new ListView(c);list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setPadding(0,dp(2),0,dp(2));
+            body=new FrameLayout(c);body.setClipChildren(false);body.setClipToPadding(false);addView(body,new LinearLayout.LayoutParams(-1,0,1));
+            list=colors==null?new ListView(c):new MenuList(c);list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setPadding(0,dp(2),0,dp(2));
+            list.setVerticalFadingEdgeEnabled(false);list.setCacheColorHint(Color.TRANSPARENT);
+            list.setNestedScrollingEnabled(true);
             list.setVerticalScrollBarEnabled(false);list.setSelector(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
             FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(-1,-1);body.addView(list,lp);
             adapter=new BaseAdapter(){
@@ -140,7 +314,7 @@ final class AppList {
             renderSelected();refreshRows();
         }
         int dp(float n){return Math.round(n*c.getResources().getDisplayMetrics().density);}
-        int appTileHeight(){return compact?66:72;}
+        int appTileHeight(){return page?96:compact?66:72;}
         int sectionHeight(){return compact?22:26;}
         void updateIndex(){
             if(index==null)return;
@@ -155,10 +329,7 @@ final class AppList {
             if(!scrolling&&!indexTouching)index.animate().alpha(0).setDuration(140).withEndAction(()->index.setVisibility(INVISIBLE)).start();
         }
         int color(int attr,int fallback){
-            TypedValue value=new TypedValue();
-            try {if(c.getTheme().resolveAttribute(attr,value,true))return value.resourceId!=0?c.getColor(value.resourceId):value.data;}
-            catch(RuntimeException ignored){}
-            return fallback;
+            return themeColor(c,attr,fallback);
         }
         static int blend(int a,int b,float amount){return Color.rgb(
                 Math.round(Color.red(a)*(1-amount)+Color.red(b)*amount),
@@ -169,7 +340,6 @@ final class AppList {
         TextView label(String value,int size,int color){TextView t=new TextView(c);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setGravity(Gravity.CENTER_VERTICAL);return t;}
         TextView button(String value,Runnable action){TextView t=label(value,14,accent);t.setGravity(Gravity.CENTER);t.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));t.setBackground(ripple(Color.TRANSPARENT));t.setOnClickListener(v->action.run());return t;}
         int selectedIndex(String key){for(int i=0;i<chosen.size();i++)if(chosen.get(i).key().equals(key))return i;return -1;}
-
         void toggleEditing(){
             if(saving)return;
             if(!editing){editing=true;renderSelected();adapter.notifyDataSetChanged();return;}
@@ -193,6 +363,7 @@ final class AppList {
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
             manage.setText(saving?"保存中…":editing?"完成":"管理");manage.setEnabled(!saving);
+            if(editState!=null)editState.accept(editing,saving);
             help.setVisibility(editing&&!compact?VISIBLE:GONE);
             selectedRows.removeAllViews();
             if(chosen.isEmpty()){
@@ -283,20 +454,11 @@ final class AppList {
             return true;
         }
         View tile(ShortcutTarget target){
-            boolean dense=compact;
-            LinearLayout cell=new LinearLayout(c);cell.setOrientation(VERTICAL);cell.setGravity(Gravity.CENTER_HORIZONTAL);
-            cell.setPadding(dp(2),dp(dense?2:4),dp(2),dp(2));cell.setBackground(ripple(Color.TRANSPARENT));
-            FrameLayout artwork=new FrameLayout(c);cell.addView(artwork,new LinearLayout.LayoutParams(-1,dp(dense?36:40)));
-            ImageView image=new ImageView(c);Drawable icon=target.icon;
-            if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
-            image.setImageDrawable(icon);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int iconSize=dp(dense?32:36);artwork.addView(image,new FrameLayout.LayoutParams(iconSize,iconSize,Gravity.CENTER));
+            IconTile cell=new IconTile(c,compact,page,target.label,target.icon,text,accent);
             if(editing) {
                 TextView badge=label(selectedIndex(target.key())>=0?"−":"+",16,accent);badge.setGravity(Gravity.CENTER);badge.setBackground(round(tonal,12));badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-                FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(22),dp(22),Gravity.TOP|Gravity.RIGHT);artwork.addView(badge,b);
+                FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(22),dp(22),Gravity.TOP|Gravity.RIGHT);cell.artwork.addView(badge,b);
             }
-            TextView title=label(target.label,11,text);title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setSingleLine(true);title.setIncludeFontPadding(false);title.setEllipsize(TextUtils.TruncateAt.END);
-            cell.addView(title,new LinearLayout.LayoutParams(-1,dp(17)));
             cell.setContentDescription(target.label+(editing?(selectedIndex(target.key())>=0?"，已选，点击移除":"，点击添加"):""));
             return cell;
         }

@@ -8,22 +8,19 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.provider.Settings
 import android.telephony.SubscriptionManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -42,17 +39,14 @@ private fun activeSims(context: Context): List<SimEntry> {
     }.getOrDefault(emptyList())
 }
 
-/** Standalone settings page: the containing navigator only supplies its back action. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CallBlockingScreen(onBack: () -> Unit) {
+fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRecords: () -> Unit = {}) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var config by remember { mutableStateOf(CallBlockingStore.readConfig(context)) }
     var records by remember { mutableStateOf(CallBlockingStore.readRecords(context).toList()) }
     var sims by remember { mutableStateOf(activeSims(context)) }
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) }
-    var showRecords by remember { mutableStateOf(false) }
     var editingSlot by remember { mutableStateOf<Int?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var permissionDenied by remember { mutableStateOf(false) }
@@ -88,87 +82,65 @@ fun CallBlockingScreen(onBack: () -> Unit) {
             lifecycle.removeObserver(observer)
         }
     }
-    BackHandler { if (showRecords) showRecords = false else onBack() }
-    Scaffold(containerColor = MaterialTheme.colorScheme.surfaceContainer, topBar = {
-        TopAppBar(title = {}, navigationIcon = {
-            IconButton(onClick = { if (showRecords) showRecords = false else onBack() }) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回")
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
+        if (showRecords) {
+            if (records.isEmpty()) Hint("暂无拦截记录") else {
+                TextButton(onClick = { confirmClear = true }) { Text("清空记录") }
+                SettingsGroup {
+                    records.forEach { item ->
+                        val sim = item.getString("sim_label").orEmpty().ifBlank { "SIM ${item.getInt("slot_index") + 1}" }
+                        val reason = when (item.getString("reason")) {
+                            "all_calls" -> "拦截全部来电"
+                            "pattern" -> "匹配规则 ${item.getString("matched_pattern").orEmpty()}"
+                            else -> item.getString("reason").orEmpty()
+                        }
+                        SettingRow(item.getString("number").orEmpty().ifBlank { "未知号码" },
+                            "$sim · $reason\n${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(item.getLong("time")))}")
+                    }
+                }
+                Hint("仅保存在本机，最多保留最近 200 条。")
             }
-        }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer))
-    }) { insets ->
-        Column(Modifier.fillMaxSize().padding(insets).verticalScroll(rememberScrollState())) {
-            Column(Modifier.widthIn(max = 680.dp).fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp)) {
-                Text(if (showRecords) "拦截记录" else "电话拦截", Modifier.padding(start = 12.dp, top = 4.dp, bottom = 28.dp),
-                    style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Normal)
-                if (showRecords) {
-                    if (records.isEmpty()) Hint("暂无拦截记录") else {
-                        TextButton(onClick = { confirmClear = true }) { Text("清空记录") }
-                        SettingsGroup {
-                            records.forEach { item ->
-                                val sim = item.getString("sim_label").orEmpty().ifBlank { "SIM ${item.getInt("slot_index") + 1}" }
-                                val reason = when (item.getString("reason")) {
-                                    "all_calls" -> "拦截全部来电"
-                                    "pattern" -> "匹配规则 ${item.getString("matched_pattern").orEmpty()}"
-                                    else -> item.getString("reason").orEmpty()
-                                }
-                                SettingRow(item.getString("number").orEmpty().ifBlank { "未知号码" },
-                                    "$sim · $reason\n${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(item.getLong("time")))}")
-                            }
-                        }
-                        Hint("仅保存在本机，最多保留最近 200 条。")
-                    }
-                } else {
-                    SettingsGroup {
-                        ToggleRow("开启电话拦截", "按 SIM 卡和号码规则拦截来电", config.getBoolean("enabled")) { CallBlockingStore.setEnabled(context, it) }
-                    }
-                    val seen = config.getLong("backend_seen_at")
-                    val error = config.getString("backend_error").orEmpty()
-                    Hint(when {
-                        error.isNotBlank() -> "系统后端：$error"
-                        seen == 0L -> "系统后端尚未激活。请在 LSPosed 中启用模块的系统框架作用域，重启后再检查。"
-                        else -> "系统后端最近运行：${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(seen))} · ${config.getString("backend_version").orEmpty()}"
+        } else {
+            SettingsGroup {
+                ToggleRow("启用来电拦截", "按 SIM 卡和号码规则拦截来电", config.getBoolean("enabled")) { CallBlockingStore.setEnabled(context, it) }
+            }
+            if (!permission) SettingsGroup {
+                SettingRow("识别 SIM 卡", "允许电话权限以显示两张卡的名称和状态", {
+                    requestPermission.launch(Manifest.permission.READ_PHONE_STATE)
+                })
+                if (permissionDenied) SettingRow("打开应用权限设置", "在权限中允许“电话”后返回", {
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
+                })
+            }
+            for (slot in 0..1) {
+                val entry = sims.firstOrNull { it.slot == slot }
+                val follows = slot == 1 && config.getBoolean("sim2_follow_sim1")
+                val ownPrefix = "sim${slot + 1}_"
+                val effectivePrefix = if (follows) "sim1_" else ownPrefix
+                val patterns = config.getStringArray(effectivePrefix + "patterns").orEmpty()
+                GroupTitle("SIM ${slot + 1}")
+                SettingsGroup {
+                    SettingRow(entry?.name ?: "SIM ${slot + 1}", when {
+                        !permission -> "等待电话权限"
+                        entry == null -> "此卡槽暂无已启用的 SIM 卡"
+                        else -> "已识别 · 卡槽 ${slot + 1}"
                     })
-                    if (!permission) SettingsGroup {
-                        SettingRow("识别 SIM 卡", "允许电话权限以显示两张卡的名称和状态", {
-                            requestPermission.launch(Manifest.permission.READ_PHONE_STATE)
-                        })
-                        if (permissionDenied) SettingRow("打开应用权限设置", "在权限中允许“电话”后返回", {
-                            context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
-                        })
+                    if (slot == 1) ToggleRow("跟随 SIM 1", "实时使用 SIM 1 的设置；关闭后恢复 SIM 2 的独立设置", follows) {
+                        CallBlockingStore.setFollowSim1(context, it)
                     }
-                    for (slot in 0..1) {
-                        val entry = sims.firstOrNull { it.slot == slot }
-                        val follows = slot == 1 && config.getBoolean("sim2_follow_sim1")
-                        val ownPrefix = "sim${slot + 1}_"
-                        val effectivePrefix = if (follows) "sim1_" else ownPrefix
-                        val patterns = config.getStringArray(effectivePrefix + "patterns").orEmpty()
-                        GroupTitle("SIM ${slot + 1}")
-                        SettingsGroup {
-                            SettingRow(entry?.name ?: "SIM ${slot + 1}", when {
-                                !permission -> "等待电话权限"
-                                entry == null -> "此卡槽暂无已启用的 SIM 卡"
-                                else -> "已识别 · 卡槽 ${slot + 1}"
-                            })
-                            if (slot == 1) ToggleRow("跟随 SIM 1", "实时使用 SIM 1 的设置；关闭后恢复 SIM 2 的独立设置", follows) {
-                                CallBlockingStore.setFollowSim1(context, it)
-                            }
-                            if (!follows) {
-                                ToggleRow("拦截全部来电", "保留移动数据与短信，仅挂断此卡的来电", config.getBoolean(ownPrefix + "reject_all")) {
-                                    CallBlockingStore.setRejectAll(context, slot, it)
-                                }
-                                SettingRow("号码过滤规则", if (patterns.isEmpty()) "未设置" else "${patterns.size} 条 · ${patterns.take(3).joinToString("、")}", { editingSlot = slot })
-                            } else {
-                                SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截全部来电"
-                                    else if (patterns.isEmpty()) "跟随 SIM 1：暂无号码规则" else "跟随 SIM 1：${patterns.size} 条号码规则")
-                            }
+                    if (!follows) {
+                        ToggleRow("拦截全部来电", "保留移动数据与短信，仅挂断此卡的来电", config.getBoolean(ownPrefix + "reject_all")) {
+                            CallBlockingStore.setRejectAll(context, slot, it)
                         }
+                        SettingRow("号码过滤规则", if (patterns.isEmpty()) "未设置" else "${patterns.size} 条 · ${patterns.take(3).joinToString("、")}", { editingSlot = slot })
+                    } else {
+                        SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截全部来电"
+                            else if (patterns.isEmpty()) "跟随 SIM 1：暂无号码规则" else "跟随 SIM 1：${patterns.size} 条号码规则")
                     }
-                    Hint("只想用 SIM 2 上网：开启电话拦截，关闭“跟随 SIM 1”，再开启 SIM 2 的“拦截全部来电”。SIM 1 的来电照常。")
-                    GroupTitle("记录")
-                    SettingsGroup { SettingRow("拦截记录", "${records.size} 条 · 查看号码、SIM 卡与拦截原因", { showRecords = true }) }
-                    Hint("规则中的 * 代表任意长度。952** 会自动保存为 952*，匹配所有 952 开头的号码；不带 * 时精确匹配。拦截总开关关闭时保留设置。")
                 }
             }
+            GroupTitle("记录")
+            SettingsGroup { SettingRow("拦截记录", "${records.size} 条 · 查看号码、SIM 卡与拦截原因", onRecords) }
         }
     }
     editingSlot?.let { slot ->

@@ -7,6 +7,8 @@ import java.util.Arrays;
 /** Small, deterministic image operations, performed only on worker threads. */
 public final class IconImages {
     private IconImages() {}
+    /** Generated subjects stay well inside the visible mask, close to stock launcher icon proportions. */
+    static final float SUBJECT=.65f;
     public static Bitmap render(Drawable drawable, int side) {
         Bitmap b = Bitmap.createBitmap(side,side,Bitmap.Config.ARGB_8888);
         Rect old = new Rect(drawable.getBounds());
@@ -34,11 +36,11 @@ public final class IconImages {
         try{inset=(Float)android.graphics.drawable.AdaptiveIconDrawable.class.getDeclaredMethod("getExtraInsetFraction").invoke(null);}catch(Exception ignored){}
         float viewport=1f/(1+2*inset);
         if(cut==null&&roundedShape(square)){
-            // A self-contained rounded-shape icon: its own fill becomes the background and the shape fills the viewport instead of shrinking inside a second plate.
+            // Keep the icon's own edge color behind a centered subject at the same reduced size as other generated icons.
             Rect bounds=contentBounds(square);
-            return new Layers(solid(insideEdgeColor(square,bounds),square.getWidth()),fit(square,square.getWidth(),viewport));
+            return new Layers(solid(insideEdgeColor(square,bounds),square.getWidth()),fit(square,square.getWidth(),viewport*SUBJECT));
         }
-        Bitmap foreground = fit(cut != null ? cut : square,square.getWidth(),viewport*.80f);
+        Bitmap foreground = fit(cut != null ? cut : square,square.getWidth(),viewport*.80f*SUBJECT);
         return new Layers(solid(color,square.getWidth()),foreground);
     }
     static boolean roundedShape(Bitmap b){
@@ -61,6 +63,13 @@ public final class IconImages {
         int color=source.getPixel(0,0);
         for(int y=0;y<source.getHeight();y++)for(int x=0;x<source.getWidth();x++)if(source.getPixel(x,y)!=color)return source;
         return source.getWidth()==1&&source.getHeight()==1?source:solid(color,1);
+    }
+    /** Preserve layer padding/alignment; 30% larger than the 0.6.4 algorithm foreground. */
+    static Bitmap algorithmForeground(Bitmap source){
+        int w=source.getWidth(),h=source.getHeight();
+        Bitmap out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+        new Canvas(out).drawBitmap(source,null,new RectF(w*.0775f,h*.0775f,w*.9225f,h*.9225f),new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG));
+        return out;
     }
 
     /** Remove a near-uniform outer field by flood fill, preserving disconnected logo details. */

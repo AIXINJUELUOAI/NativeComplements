@@ -126,6 +126,15 @@ public class IconImagesTest {
         IconPolicy p=new IconPolicy();p.color=IconPolicy.ALGORITHM;IconPolicy.save(c,PKG,p);
         assertNull("Selecting algorithm or opening preview must not calculate pixels",IconAssets.resolve(c,PKG,p,"",256,true));
         provider.generate(PKG);p=IconPolicy.read(c,PKG);assertFalse(p.generatedVersion.isEmpty());
+        int oldWidth=IconImages.contentBounds(IconImages.separate(IconImages.solid(Color.BLUE,256)).foreground()).width();
+        int newWidth=IconImages.contentBounds(IconAssets.resolve(c,PKG,p,"",256,true).foreground()).width();
+        assertEquals("Generated subjects are 30 percent larger than the 0.6.4 result",oldWidth*.845f,newWidth,2f);
+        String previousForeground=p.generatedForeground;
+        p.generatedVersion="3:"+c.getPackageManager().getPackageInfo(PKG,0).lastUpdateTime;IconPolicy.save(c,PKG,p);
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new BitmapDrawable(c.getResources(),IconImages.solid(Color.RED,96)));
+        provider.generate(PKG);p=IconPolicy.read(c,PKG);
+        assertNotEquals("Old algorithm pixels must be regenerated even when the app has not updated",previousForeground,p.generatedForeground);
+        assertEquals(Color.RED,IconAssets.resolve(c,PKG,p,"",256,true).foreground().getPixel(128,128));
         File foreground=IconOverrides.image(c,p.generatedForeground);assertTrue(foreground.isFile());
         assertTrue(foreground.setLastModified(123456000));
         assertNotNull(IconAssets.resolve(c,PKG,p,"",256,true));
@@ -144,6 +153,40 @@ public class IconImagesTest {
         assertEquals(256,result.foreground().getWidth());assertFalse(result.monoChanged());
         assertEquals(Color.WHITE,result.mono().getPixel(128,128));assertNull(result.notification());
     }
+    @Test public void algorithmNativeLayersAlsoShrinkWithoutNormalizingTheirPadding()throws Exception{
+        Bitmap foreground=Bitmap.createBitmap(256,256,Bitmap.Config.ARGB_8888);
+        Paint paint=new Paint();paint.setColor(Color.RED);new Canvas(foreground).drawRect(32,64,160,192,paint);
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new AdaptiveIconDrawable(new ColorDrawable(Color.BLUE),new BitmapDrawable(c.getResources(),foreground)));
+        IconPolicy p=new IconPolicy();p.color=IconPolicy.ALGORITHM;IconPolicy.save(c,PKG,p);IconLayerStore.enabled(c,true);
+        Robolectric.buildContentProvider(IconLayerProvider.class).create().get().generate(PKG);
+        var generated=IconAssets.resolve(c,PKG,IconPolicy.read(c,PKG),"",256,true);
+        assertNotNull(generated);
+        Rect bounds=IconImages.contentBounds(generated.foreground());
+        assertEquals(128*.845f,bounds.width(),2f);assertEquals(128*.845f,bounds.height(),2f);
+        assertEquals(128+(96-128)*.845f,bounds.exactCenterX(),1f);
+        assertEquals(128,bounds.exactCenterY(),1f);
+        assertEquals(Color.BLUE,generated.background().getPixel(0,0));
+        assertEquals(new Rect(32,64,160,192),IconImages.contentBounds(foreground));
+    }
+    @Test public void refreshMigratesExistingAlgorithmCacheButDoesNotGenerateNewSelections()throws Exception{
+        Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new BitmapDrawable(c.getResources(),IconImages.solid(Color.RED,96)));
+        IconLayerStore.enabled(c,true);
+        IconPolicy cached=new IconPolicy();cached.color=IconPolicy.ALGORITHM;
+        cached.generatedBackground=upload(IconImages.solid(Color.BLUE,256));
+        cached.generatedForeground=cached.generatedBackground;cached.generatedVersion="4:old";
+        IconPolicy.save(c,PKG,cached);
+        String fresh="com.example.newselection";IconPolicy selected=new IconPolicy();selected.color=IconPolicy.ALGORITHM;
+        IconPolicy.save(c,fresh,selected);
+        var provider=Robolectric.buildContentProvider(IconLayerProvider.class).create().get();
+        provider.migrateCached();
+        var migrated=IconPolicy.read(c,PKG);
+        assertTrue(migrated.generatedVersion.startsWith("6:"));
+        assertNotEquals(cached.generatedForeground,migrated.generatedForeground);
+        assertEquals("",IconPolicy.read(c,fresh).generatedVersion);
+        assertEquals("",IconPolicy.read(c,fresh).generatedForeground);
+        File pixels=IconOverrides.image(c,migrated.generatedForeground);assertTrue(pixels.setLastModified(123456000));
+        provider.migrateCached();assertEquals("Current caches are reused during refresh",123456000,pixels.lastModified());
+    }
     @Test public void nonSquareArtworkKeepsItsAspectAndGeneratedSubjectFitsTheAdaptiveViewport(){
         Bitmap wide=IconImages.solid(Color.RED,200);
         Bitmap crop=Bitmap.createBitmap(wide,0,0,200,100);
@@ -154,6 +197,16 @@ public class IconImagesTest {
         Rect finalBounds=IconImages.contentBounds(layers.foreground());
         assertTrue(finalBounds.width()<=53);assertEquals(2f,(float)finalBounds.width()/finalBounds.height(),.15f);
         assertNotNull(IconImages.render(icon,96));
+    }
+    @Test public void roundedArtworkShrinksInsideTheAdaptiveViewportWithoutLosingItsOwnBackground(){
+        Bitmap source=Bitmap.createBitmap(96,96,Bitmap.Config.ARGB_8888);
+        Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);paint.setColor(Color.BLUE);
+        new Canvas(source).drawRoundRect(0,0,96,96,24,24,paint);
+        var layers=IconImages.separate(source);
+        float visibleWidth=IconImages.contentBounds(layers.foreground()).width()*1.5f;
+        assertTrue("Rounded subjects should occupy 60-70 percent of the former full viewport",visibleWidth>=96*.60f&&visibleWidth<=96*.70f);
+        assertEquals(Color.BLUE,layers.background().getPixel(0,0));
+        assertEquals(Color.BLUE,layers.foreground().getPixel(48,48));
     }
     private String upload(Bitmap b)throws Exception{
         File file=File.createTempFile("test-user-image-",".png",c.getCacheDir());

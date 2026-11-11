@@ -9,6 +9,7 @@ import java.io.*;
 
 /** Only the owner and the three existing system hosts may read immutable icon snapshots. */
 public final class IconLayerProvider extends ContentProvider {
+    private static final String GENERATION="6:";
     private final java.util.concurrent.ExecutorService generator=java.util.concurrent.Executors.newSingleThreadExecutor();
     @Override public boolean onCreate() { return true; }
     private boolean checkCaller() {
@@ -29,6 +30,9 @@ public final class IconLayerProvider extends ContentProvider {
             return Bundle.EMPTY;
         }
         if ("read".equals(method)) {
+            // Refresh existing algorithm caches after module upgrades. A newly opted-in
+            // app still waits for its first launch; importing/previewing never generates it.
+            generator.execute(this::migrateCached);
             Bundle result = IconLayerStore.read(getContext());
             // A large library stays on disk; send only installed matches across Binder.
             var installed = new java.util.HashSet<String>();
@@ -51,12 +55,19 @@ public final class IconLayerProvider extends ContentProvider {
         throw new IllegalArgumentException("method");
     }
     /** Explicit opt-in only; native resume observer merely queues this work outside WM locks. */
+    void migrateCached(){
+        for(var entry:IconPolicy.parse(IconLayerStore.prefs(getContext()).getString("policies","{}")).entrySet()){
+            IconPolicy p=entry.getValue();
+            if(p.color==IconPolicy.ALGORITHM&&!p.generatedVersion.startsWith(GENERATION)
+                &&!p.generatedBackground.isEmpty()&&!p.generatedForeground.isEmpty())generate(entry.getKey());
+        }
+    }
     void generate(String pkg){
         try{
             if(!IconLayerStore.prefs(getContext()).getBoolean("enabled",false))return;
             IconPolicy p=IconPolicy.read(getContext(),pkg);
             if(p.color!=IconPolicy.ALGORITHM)return;
-            String version="2:"+getContext().getPackageManager().getPackageInfo(pkg,0).lastUpdateTime;
+            String version=GENERATION+getContext().getPackageManager().getPackageInfo(pkg,0).lastUpdateTime;
             if(version.equals(p.generatedVersion)&&!p.generatedBackground.isEmpty()&&!p.generatedForeground.isEmpty()
                 &&IconOverrides.image(getContext(),p.generatedBackground).isFile()&&IconOverrides.image(getContext(),p.generatedForeground).isFile())return;
             var original=getContext().getPackageManager().getApplicationIcon(pkg);
@@ -64,7 +75,8 @@ public final class IconLayerProvider extends ContentProvider {
             IconImages.Layers layers=original instanceof android.graphics.drawable.AdaptiveIconDrawable adaptive
                 ?new IconImages.Layers(IconImages.render(adaptive.getBackground(),256),IconImages.render(adaptive.getForeground(),256))
                 :IconImages.separate(IconImages.render(original,256));
-            String bg=IconOverrides.store(getContext(),layers.background()),fg=IconOverrides.store(getContext(),layers.foreground());
+            // Apply the requested reduction to both algorithm paths, including native adaptive layers.
+            String bg=IconOverrides.store(getContext(),layers.background()),fg=IconOverrides.store(getContext(),IconImages.algorithmForeground(layers.foreground()));
             synchronized(IconPolicy.class){
                 p=IconPolicy.read(getContext(),pkg);if(p.color!=IconPolicy.ALGORITHM)return;
                 p.generatedBackground=bg;p.generatedForeground=fg;p.generatedVersion=version;IconPolicy.save(getContext(),pkg,p);

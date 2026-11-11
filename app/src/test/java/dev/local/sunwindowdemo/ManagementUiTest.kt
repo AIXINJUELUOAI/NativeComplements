@@ -57,7 +57,7 @@ class ManagementUiTest {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 32.dp)) {
                         androidx.compose.material3.Text("类原生补全", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 20.dp, 12.dp, 28.dp))
-                        HomeScreen(WindowRuntime(received = true, compatible = true, hostConnected = true), { selected = true }, {}, {})
+                        HomeScreen(onWindow = { selected = true }, onAbout = {})
                     }
                 }
             }
@@ -69,7 +69,7 @@ class ManagementUiTest {
         compose.runOnIdle { assertTrue(selected) }
     }
 
-    @Test fun windowPageOffersAllExistingSettingsAndRecovery() {
+    @Test fun windowPageOffersSettingsWithoutDeveloperTools() {
         var page: Page? = null
         compose.setContent {
             captureView = LocalView.current
@@ -77,7 +77,7 @@ class ManagementUiTest {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
                         androidx.compose.material3.Text("小窗", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 24.dp, 12.dp, 28.dp))
-                        WindowScreen(WindowPreferences(), WindowRuntime(), { page = it }, {})
+                        WindowScreen(WindowPreferences(), { page = it }, {})
                     }
                 }
             }
@@ -85,8 +85,8 @@ class ManagementUiTest {
         screenshot("window-light")
         compose.onNodeWithText("快捷应用").performClick()
         compose.runOnIdle { assertEquals(Page.Apps, page) }
-        compose.onNodeWithText("诊断与恢复").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(Page.Diagnostics, page) }
+        compose.onNodeWithText("诊断与恢复").assertDoesNotExist()
+        compose.onNodeWithText("启用小窗").assertExists()
     }
 
     @Test fun gestureToggleWritesOriginalPreferenceAndSurvivesReload() {

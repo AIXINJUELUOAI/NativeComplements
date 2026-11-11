@@ -59,7 +59,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     });}
     private final Runnable poll=new Runnable(){public void run(){if(cleaned)return;Wire.send(SystemUiHost.this,"STATUS");main.postDelayed(this,750);}};
     private void reloadSettings(){
-        if(cleaned)return;showSwipeHint(0);hideFan();if(!config.enabled())hidePanel();removeHot();
+        if(cleaned)return;showSwipeHint(0);hideFan();if(!config.enabled()){cancelOpenWait();hidePanel();}removeHot();
+        if(panel instanceof FrameLayout outside&&outside.getChildCount()>0)AppList.blur(outside.getChildAt(0),config.menuBlur());
         if(!config.enabled()&&controls!=null){
             if("active".equals(backendState)||"recovery".equals(backendState))Wire.send(this,"RESTORE");
             hideControls();
@@ -71,7 +72,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private int[] published,publishedHandles;
     private boolean screenshotVisible,systemFocus,immersive;
     private android.window.OnBackInvokedDispatcher panelDispatcher;
-    private final android.window.OnBackInvokedCallback panelBack=()->hidePanel();
+    private final android.window.OnBackInvokedCallback panelBack=this::backPanel;
+    private android.window.OnBackInvokedDispatcher openWaitDispatcher;
+    private final android.window.OnBackInvokedCallback openWaitBack=this::cancelOpenWait;
     void controlsChanged(){main.post(()->publish(false));}
     private int publishedWidth,publishedHeight;
     private final CornerGesture cornerGesture=new CornerGesture();
@@ -152,6 +155,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private View left,right;
     private FanView fan;
     private View panel;
+    private View openWait;
+    private ImageView openWaitIcon;
+    private String openWaitToken,openWaitPackage;
+    private String cancelledOpenWaitToken;
     private TextView swipeHint;
     private int hintStage;
     private int hintRevision;
@@ -181,13 +188,16 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private WindowControls controls,miniControls;
     private void hideControls(){if(controls!=null)controls.hide();if(miniControls!=null)miniControls.hide();}
     private boolean normalOccupied;
-    private boolean dropAvailable(){return "idle".equals(backendState)||"active".equals(backendState)&&!normalOccupied;}
+    private boolean dropAvailable(){return "idle".equals(backendState)||"recovery".equals(backendState)||"active".equals(backendState)&&!normalOccupied;}
     private SuggestionHost suggestions;
+    private WindowQuickHost quick;
+    private BarrageHost barrage;
+    private View menuContent;
     private int suggestionImeTop=Integer.MAX_VALUE;
     void suggestionNotification(android.service.notification.NotificationListenerService source,android.service.notification.StatusBarNotification notification){
-        main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);});
+        main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(notification);});
     }
-    void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);});}
+    void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);if(barrage!=null)barrage.notificationRemoved(key);});}
     private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
     boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
     private volatile boolean backendReady;
@@ -199,6 +209,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void receiveFrame(Intent i){
         if(cleaned||controls==null)return;
         backendReady=true;backendState=i.getStringExtra("state");normalOccupied=i.getBooleanExtra("normalOccupied",true);
+        updateOpenWait(i);
         if(i.hasExtra("foreground")){foreground=i.getStringExtra("foreground");keyboard=i.getBooleanExtra("imeVisible",false);systemFocus=i.getBooleanExtra("systemOverlay",false);
             suggestionImeTop=i.getIntExtra("imeTop",Integer.MAX_VALUE);
             updateOverlayPriority();controls.imeTop(suggestionImeTop);miniControls.imeTop(suggestionImeTop);refresh();}
@@ -209,7 +220,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             Intent mini=i.getParcelableExtra("pinnedFrame",Intent.class);
             if(mini==null)miniControls.hide();else miniControls.update(mini);
         }}catch(RuntimeException e){hideControls();android.util.Log.e("NativeComplements","overlay controls failed",e);}
-        if(i.getStringExtra("event")!=null&&(i.getStringExtra("event").endsWith("FAILED")||"BLOCKED".equals(i.getStringExtra("event"))))Toast.makeText(this,i.getStringExtra("report"),Toast.LENGTH_LONG).show();
+        if(i.getStringExtra("event")!=null&&(i.getStringExtra("event").endsWith("FAILED")||"BLOCKED".equals(i.getStringExtra("event"))))Toast.makeText(this,WindowPolicy.failureMessage(i.getStringExtra("report")),Toast.LENGTH_SHORT).show();
     }
     private List<AppCatalog.App> all=List.of();
     private String foreground="";
@@ -221,10 +232,11 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void touchLog(String message){lastTouch=message;if(touchLogs++<50)android.util.Log.i("CornerLauncher",message);}
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener=(p,k)->{main.removeCallbacks(reload);main.post(reload);};
     private final BroadcastReceiver screenReceiver=new BroadcastReceiver(){
-        public void onReceive(Context c,Intent i){hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");}
+        public void onReceive(Context c,Intent i){cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");}
     };
     private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){loadApps();}};
     private int catalogGeneration;
+    private final Runnable iconsReloaded=()->main.post(()->{if(!cleaned)loadApps();});
     private void initialize() {
         cleaned=false;connected=true;live=this;
         Config.hostPreferences=getSharedPreferences("nativecomplements_corner",Context.MODE_PRIVATE);
@@ -232,6 +244,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         controls=new WindowControls(this);miniControls=new WindowControls(this);
         try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
         edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
+        quick=new WindowQuickHost(this,this::hidePanel);
+        try{barrage=new BarrageHost(this);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
         Wire.send(this,"STATUS");
@@ -243,22 +257,31 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         registerReceiver(settingsReceiver,settingsFilter(),null,main,Context.RECEIVER_EXPORTED);
         registerReceiver(queryReceiver,new IntentFilter(LauncherGuard.QUERY),null,main,Context.RECEIVER_EXPORTED);
         getApplicationContext().registerComponentCallbacks(this);
+        dev.local.sunwindowdemo.features.iconlayers.IconAssets.onReload(iconsReloaded);
+        dev.local.sunwindowdemo.features.iconlayers.IconAssets.connect(getApplicationContext());
         loadApps();loadSettings();main.post(poll);
     }
     private void loadApps() {
         int generation=++catalogGeneration;
         new Thread(()->{
             List<AppCatalog.App> apps=AppCatalog.load(this);
-            main.post(()->{if(!connected||cleaned||generation!=catalogGeneration)return;all=apps;refresh();});
+            main.post(()->{
+                if(!connected||cleaned||generation!=catalogGeneration)return;all=apps;
+                if(menuContent!=null)AppList.updateApps(menuContent,apps);
+                if(fan!=null)fan.updateApps(apps);
+                if(openWaitIcon!=null)for(AppCatalog.App app:apps)if(app.pkg.equals(openWaitPackage)){openWaitIcon.setImageDrawable(app.icon);break;}
+                refresh();
+            });
         },"corner-app-catalog").start();
     }
     private void updateOverlayPriority(){
-        if(panel!=null&&panel.getLayoutParams() instanceof WindowManager.LayoutParams p){
+        for(View overlay:new View[]{panel,openWait})if(overlay!=null&&overlay.getLayoutParams() instanceof WindowManager.LayoutParams p){
             int mask=WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
             int next=screenshotVisible||systemFocus?p.flags|mask:p.flags&~mask;
-            if(next!=p.flags){p.flags=next;try{wm.updateViewLayout(panel,p);}catch(RuntimeException ignored){}}
+            if(next!=p.flags){p.flags=next;try{wm.updateViewLayout(overlay,p);}catch(RuntimeException ignored){}}
         }
-        if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panel!=null,suggestionImeTop);
+        if(barrage!=null)barrage.environment(foreground,screenshotVisible||systemFocus||keyboard||panel!=null||openWait!=null);
+        if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panel!=null||openWait!=null,suggestionImeTop);
         if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);
         if(miniControls!=null)miniControls.systemOverlay(screenshotVisible||systemFocus);
         if(edgeTouch!=null)edgeTouch.setEnvironment(screenshotVisible||systemFocus,keyboard);
@@ -372,23 +395,20 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(panel!=null)return;
         if(all.isEmpty()){Toast.makeText(this,"应用列表正在加载，请稍后重试",Toast.LENGTH_SHORT).show();return;}
         FrameLayout outside=new FrameLayout(this){
-            @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)hidePanel();return true;}return super.dispatchKeyEvent(e);}
+            @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)backPanel();return true;}return super.dispatchKeyEvent(e);}
         };
         outside.setBackgroundColor(Color.TRANSPARENT);outside.setOnClickListener(v->hidePanel());
-        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key(),false);},this::saveTargets,this::hidePanel);
+        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key(),false);},this::saveTargets,quick.view());menuContent=content;
+        AppList.blur(content,config.menuBlur());
         content.setOnClickListener(v->{});
         WindowMetrics metrics=wm.getCurrentWindowMetrics();
         android.graphics.Rect display=metrics.getBounds();
-        boolean landscape=display.width()>display.height();
-        int types=WindowInsets.Type.displayCutout();if(!landscape)types|=WindowInsets.Type.systemBars();
-        android.graphics.Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(types);
-        // The menu is a portrait canvas using the same default placement as an app window.
-        Geometry.Placement placement=Geometry.place(Math.min(display.width(),display.height()),false,
-            display.left+bars.left,display.top+bars.top,display.right-bars.right,display.bottom-bars.bottom,dp(landscape?4:12));
+        Geometry.Placement placement=AppList.placement(this,metrics);
         FrameLayout.LayoutParams card=new FrameLayout.LayoutParams(Math.round(placement.width()*placement.scale()),
             Math.round(placement.height()*placement.scale()),Gravity.TOP|Gravity.LEFT);
         card.leftMargin=Math.round(placement.x()-display.left);card.topMargin=Math.round(placement.y()-display.top);outside.addView(content,card);
         WindowManager.LayoutParams p=params(-1,-1,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+        p.flags|=WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
         p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         p.windowAnimations=0;panel=outside;
         outside.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
@@ -397,17 +417,71 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         });
         outside.setAlpha(0);
         try{wm.addView(outside,p);outside.animate().alpha(1).setDuration(150).start();updateOverlayPriority();publish(false);}
-        catch(RuntimeException failure){panel=null;Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
+        catch(RuntimeException failure){panel=null;menuContent=null;quick.detach();Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
     }
-    private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;updateOverlayPriority();publish(false);}}
+    private void backPanel(){if(menuContent==null||!AppList.back(menuContent))hidePanel();}
+    private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;menuContent=null;if(quick!=null)quick.detach();updateOverlayPriority();publish(false);}}
     private IntentFilter settingsFilter(){IntentFilter filter=new IntentFilter(ConfigProvider.CHANGED);filter.addAction(WindowShortcutActivity.ACTION);return filter;}
+    private void updateOpenWait(Intent frame){
+        if(!frame.hasExtra("waitingOpen"))return;
+        String token=frame.getStringExtra("waitingToken"),pkg=frame.getStringExtra("waitingPackage");
+        if(!frame.getBooleanExtra("waitingOpen",false)||!Wire.validToken(token)||!Wire.allowedPackage(pkg)){
+            hideOpenWait();return;
+        }
+        if(!ready()||!config.enabled()||!getSystemService(android.os.PowerManager.class).isInteractive()
+            ||getSystemService(KeyguardManager.class).isKeyguardLocked())return;
+        if(token.equals(openWaitToken)||token.equals(cancelledOpenWaitToken))return;
+        hideOpenWait();openWaitToken=token;openWaitPackage=pkg;
+        FrameLayout outside=new FrameLayout(this){
+            @Override public boolean dispatchKeyEvent(KeyEvent event){
+                if(event.getKeyCode()==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)cancelOpenWait();return true;}
+                return super.dispatchKeyEvent(event);
+            }
+        };
+        outside.setOnClickListener(v->cancelOpenWait());
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);card.setGravity(Gravity.CENTER);card.setPadding(dp(32),dp(28),dp(32),dp(28));
+        boolean dark=(getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;
+        android.graphics.drawable.GradientDrawable background=new android.graphics.drawable.GradientDrawable();
+        background.setColor(dark?0xff171717:0xfff0f0f0);background.setCornerRadius(dp(24));card.setBackground(background);card.setOnClickListener(v->{});
+        ImageView icon=new ImageView(this);openWaitIcon=icon;String label="";
+        for(AppCatalog.App app:all)if(pkg.equals(app.pkg)){icon.setImageDrawable(app.icon);label=app.label;break;}
+        icon.setContentDescription(label);card.addView(icon,new LinearLayout.LayoutParams(dp(64),dp(64)));
+        ProgressBar progress=new ProgressBar(this);LinearLayout.LayoutParams indicator=new LinearLayout.LayoutParams(dp(28),dp(28));indicator.topMargin=dp(20);card.addView(progress,indicator);
+        TextView text=new TextView(this);text.setText("正在打开…");text.setTextSize(14);text.setTextColor(dark?Color.WHITE:Color.BLACK);
+        LinearLayout.LayoutParams caption=new LinearLayout.LayoutParams(-2,-2);caption.topMargin=dp(12);card.addView(text,caption);
+        outside.addView(card,new FrameLayout.LayoutParams(-2,-2,Gravity.CENTER));
+        outside.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
+            public void onViewAttachedToWindow(View view){openWaitDispatcher=view.findOnBackInvokedDispatcher();if(openWaitDispatcher!=null)openWaitDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,openWaitBack);}
+            public void onViewDetachedFromWindow(View view){if(openWaitDispatcher!=null){openWaitDispatcher.unregisterOnBackInvokedCallback(openWaitBack);openWaitDispatcher=null;}}
+        });
+        WindowManager.LayoutParams params=params(-1,-1,WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
+        params.setTitle("NativeComplements-opening");params.windowAnimations=0;openWait=outside;
+        try{wm.addView(outside,params);updateOverlayPriority();}
+        catch(RuntimeException failure){hideOpenWait();}
+        main.postDelayed(()->{if(token.equals(openWaitToken))cancelOpenWait();},13000);
+    }
+    private void hideOpenWait(){
+        if(openWait!=null){remove(openWait);openWait=null;}
+        openWaitIcon=null;
+        openWaitToken=null;openWaitPackage=null;updateOverlayPriority();
+    }
+    private void cancelOpenWait(){
+        String token=openWaitToken,pkg=openWaitPackage;if(token!=null)cancelledOpenWaitToken=token;hideOpenWait();
+        if(token!=null)Wire.send(this,"CANCEL_OPEN",pkg,-1,token,false);
+    }
     boolean notificationWindowReady(){
         return ready()&&config.enabled()&&config.notificationWindow()&&backendReady&&!"recovery".equals(backendState)
             &&getSystemService(android.os.PowerManager.class).isInteractive()&&!getSystemService(KeyguardManager.class).isKeyguardLocked();
     }
+    String notificationForegroundPackage(){
+        try{
+            var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(1);
+            return tasks.isEmpty()||tasks.get(0).topActivity==null?null:tasks.get(0).topActivity.getPackageName();
+        }catch(RuntimeException unavailable){return null;}
+    }
     void openNotification(android.service.notification.StatusBarNotification notice,android.app.PendingIntent pending,Intent fill){
         if(Looper.myLooper()!=main.getLooper()){main.post(()->openNotification(notice,pending,fill));return;}
-        hideFan();hidePanel();
+        cancelOpenWait();hideFan();hidePanel();
         ResultReceiver reply=new ResultReceiver(main){
             // Runs in SystemUI, whose actual permission is checked below. The
             // module APK's manifest does not describe this host UID's grants.
@@ -442,19 +516,20 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             if(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task)!=0||Wire.PKG.equals(pkg)||BackBridge.PACKAGE.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg)||!Wire.allowedPackage(pkg)){
                 Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
             }
-            Wire.send(this,"GESTURE",pkg,task.taskId,Wire.token(),false);
+            cancelOpenWait();Wire.send(this,"GESTURE",pkg,task.taskId,Wire.token(),false);
         }catch(Exception error){Toast.makeText(this,"当前应用转换失败，请稍后重试",Toast.LENGTH_SHORT).show();}
     }
     private void launch(String key,boolean wakeStep) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
         ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
+        cancelOpenWait();
         main.postDelayed(()->{
             if(cleaned)return;
             if(!backendReady){Wire.send(this,"STATUS");Toast.makeText(this,"后端尚未就绪，请先在模块内预检",Toast.LENGTH_LONG).show();return;}
             Wire.openApp(this,target.pkg,wakeStep);
         },180);
     }
-    @Override public void onConfigurationChanged(Configuration c){hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
+    @Override public void onConfigurationChanged(Configuration c){cancelOpenWait();hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
+    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(barrage!=null){barrage.close();barrage=null;}if(quick!=null){quick.close();quick=null;}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
 }

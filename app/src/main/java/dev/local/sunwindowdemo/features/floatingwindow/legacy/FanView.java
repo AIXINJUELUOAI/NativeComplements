@@ -29,7 +29,7 @@ final class FanView extends View {
         animator.start();
     };
     FanView(Context c,List<ShortcutTarget> apps,boolean right,float icon,float radius,float bottom,int selectionDistance) {
-        super(c);this.apps=apps;this.right=right;this.icon=icon;requested=radius;this.bottom=bottom;
+        super(c);this.apps=new java.util.ArrayList<>(apps);this.right=right;this.icon=icon;requested=radius;this.bottom=bottom;
         this.selectionDistance=selectionDistance;
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -44,6 +44,13 @@ final class FanView extends View {
         selected=next;invalidate();return next;
     }
     String picked(){return selected<0?null:selected==0?"":apps.get(selected-1).key();}
+    void updateApps(List<AppCatalog.App> catalog){
+        for(int i=0;i<apps.size();i++){
+            ShortcutTarget updated=ShortcutTarget.fromKey(getContext(),apps.get(i).key(),catalog);
+            if(updated!=null)apps.set(i,updated);
+        }
+        invalidate();
+    }
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);float x=ox(),y=oy(),r=drawnRadius();
         

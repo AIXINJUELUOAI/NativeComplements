@@ -17,11 +17,12 @@
         <activity android:name=".WindowShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="dev.nativecomplements.module.shortcut">
             <intent-filter><action android:name="android.intent.action.CREATE_SHORTCUT" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
-        <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" />
+        <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
         <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.nativecomplements.module.callblocking" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.motion.MotionProvider" android:authorities="dev.nativecomplements.module.motion" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.nativecomplements.module.iconlayers" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.nativecomplements.module.edgetouch" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.barrage.BarrageProvider" android:authorities="dev.nativecomplements.module.barrage" android:exported="true" android:directBootAware="true" />
         <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
         </receiver>

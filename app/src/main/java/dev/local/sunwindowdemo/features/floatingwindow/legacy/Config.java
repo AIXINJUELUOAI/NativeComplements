@@ -7,11 +7,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-final class Config {
+public final class Config {
     static final int MAX_TARGETS=512;
+    static final int DEFAULT_WINDOW_DIM=20;
     final SharedPreferences prefs;
     static volatile SharedPreferences hostPreferences;
-    Config(Context c) { prefs = hostPreferences!=null?hostPreferences:c.getSharedPreferences("corner", Context.MODE_PRIVATE); }
+    public Config(Context c) { prefs = hostPreferences!=null?hostPreferences:c.getSharedPreferences("corner", Context.MODE_PRIVATE); }
     boolean enabled(){return prefs.getBoolean("enabled",true);}
     int number(String key, int def, int min, int max) { return Rules.clamp(prefs.getInt(key, def), min, max); }
     static final int HEAT_MIN=36,HEAT_MAX=72;
@@ -31,6 +32,8 @@ final class Config {
     boolean notificationWindow() { return prefs.getBoolean("notificationWindow", true); }
     boolean landscapeShareWindow() { return prefs.getBoolean("landscapeShareWindow", true); }
     boolean showHeat() { return prefs.getBoolean("showHeat", false); }
+    boolean menuBlur() { return prefs.getBoolean("menuBlur", false); }
+    int windowDim() { return number("windowDim",DEFAULT_WINDOW_DIM,0,100); }
     List<String> apps() {
         Set<String> unique = new LinkedHashSet<>();
         for (String item : prefs.getString("apps", "").split(",")) {
@@ -38,7 +41,7 @@ final class Config {
         }
         return new ArrayList<>(unique);
     }
-    List<String> targets() {
+    public List<String> targets() {
         if(!prefs.contains("targets"))return apps();
         Set<String> unique=new LinkedHashSet<>();
         try{org.json.JSONArray array=new org.json.JSONArray(prefs.getString("targets","[]"));

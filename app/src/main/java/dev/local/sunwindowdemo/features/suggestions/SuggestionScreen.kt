@@ -45,7 +45,7 @@ fun SuggestionScreen(controller: WindowController) {
     var query by remember { mutableStateOf("") }
     val selected = config.getString("bluetooth_app", "")
     SettingsGroup {
-        ToggleRow("开启建议", "在屏幕底部显示当前可用的圆形操作按钮", config.getBoolean("enabled")) { toggle("enabled", it) }
+        ToggleRow("启用快捷建议", "在屏幕底部显示当前可用的操作按钮", config.getBoolean("enabled")) { toggle("enabled", it) }
     }
     GroupTitle("设备")
     SettingsGroup {
@@ -63,25 +63,21 @@ fun SuggestionScreen(controller: WindowController) {
         SliderRow("逐位输入间隔", "先选中输入框，再点击验证码按钮；切换窗口会停止输入", config.getInt("delay"), 50..500, " ms") { SuggestionStore.setDelay(context, it) }
         ToggleRow("隐藏对应验证码通知", "仅在按钮已显示且能与一条新短信准确对应时移除通知；普通或合并短信通知保留", config.getBoolean("hide_sms")) { toggle("hide_sms", it) }
     }
-    Hint("验证码保留前导零。分格输入框交给应用自动换格，自绘输入框是否响应按键取决于应用。短信内容与验证码只短暂保存在内存中，不写入日志。")
     GroupTitle("复制内容")
     SettingsGroup {
         ToggleRow("链接与分享口令", "淘宝、京东、拼多多、抖音、快手、哔哩哔哩、小红书、知乎、微博、美团", config.getBoolean("links")) { toggle("links", it) }
         ToggleRow("地址与地点", "复制地址、店铺或地名后显示地图搜索；安装多个地图时点击选择", config.getBoolean("maps")) { toggle("maps", it) }
     }
-    Hint("链接交给目标应用打开；纯分享口令会保留剪贴板并启动应用，由应用自行识别。识别地点后仅展示按钮，点击才搜索或跳转。")
     GroupTitle("按钮显示")
     SettingsGroup {
         SliderRow("显示时长", "5–300 秒；手电筒操作后仍保留 5 秒供反向切换", config.getInt("duration", 60), 5..300, " 秒") { SuggestionStore.setDuration(context, it) }
         SliderRow("按钮大小", "图标和背景一起缩放，小尺寸仍保留至少 48 dp 的触摸区域", config.getInt("size", 48), 32..80, " dp") { SuggestionStore.setSize(context, it) }
         ToggleRow("显示在右下角", "关闭时显示在左下角；键盘弹出时沿所选一侧上移", config.getBoolean("right")) { toggle("right", it) }
     }
-    Hint("长按建议按钮可拖动，拖到底部 X 后松手隐藏当前建议；进入关闭区时轻震。仅隐藏按钮，不关闭手电筒、蓝牙或应用。")
     GroupTitle("打开方式")
     SettingsGroup {
         ToggleRow("以小窗打开", "应用、链接和地图使用现有小窗；关闭后全屏打开", config.getBoolean("window")) { toggle("window", it) }
     }
-    Hint("按钮触发时轻震，操作完成后消失；手电筒操作后保留 5 秒，可再次点击反向切换。按钮使用桌面应用图标，跟随深浅模式并避让键盘。此功能独立于小窗手势总开关，不需要无障碍或普通应用作用域。")
     if (selectingApp) AlertDialog(onDismissRequest = { selectingApp = false }, title = { Text("选择一个应用") }, text = {
         Column {
             OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("搜索应用") }, modifier = Modifier.fillMaxWidth())

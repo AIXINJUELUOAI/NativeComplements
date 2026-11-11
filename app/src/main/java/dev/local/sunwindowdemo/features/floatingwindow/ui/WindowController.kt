@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import dev.local.sunwindowdemo.features.iconlayers.IconAssets
 
 data class WindowRuntime(
     val received: Boolean = false, val compatible: Boolean = false,
@@ -29,8 +30,14 @@ class WindowController(private val activity: Activity) {
     var runtime by mutableStateOf(WindowRuntime()); private set
     var apps by mutableStateOf<List<LaunchableApp>>(emptyList()); private set
     var catalogLoaded by mutableStateOf(false); private set
+    var menuEditing by mutableStateOf(false); private set
+    var menuSaving by mutableStateOf(false); private set
+    private var menu: android.view.View? = null
+    private var catalog: List<AppCatalog.App> = emptyList()
     private val handler = Handler(Looper.getMainLooper())
     private var destroyed = false
+    private var catalogGeneration = 0
+    private val iconsReloaded = Runnable { handler.post { if (!destroyed) loadCatalog() } }
     private var recovery: Intent? = null
     private val change = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> preferences = store.read() }
     private val receiver = object : BroadcastReceiver() {
@@ -57,9 +64,19 @@ class WindowController(private val activity: Activity) {
         store.preferences.registerOnSharedPreferenceChangeListener(change)
         activity.registerReceiver(receiver, IntentFilter(Wire.RESULT), Wire.PERMISSION, null, Context.RECEIVER_EXPORTED)
         val context = activity.applicationContext
+        IconAssets.onReload(iconsReloaded)
+        IconAssets.connect(context)
+        loadCatalog()
+    }
+    private fun loadCatalog() {
+        val context = activity.applicationContext
+        val generation = ++catalogGeneration
         Thread({
-            val loaded = runCatching { AppCatalog.load(context).map { LaunchableApp(it.pkg, it.label, it.icon) } }.getOrDefault(emptyList())
-            handler.post { if (!destroyed) { apps = loaded; catalogLoaded = true } }
+            val loaded = runCatching { AppCatalog.load(context) }.getOrDefault(emptyList())
+            handler.post { if (!destroyed && generation == catalogGeneration) {
+                catalog = loaded; apps = loaded.map { LaunchableApp(it.pkg, it.label, it.icon) }; catalogLoaded = true
+                menu?.let { AppList.updateApps(it, loaded) }
+            } }
         }, "settings-app-catalog").start()
     }
     fun resume() {
@@ -81,6 +98,26 @@ class WindowController(private val activity: Activity) {
     fun selected(packages: List<String>) = store.apps(packages)
     fun blocked(packages: Set<String>) = store.blocked(packages)
     fun toggleControl() = store.boolean("enabled", !preferences.enabled)
+    fun menuView(context: Context, colors: IntArray): android.view.View {
+        val selected = preferences.apps.mapNotNull { ShortcutTarget.fromKey(context, it, catalog) }
+        return AppList.createPage(context, catalog, selected, { target ->
+            if (preferences.enabled && runtime.compatible && runtime.hostConnected) Wire.openApp(activity, target.pkg, false)
+            else toast("请先启用小窗并等待系统服务就绪")
+        }, { targets, done ->
+            Thread({
+                val saved = runCatching {
+                    Config(activity).targets(targets.map { it.key() }, targets.map { it.label })
+                    ConfigProvider.changed(activity)
+                }.isSuccess
+                handler.post { if (!destroyed) done.accept(saved) }
+            }, "settings-menu-save").start()
+        }, colors, { editing, saving -> menuEditing = editing; menuSaving = saving }).also { menu = it }
+    }
+    fun editMenu() { menu?.let { AppList.edit(it) } }
+    fun releaseMenu(view: android.view.View) {
+        if (menu === view) { menu = null; menuEditing = false; menuSaving = false }
+    }
+    fun menuInsets(view: android.view.View, bottom: Int) = AppList.bottomInset(view, bottom)
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")
     fun notifications() {
@@ -112,6 +149,7 @@ class WindowController(private val activity: Activity) {
     private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     fun close() {
         destroyed = true
+        IconAssets.removeOnReload(iconsReloaded)
         handler.removeCallbacksAndMessages(null)
         activity.unregisterReceiver(receiver)
         store.preferences.unregisterOnSharedPreferenceChangeListener(change)

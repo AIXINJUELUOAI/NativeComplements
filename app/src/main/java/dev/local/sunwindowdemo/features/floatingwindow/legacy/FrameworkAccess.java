@@ -204,6 +204,9 @@ final class FrameworkAccess {
         return bool(field(target, "mSurfaceAnimator"), "hasLeash")
             || (Boolean) call(field(target, "mTransitionController"), "inTransition", new Class<?>[]{wc}, target);
     }
+    boolean entryBusy(Object target,boolean allowTransition)throws Exception {
+        return WindowPolicy.entryBusy(!allowTransition&&animating(target),integer(target,"getRelativeDisplayRotation"));
+    }
     /** Collection alone does not own the surface. SunOS pauses presentation only for a real leash/playback. */
     boolean presentationLeashed(Object target) throws Exception {
         return bool(field(target,"mSurfaceAnimator"),"hasLeash")

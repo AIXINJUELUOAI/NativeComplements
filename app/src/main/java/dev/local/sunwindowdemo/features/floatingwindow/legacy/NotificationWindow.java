@@ -38,10 +38,14 @@ final class NotificationWindow {
             &&(n.flags&Notification.FLAG_GROUP_SUMMARY)==0&&n.fullScreenIntent==null
             &&!Notification.CATEGORY_CALL.equals(n.category)&&!Notification.CATEGORY_ALARM.equals(n.category);
     }
+    static boolean backgroundTarget(String notificationPackage,String foregroundPackage){
+        return notificationPackage!=null&&foregroundPackage!=null&&!notificationPackage.equals(foregroundPackage);
+    }
     private Click eligible(Object entry,PendingIntent pending)throws Exception{
         SystemUiHost host=SystemUiHost.live;if(host==null||!host.notificationWindowReady()||entry==null)return null;
         StatusBarNotification notice=(StatusBarNotification)sbn.get(entry);
         if(notice==null||!contentLaunch(notice.getNotification(),pending)||!Process.myUserHandle().equals(notice.getUser())
+            ||!backgroundTarget(notice.getPackageName(),host.notificationForegroundPackage())
             ||!Process.myUserHandle().equals(pending.getCreatorUserHandle())
             ||Wire.PKG.equals(notice.getPackageName())||BackBridge.PACKAGE.equals(notice.getPackageName())||"android".equals(notice.getPackageName()))return null;
         return new Click(notice,pending);
@@ -63,6 +67,7 @@ final class NotificationWindow {
                 try{
                     Click selected=route.current.get();Object owner=chain.getThisObject();SystemUiHost host=SystemUiHost.live;
                     if(selected!=null&&host!=null&&host.notificationWindowReady()&&route.startDisplay.getInt(owner)==Display.DEFAULT_DISPLAY
+                        &&backgroundTarget(selected.notice.getPackageName(),host.notificationForegroundPackage())
                         &&selected.pending.equals(route.startPending.get(owner))
                         &&selected.notice.equals(route.sbn.get(route.startEntry.get(owner)))){
                         host.openNotification(selected.notice,selected.pending,(Intent)route.startFill.get(owner));

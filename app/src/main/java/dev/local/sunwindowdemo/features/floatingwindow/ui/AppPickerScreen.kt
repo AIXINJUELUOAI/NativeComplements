@@ -19,21 +19,21 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
-fun AppPickerScreen(controller: WindowController, blocked: Boolean) {
+fun AppPickerScreen(controller: WindowController, blocked: Boolean, bottomInset: Dp = 0.dp) {
     var query by rememberSaveable { mutableStateOf("") }
     val selected = controller.preferences.apps
     val excluded = controller.preferences.blocked
     val catalog = controller.apps
     val visible = remember(query, catalog) { catalog.filter { it.label.contains(query, true) || it.packageName.contains(query, true) } }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
+        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item {
-                Text(if (blocked) "禁用应用" else "快捷应用", Modifier.padding(start = 12.dp, bottom = 20.dp), style = MaterialTheme.typography.headlineLarge)
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     placeholder = { Text("搜索应用或包名") }, leadingIcon = { Icon(Icons.Default.Search, null) },
                     shape = RoundedCornerShape(50), singleLine = true)

@@ -28,6 +28,12 @@ public class NotificationWindowTest {
         n.category=Notification.CATEGORY_ALARM;assertFalse(NotificationWindow.contentLaunch(n,content));n.category=null;
         n.fullScreenIntent=content;assertFalse(NotificationWindow.contentLaunch(n,content));
     }
+    @Test public void foregroundNotificationsKeepNativeNavigationAndUnknownForegroundIsNotConverted(){
+        assertFalse(NotificationWindow.backgroundTarget("example.chat","example.chat"));
+        assertTrue(NotificationWindow.backgroundTarget("example.chat","example.browser"));
+        assertFalse(NotificationWindow.backgroundTarget("example.chat",null));
+        assertFalse(NotificationWindow.backgroundTarget(null,"example.chat"));
+    }
     @Test public void notificationPreferencePersistsAndCanBeDisabled()throws Exception{
         WindowPreferenceStore store=new WindowPreferenceStore(context);
         assertTrue(store.read().getNotificationWindow());store.getClass().getMethod("boolean",String.class,boolean.class).invoke(store,"notificationWindow",false);

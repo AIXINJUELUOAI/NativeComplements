@@ -12,24 +12,17 @@ import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.navigation.Page
 
 @Composable
-fun WindowScreen(p: WindowPreferences, runtime: WindowRuntime, navigate: (Page) -> Unit, toggleControl: () -> Unit) {
-    Surface(onClick = toggleControl, shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-        Column(Modifier.fillMaxWidth().padding(22.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(if (!p.enabled) "小窗控制已关闭" else if (runtime.hostConnected) "小窗控制已开启" else "等待 SystemUI 宿主", style = MaterialTheme.typography.titleLarge)
-            Text(if (!p.enabled) "点击开启 · 由 LSPosed 运行，无需无障碍" else "点击关闭 · 由 SystemUI 承载角落菜单与窗口控制", style = MaterialTheme.typography.bodyMedium)
-        }
+fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: () -> Unit) {
+    SettingsGroup {
+        ToggleRow("启用小窗", "通过角落菜单或长侧滑打开应用小窗", p.enabled) { toggleControl() }
     }
-    Hint("从屏幕底角向内斜滑打开菜单；侧边返回长滑，震动后松手，将当前应用变成小窗。")
     GroupTitle("小窗设置")
     SettingsGroup {
         SettingRow("快捷应用", "已选择 ${p.apps.size} 项 · 扇区显示前 ${p.fanCount} 项", { navigate(Page.Apps) }, leading = { Glyph("apps") })
         SettingRow("手势与菜单", "触发热区、滑动距离、扇形外观", { navigate(Page.Gestures) }, leading = { Glyph("gesture") })
-        SettingRow("窗口与多任务", "空白处关闭、最近任务中的显示", { navigate(Page.Behavior) }, leading = { Glyph("window") })
+        SettingRow("窗口与多任务", "背景压暗、空白处关闭、最近任务中的显示", { navigate(Page.Behavior) }, leading = { Glyph("window") })
         SettingRow("小窗触发限制", "横屏、键盘与指定应用", { navigate(Page.Prevention) }, leading = { Glyph("check") })
     }
-    GroupTitle("帮助")
-    SettingsGroup { SettingRow("诊断与恢复", "检查连接、测试触摸、恢复原窗口", { navigate(Page.Diagnostics) }, leading = { Glyph("info") }) }
-    Hint("一个普通小窗与一个迷你窗可同时运行，无定时退出。关闭控制会结束当前小窗；禁用模块前请先恢复窗口。")
 }
 
 @Composable
@@ -45,19 +38,19 @@ fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, numb
     }
     GroupTitle("菜单外观")
     SettingsGroup {
+        ToggleRow("菜单背景模糊", "模糊应用菜单背后的画面；系统停用模糊时使用实色背景", p.menuBlur) { boolean("menuBlur", it) }
         SliderRow("扇区快捷项数量", "按快捷区顺序显示前几项，另保留一个列表入口", p.fanCount, 1..5, " 个") { number("fanCount", it) }
         SliderRow("扇形半径", "图标较多时自动适配间距，左右镜像", p.radius, 120..260, " dp") { number("radius", it) }
         SliderRow("图标直径", "应用列表入口固定排在最下面", p.icon, 32..56, " dp") { number("icon", it) }
     }
-    GroupTitle("调试")
-    SettingsGroup {
-        ToggleRow("显示触发热区", "蓝色表示范围，绿色表示按中，橙色表示触摸取消", p.showHeat) { boolean("showHeat", it) }
-    }
-    Hint("设置保存后立即由原有手势服务读取。震动与动画沿用当前小窗实现。")
 }
 
 @Composable
-fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
+fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, number: (String, Int) -> Unit) {
+    SettingsGroup {
+        SliderRow("背景压暗", "普通小窗后方的压暗程度，0% 为关闭", p.windowDim, 0..100, "%") { number("windowDim", it) }
+    }
+    GroupTitle("窗口行为")
     SettingsGroup {
         ToggleRow("应用间跳转小窗打开", "分享、链接及打开其他应用时，以小窗显示目标页面，保留原有返回关系", p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
         ToggleRow("通知小窗打开", "点击普通应用通知时，用小窗打开对应页面；关闭后沿用系统方式", p.notificationWindow) { boolean("notificationWindow", it) }
@@ -65,13 +58,6 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit) {
         ToggleRow("贴边锁屏继续运行", "贴边隐藏后保持运行，支持锁屏听视频与下载；关闭小窗后结束维持", p.keepEdgeAwake) { boolean("keepEdgeAwake", it) }
         ToggleRow("关闭小窗时结束应用", "明确关闭或拖到关闭圆环后结束应用，播放和下载也会停止；仍有同应用小窗时保留；切换、贴边与转全屏不清理", p.endOnClose) { boolean("endOnClose", it) }
         ToggleRow("在多任务中隐藏小窗应用", "关闭或切换后继续隐藏；真正全屏打开并完成绘制后重新显示", p.hideRecents) { boolean("hideRecents", it) }
-    }
-    GroupTitle("窗口操作")
-    SettingsGroup {
-        SettingRow("操作条颜色", "竖屏跟随应用窗口的明暗显示深色或浅色；屏幕横屏时固定浅色。")
-        SettingRow("普通小窗", "竖屏固定默认位置，横屏固定靠左。底部键盘弹出时，竖屏小窗向上避让。")
-        SettingRow("迷你窗", "单击还原、双击全屏；旋转后回到右上角。拖到关闭圆环内松手关闭，推过贴边阈值松手隐藏，两处都有触感提示。")
-        SettingRow("返回与截图", "返回先交给应用；应用根页面返回时关闭小窗。截图工具栏出现时优先响应截图操作。")
     }
 }
 
@@ -88,6 +74,10 @@ fun PreventionScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, b
 @Composable
 fun DiagnosticsScreen(controller: WindowController) {
     val runtime = controller.runtime
+    SettingsGroup {
+        ToggleRow("显示小窗触发热区", "显示角落范围、按中与取消状态", controller.preferences.showHeat) { controller.boolean("showHeat", it) }
+    }
+    GroupTitle("小窗连接")
     SettingsGroup {
         SettingRow("系统后端", when {
             !runtime.received -> "尚未连接"

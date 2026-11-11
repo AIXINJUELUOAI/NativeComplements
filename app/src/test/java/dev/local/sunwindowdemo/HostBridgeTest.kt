@@ -70,6 +70,26 @@ class HostBridgeTest {
         assertFalse(WindowPreferenceStore(context).read().doubleClose)
     }
 
+    @Test fun windowDimPersistsClampsAndTravelsThroughTheHostSnapshotAndCommand() {
+        val store = WindowPreferenceStore(context)
+        store.preferences.edit().remove("windowDim").commit()
+        assertEquals(20, store.read().windowDim)
+        store.number("windowDim", 35)
+        assertEquals(35, WindowPreferenceStore(context).read().windowDim)
+        val destination = context.getSharedPreferences("dim-host-test", 0)
+        ConfigProvider.copy(Bundle().apply { putInt("windowDim", store.read().windowDim) }, destination)
+        assertEquals(35, destination.getInt("windowDim", -1))
+        val host = object : android.content.ContextWrapper(context) {
+            override fun getPackageName() = "com.android.systemui"
+        }
+        Wire.openApp(host, "example.app", false)
+        val request = shadowOf(context.applicationContext as android.app.Application).broadcastIntents.last()
+        assertEquals(35, request.getIntExtra("windowDim", -1))
+        store.number("windowDim", -1)
+        assertEquals(0, store.read().windowDim)
+        store.number("windowDim", 101)
+        assertEquals(100, store.read().windowDim)
+    }
     @Test fun shortcutLibraryPersistsBeyondFanLimitWithoutDroppingOrder() {
         val store = WindowPreferenceStore(context)
         val targets = (0 until 12).map { "com.example.app$it" }

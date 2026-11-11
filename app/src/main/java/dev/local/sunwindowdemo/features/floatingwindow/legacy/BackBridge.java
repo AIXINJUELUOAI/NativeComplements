@@ -45,6 +45,7 @@ public final class BackBridge extends XposedModule {
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         installSuggestionNotifications(p.getDefaultClassLoader());
+        WindowTools.install(this,p.getDefaultClassLoader(),this::note);
         NotificationWindow.install(this,p.getDefaultClassLoader(),this::note);
         installBackFinish(p.getDefaultClassLoader());
         try{

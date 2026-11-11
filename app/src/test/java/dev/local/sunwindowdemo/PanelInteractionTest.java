@@ -31,6 +31,42 @@ public class PanelInteractionTest {
     private static void invoke(Object object,String name,Class<?>[] types,Object... args)throws Exception{
         Method m=object.getClass().getDeclaredMethod(name,types);m.setAccessible(true);m.invoke(object,args);
     }
+    @Test public void quickTabIsAlwaysVisibleAndBackReturnsToApplicationsWithoutLosingEdits()throws Exception{
+        AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
+        View quick=new View(context);
+        View menu=AppList.create(context,List.of(alpha),List.of(ShortcutTarget.app(context,alpha)),target->{},
+            (targets,done)->done.accept(true),quick);
+        View apps=(View)field(menu,"apps");
+        assertEquals(View.VISIBLE,apps.getVisibility());assertEquals(View.GONE,quick.getVisibility());
+        assertEquals(View.VISIBLE,((View)field(menu,"quickTab")).getVisibility());
+        assertFalse((Boolean)field(apps,"editing"));
+        ((View)field(menu,"quickTab")).performClick();
+        assertEquals(View.GONE,apps.getVisibility());assertEquals(View.VISIBLE,quick.getVisibility());
+        assertTrue(AppList.back(menu));assertEquals(View.VISIBLE,apps.getVisibility());assertEquals(View.GONE,quick.getVisibility());
+        assertFalse(AppList.back(menu));assertEquals(1,((List<?>)field(apps,"chosen")).size());
+        invoke(apps,"toggleEditing",new Class<?>[]{});
+        ((View)field(menu,"quickTab")).performClick();((View)field(menu,"appTab")).performClick();
+        assertTrue((Boolean)field(apps,"editing"));
+        AppList.blur(menu,true);assertNotNull(menu.getBackground());
+    }
+    @SuppressWarnings("unchecked")
+    @Test public void iconReloadPreservesUnsavedOrderAndCurrentQuickTab()throws Exception{
+        AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
+        AppCatalog.App beta=new AppCatalog.App("example.beta","Beta",new ColorDrawable(Color.BLUE));
+        View quick=new View(context);
+        View menu=AppList.create(context,List.of(alpha,beta),List.of(ShortcutTarget.app(context,alpha)),target->{},(targets,done)->done.accept(true),quick);
+        Object panel=field(menu,"apps");invoke(panel,"toggleEditing",new Class<?>[]{});
+        invoke(panel,"toggle",new Class<?>[]{ShortcutTarget.class},ShortcutTarget.app(context,beta));
+        ((View)field(menu,"quickTab")).performClick();
+        AppCatalog.App updated=new AppCatalog.App(alpha.pkg,alpha.label,new ColorDrawable(Color.GREEN));
+        AppList.updateApps(menu,List.of(updated,beta));
+        assertTrue((Boolean)field(panel,"editing"));assertEquals(View.VISIBLE,quick.getVisibility());
+        List<ShortcutTarget> chosen=(List<ShortcutTarget>)field(panel,"chosen");
+        assertEquals(List.of(alpha.pkg,beta.pkg),chosen.stream().map(t->t.pkg).toList());
+        android.widget.LinearLayout rows=(android.widget.LinearLayout)field(panel,"selectedRows");
+        View cell=((android.view.ViewGroup)rows.getChildAt(0)).getChildAt(0);
+        assertEquals(Color.GREEN,((ColorDrawable)((ImageView)field(cell,"image")).getDrawable()).getColor());
+    }
     @SuppressWarnings("unchecked")
     @Test public void chosenTargetLeavesCandidatesAndReturnsToItsLetterWhenRemoved()throws Exception{
         AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
@@ -64,6 +100,36 @@ public class PanelInteractionTest {
         SuggestionStore.preferences(context).edit().putBoolean("right",false).commit();
         assertFalse(SuggestionStore.read(context).getBoolean("right"));
     }
+    @Test public void pageUsesLargeIconsWithoutCardOrHeaderAndSavesFromToolbar()throws Exception{
+        AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
+        AppCatalog.App beta=new AppCatalog.App("example.beta","Beta",new ColorDrawable(Color.BLUE));
+        ShortcutTarget first=ShortcutTarget.app(context,alpha),second=ShortcutTarget.app(context,beta);
+        List<String> editing=new ArrayList<>();
+        View page=AppList.createPage(context,List.of(alpha,beta),List.of(first,second),target->{},
+            (targets,done)->{new dev.local.sunwindowdemo.Config(context).targets(targets.stream().map(ShortcutTarget::key).toList());done.accept(true);},
+            new int[]{0xffeeeeee,0xff111111,0xff555555,0xff336699},(edit,saving)->editing.add(edit+":"+saving));
+        ListView list=(ListView)field(page,"list");assertTrue(list.isNestedScrollingEnabled());
+        assertNull(page.getBackground());assertNull(((View)field(page,"manage")).getParent());
+        assertFalse(page.getClipToOutline());assertEquals(0,page.getPaddingTop());assertEquals(0,page.getPaddingBottom());
+        assertFalse(list.isVerticalFadingEdgeEnabled());
+        View tile=((android.widget.LinearLayout)((android.widget.LinearLayout)field(page,"selectedRows")).getChildAt(0)).getChildAt(0);
+        ImageView image=(ImageView)field(tile,"image");
+        assertEquals(Math.round(52*context.getResources().getDisplayMetrics().density),image.getLayoutParams().width);
+        AppList.bottomInset(page,100);assertTrue(list.getPaddingBottom()>=100);
+        AppList.edit(page);
+        invoke(page,"toggle",new Class<?>[]{ShortcutTarget.class},first);
+        invoke(page,"toggle",new Class<?>[]{ShortcutTarget.class},first);
+        AppList.edit(page);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertEquals(List.of("example.beta","example.alpha"),new dev.local.sunwindowdemo.Config(context).targets());
+        assertFalse((Boolean)field(page,"editing"));
+        assertTrue(editing.contains("true:false"));assertTrue(editing.contains("true:true"));
+        assertEquals("false:false",editing.get(editing.size()-1));
+        AppList.blur(page,true);
+        assertNull(page.getBackground());
+        AppList.blur(page,false);
+        assertNull(page.getBackground());
+    }
     @Test public void suggestionDisplaySettingsPersistAndClamp(){
         SuggestionStore.preferences(context).edit().clear().commit();
         assertEquals(60,SuggestionStore.read(context).getInt("duration"));
@@ -77,6 +143,30 @@ public class PanelInteractionTest {
         SuggestionStore.preferences(context).edit().putInt("duration",-1).putInt("size",999).commit();
         assertEquals(5,SuggestionStore.read(context).getInt("duration"));
         assertEquals(80,SuggestionStore.read(context).getInt("size"));
+    }
+    @Test public void recoveryWaitCancelsByExactTokenAndIgnoresLateFrames()throws Exception{
+        var constructor=SystemUiHost.class.getDeclaredConstructor(Context.class);constructor.setAccessible(true);
+        SystemUiHost host=constructor.newInstance(context);
+        org.robolectric.util.ReflectionHelpers.setField(host,"settingsReady",true);
+        org.robolectric.util.ReflectionHelpers.setField(host,"config",new dev.local.sunwindowdemo.Config(context));
+        org.robolectric.util.ReflectionHelpers.setField(host,"wm",context.getSystemService(WindowManager.class));
+        String token=Wire.token();android.content.Intent waiting=new android.content.Intent().putExtra("waitingOpen",true).putExtra("waitingToken",token).putExtra("waitingPackage","example.alpha");
+        try{
+            invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},waiting);
+            View overlay=(View)field(host,"openWait");assertNotNull(overlay);
+            invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},waiting);assertSame(overlay,field(host,"openWait"));
+            overlay.performClick();assertNull(field(host,"openWait"));
+            var sent=org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents();
+            android.content.Intent cancel=sent.stream().filter(i->"CANCEL_OPEN".equals(i.getStringExtra("op"))).reduce((a,b)->b).orElseThrow();
+            assertEquals(token,cancel.getStringExtra("token"));assertEquals("example.alpha",cancel.getStringExtra("package"));
+            invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},waiting);assertNull(field(host,"openWait"));
+            waiting.putExtra("waitingToken",Wire.token());invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},waiting);assertNotNull(field(host,"openWait"));
+            invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},new android.content.Intent().putExtra("waitingOpen",false));
+            assertNull(field(host,"openWait"));
+        }finally{
+            invoke(host,"hideOpenWait",new Class<?>[]{});
+            ((java.util.concurrent.ExecutorService)field(host,"settingsWorker")).shutdownNow();
+        }
     }
     private static void touch(View view,int action,float x,float y){
         MotionEvent event=MotionEvent.obtain(0,0,action,x,y,0);

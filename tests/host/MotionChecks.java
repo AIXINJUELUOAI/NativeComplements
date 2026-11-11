@@ -46,6 +46,19 @@ public final class MotionChecks {
             near(MotionStyle.visibility(target,1).placement().scale(),target.scale());
             near(MotionStyle.visibility(target,0).alpha(),0);near(MotionStyle.visibility(target,1).alpha(),1);
         }
+        for(boolean fade:new boolean[]{false,true}){
+            float handle=0,dim=0;
+            for(int step=0;step<=120;step++){
+                MotionStyle.Decoration sample=MotionStyle.entryDecoration(step/120f,fade);
+                if(sample.handle()<handle||sample.dim()<dim||sample.handle()>sample.dim())throw new AssertionError("entry decoration discontinuity");
+                if(sample.handle()-handle>.06f||sample.dim()-dim>.06f)throw new AssertionError("entry decoration jumped");
+                handle=sample.handle();dim=sample.dim();
+            }
+            near(handle,1);near(dim,1);
+            near(MotionStyle.entryDecoration(0,fade).handle(),0);near(MotionStyle.entryDecoration(0,fade).dim(),0);
+            near(MotionStyle.entryDecoration(fade?.25f:.65f,fade).handle(),0);
+        }
+        try{MotionStyle.entryDecoration(Float.NaN,true);throw new AssertionError("NaN decoration accepted");}catch(IllegalArgumentException expected){}
         try{MotionStyle.visibility(portrait,Float.NaN);throw new AssertionError("NaN visibility accepted");}catch(IllegalArgumentException expected){}
         for(float bad:new float[]{0,-1,Float.NaN,Float.POSITIVE_INFINITY}){
             try{MotionStyle.radius(bad,.75f);throw new AssertionError("invalid radius accepted");}catch(IllegalArgumentException expected){}

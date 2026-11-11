@@ -23,13 +23,14 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import dev.local.sunwindowdemo.LaunchableApp
 import dev.local.sunwindowdemo.core.ui.*
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Composable
-fun IconLayerScreen(apps: List<LaunchableApp>) {
+fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(IconLayerStore.read(context)) }
@@ -43,7 +44,6 @@ fun IconLayerScreen(apps: List<LaunchableApp>) {
     var pending by remember { mutableStateOf<IconArchive?>(null) }
     var removeDialog by remember { mutableStateOf(false) }
     var editor by remember { mutableStateOf<LaunchableApp?>(null) }
-    var diagnostics by remember { mutableStateOf(false) }
     val cancel = remember { AtomicBoolean(false) }
     DisposableEffect(Unit) { onDispose { cancel.set(true); if (!busy) pending?.close() } }
     LaunchedEffect(Unit) {
@@ -88,11 +88,10 @@ fun IconLayerScreen(apps: List<LaunchableApp>) {
         installed.filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(bottom = 32.dp)) {
+        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(bottom = 32.dp + bottomInset)) {
             item {
-                Text("图标补全", Modifier.padding(start = 12.dp, top = 4.dp, bottom = 28.dp), style = MaterialTheme.typography.headlineLarge)
                 SettingsGroup {
-                    ToggleRow("启用图标补全", "图标包优先，未匹配时保留应用原图", state.getBoolean("enabled")) {
+                    ToggleRow("启用图标适配", "图标包优先，未匹配时保留应用原图", state.getBoolean("enabled")) {
                         IconLayerStore.enabled(context, it); refreshState()
                     }
                     ToggleRow("通知图标替换", "默认不处理；开启后仍按逐应用的通知设置生效", state.getBoolean("notifications")) {
@@ -102,7 +101,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>) {
                         if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else "未导入素材时保留原图，算法需要逐应用开启")
                     SettingRow("导入本地 ZIP", "包名/0.png 为背景，1.png 为透明前景", onClick = if (busy || pending != null) null else { { zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) } })
                     SettingRow("导入本地文件夹", "素材由用户自行提供，模块不内置第三方素材", onClick = if (busy || pending != null) null else { { folderPicker.launch(null) } })
-                    SettingRow("刷新图标", "重新生成桌面图标并刷新系统宿主，保留桌面排列", onClick = { IconLayerStore.refreshAll(context); message = "已请求刷新，宿主正在重新加载" })
+                    SettingRow("刷新图标", "刷新桌面及已生成的算法缓存，保留桌面排列", onClick = { IconLayerStore.refreshAll(context); message = "已请求刷新，宿主正在重新加载" })
                     if (state.getInt("count") > 0) SettingRow("移除图标库", "保留逐应用设置、上传图片和算法补全", onClick = if (busy) null else { { removeDialog = true } })
                 }
                 if (busy) {
@@ -115,7 +114,6 @@ fun IconLayerScreen(apps: List<LaunchableApp>) {
                 if (message.isNotBlank()) Hint(message)
                 GroupTitle("逐应用设置")
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索已安装应用") })
-                Hint("仅列出有桌面入口的应用。算法仅对手动选中的应用，在其启动后生成并缓存；彩色、莫奈、通知可分别选择不处理。")
             }
             items(matched, key = { it.packageName }) { app ->
                 val policy = remember(app.packageName, state.getString("policies"), state.getStringArrayList("originals").toString()) { IconPolicy.read(context, app.packageName) }
@@ -131,18 +129,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>) {
             }
             item {
                 if (matched.isEmpty()) Hint("未找到应用")
-                GroupTitle("连接与诊断")
-                SettingsGroup {
-                    SettingRow("桌面连接状态", "${state.getString("status")} · 已加载 ${state.getInt("loaded")} 个")
-                    SettingRow("实验与诊断", "Demo 分层对照", onClick = { diagnostics = !diagnostics })
-                }
                 if (!state.getString("error").isNullOrBlank()) Hint(state.getString("error")!!)
-                if (diagnostics) SettingsGroup {
-                    listOf("保留 Demo 原图", "粉色双层 Demo", "薄荷色双层 Demo").forEachIndexed { index, title ->
-                        SettingRow(title, onClick = { IconLayerStore.save(context, index); refreshState() }, trailing = { RadioButton(state.getInt("mode") == index, null) })
-                    }
-                }
-                Hint("沿用现有三个系统作用域。莫奈颜色由桌面主题决定；系统启动图不包含应用自行绘制的品牌页面。")
             }
         }
     }
@@ -157,6 +144,24 @@ fun IconLayerScreen(apps: List<LaunchableApp>) {
         text = { Text("保留手动图片和逐应用设置，自动模式将恢复应用原图。") }, confirmButton = { TextButton(onClick = {
             removeDialog = false; scope.launch { withContext(Dispatchers.IO) { IconLibrary.remove(context) }; refreshState() }
         }) { Text("移除") } }, dismissButton = { TextButton(onClick = { removeDialog = false }) { Text("取消") } })
+}
+
+@Composable
+fun IconDiagnosticsScreen() {
+    val context = LocalContext.current
+    var state by remember { mutableStateOf(IconLayerStore.read(context)) }
+    SettingsGroup {
+        SettingRow("桌面连接状态", "${state.getString("status")} · 已加载 ${state.getInt("loaded")} 个")
+        SettingRow("刷新状态", onClick = { state = IconLayerStore.read(context) })
+    }
+    GroupTitle("图标分层实验")
+    SettingsGroup {
+        listOf("保留 Demo 原图", "粉色双层 Demo", "薄荷色双层 Demo").forEachIndexed { index, title ->
+            SettingRow(title, onClick = { IconLayerStore.save(context, index); state = IconLayerStore.read(context) },
+                trailing = { RadioButton(state.getInt("mode") == index, null) })
+        }
+    }
+    if (!state.getString("error").isNullOrBlank()) Hint(state.getString("error")!!)
 }
 
 @Composable

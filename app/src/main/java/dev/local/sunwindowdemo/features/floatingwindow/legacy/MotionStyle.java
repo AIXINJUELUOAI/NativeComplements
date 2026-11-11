@@ -4,6 +4,13 @@ package dev.local.sunwindowdemo;
 final class MotionStyle {
     record Bar(float length,float thickness,float margin) {}
     record Visibility(Geometry.Placement placement,float alpha) {}
+    record Decoration(float handle,float dim) {}
+    static Decoration entryDecoration(float progress,boolean fadeIn){
+        if(!Float.isFinite(progress))throw new IllegalArgumentException("decoration progress");
+        return new Decoration(smooth((progress-(fadeIn?.25f:.65f))/(fadeIn?.5f:.35f)),
+            smooth(progress/(fadeIn?.625f:1)));
+    }
+    private static float smooth(float value){float p=Math.max(0,Math.min(1,value));return p*p*(3-2*p);}
     /** The same centered 94%→100% path is sampled forward for entry, backward for exit. */
     static Visibility visibility(Geometry.Placement target,float progress){
         if(target==null||!Float.isFinite(progress))throw new IllegalArgumentException("visibility");

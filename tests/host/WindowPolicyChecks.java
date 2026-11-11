@@ -3,6 +3,18 @@ package dev.local.sunwindowdemo;
 public final class WindowPolicyChecks {
     private static void require(boolean value){if(!value)throw new AssertionError();}
     public static void main(String[] args){
+        require(!WindowPolicy.entryBusy(false,0));
+        require(WindowPolicy.entryBusy(true,0));
+        for(int rotation:new int[]{-3,-1,1,2,3})require(WindowPolicy.entryBusy(false,rotation));
+        require(WindowPolicy.morphEntry(false,true,true,1));
+        require(!WindowPolicy.morphEntry(true,true,true,1));
+        require(!WindowPolicy.morphEntry(false,false,true,1));
+        require(!WindowPolicy.morphEntry(false,true,false,1));
+        require(!WindowPolicy.morphEntry(false,true,true,5));
+        require(WindowPolicy.failureMessage("BLOCKED：IllegalStateException: 等待当前任务转场结束后再试\n\nmultiWindow=true\nfreeform=true").equals("系统转场尚未结束，请稍后重试"));
+        require(WindowPolicy.failureMessage("GESTURE_FAILED：默认窗已被占用").equals("请先关闭当前默认小窗"));
+        require(WindowPolicy.failureMessage("BLOCKED：先解锁屏幕").equals("请先解锁屏幕"));
+        require(!WindowPolicy.failureMessage(null).contains("Exception"));
         for(float scale:new float[]{.18f,.28f,.6f,.75f,1f})for(float origin:new float[]{0,90,350})for(float logical:new float[]{0,42,1200}){
             float physical=origin+logical*scale;
             require(Math.abs(WindowPolicy.logicalRaw(physical,origin,scale)-logical)<.001f);
@@ -23,11 +35,6 @@ public final class WindowPolicyChecks {
         require(!WindowPolicy.currentLandscape(1,0,true));
         require(WindowPolicy.currentLandscape(0,0,false));
         require(!WindowPolicy.currentLandscape(0,1,true));
-        require(WindowPolicy.handleColor(false,16,false)==0xff303234);
-        require(WindowPolicy.handleColor(false,0,true)==0xfff0f2f2);
-        require(WindowPolicy.handleColor(false,-1,false)==0xff303234);
-        require(WindowPolicy.handleColor(false,-1,true)==0xfff0f2f2);
-        require(WindowPolicy.handleColor(true,16,false)==0xfff0f2f2);
         require(WindowPolicy.clientMode("com.tencent.mm")==5);
         require(WindowPolicy.clientMode("tv.danmaku.bili")==1);
         require(WindowPolicy.clientMode("com.example.media")==1);

@@ -18,6 +18,7 @@ public final class IconAssets {
     private static volatile Snapshot snapshot=new Snapshot(Map.of(),"",0,0,Set.of());
     private static final AtomicInteger epoch=new AtomicInteger();
     private static volatile Handler worker;
+    private static volatile boolean ready;
     private static Context host;
     private static final List<Runnable> listeners=new ArrayList<>();
     private IconAssets() {}
@@ -28,12 +29,16 @@ public final class IconAssets {
         HandlerThread thread=new HandlerThread("NcIconAssets");thread.start();worker=new Handler(thread.getLooper());
         BroadcastReceiver receiver=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){reload();}};
         context.registerReceiver(receiver,new IntentFilter(IconLayerStore.REFRESH),IconLayerStore.CONTROL,null,Context.RECEIVER_EXPORTED);
+        IntentFilter lifecycle=new IntentFilter(Intent.ACTION_BOOT_COMPLETED);lifecycle.addAction(Intent.ACTION_USER_UNLOCKED);
+        context.registerReceiver(new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){reload();}},lifecycle,Context.RECEIVER_NOT_EXPORTED);
         IntentFilter packages=new IntentFilter();packages.addAction(Intent.ACTION_PACKAGE_ADDED);packages.addAction(Intent.ACTION_PACKAGE_REMOVED);
         packages.addAction(Intent.ACTION_PACKAGE_REPLACED);packages.addDataScheme("package");
         context.registerReceiver(new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){reload();}},packages,Context.RECEIVER_NOT_EXPORTED);
         reload();
     }
     public static synchronized void onReload(Runnable listener){listeners.add(listener);}
+    public static synchronized void removeOnReload(Runnable listener){listeners.remove(listener);}
+    public static boolean ready(){return ready;}
     /** The resume hook reads memory and queues work only; no Binder or decoding under WM locks. */
     public static void started(String pkg){
         Handler queue=worker;
@@ -44,16 +49,26 @@ public final class IconAssets {
             catch(Exception failure){android.util.Log.w("NcIconAssets","launch generation failed: "+pkg,failure);}
         });
     }
-    private static void reload(){int request=epoch.incrementAndGet();worker.post(()->{
+    private static void reload(){int request=epoch.incrementAndGet();worker.post(()->reload(request,0));}
+    private static void reload(int request,int attempt){
+        if(request!=epoch.get())return;
         try{
             Bundle config=host.getContentResolver().call(IconLayerStore.URI,"read",null,null);
-            if(config==null)return;
+            if(config==null)throw new IllegalStateException("icon config not ready");
+            if(config.getBoolean("enabled")&&(config.getStringArrayList("targets")==null||config.getStringArrayList("targets").isEmpty()))
+                throw new IllegalStateException("icon targets not ready");
             if(load(host,config,()->request!=epoch.get())){
+                android.util.Log.i("NcIconAssets","loaded host="+host.getPackageName()+" entries="+snapshot.entries.size()+" failures="+snapshot.failures);
                 List<Runnable> callbacks;synchronized(IconAssets.class){callbacks=List.copyOf(listeners);}
                 for(Runnable callback:callbacks)try{callback.run();}catch(RuntimeException ignored){}
             }
-        }catch(Exception failure){android.util.Log.w("NcIconAssets","reload failed",failure);}
-    });}
+        }catch(Exception failure){
+            android.util.Log.w("NcIconAssets","reload failed attempt="+attempt,failure);
+            // Boot providers and LauncherApps can become usable after the first request.
+            // Keep the last snapshot; bounded retries are superseded by a newer refresh.
+            if(request==epoch.get()&&attempt<5)worker.postDelayed(()->reload(request,attempt+1),250L<<attempt);
+        }
+    }
 
     static boolean load(Context c,Bundle config,BooleanSupplier stale) {
         String generation=config.getString("generation","");int demo=config.getInt("mode");
@@ -84,7 +99,7 @@ public final class IconAssets {
             }
         }
         if(stale.getAsBoolean())return false;
-        snapshot=new Snapshot(Map.copyOf(entries),generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));return true;
+        snapshot=new Snapshot(Map.copyOf(entries),generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));ready=true;return true;
     }
     static Snapshot snapshot(){return snapshot;}
 

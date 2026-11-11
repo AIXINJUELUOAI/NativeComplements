@@ -18,8 +18,27 @@ final class ShareWindow {
         ActivityOptions.class.getDeclaredMethod("setLaunchWindowingMode",int.class).invoke(copy,5);
         copy.setLaunchBounds(new Rect(bounds));return copy;
     }
+    // Also runs only in system_server after install() preflights these API37 members.
+    @android.annotation.SuppressLint({"BlockedPrivateApi","SoonBlockedPrivateApi"})
+    static ActivityOptions installerOptions(ActivityOptions original)throws Exception{
+        ActivityOptions copy=original==null?ActivityOptions.makeBasic():(ActivityOptions)
+            ActivityOptions.class.getDeclaredMethod("fromBundle",Bundle.class).invoke(null,original.toBundle());
+        ActivityOptions.class.getDeclaredMethod("setLaunchWindowingMode",int.class).invoke(copy,1);
+        copy.setLaunchBounds(null);
+        ActivityOptions.class.getDeclaredMethod("setLaunchTaskId",int.class).invoke(copy,-1);
+        ActivityOptions.class.getDeclaredMethod("setLaunchRootTask",Class.forName("android.window.WindowContainerToken")).invoke(copy,new Object[]{null});
+        ActivityOptions.class.getDeclaredMethod("setLaunchTaskFragmentToken",android.os.IBinder.class).invoke(copy,new Object[]{null});
+        return copy;
+    }
+    static boolean installerIntent(Intent intent){
+        return intent!=null&&("application/vnd.android.package-archive".equalsIgnoreCase(intent.getType())
+            ||"android.intent.action.INSTALL_PACKAGE".equals(intent.getAction())
+            ||"android.content.pm.action.CONFIRM_INSTALL".equals(intent.getAction()));
+    }
     static boolean eligibleIntent(Intent intent,boolean chooser){
         if(intent==null)return false;
+        // Installers also arrive as VIEW(content://..., APK MIME), not only INSTALL_PACKAGE.
+        if(installerIntent(intent))return false;
         String action=intent.getAction();
         if(intent.hasCategory(Intent.CATEGORY_HOME)||Intent.ACTION_CHOOSER.equals(action)
             ||Intent.ACTION_OPEN_DOCUMENT.equals(action)||Intent.ACTION_OPEN_DOCUMENT_TREE.equals(action)
@@ -53,6 +72,9 @@ final class ShareWindow {
             a.method(android.content.pm.PackageManager.class,"getPermissionControllerPackageName");
             a.method(ActivityOptions.class,"fromBundle",Bundle.class);
             a.method(ActivityOptions.class,"getLaunchWindowingMode");a.method(ActivityOptions.class,"setLaunchWindowingMode",int.class);
+            a.method(ActivityOptions.class,"setLaunchTaskId",int.class);
+            a.method(ActivityOptions.class,"setLaunchRootTask",Class.forName("android.window.WindowContainerToken",false,loader));
+            a.method(ActivityOptions.class,"setLaunchTaskFragmentToken",android.os.IBinder.class);
             java.lang.reflect.Field starting=a.field(starter,"mStartActivity");
             Method targetTask=a.method(starter,"computeTargetTask");
             if(targetTask.getReturnType()!=a.task)throw new NoSuchMethodException("handoff target task");
@@ -73,7 +95,10 @@ final class ShareWindow {
             handles.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 WindowEngine.ShareLaunch selected=null;
                 if(chain.getArg(6)==null&&chain.getArg(7)==null){
-                    try{selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(10));}
+                    try{
+                        selected=engine.prepareInstaller(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(10));
+                        if(selected==null)selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(10));
+                    }
                     catch(Exception error){log.accept("SHARE_WINDOW_NATIVE "+FrameworkAccess.reason(error));}
                 }
                 if(selected==null)return chain.proceed();

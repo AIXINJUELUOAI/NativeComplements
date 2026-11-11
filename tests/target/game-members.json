@@ -1,0 +1,27 @@
+{
+  "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972",
+  "classes": {
+    "Lcom/android/systemui/qs/tileimpl/QSFactoryImpl;": {
+      "dex": "classes2.dex",
+      "methods": [
+        {
+          "name": "createTile",
+          "descriptor": "(Ljava/lang/String;)Lcom/android/systemui/plugins/qs/QSTile;"
+        }
+      ]
+    },
+    "Lcom/android/systemui/qs/tileimpl/QSTileImpl;": {
+      "dex": "classes2.dex",
+      "methods": [
+        {
+          "name": "click",
+          "descriptor": "(Lcom/android/systemui/animation/Expandable;)V"
+        },
+        {
+          "name": "setTileSpec",
+          "descriptor": "(Ljava/lang/String;)V"
+        }
+      ]
+    }
+  }
+}

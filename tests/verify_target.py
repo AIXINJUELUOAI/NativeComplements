@@ -29,6 +29,15 @@ for cls,sections in checks.items():
    total+=1
 print(f'PASS: {total} exact API37 members from archived target artifacts; current-device behavior remains unverified')
 
+game=json.loads((root/'tests/target/game-members.json').read_text())
+assert game['sha256']=='a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972'
+for cls,name,sig in [
+ ('Lcom/android/systemui/qs/tileimpl/QSFactoryImpl;','createTile','(Ljava/lang/String;)Lcom/android/systemui/plugins/qs/QSTile;'),
+ ('Lcom/android/systemui/qs/tileimpl/QSTileImpl;','click','(Lcom/android/systemui/animation/Expandable;)V'),
+ ('Lcom/android/systemui/qs/tileimpl/QSTileImpl;','setTileSpec','(Ljava/lang/String;)V')]:
+ assert any(m['name']==name and m['descriptor']==sig for m in game['classes'][cls]['methods']),(cls,name,sig)
+print('PASS: exact native recording-tile adapter signatures from device SystemUI archive')
+
 # Native notification creators may launch another package; correlate the original sender binder.
 requests=json.loads((root/'tests/target/window-request-members.json').read_text())['classes']
 assert any(m['name']=='getTarget' and m['descriptor']=='()Landroid/content/IIntentSender;'
@@ -116,6 +125,9 @@ for cls,name,sig in [
  ('Landroid/app/ActivityOptions;','fromBundle','(Landroid/os/Bundle;)Landroid/app/ActivityOptions;'),
  ('Landroid/app/ActivityOptions;','setLaunchWindowingMode','(I)V'),
  ('Landroid/app/ActivityOptions;','getLaunchWindowingMode','()I'),
+ ('Landroid/app/ActivityOptions;','setLaunchTaskId','(I)V'),
+ ('Landroid/app/ActivityOptions;','setLaunchRootTask','(Landroid/window/WindowContainerToken;)Landroid/app/ActivityOptions;'),
+ ('Landroid/app/ActivityOptions;','setLaunchTaskFragmentToken','(Landroid/os/IBinder;)Landroid/app/ActivityOptions;'),
  ('Landroid/view/InsetsState;','setDisplayFrame','(Landroid/graphics/Rect;)V'),
  ('Landroid/view/InsetsState;','setDisplayCutout','(Landroid/view/DisplayCutout;)V'),
  ('Landroid/view/InsetsSource;','setVisible','(Z)Landroid/view/InsetsSource;')]:

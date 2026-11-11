@@ -11,7 +11,7 @@ final class WindowNavigation {
     /** One explicit native PendingIntent send; matched by its binder, never by recent-task order. */
     static final class Launch {
         final long generation;
-        final String hint, expectedPackage;
+        final String hint, expectedPackage, foregroundPackage;
         final int userId;
         final IBinder sender;
         final long sentAt;
@@ -20,9 +20,10 @@ final class WindowNavigation {
         volatile String targetPackage;
         volatile boolean dispatched;
 
-        Launch(long generation, String hint, String expectedPackage, int userId, IBinder sender, long sentAt) {
+        Launch(long generation, String hint, String expectedPackage, int userId, IBinder sender, long sentAt,
+               String foregroundPackage) {
             this.generation=generation;this.hint=hint;this.expectedPackage=expectedPackage;
-            this.userId=userId;this.sender=sender;this.sentAt=sentAt;
+            this.userId=userId;this.sender=sender;this.sentAt=sentAt;this.foregroundPackage=foregroundPackage;
         }
 
         boolean accepts(long current, IBinder originatingSender, Object sourceTask) {
@@ -33,6 +34,10 @@ final class WindowNavigation {
         boolean targetAllowed(String pkg, int user) {
             return user==userId && Wire.allowedPackage(pkg)
                 && (expectedPackage==null || expectedPackage.equals(pkg));
+        }
+
+        boolean keepNativeForeground() {
+            return expectedPackage==null && (foregroundPackage==null || foregroundPackage.equals(targetPackage));
         }
     }
 }

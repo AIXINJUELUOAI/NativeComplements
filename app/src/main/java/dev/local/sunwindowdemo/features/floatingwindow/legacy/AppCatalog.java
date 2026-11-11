@@ -37,6 +37,11 @@ final class AppCatalog {
         icon.draw(new Canvas(bitmap));icon.setBounds(before);
         return raster(c,new AdaptiveIconDrawable(new ColorDrawable(Color.WHITE),new InsetDrawable(new BitmapDrawable(c.getResources(),bitmap),.18f)));
     }
+    static Drawable icon(Context c,String pkg,Drawable original){
+        if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return new ColorDrawable(Color.TRANSPARENT);
+        Drawable adapted=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(c,pkg);
+        return normalized(c,adapted!=null?adapted:original);
+    }
     private static Drawable raster(Context c,Drawable icon){
         Bitmap bitmap=Bitmap.createBitmap(192,192,Bitmap.Config.ARGB_8888);
         Rect saved=new Rect(icon.getBounds());int alpha=icon.getAlpha();
@@ -51,7 +56,7 @@ final class AppCatalog {
         for (var activity : launcher.getActivityList(null,android.os.Process.myUserHandle())) {
             String pkg = activity.getComponentName().getPackageName();
             if (pkg.equals(Wire.PKG) || !seen.add(pkg)) continue;
-            try { result.add(new App(pkg, activity.getLabel().toString(), normalized(c,activity.getIcon(c.getResources().getDisplayMetrics().densityDpi)))); }
+            try { result.add(new App(pkg, activity.getLabel().toString(), icon(c,pkg,activity.getIcon(c.getResources().getDisplayMetrics().densityDpi)))); }
             catch (RuntimeException ignored) { }
         }
         result.sort(Comparator.comparing((App a)->a.section.equals("#")?"~"+a.sortKey:a.sortKey)

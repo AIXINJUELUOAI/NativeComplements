@@ -2,6 +2,15 @@ package dev.local.sunwindowdemo;
 
 /** Shared, framework-independent geometry and orientation decisions. */
 final class WindowPolicy {
+    static boolean entryBusy(boolean animating,int relativeRotation){return animating||relativeRotation!=0;}
+    static boolean morphEntry(boolean delegated,boolean focused,boolean visible,int mode){return !delegated&&focused&&visible&&mode==1;}
+    static String failureMessage(String report){
+        String first=report==null?"":report.split("\n",2)[0];
+        if(first.contains("等待当前任务转场")||first.contains("桌面转场尚未结束"))return "系统转场尚未结束，请稍后重试";
+        if(first.contains("默认窗已被占用"))return "请先关闭当前默认小窗";
+        if(first.contains("先解锁"))return "请先解锁屏幕";
+        return "小窗操作未完成，请稍后重试";
+    }
     static boolean mayRestoreNormalFocus(int type,boolean dimmed,int mode){
         // Standard full-screen app windows may change underneath a normal window.
         // System/IME overlays, modal dialogs, PiP and other freeform windows win.
@@ -28,10 +37,6 @@ final class WindowPolicy {
     }
     static boolean currentLandscape(int orientation,int request,boolean fallback){
         return orientation==2 || orientation!=1&&landscape(request,fallback);
-    }
-    static int handleColor(boolean horizontal,int appearance,boolean night){
-        if(horizontal)return 0xfff0f2f2;
-        return (appearance>=0?(appearance&16)==0:night)?0xfff0f2f2:0xff303234;
     }
     static int clientMode(String pkg){return "com.tencent.mm".equals(pkg)?5:1;}
     static boolean landscape(int requested,boolean previous){

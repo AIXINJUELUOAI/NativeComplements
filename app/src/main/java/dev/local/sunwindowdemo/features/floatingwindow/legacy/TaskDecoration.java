@@ -2,28 +2,17 @@ package dev.local.sunwindowdemo;
 
 import android.graphics.Rect;
 import android.view.SurfaceControl;
-import java.util.List;
 
-/** Small color layer, submitted with the task's pending transaction, never a full-screen window. */
+/** Fixed SunOS handle and a non-interactive backdrop below its task, in one transaction. */
 final class TaskDecoration {
+    private static final int EDGE_BAR_COLOR=0xfff0f2f2;
+    private float dimAmount=Config.DEFAULT_WINDOW_DIM/100f;
+    void dimAmount(int percent){dimAmount=Rules.clamp(percent,0,100)/100f;}
     private final FrameworkAccess a;
-    private SurfaceControl bar;
+    private SurfaceControl bar,dim;
     private boolean drawn;
     private int color;
-    private Boolean backgroundDark;
-    void backgroundDark(boolean dark){backgroundDark=dark;}
-    int color(){return color==0?0xfff0f2f2:color;}
-    private int resolveColor(Object task,boolean horizontal){
-        if(horizontal)return WindowPolicy.handleColor(true,-1,false);
-        if(backgroundDark!=null)return WindowPolicy.handleColor(false,-1,backgroundDark);
-        int appearance=-1;boolean night=true;
-        try{Object display=a.call(task,"getDisplayContent");
-            Object window=a.field(a.call(display,"getDisplayPolicy"),"mTopFullscreenOpaqueWindowState");
-            if(window!=null&&a.call(window,"getTask")==task)window=null;
-            if(window!=null)appearance=(Integer)a.field(a.field(a.field(window,"mAttrs"),"insetsFlags"),"appearance");
-        }catch(Exception ignored){}
-        return WindowPolicy.handleColor(false,appearance,night);
-    }
+    int color(){return EDGE_BAR_COLOR;}
     private Rect parentBounds;
     TaskDecoration(FrameworkAccess access){a=access;}
     static void preflight(FrameworkAccess a) throws Exception {
@@ -46,6 +35,13 @@ final class TaskDecoration {
         a.method(w,"isDrawn");a.method(w,"isVisible");
     }
     private void tx(Object t,String name,Class<?>[] types,Object... args) throws Exception {a.call(t,name,types,args);}
+    private SurfaceControl layer(Object parent,String name)throws Exception{
+        Object builder=Class.forName("android.view.SurfaceControl$Builder").getDeclaredConstructor().newInstance();
+        a.call(builder,"setName",new Class<?>[]{String.class},name);
+        a.call(builder,"setParent",new Class<?>[]{SurfaceControl.class},a.field(parent,"mSurfaceControl"));
+        a.call(builder,"setColorLayer");a.call(builder,"setHidden",new Class<?>[]{boolean.class},true);
+        return (SurfaceControl)a.call(builder,"build");
+    }
     /** Reapply native sibling ordering after Shell playback; never invent a topmost Z. */
     void order(Object task,Object parent,Object t) throws Exception {
         Object controller=a.field(task,"mTransitionController");
@@ -57,25 +53,23 @@ final class TaskDecoration {
         a.finishLayers.invoke(null,parent,t);
     }
     boolean update(Object task,Object parent,Geometry.Placement p,float density,boolean landscape,float alpha,boolean structural) throws Exception {
-        Object t=a.transaction(task);
+        return update(task,parent,p,density,landscape,alpha,alpha,structural,a.transaction(task));
+    }
+    boolean update(Object task,Object parent,Geometry.Placement p,float density,boolean landscape,float alpha,float dimAlpha,boolean structural,Object t) throws Exception {
         if(structural||parentBounds==null){
             order(task,parent,t);
             Object win=a.call(task,"getTopVisibleAppMainWindow");
             drawn=win!=null&&a.bool(win,"isDrawn")&&a.bool(win,"isVisible");
             parentBounds=new Rect((Rect)a.call(parent,"getBounds"));
         }
-        if(!drawn||alpha<=0){if(bar!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},bar);return drawn;}
-        SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl");
-        if(bar==null){
-            Object builder=Class.forName("android.view.SurfaceControl$Builder").getDeclaredConstructor().newInstance();
-            a.call(builder,"setName",new Class<?>[]{String.class},"SunWindow-handle");
-            a.call(builder,"setParent",new Class<?>[]{SurfaceControl.class},a.field(parent,"mSurfaceControl"));
-            a.call(builder,"setColorLayer");a.call(builder,"setHidden",new Class<?>[]{boolean.class},true);
-            bar=(SurfaceControl)a.call(builder,"build");
-
+        if(!drawn||alpha<=0&&dimAlpha<=0){
+            if(bar!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},bar);
+            if(dim!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},dim);
+            return drawn;
         }
-        int nextColor=resolveColor(task,landscape);
-        if(color!=nextColor){color=nextColor;tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,
+        SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl");
+        if(bar==null)bar=layer(parent,"SunWindow-handle");
+        if(color!=EDGE_BAR_COLOR){color=EDGE_BAR_COLOR;tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,
             new float[]{((color>>16)&255)/255f,((color>>8)&255)/255f,(color&255)/255f});}
         MotionStyle.Bar b=MotionStyle.bar(p.scale());
         float length=b.length()*density,thickness=b.thickness()*density,gap=b.margin()*density;
@@ -89,17 +83,38 @@ final class TaskDecoration {
         tx(t,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},bar,thickness/2);
         tx(t,"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},bar,Math.max(0,Math.min(1,alpha)));
         tx(t,"show",new Class<?>[]{SurfaceControl.class},bar);
+        // Keep the dim layer below the task, preserving its brightness and
+        // leaving native system/IME windows above it.
+        if(dim==null){
+            dim=layer(parent,"NativeComplements-dimmer");
+            tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},dim,new float[]{0,0,0});
+        }
+        tx(t,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},dim,surface,-1);
+        tx(t,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},dim,0f,0f);
+        tx(t,"setWindowCrop",new Class<?>[]{SurfaceControl.class,int.class,int.class},dim,parentBounds.width(),parentBounds.height());
+        tx(t,"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},dim,dimAmount*Math.max(0,Math.min(1,dimAlpha)));
+        tx(t,"show",new Class<?>[]{SurfaceControl.class},dim);
         return true;
     }
-    void hide(Object task) throws Exception {if(bar!=null)tx(a.transaction(task),"hide",new Class<?>[]{SurfaceControl.class},bar);}
+    void hide(Object task) throws Exception {
+        Object t=a.transaction(task);
+        if(bar!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},bar);
+        if(dim!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},dim);
+    }
     void remove(Object task) throws Exception {
         if(bar!=null){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},bar);bar.release();bar=null;color=0;}
+        if(dim!=null){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},dim);dim.release();dim=null;}
     }
     void dispose(){
-        if(bar==null)return;
+        if(bar==null&&dim==null)return;
         try(SurfaceControl.Transaction t=new SurfaceControl.Transaction()){
-            tx(t,"remove",new Class<?>[]{SurfaceControl.class},bar);t.apply();
-        }catch(Exception ignored){}finally{bar.release();bar=null;}
+            if(bar!=null)tx(t,"remove",new Class<?>[]{SurfaceControl.class},bar);
+            if(dim!=null)tx(t,"remove",new Class<?>[]{SurfaceControl.class},dim);
+            t.apply();
+        }catch(Exception ignored){}finally{
+            if(bar!=null){bar.release();bar=null;color=0;}
+            if(dim!=null){dim.release();dim=null;}
+        }
     }
     /** Undo our relative-layer override using current WM ordering after restoration. */
     void restoreLayer(Object task) throws Exception {
