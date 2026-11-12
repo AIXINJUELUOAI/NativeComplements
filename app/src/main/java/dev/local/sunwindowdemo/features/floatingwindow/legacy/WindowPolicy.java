@@ -7,8 +7,8 @@ final class WindowPolicy {
         return before!=null&&before==target&&beforePackage!=null&&beforePackage.equals(targetPackage)
             &&beforeUser==targetUser&&beforeDisplay!=null&&beforeDisplay==targetDisplay&&mode==1&&!owned;
     }
-    static boolean autoMini(boolean different,boolean sameToken,String previousForm,boolean validMini){
-        return different&&!sameToken&&"normal".equals(previousForm)&&!validMini;
+    static boolean autoMini(boolean enabled,boolean different,boolean sameToken,String previousForm,boolean validMini){
+        return enabled&&different&&!sameToken&&"normal".equals(previousForm)&&!validMini;
     }
     static boolean entryBusy(boolean animating,int relativeRotation){return animating||relativeRotation!=0;}
     static boolean morphEntry(boolean delegated,boolean focused,boolean visible,int mode){return !delegated&&focused&&visible&&mode==1;}

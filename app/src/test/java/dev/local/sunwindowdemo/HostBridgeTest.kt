@@ -70,6 +70,37 @@ class HostBridgeTest {
         assertFalse(WindowPreferenceStore(context).read().doubleClose)
     }
 
+    @Test fun autoMinimizeDefaultsOnAndPersistsThroughProviderSnapshotAndHostHeartbeat() {
+        val store = WindowPreferenceStore(context)
+        store.preferences.edit().remove("autoMinimizeOnOpen").commit()
+        assertTrue(store.read().autoMinimizeOnOpen)
+        val provider = Robolectric.buildContentProvider(ConfigProvider::class.java).create().get()
+        val destination = context.getSharedPreferences("auto-mini-host-test", 0)
+        val host = object : android.content.ContextWrapper(context) {
+            override fun getPackageName() = "com.android.systemui"
+        }
+        try {
+            for (enabled in listOf(false, true)) {
+                store.boolean("autoMinimizeOnOpen", enabled)
+                assertEquals(enabled, WindowPreferenceStore(context).read().autoMinimizeOnOpen)
+                val snapshot = requireNotNull(provider.call("read", null, null))
+                assertEquals(enabled, snapshot.getBoolean("autoMinimizeOnOpen", !enabled))
+                ConfigProvider.copy(snapshot, destination)
+                dev.local.sunwindowdemo.Config.hostPreferences = destination
+                assertEquals(enabled, dev.local.sunwindowdemo.Config(host).autoMinimizeOnOpen())
+                for (op in listOf("STATUS", "OPEN")) {
+                    if (op == "OPEN") Wire.openApp(host, "example.app", false) else Wire.send(host, op)
+                    val request = shadowOf(context.applicationContext as android.app.Application).broadcastIntents.last()
+                    assertEquals(enabled, request.getBooleanExtra("autoMinimizeOnOpen", !enabled))
+                }
+                dev.local.sunwindowdemo.Config.hostPreferences = null
+            }
+            ConfigProvider.copy(Bundle(), destination)
+            dev.local.sunwindowdemo.Config.hostPreferences = destination
+            assertTrue(dev.local.sunwindowdemo.Config(host).autoMinimizeOnOpen())
+        } finally { dev.local.sunwindowdemo.Config.hostPreferences = null }
+    }
+
     @Test fun windowDimPersistsClampsAndTravelsThroughTheHostSnapshotAndCommand() {
         val store = WindowPreferenceStore(context)
         store.preferences.edit().remove("windowDim").commit()

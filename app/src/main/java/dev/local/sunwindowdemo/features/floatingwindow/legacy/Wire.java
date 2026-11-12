@@ -97,7 +97,7 @@ final class Wire {
             i.putExtra("hostReady",SystemUiHost.live!=null&&SystemUiHost.live.ready()).putExtra("lastTouch",SystemUiHost.lastTouch)
                 .putExtra("landscapeShareWindow",config.enabled()&&config.landscapeShareWindow())
                 .putExtra("endOnClose",config.endOnClose()).putExtra("keepEdgeAwake",config.enabled()&&config.keepEdgeAwake())
-                .putExtra("windowDim",config.windowDim());
+                .putExtra("windowDim",config.windowDim()).putExtra("autoMinimizeOnOpen",config.autoMinimizeOnOpen());
         }
         Bundle b = new Bundle(); b.putBinder("lease", LEASE); if(listener!=null)b.putBinder("frameChannel",FRAMES); i.putExtras(b);
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());

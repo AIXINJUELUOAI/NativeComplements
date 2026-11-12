@@ -40,6 +40,7 @@ final class WindowEngine {
     private long uiSeen;
     private boolean uiReady;
     private volatile boolean landscapeShareWindow,endOnClose,keepEdgeAwake;
+    private volatile boolean autoMinimizeOnOpen=true;
     private WindowContinuation continuation;
     private boolean continuationReady;
     void continuationReady(){continuationReady=true;}
@@ -315,6 +316,7 @@ final class WindowEngine {
                             uiLease=extras.getBinder("lease");uiSeen=SystemClock.elapsedRealtime();
                             uiReady=i.getBooleanExtra("hostReady",false);
                             landscapeShareWindow=i.getBooleanExtra("landscapeShareWindow",false);
+                            autoMinimizeOnOpen=i.getBooleanExtra("autoMinimizeOnOpen",true);
                             endOnClose=i.getBooleanExtra("endOnClose",false);keepEdgeAwake=i.getBooleanExtra("keepEdgeAwake",false);
                             windowDim=Rules.clamp(i.getIntExtra("windowDim",Config.DEFAULT_WINDOW_DIM),0,100);
                             handler.post(WindowEngine.this::updateContinuation);
@@ -1368,7 +1370,7 @@ final class WindowEngine {
         if("mini".equals(previous.frame)){
             previous.parked=false;previous.opacity=1;pinned=previous;renderFrame(previous);return;
         }
-        if(WindowPolicy.autoMini(previous!=next,previous.token.equals(next.token),previous.frame,
+        if(WindowPolicy.autoMini(autoMinimizeOnOpen,previous!=next,previous.token.equals(next.token),previous.frame,
             pinned!=null&&pinned!=previous&&live(pinned)&&"mini".equals(pinned.frame))){
             if(pinned!=null&&pinned!=previous)finishGroup(pinned,false,"清理失效迷你窗");
             endCover(previous);

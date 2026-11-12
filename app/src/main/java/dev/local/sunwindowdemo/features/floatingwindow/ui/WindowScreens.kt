@@ -53,6 +53,7 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, num
     SettingsGroup {
         ToggleRow("应用间跳转小窗打开", value = p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
         ToggleRow("通知小窗打开", value = p.notificationWindow) { boolean("notificationWindow", it) }
+        ToggleRow("新开小窗时自动最小化", value = p.autoMinimizeOnOpen) { boolean("autoMinimizeOnOpen", it) }
         ToggleRow("双击空白处关闭", value = p.doubleClose) { boolean("doubleClose", it) }
         ToggleRow("贴边锁屏继续运行", value = p.keepEdgeAwake) { boolean("keepEdgeAwake", it) }
         ToggleRow("关闭小窗时结束应用", value = p.endOnClose) { boolean("endOnClose", it) }

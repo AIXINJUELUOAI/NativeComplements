@@ -26,6 +26,8 @@ public final class Config {
     boolean landscapeOff() { return prefs.getBoolean("landscape", true); }
     boolean keyboardOff() { return prefs.getBoolean("keyboard", true); }
     boolean hideRecents() { return prefs.getBoolean("hideRecents", false); }
+    // Keep the 0.9.7 automatic-mini behavior for existing installations without this key.
+    boolean autoMinimizeOnOpen() { return prefs.getBoolean("autoMinimizeOnOpen", true); }
     boolean endOnClose() { return prefs.getBoolean("endOnClose", false); }
     boolean keepEdgeAwake() { return prefs.getBoolean("keepEdgeAwake", false); }
     boolean doubleClose() { return prefs.getBoolean("doubleClose", false); }

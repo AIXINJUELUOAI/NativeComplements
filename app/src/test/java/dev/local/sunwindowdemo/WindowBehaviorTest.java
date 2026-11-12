@@ -63,11 +63,31 @@ public class WindowBehaviorTest {
         Field f=TaskDecoration.class.getDeclaredField("dim");f.setAccessible(true);assertNull(f.get(from));assertSame(dim,f.get(to));
     }
     @Test public void newDefaultOnlyMinimizesADifferentGroupWhenMiniSlotIsEmpty(){
-        assertTrue(WindowPolicy.autoMini(true,false,"normal",false));
-        assertFalse(WindowPolicy.autoMini(false,false,"normal",false));
-        assertFalse(WindowPolicy.autoMini(true,true,"normal",false));
-        assertFalse(WindowPolicy.autoMini(true,false,"normal",true));
-        assertFalse(WindowPolicy.autoMini(true,false,"mini",false));
+        assertTrue(WindowPolicy.autoMini(true,true,false,"normal",false));
+        assertFalse(WindowPolicy.autoMini(false,true,false,"normal",false));
+        assertFalse(WindowPolicy.autoMini(true,false,false,"normal",false));
+        assertFalse(WindowPolicy.autoMini(true,true,true,"normal",false));
+        assertFalse(WindowPolicy.autoMini(true,true,false,"normal",true));
+        assertFalse(WindowPolicy.autoMini(true,true,false,"mini",false));
+    }
+    @Test public void disabledAutoMiniUsesReplacementButSameTokenIsUntouched()throws Exception{
+        WindowEngine engine=new WindowEngine(null,message->{});
+        set(engine,"lock",new Object());set(engine,"handler",new android.os.Handler(android.os.Looper.getMainLooper()));
+        set(engine,"autoMinimizeOnOpen",false);
+        Class<?> type=Class.forName(WindowEngine.class.getName()+"$Session");
+        var constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
+        Object previous=constructor.newInstance(),next=constructor.newInstance();
+        set(previous,"token","same");set(next,"token","same");set(previous,"frame","normal");
+        var settle=WindowEngine.class.getDeclaredMethod("settleNewDefault",type,type);settle.setAccessible(true);
+        var restoring=type.getDeclaredField("restoring");restoring.setAccessible(true);
+        settle.invoke(engine,previous,next);
+        assertFalse(restoring.getBoolean(previous));
+        set(next,"token","different");settle.invoke(engine,previous,next);
+        assertTrue(restoring.getBoolean(previous));
+        var frame=type.getDeclaredField("frame");frame.setAccessible(true);
+        assertEquals("normal",frame.get(previous));
+        var reason=type.getDeclaredField("recoveryReason");reason.setAccessible(true);
+        assertEquals("替换默认窗",reason.get(previous));
     }
     @Test public void fullscreenExceptionRequiresExactPrelaunchTaskUserDisplayAndOwnership(){
         Object task=new Object(),display=new Object();
