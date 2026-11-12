@@ -492,8 +492,15 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     String notificationForegroundPackage(){
         try{
-            var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(1);
-            return tasks.isEmpty()||tasks.get(0).topActivity==null?null:tasks.get(0).topActivity.getPackageName();
+            var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(2);
+            if(tasks.isEmpty())return null;
+            // Skip the current floating window task to get the real fullscreen foreground app
+            for(var task:tasks){
+                if(task.topActivity==null)continue;
+                if(activeTask>0&&task.taskId==activeTask)continue; // Skip floating window
+                return task.topActivity.getPackageName();
+            }
+            return null;
         }catch(RuntimeException unavailable){return null;}
     }
     void openNotification(android.service.notification.StatusBarNotification notice,android.app.PendingIntent pending,Intent fill){
