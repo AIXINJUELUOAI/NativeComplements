@@ -1,0 +1,5449 @@
+{
+  "schema_version": 1,
+  "artifact": {
+    "path": "verification/split-shade-device/SystemUI.apk",
+    "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
+  },
+  "classes": {
+    "Lcom/android/settingslib/graph/SignalDrawable;": {
+      "dex": "classes.dex",
+      "superclass": "Landroid/graphics/drawable/DrawableWrapper;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "$r8$clinit",
+          "type": "I",
+          "access_flags": 4121
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mAnimating",
+          "type": "Z",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mAttributionPath",
+          "type": "Landroid/graphics/Path;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mAttributionScaleMatrix",
+          "type": "Landroid/graphics/Matrix;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mChangeDot",
+          "type": "Lcom/android/settingslib/graph/SignalDrawable$1;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mCurrentDot",
+          "type": "I",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mCutoutPath",
+          "type": "Landroid/graphics/Path;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mForegroundPaint",
+          "type": "Landroid/graphics/Paint;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mForegroundPath",
+          "type": "Landroid/graphics/Path;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mHandler",
+          "type": "Landroid/os/Handler;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mScaledAttributionPath",
+          "type": "Landroid/graphics/Path;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "mTransparentPaint",
+          "type": "Landroid/graphics/Paint;",
+          "access_flags": 17
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "<init>",
+          "descriptor": "(Landroid/content/Context;)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "<init>",
+          "descriptor": "(Landroid/content/Context;Landroid/os/Handler;)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "getState",
+          "descriptor": "(IIZ)I",
+          "access_flags": 9
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "draw",
+          "descriptor": "(Landroid/graphics/Canvas;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "drawDotAndPadding",
+          "descriptor": "(FFFFI)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "equals",
+          "descriptor": "(Ljava/lang/Object;)Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "hashCode",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "isInState",
+          "descriptor": "(I)Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "onBoundsChange",
+          "descriptor": "(Landroid/graphics/Rect;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "onLevelChange",
+          "descriptor": "(I)Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "setAlpha",
+          "descriptor": "(I)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "setColorFilter",
+          "descriptor": "(Landroid/graphics/ColorFilter;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "setTintList",
+          "descriptor": "(Landroid/content/res/ColorStateList;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "setVisible",
+          "descriptor": "(ZZ)Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "unpackLevel",
+          "descriptor": "(I)I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "updateAnimation",
+          "descriptor": "()V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+          "name": "updateScaledAttributionPath",
+          "descriptor": "()V",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;": {
+      "dex": "classes2.dex",
+      "superclass": "Landroid/telephony/TelephonyCallback;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "$$this$callbackFlow",
+          "type": "Lkotlinx/coroutines/channels/ProducerScope;",
+          "access_flags": 4113
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "$logger",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+          "access_flags": 4113
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "$this_run",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "access_flags": 4113
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "<init>",
+          "descriptor": "(Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;Lkotlinx/coroutines/channels/ProducerScope;)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onCarrierNetworkChange",
+          "descriptor": "(Z)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onCarrierRoamingNtnModeChanged",
+          "descriptor": "(Z)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onCarrierRoamingNtnSignalStrengthChanged",
+          "descriptor": "(Landroid/telephony/satellite/NtnSignalStrength;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onDataActivity",
+          "descriptor": "(I)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onDataConnectionStateChanged",
+          "descriptor": "(II)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onDataEnabledChanged",
+          "descriptor": "(ZI)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onDisplayInfoChanged",
+          "descriptor": "(Landroid/telephony/TelephonyDisplayInfo;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onServiceStateChanged",
+          "descriptor": "(Landroid/telephony/ServiceState;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+          "name": "onSignalStrengthsChanged",
+          "descriptor": "(Landroid/telephony/SignalStrength;)V",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;": {
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "allowNetworkSliceIndicator",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "bgDispatcher",
+          "type": "Lkotlinx/coroutines/CoroutineDispatcher;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "callbackEvents",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "carrierId",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "carrierName",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "carrierNetworkChangeActive",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "cdmaLevel",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "cdmaRoaming",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "context",
+          "type": "Landroid/content/Context;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "dataActivityDirection",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "dataConnectionState",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "dataEnabled",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "hasPrioritizedNetworkCapabilities",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "inflateSignalStrength",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isAllowedDuringAirplaneMode",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isEmergencyOnly",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isGsm",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isInService",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isNonTerrestrial",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isRoaming",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "mobileMappingsProxy",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/util/MobileMappingsProxyImpl;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "networkName",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "networkSliceRequest",
+          "type": "Landroid/net/NetworkRequest;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "numberOfLevels",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "operatorAlphaShort",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "primaryLevel",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "resolvedNetworkType",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "satelliteLevel",
+          "type": "Lkotlinx/coroutines/flow/ReadonlyStateFlow;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "subId",
+          "type": "I",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "tableLogBuffer",
+          "type": "Lcom/android/systemui/log/table/TableLogBuffer;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "telephonyManager",
+          "type": "Landroid/telephony/TelephonyManager;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "telephonyPollingEvent",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$special$$inlined$map$16;",
+          "access_flags": 1
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getAllowNetworkSliceIndicator",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getCarrierId",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getCarrierName",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getCarrierNetworkChangeActive",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getCdmaLevel",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getCdmaRoaming",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getDataActivityDirection",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getDataConnectionState",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getDataEnabled",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getHasPrioritizedNetworkCapabilities",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getInflateSignalStrength",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getNetworkName",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getNumberOfLevels",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getOperatorAlphaShort",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getPrimaryLevel",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getResolvedNetworkType",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getSatelliteLevel",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getSubId",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "getTableLogBuffer",
+          "descriptor": "()Lcom/android/systemui/log/table/TableLogBuffer;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isAllowedDuringAirplaneMode",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isEmergencyOnly",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isGsm",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isInEcmMode",
+          "descriptor": "(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isInService",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isNonTerrestrial",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "isRoaming",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+          "name": "setDataEnabled",
+          "descriptor": "(Z)V",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;": {
+      "dex": "classes2.dex",
+      "superclass": "Landroid/telephony/TelephonyCallback;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "$$this$coalescingEvents",
+          "type": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;",
+          "access_flags": 4113
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "$logger",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+          "access_flags": 4113
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "this$0",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "access_flags": 4113
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "<init>",
+          "descriptor": "(Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onCallbackModeRestarted",
+          "descriptor": "(ILjava/time/Duration;I)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onCallbackModeStarted",
+          "descriptor": "(ILjava/time/Duration;I)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onCallbackModeStopped",
+          "descriptor": "(III)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onCarrierNetworkChange",
+          "descriptor": "(Z)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onCarrierRoamingNtnModeChanged",
+          "descriptor": "(Z)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onCarrierRoamingNtnSignalStrengthChanged",
+          "descriptor": "(Landroid/telephony/satellite/NtnSignalStrength;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onDataActivity",
+          "descriptor": "(I)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onDataConnectionStateChanged",
+          "descriptor": "(II)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onDataEnabledChanged",
+          "descriptor": "(ZI)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onDisplayInfoChanged",
+          "descriptor": "(Landroid/telephony/TelephonyDisplayInfo;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onServiceStateChanged",
+          "descriptor": "(Landroid/telephony/ServiceState;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+          "name": "onSignalStrengthsChanged",
+          "descriptor": "(Landroid/telephony/SignalStrength;)V",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;": {
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "$$delegate_0",
+          "type": "Lcom/android/systemui/util/lifecycle/kairos/KairosBuilderImpl;",
+          "access_flags": 4097
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "allowNetworkSliceIndicator",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "bgDispatcher",
+          "type": "Lkotlinx/coroutines/CoroutineDispatcher;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "callbackEvents",
+          "type": "Lcom/android/systemui/kairos/Events;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "carrierId",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "carrierName",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "carrierNetworkChangeActive",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "carrierRoamingNtnActive",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "cdmaEnhancedRoamingIndicatorDisplayNumber",
+          "type": "Lcom/android/systemui/kairos/Transactional;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "cdmaLevel",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "cdmaRoaming",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "context",
+          "type": "Landroid/content/Context;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "dataActivityDirection",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "dataConnectionState",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "dataEnabled",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "hasPrioritizedNetworkCapabilities",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "inflateSignalStrength",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isAllowedDuringAirplaneMode",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isEmergencyOnly",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isGsm",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isInEcmMode",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isInService",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isRoaming",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "mobileMappingsProxy",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/util/MobileMappingsProxyImpl;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "networkName",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "networkSliceRequest",
+          "type": "Landroid/net/NetworkRequest;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "numberOfLevels",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "operatorAlphaShort",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "primaryLevel",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "resolvedNetworkType",
+          "type": "Lcom/android/systemui/kairos/StateInit;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "satelliteLevel",
+          "type": "Lcom/android/systemui/kairos/State;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "subId",
+          "type": "I",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "tableLogBuffer",
+          "type": "Lcom/android/systemui/log/table/TableLogBuffer;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "telephonyManager",
+          "type": "Landroid/telephony/TelephonyManager;",
+          "access_flags": 1
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "telephonyPollingEvent",
+          "type": "Lcom/android/systemui/kairos/EventsInit;",
+          "access_flags": 1
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "activate",
+          "descriptor": "(Lcom/android/systemui/kairos/BuildScope;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getAllowNetworkSliceIndicator",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getCarrierId",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getCarrierName",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getCarrierNetworkChangeActive",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getCdmaLevel",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getCdmaRoaming",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getDataActivityDirection",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getDataConnectionState",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getDataEnabled",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getHasPrioritizedNetworkCapabilities",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getInflateSignalStrength",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getNetworkName",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getNumberOfLevels",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getOperatorAlphaShort",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getPrimaryLevel",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getResolvedNetworkType",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getSatelliteLevel",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getSubId",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "getTableLogBuffer",
+          "descriptor": "()Lcom/android/systemui/log/table/TableLogBuffer;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isAllowedDuringAirplaneMode",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isEmergencyOnly",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isGsm",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isInEcmMode",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isInService",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isNonTerrestrial",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "isRoaming",
+          "descriptor": "()Lcom/android/systemui/kairos/State;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+          "name": "setDataEnabled",
+          "descriptor": "(Z)V",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;": {
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "carrierNetworkChange",
+          "type": "Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "level",
+          "type": "I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "numberOfLevels",
+          "type": "I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "showExclamationMark",
+          "type": "Z",
+          "access_flags": 17
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "<init>",
+          "descriptor": "(IIZZ)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "equals",
+          "descriptor": "(Ljava/lang/Object;)Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "getLevel",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "getNumberOfLevels",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "getShowExclamationMark",
+          "descriptor": "()Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "hashCode",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "logFully",
+          "descriptor": "(Lcom/android/systemui/log/table/TableRowLogger;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "logPartial",
+          "descriptor": "(Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel;Lcom/android/systemui/log/table/TableRowLogger;)V",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "toSignalDrawableState",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+          "name": "toString",
+          "descriptor": "()Ljava/lang/String;",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;": {
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "$iconView",
+          "type": "Landroid/widget/ImageView;",
+          "access_flags": 4097
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "$mobileDrawable",
+          "type": "Ljava/lang/Object;",
+          "access_flags": 4097
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "$r8$classId",
+          "type": "I",
+          "access_flags": 4113
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "$view",
+          "type": "Landroid/view/ViewGroup;",
+          "access_flags": 4097
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "$viewModel",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "access_flags": 4097
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "<init>",
+          "descriptor": "(I)V",
+          "access_flags": 69633
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+          "name": "emit",
+          "descriptor": "(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+          "access_flags": 17
+        }
+      ]
+    },
+    "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;": {
+      "dex": "classes2.dex",
+      "superclass": "Ljava/lang/Object;",
+      "access_flags": 1025,
+      "fields": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "commonImpl",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "location",
+          "type": "Lcom/android/systemui/statusbar/phone/StatusBarLocation;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "verboseLogger",
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;",
+          "access_flags": 17
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "<init>",
+          "descriptor": "(Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;Lcom/android/systemui/statusbar/phone/StatusBarLocation;Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getActivityContainerVisible",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getActivityInVisible",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getActivityOutVisible",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getContentDescription",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getIcon",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getNetworkTypeBackground",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getNetworkTypeIcon",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getRoaming",
+          "descriptor": "()Lkotlinx/coroutines/flow/Flow;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "getSubscriptionId",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+          "name": "isVisible",
+          "descriptor": "()Lkotlinx/coroutines/flow/StateFlow;",
+          "access_flags": 1
+        }
+      ]
+    },
+    "Lkotlin/Pair;": {
+      "dex": "classes3.dex",
+      "superclass": "Ljava/lang/Object;",
+      "access_flags": 17,
+      "fields": [
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "first",
+          "type": "Ljava/lang/Object;",
+          "access_flags": 18
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "second",
+          "type": "Ljava/lang/Object;",
+          "access_flags": 18
+        }
+      ],
+      "methods": [
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "<init>",
+          "descriptor": "(Ljava/lang/Object;Ljava/lang/Object;)V",
+          "access_flags": 65537
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "copy$default",
+          "descriptor": "(Lkotlin/Pair;Landroidx/compose/ui/text/TextRange;)Lkotlin/Pair;",
+          "access_flags": 9
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "component1",
+          "descriptor": "()Ljava/lang/Object;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "component2",
+          "descriptor": "()Ljava/lang/Object;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "equals",
+          "descriptor": "(Ljava/lang/Object;)Z",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "getFirst",
+          "descriptor": "()Ljava/lang/Object;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "getSecond",
+          "descriptor": "()Ljava/lang/Object;",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "hashCode",
+          "descriptor": "()I",
+          "access_flags": 17
+        },
+        {
+          "owner": "Lkotlin/Pair;",
+          "name": "toString",
+          "descriptor": "()Ljava/lang/String;",
+          "access_flags": 17
+        }
+      ]
+    }
+  },
+  "code_evidence": [
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+      "method": "emit",
+      "descriptor": "(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "08",
+          "units": [
+            8,
+            16
+          ]
+        },
+        {
+          "offset": 2,
+          "opcode": "52",
+          "units": [
+            338,
+            46064
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$r8$classId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "62",
+          "units": [
+            610,
+            58801
+          ],
+          "field": {
+            "owner": "Lkotlin/Unit;",
+            "name": "INSTANCE",
+            "type": "Lkotlin/Unit;"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "12",
+          "units": [
+            4882
+          ]
+        },
+        {
+          "offset": 7,
+          "opcode": "12",
+          "units": [
+            1298
+          ]
+        },
+        {
+          "offset": 8,
+          "opcode": "1a",
+          "units": [
+            1562,
+            33775
+          ]
+        },
+        {
+          "offset": 10,
+          "opcode": "2b",
+          "units": [
+            299,
+            366,
+            0
+          ],
+          "switch": {
+            "keys": [
+              0
+            ],
+            "targets": [
+              124
+            ],
+            "default": 13
+          }
+        },
+        {
+          "offset": 13,
+          "opcode": "08",
+          "units": [
+            264,
+            17
+          ]
+        },
+        {
+          "offset": 15,
+          "opcode": "1f",
+          "units": [
+            287,
+            2865
+          ],
+          "type": "Lcom/android/systemui/common/shared/model/Icon$Resource;"
+        },
+        {
+          "offset": 17,
+          "opcode": "54",
+          "units": [
+            1876,
+            46066
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$viewModel",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;"
+          }
+        },
+        {
+          "offset": 19,
+          "opcode": "54",
+          "units": [
+            30804,
+            46347
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+            "name": "verboseLogger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;"
+          }
+        },
+        {
+          "offset": 21,
+          "opcode": "38",
+          "units": [
+            2104,
+            59
+          ]
+        },
+        {
+          "offset": 23,
+          "opcode": "54",
+          "units": [
+            2388,
+            46065
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$view",
+            "type": "Landroid/view/ViewGroup;"
+          }
+        },
+        {
+          "offset": 25,
+          "opcode": "54",
+          "units": [
+            30548,
+            46345
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+            "name": "commonImpl",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;"
+          }
+        },
+        {
+          "offset": 27,
+          "opcode": "72",
+          "units": [
+            4210,
+            43434,
+            7
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;",
+            "name": "getSubscriptionId",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 30,
+          "opcode": "0a",
+          "units": [
+            1802
+          ]
+        },
+        {
+          "offset": 31,
+          "opcode": "54",
+          "units": [
+            34900,
+            46013
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;",
+            "name": "buffer",
+            "type": "Lcom/android/systemui/log/LogBuffer;"
+          }
+        },
+        {
+          "offset": 33,
+          "opcode": "62",
+          "units": [
+            2658,
+            11643
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/core/LogLevel;",
+            "name": "VERBOSE",
+            "type": "Lcom/android/systemui/log/core/LogLevel;"
+          }
+        },
+        {
+          "offset": 35,
+          "opcode": "22",
+          "units": [
+            2850,
+            15821
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;"
+        },
+        {
+          "offset": 37,
+          "opcode": "12",
+          "units": [
+            15378
+          ]
+        },
+        {
+          "offset": 38,
+          "opcode": "70",
+          "units": [
+            8304,
+            43149,
+            203
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;",
+            "name": "<init>",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 41,
+          "opcode": "6e",
+          "units": [
+            21870,
+            14576,
+            47720
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "obtain",
+            "descriptor": "(Ljava/lang/String;Lcom/android/systemui/log/core/LogLevel;Lkotlin/jvm/functions/Function1;Ljava/lang/Throwable;)Lcom/android/systemui/log/core/LogMessage;"
+          }
+        },
+        {
+          "offset": 44,
+          "opcode": "0c",
+          "units": [
+            1292
+          ]
+        },
+        {
+          "offset": 45,
+          "opcode": "71",
+          "units": [
+            4209,
+            53044,
+            9
+          ],
+          "method": {
+            "owner": "Ljava/lang/System;",
+            "name": "identityHashCode",
+            "descriptor": "(Ljava/lang/Object;)I"
+          }
+        },
+        {
+          "offset": 48,
+          "opcode": "0a",
+          "units": [
+            1546
+          ]
+        },
+        {
+          "offset": 49,
+          "opcode": "71",
+          "units": [
+            4209,
+            52907,
+            6
+          ],
+          "method": {
+            "owner": "Ljava/lang/Integer;",
+            "name": "toHexString",
+            "descriptor": "(I)Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 52,
+          "opcode": "0c",
+          "units": [
+            1548
+          ]
+        },
+        {
+          "offset": 53,
+          "opcode": "07",
+          "units": [
+            22791
+          ]
+        },
+        {
+          "offset": 54,
+          "opcode": "1f",
+          "units": [
+            2335,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 56,
+          "opcode": "5b",
+          "units": [
+            38491,
+            11593
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "str1",
+            "type": "Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 58,
+          "opcode": "07",
+          "units": [
+            22023
+          ]
+        },
+        {
+          "offset": 59,
+          "opcode": "1f",
+          "units": [
+            1567,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 61,
+          "opcode": "59",
+          "units": [
+            26457,
+            11586
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int1",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 63,
+          "opcode": "38",
+          "units": [
+            312,
+            3
+          ]
+        },
+        {
+          "offset": 65,
+          "opcode": "28",
+          "units": [
+            552
+          ]
+        },
+        {
+          "offset": 66,
+          "opcode": "12",
+          "units": [
+            786
+          ]
+        },
+        {
+          "offset": 67,
+          "opcode": "5c",
+          "units": [
+            25436,
+            11579
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "bool1",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 69,
+          "opcode": "38",
+          "units": [
+            312,
+            5
+          ]
+        },
+        {
+          "offset": 71,
+          "opcode": "52",
+          "units": [
+            4946,
+            2002
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/common/shared/model/Icon$Resource;",
+            "name": "resId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 73,
+          "opcode": "28",
+          "units": [
+            552
+          ]
+        },
+        {
+          "offset": 74,
+          "opcode": "12",
+          "units": [
+            62226
+          ]
+        },
+        {
+          "offset": 75,
+          "opcode": "59",
+          "units": [
+            25433,
+            11587
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int2",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 77,
+          "opcode": "6e",
+          "units": [
+            8302,
+            14572,
+            88
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "commit",
+            "descriptor": "(Lcom/android/systemui/log/core/LogMessage;)V"
+          }
+        },
+        {
+          "offset": 80,
+          "opcode": "38",
+          "units": [
+            312,
+            7
+          ]
+        },
+        {
+          "offset": 82,
+          "opcode": "54",
+          "units": [
+            852,
+            46062
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$iconView",
+            "type": "Landroid/widget/ImageView;"
+          }
+        },
+        {
+          "offset": 84,
+          "opcode": "71",
+          "units": [
+            8305,
+            8419,
+            49
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/common/ui/binder/IconViewBinder;",
+            "name": "bind",
+            "descriptor": "(Lcom/android/systemui/common/shared/model/Icon;Landroid/widget/ImageView;)V"
+          }
+        },
+        {
+          "offset": 87,
+          "opcode": "54",
+          "units": [
+            852,
+            46063
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$mobileDrawable",
+            "type": "Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 89,
+          "opcode": "1f",
+          "units": [
+            799,
+            1103
+          ],
+          "type": "Landroid/widget/FrameLayout;"
+        },
+        {
+          "offset": 91,
+          "opcode": "6e",
+          "units": [
+            4206,
+            5056,
+            3
+          ],
+          "method": {
+            "owner": "Landroid/widget/FrameLayout;",
+            "name": "getVisibility",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 94,
+          "opcode": "0a",
+          "units": [
+            778
+          ]
+        },
+        {
+          "offset": 95,
+          "opcode": "54",
+          "units": [
+            1364,
+            46063
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$mobileDrawable",
+            "type": "Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 97,
+          "opcode": "1f",
+          "units": [
+            1311,
+            1103
+          ],
+          "type": "Landroid/widget/FrameLayout;"
+        },
+        {
+          "offset": 99,
+          "opcode": "38",
+          "units": [
+            312,
+            4
+          ]
+        },
+        {
+          "offset": 101,
+          "opcode": "12",
+          "units": [
+            1042
+          ]
+        },
+        {
+          "offset": 102,
+          "opcode": "28",
+          "units": [
+            808
+          ]
+        },
+        {
+          "offset": 103,
+          "opcode": "13",
+          "units": [
+            1043,
+            8
+          ]
+        },
+        {
+          "offset": 105,
+          "opcode": "6e",
+          "units": [
+            8302,
+            5178,
+            69
+          ],
+          "method": {
+            "owner": "Landroid/widget/FrameLayout;",
+            "name": "setVisibility",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 108,
+          "opcode": "54",
+          "units": [
+            340,
+            46063
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$mobileDrawable",
+            "type": "Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 110,
+          "opcode": "1f",
+          "units": [
+            287,
+            1103
+          ],
+          "type": "Landroid/widget/FrameLayout;"
+        },
+        {
+          "offset": 112,
+          "opcode": "6e",
+          "units": [
+            4206,
+            5056,
+            1
+          ],
+          "method": {
+            "owner": "Landroid/widget/FrameLayout;",
+            "name": "getVisibility",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 115,
+          "opcode": "0a",
+          "units": [
+            266
+          ]
+        },
+        {
+          "offset": 116,
+          "opcode": "32",
+          "units": [
+            4914,
+            7
+          ]
+        },
+        {
+          "offset": 118,
+          "opcode": "54",
+          "units": [
+            84,
+            46065
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$view",
+            "type": "Landroid/view/ViewGroup;"
+          }
+        },
+        {
+          "offset": 120,
+          "opcode": "6e",
+          "units": [
+            4206,
+            4581,
+            0
+          ],
+          "method": {
+            "owner": "Landroid/view/ViewGroup;",
+            "name": "requestLayout",
+            "descriptor": "()V"
+          }
+        },
+        {
+          "offset": 123,
+          "opcode": "11",
+          "units": [
+            529
+          ]
+        },
+        {
+          "offset": 124,
+          "opcode": "08",
+          "units": [
+            264,
+            17
+          ]
+        },
+        {
+          "offset": 126,
+          "opcode": "1f",
+          "units": [
+            287,
+            20032
+          ],
+          "type": "Lkotlin/Pair;"
+        },
+        {
+          "offset": 128,
+          "opcode": "54",
+          "units": [
+            1876,
+            46063
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$mobileDrawable",
+            "type": "Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 130,
+          "opcode": "1f",
+          "units": [
+            1823,
+            2508
+          ],
+          "type": "Lcom/android/settingslib/graph/SignalDrawable;"
+        },
+        {
+          "offset": 132,
+          "opcode": "54",
+          "units": [
+            2132,
+            46066
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$viewModel",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;"
+          }
+        },
+        {
+          "offset": 134,
+          "opcode": "54",
+          "units": [
+            35156,
+            46345
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+            "name": "commonImpl",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;"
+          }
+        },
+        {
+          "offset": 136,
+          "opcode": "54",
+          "units": [
+            34900,
+            46347
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+            "name": "verboseLogger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;"
+          }
+        },
+        {
+          "offset": 138,
+          "opcode": "6e",
+          "units": [
+            4206,
+            53654,
+            1
+          ],
+          "method": {
+            "owner": "Lkotlin/Pair;",
+            "name": "component1",
+            "descriptor": "()Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 141,
+          "opcode": "0c",
+          "units": [
+            2572
+          ]
+        },
+        {
+          "offset": 142,
+          "opcode": "1f",
+          "units": [
+            2591,
+            19836
+          ],
+          "type": "Ljava/lang/Boolean;"
+        },
+        {
+          "offset": 144,
+          "opcode": "6e",
+          "units": [
+            4206,
+            52827,
+            10
+          ],
+          "method": {
+            "owner": "Ljava/lang/Boolean;",
+            "name": "booleanValue",
+            "descriptor": "()Z"
+          }
+        },
+        {
+          "offset": 147,
+          "opcode": "0a",
+          "units": [
+            2570
+          ]
+        },
+        {
+          "offset": 148,
+          "opcode": "6e",
+          "units": [
+            4206,
+            53655,
+            1
+          ],
+          "method": {
+            "owner": "Lkotlin/Pair;",
+            "name": "component2",
+            "descriptor": "()Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 151,
+          "opcode": "0c",
+          "units": [
+            268
+          ]
+        },
+        {
+          "offset": 152,
+          "opcode": "1f",
+          "units": [
+            287,
+            15805
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel;"
+        },
+        {
+          "offset": 154,
+          "opcode": "20",
+          "units": [
+            6944,
+            15802
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel;"
+        },
+        {
+          "offset": 156,
+          "opcode": "38",
+          "units": [
+            2872,
+            148
+          ]
+        },
+        {
+          "offset": 158,
+          "opcode": "1f",
+          "units": [
+            287,
+            15802
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel;"
+        },
+        {
+          "offset": 160,
+          "opcode": "72",
+          "units": [
+            4210,
+            43097,
+            1
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel;",
+            "name": "toSignalDrawableState",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 163,
+          "opcode": "0a",
+          "units": [
+            2826
+          ]
+        },
+        {
+          "offset": 164,
+          "opcode": "38",
+          "units": [
+            2104,
+            78
+          ]
+        },
+        {
+          "offset": 166,
+          "opcode": "54",
+          "units": [
+            3156,
+            46065
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$view",
+            "type": "Landroid/view/ViewGroup;"
+          }
+        },
+        {
+          "offset": 168,
+          "opcode": "72",
+          "units": [
+            4210,
+            43434,
+            9
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;",
+            "name": "getSubscriptionId",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 171,
+          "opcode": "0a",
+          "units": [
+            3338
+          ]
+        },
+        {
+          "offset": 172,
+          "opcode": "54",
+          "units": [
+            36436,
+            46013
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;",
+            "name": "buffer",
+            "type": "Lcom/android/systemui/log/LogBuffer;"
+          }
+        },
+        {
+          "offset": 174,
+          "opcode": "62",
+          "units": [
+            3938,
+            11643
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/core/LogLevel;",
+            "name": "VERBOSE",
+            "type": "Lcom/android/systemui/log/core/LogLevel;"
+          }
+        },
+        {
+          "offset": 176,
+          "opcode": "22",
+          "units": [
+            1058,
+            15821
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;"
+        },
+        {
+          "offset": 178,
+          "opcode": "70",
+          "units": [
+            8304,
+            43149,
+            52
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;",
+            "name": "<init>",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 181,
+          "opcode": "6e",
+          "units": [
+            21870,
+            14576,
+            20334
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "obtain",
+            "descriptor": "(Ljava/lang/String;Lcom/android/systemui/log/core/LogLevel;Lkotlin/jvm/functions/Function1;Ljava/lang/Throwable;)Lcom/android/systemui/log/core/LogMessage;"
+          }
+        },
+        {
+          "offset": 184,
+          "opcode": "0c",
+          "units": [
+            780
+          ]
+        },
+        {
+          "offset": 185,
+          "opcode": "71",
+          "units": [
+            4209,
+            53044,
+            12
+          ],
+          "method": {
+            "owner": "Ljava/lang/System;",
+            "name": "identityHashCode",
+            "descriptor": "(Ljava/lang/Object;)I"
+          }
+        },
+        {
+          "offset": 188,
+          "opcode": "0a",
+          "units": [
+            1034
+          ]
+        },
+        {
+          "offset": 189,
+          "opcode": "71",
+          "units": [
+            4209,
+            52907,
+            4
+          ],
+          "method": {
+            "owner": "Ljava/lang/Integer;",
+            "name": "toHexString",
+            "descriptor": "(I)Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 192,
+          "opcode": "0c",
+          "units": [
+            1036
+          ]
+        },
+        {
+          "offset": 193,
+          "opcode": "07",
+          "units": [
+            15367
+          ]
+        },
+        {
+          "offset": 194,
+          "opcode": "1f",
+          "units": [
+            3103,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 196,
+          "opcode": "5b",
+          "units": [
+            50267,
+            11593
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "str1",
+            "type": "Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 198,
+          "opcode": "07",
+          "units": [
+            13319
+          ]
+        },
+        {
+          "offset": 199,
+          "opcode": "1f",
+          "units": [
+            1055,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 201,
+          "opcode": "59",
+          "units": [
+            19801,
+            11586
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int1",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 203,
+          "opcode": "72",
+          "units": [
+            4210,
+            43107,
+            1
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel;",
+            "name": "getLevel",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 206,
+          "opcode": "0a",
+          "units": [
+            3082
+          ]
+        },
+        {
+          "offset": 207,
+          "opcode": "59",
+          "units": [
+            19545,
+            11587
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int2",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 209,
+          "opcode": "72",
+          "units": [
+            4210,
+            43095,
+            1
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel;",
+            "name": "getNumberOfLevels",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 212,
+          "opcode": "0a",
+          "units": [
+            3082
+          ]
+        },
+        {
+          "offset": 213,
+          "opcode": "81",
+          "units": [
+            52353
+          ]
+        },
+        {
+          "offset": 214,
+          "opcode": "5a",
+          "units": [
+            19546,
+            11590
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "long1",
+            "type": "J"
+          }
+        },
+        {
+          "offset": 216,
+          "opcode": "81",
+          "units": [
+            48257
+          ]
+        },
+        {
+          "offset": 217,
+          "opcode": "5a",
+          "units": [
+            19546,
+            11591
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "long2",
+            "type": "J"
+          }
+        },
+        {
+          "offset": 219,
+          "opcode": "72",
+          "units": [
+            4210,
+            43096,
+            1
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel;",
+            "name": "getShowExclamationMark",
+            "descriptor": "()Z"
+          }
+        },
+        {
+          "offset": 222,
+          "opcode": "0a",
+          "units": [
+            3082
+          ]
+        },
+        {
+          "offset": 223,
+          "opcode": "5c",
+          "units": [
+            19548,
+            11579
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "bool1",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 225,
+          "opcode": "5c",
+          "units": [
+            19036,
+            11580
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "bool2",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 227,
+          "opcode": "1a",
+          "units": [
+            3098,
+            37677
+          ]
+        },
+        {
+          "offset": 229,
+          "opcode": "5b",
+          "units": [
+            19547,
+            11594
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "str2",
+            "type": "Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 231,
+          "opcode": "20",
+          "units": [
+            4384,
+            15801
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$SatelliteV2;"
+        },
+        {
+          "offset": 233,
+          "opcode": "38",
+          "units": [
+            312,
+            6
+          ]
+        },
+        {
+          "offset": 235,
+          "opcode": "1a",
+          "units": [
+            282,
+            58304
+          ]
+        },
+        {
+          "offset": 237,
+          "opcode": "5b",
+          "units": [
+            16731,
+            11594
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "str2",
+            "type": "Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 239,
+          "opcode": "6e",
+          "units": [
+            8302,
+            14572,
+            62
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "commit",
+            "descriptor": "(Lcom/android/systemui/log/core/LogMessage;)V"
+          }
+        },
+        {
+          "offset": 242,
+          "opcode": "54",
+          "units": [
+            340,
+            46062
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$iconView",
+            "type": "Landroid/widget/ImageView;"
+          }
+        },
+        {
+          "offset": 244,
+          "opcode": "6e",
+          "units": [
+            8302,
+            5332,
+            113
+          ],
+          "method": {
+            "owner": "Landroid/widget/ImageView;",
+            "name": "setImageDrawable",
+            "descriptor": "(Landroid/graphics/drawable/Drawable;)V"
+          }
+        },
+        {
+          "offset": 247,
+          "opcode": "6e",
+          "units": [
+            8302,
+            1941,
+            183
+          ],
+          "method": {
+            "owner": "Landroid/graphics/drawable/DrawableWrapper;",
+            "name": "setLevel",
+            "descriptor": "(I)Z"
+          }
+        },
+        {
+          "offset": 250,
+          "opcode": "38",
+          "units": [
+            2104,
+            117
+          ]
+        },
+        {
+          "offset": 252,
+          "opcode": "54",
+          "units": [
+            340,
+            46065
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$view",
+            "type": "Landroid/view/ViewGroup;"
+          }
+        },
+        {
+          "offset": 254,
+          "opcode": "72",
+          "units": [
+            4210,
+            43434,
+            9
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;",
+            "name": "getSubscriptionId",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 257,
+          "opcode": "0a",
+          "units": [
+            778
+          ]
+        },
+        {
+          "offset": 258,
+          "opcode": "6e",
+          "units": [
+            4206,
+            1934,
+            7
+          ],
+          "method": {
+            "owner": "Landroid/graphics/drawable/DrawableWrapper;",
+            "name": "getLevel",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 261,
+          "opcode": "0a",
+          "units": [
+            1034
+          ]
+        },
+        {
+          "offset": 262,
+          "opcode": "6e",
+          "units": [
+            8302,
+            7968,
+            71
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "unpackLevel",
+            "descriptor": "(I)I"
+          }
+        },
+        {
+          "offset": 265,
+          "opcode": "0a",
+          "units": [
+            1034
+          ]
+        },
+        {
+          "offset": 266,
+          "opcode": "54",
+          "units": [
+            34644,
+            46013
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;",
+            "name": "buffer",
+            "type": "Lcom/android/systemui/log/LogBuffer;"
+          }
+        },
+        {
+          "offset": 268,
+          "opcode": "62",
+          "units": [
+            2146,
+            11643
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/core/LogLevel;",
+            "name": "VERBOSE",
+            "type": "Lcom/android/systemui/log/core/LogLevel;"
+          }
+        },
+        {
+          "offset": 270,
+          "opcode": "22",
+          "units": [
+            2338,
+            15821
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;"
+        },
+        {
+          "offset": 272,
+          "opcode": "12",
+          "units": [
+            2834
+          ]
+        },
+        {
+          "offset": 273,
+          "opcode": "70",
+          "units": [
+            8304,
+            43149,
+            185
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;",
+            "name": "<init>",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 276,
+          "opcode": "6e",
+          "units": [
+            21870,
+            14576,
+            39015
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "obtain",
+            "descriptor": "(Ljava/lang/String;Lcom/android/systemui/log/core/LogLevel;Lkotlin/jvm/functions/Function1;Ljava/lang/Throwable;)Lcom/android/systemui/log/core/LogMessage;"
+          }
+        },
+        {
+          "offset": 279,
+          "opcode": "0c",
+          "units": [
+            1292
+          ]
+        },
+        {
+          "offset": 280,
+          "opcode": "71",
+          "units": [
+            4209,
+            53044,
+            1
+          ],
+          "method": {
+            "owner": "Ljava/lang/System;",
+            "name": "identityHashCode",
+            "descriptor": "(Ljava/lang/Object;)I"
+          }
+        },
+        {
+          "offset": 283,
+          "opcode": "0a",
+          "units": [
+            266
+          ]
+        },
+        {
+          "offset": 284,
+          "opcode": "71",
+          "units": [
+            4209,
+            52907,
+            1
+          ],
+          "method": {
+            "owner": "Ljava/lang/Integer;",
+            "name": "toHexString",
+            "descriptor": "(I)Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 287,
+          "opcode": "0c",
+          "units": [
+            268
+          ]
+        },
+        {
+          "offset": 288,
+          "opcode": "07",
+          "units": [
+            22023
+          ]
+        },
+        {
+          "offset": 289,
+          "opcode": "1f",
+          "units": [
+            1567,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 291,
+          "opcode": "5b",
+          "units": [
+            24923,
+            11593
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "str1",
+            "type": "Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 293,
+          "opcode": "07",
+          "units": [
+            20743
+          ]
+        },
+        {
+          "offset": 294,
+          "opcode": "1f",
+          "units": [
+            287,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 296,
+          "opcode": "59",
+          "units": [
+            4953,
+            11586
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int1",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 298,
+          "opcode": "59",
+          "units": [
+            5209,
+            11587
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int2",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 300,
+          "opcode": "6e",
+          "units": [
+            8302,
+            14572,
+            87
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "commit",
+            "descriptor": "(Lcom/android/systemui/log/core/LogMessage;)V"
+          }
+        },
+        {
+          "offset": 303,
+          "opcode": "28",
+          "units": [
+            16424
+          ]
+        },
+        {
+          "offset": 304,
+          "opcode": "20",
+          "units": [
+            4896,
+            15804
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$Satellite;"
+        },
+        {
+          "offset": 306,
+          "opcode": "38",
+          "units": [
+            824,
+            61
+          ]
+        },
+        {
+          "offset": 308,
+          "opcode": "38",
+          "units": [
+            2104,
+            50
+          ]
+        },
+        {
+          "offset": 310,
+          "opcode": "54",
+          "units": [
+            852,
+            46065
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$view",
+            "type": "Landroid/view/ViewGroup;"
+          }
+        },
+        {
+          "offset": 312,
+          "opcode": "72",
+          "units": [
+            4210,
+            43434,
+            9
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;",
+            "name": "getSubscriptionId",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 315,
+          "opcode": "0a",
+          "units": [
+            1034
+          ]
+        },
+        {
+          "offset": 316,
+          "opcode": "07",
+          "units": [
+            5895
+          ]
+        },
+        {
+          "offset": 317,
+          "opcode": "1f",
+          "units": [
+            1823,
+            15804
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$Satellite;"
+        },
+        {
+          "offset": 319,
+          "opcode": "54",
+          "units": [
+            34900,
+            46013
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger;",
+            "name": "buffer",
+            "type": "Lcom/android/systemui/log/LogBuffer;"
+          }
+        },
+        {
+          "offset": 321,
+          "opcode": "62",
+          "units": [
+            2402,
+            11643
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/core/LogLevel;",
+            "name": "VERBOSE",
+            "type": "Lcom/android/systemui/log/core/LogLevel;"
+          }
+        },
+        {
+          "offset": 323,
+          "opcode": "22",
+          "units": [
+            2850,
+            15821
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;"
+        },
+        {
+          "offset": 325,
+          "opcode": "12",
+          "units": [
+            19474
+          ]
+        },
+        {
+          "offset": 326,
+          "opcode": "70",
+          "units": [
+            8304,
+            43149,
+            203
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/VerboseMobileViewLogger$$ExternalSyntheticLambda0;",
+            "name": "<init>",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 329,
+          "opcode": "6e",
+          "units": [
+            21870,
+            14576,
+            47464
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "obtain",
+            "descriptor": "(Ljava/lang/String;Lcom/android/systemui/log/core/LogLevel;Lkotlin/jvm/functions/Function1;Ljava/lang/Throwable;)Lcom/android/systemui/log/core/LogMessage;"
+          }
+        },
+        {
+          "offset": 332,
+          "opcode": "0c",
+          "units": [
+            1292
+          ]
+        },
+        {
+          "offset": 333,
+          "opcode": "71",
+          "units": [
+            4209,
+            53044,
+            3
+          ],
+          "method": {
+            "owner": "Ljava/lang/System;",
+            "name": "identityHashCode",
+            "descriptor": "(Ljava/lang/Object;)I"
+          }
+        },
+        {
+          "offset": 336,
+          "opcode": "0a",
+          "units": [
+            778
+          ]
+        },
+        {
+          "offset": 337,
+          "opcode": "71",
+          "units": [
+            4209,
+            52907,
+            3
+          ],
+          "method": {
+            "owner": "Ljava/lang/Integer;",
+            "name": "toHexString",
+            "descriptor": "(I)Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 340,
+          "opcode": "0c",
+          "units": [
+            780
+          ]
+        },
+        {
+          "offset": 341,
+          "opcode": "07",
+          "units": [
+            22023
+          ]
+        },
+        {
+          "offset": 342,
+          "opcode": "1f",
+          "units": [
+            1567,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 344,
+          "opcode": "5b",
+          "units": [
+            25435,
+            11593
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "str1",
+            "type": "Ljava/lang/String;"
+          }
+        },
+        {
+          "offset": 346,
+          "opcode": "07",
+          "units": [
+            21255
+          ]
+        },
+        {
+          "offset": 347,
+          "opcode": "1f",
+          "units": [
+            799,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 349,
+          "opcode": "59",
+          "units": [
+            13401,
+            11586
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int1",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 351,
+          "opcode": "52",
+          "units": [
+            29778,
+            45971
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$Satellite;",
+            "name": "level",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 353,
+          "opcode": "59",
+          "units": [
+            13401,
+            11587
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int2",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 355,
+          "opcode": "6e",
+          "units": [
+            8302,
+            14572,
+            88
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "commit",
+            "descriptor": "(Lcom/android/systemui/log/core/LogMessage;)V"
+          }
+        },
+        {
+          "offset": 358,
+          "opcode": "1f",
+          "units": [
+            287,
+            15804
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$Satellite;"
+        },
+        {
+          "offset": 360,
+          "opcode": "54",
+          "units": [
+            4436,
+            45970
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$Satellite;",
+            "name": "icon",
+            "type": "Lcom/android/systemui/common/shared/model/Icon$Resource;"
+          }
+        },
+        {
+          "offset": 362,
+          "opcode": "54",
+          "units": [
+            852,
+            46062
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$iconView",
+            "type": "Landroid/widget/ImageView;"
+          }
+        },
+        {
+          "offset": 364,
+          "opcode": "71",
+          "units": [
+            8305,
+            8419,
+            49
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/common/ui/binder/IconViewBinder;",
+            "name": "bind",
+            "descriptor": "(Lcom/android/systemui/common/shared/model/Icon;Landroid/widget/ImageView;)V"
+          }
+        },
+        {
+          "offset": 367,
+          "opcode": "38",
+          "units": [
+            2616,
+            7
+          ]
+        },
+        {
+          "offset": 369,
+          "opcode": "54",
+          "units": [
+            84,
+            46062
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/binder/MobileIconBinder$bind$1$2$1$2$2;",
+            "name": "$iconView",
+            "type": "Landroid/widget/ImageView;"
+          }
+        },
+        {
+          "offset": 371,
+          "opcode": "6e",
+          "units": [
+            4206,
+            5313,
+            0
+          ],
+          "method": {
+            "owner": "Landroid/widget/ImageView;",
+            "name": "requestLayout",
+            "descriptor": "()V"
+          }
+        },
+        {
+          "offset": 374,
+          "opcode": "11",
+          "units": [
+            529
+          ]
+        },
+        {
+          "offset": 375,
+          "opcode": "00",
+          "units": [
+            0
+          ]
+        },
+        {
+          "offset": 376,
+          "opcode": "00",
+          "units": [
+            256,
+            1,
+            0,
+            0,
+            114,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+      "method": "getSubscriptionId",
+      "descriptor": "()I",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            84,
+            46345
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/LocationBasedMobileViewModel;",
+            "name": "commonImpl",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "72",
+          "units": [
+            4210,
+            43434,
+            0
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/ui/viewmodel/MobileIconViewModelCommon;",
+            "name": "getSubscriptionId",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 5,
+          "opcode": "0a",
+          "units": [
+            10
+          ]
+        },
+        {
+          "offset": 6,
+          "opcode": "0f",
+          "units": [
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+      "method": "toSignalDrawableState",
+      "descriptor": "()I",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "55",
+          "units": [
+            8277,
+            45962
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+            "name": "carrierNetworkChange",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "52",
+          "units": [
+            8530,
+            45964
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+            "name": "numberOfLevels",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "38",
+          "units": [
+            56,
+            10
+          ]
+        },
+        {
+          "offset": 6,
+          "opcode": "60",
+          "units": [
+            608,
+            1469
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "$r8$clinit",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 8,
+          "opcode": "e0",
+          "units": [
+            736,
+            2049
+          ]
+        },
+        {
+          "offset": 10,
+          "opcode": "15",
+          "units": [
+            21,
+            3
+          ]
+        },
+        {
+          "offset": 12,
+          "opcode": "b6",
+          "units": [
+            694
+          ]
+        },
+        {
+          "offset": 13,
+          "opcode": "0f",
+          "units": [
+            527
+          ]
+        },
+        {
+          "offset": 14,
+          "opcode": "52",
+          "units": [
+            8274,
+            45963
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+            "name": "level",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "55",
+          "units": [
+            8789,
+            45965
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/domain/model/SignalIconModel$CellularTypeIconModel$Cellular;",
+            "name": "showExclamationMark",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 18,
+          "opcode": "71",
+          "units": [
+            12401,
+            7967,
+            528
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "getState",
+            "descriptor": "(IIZ)I"
+          }
+        },
+        {
+          "offset": 21,
+          "opcode": "0a",
+          "units": [
+            522
+          ]
+        },
+        {
+          "offset": 22,
+          "opcode": "0f",
+          "units": [
+            527
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes.dex",
+      "class": "Lcom/android/settingslib/graph/SignalDrawable;",
+      "method": "getState",
+      "descriptor": "(IIZ)I",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "38",
+          "units": [
+            568,
+            4
+          ]
+        },
+        {
+          "offset": 2,
+          "opcode": "12",
+          "units": [
+            8722
+          ]
+        },
+        {
+          "offset": 3,
+          "opcode": "28",
+          "units": [
+            552
+          ]
+        },
+        {
+          "offset": 4,
+          "opcode": "12",
+          "units": [
+            530
+          ]
+        },
+        {
+          "offset": 5,
+          "opcode": "e0",
+          "units": [
+            736,
+            4098
+          ]
+        },
+        {
+          "offset": 7,
+          "opcode": "e0",
+          "units": [
+            480,
+            2049
+          ]
+        },
+        {
+          "offset": 9,
+          "opcode": "b6",
+          "units": [
+            8630
+          ]
+        },
+        {
+          "offset": 10,
+          "opcode": "b6",
+          "units": [
+            4278
+          ]
+        },
+        {
+          "offset": 11,
+          "opcode": "0f",
+          "units": [
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes.dex",
+      "class": "Lcom/android/settingslib/graph/SignalDrawable;",
+      "method": "isInState",
+      "descriptor": "(I)Z",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "6e",
+          "units": [
+            4206,
+            2102,
+            1
+          ],
+          "method": {
+            "owner": "Landroid/graphics/drawable/DrawableWrapper;",
+            "name": "getLevel",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 3,
+          "opcode": "0a",
+          "units": [
+            266
+          ]
+        },
+        {
+          "offset": 4,
+          "opcode": "15",
+          "units": [
+            21,
+            255
+          ]
+        },
+        {
+          "offset": 6,
+          "opcode": "b5",
+          "units": [
+            437
+          ]
+        },
+        {
+          "offset": 7,
+          "opcode": "e1",
+          "units": [
+            481,
+            4097
+          ]
+        },
+        {
+          "offset": 9,
+          "opcode": "33",
+          "units": [
+            8499,
+            4
+          ]
+        },
+        {
+          "offset": 11,
+          "opcode": "12",
+          "units": [
+            4370
+          ]
+        },
+        {
+          "offset": 12,
+          "opcode": "0f",
+          "units": [
+            271
+          ]
+        },
+        {
+          "offset": 13,
+          "opcode": "12",
+          "units": [
+            274
+          ]
+        },
+        {
+          "offset": 14,
+          "opcode": "0f",
+          "units": [
+            271
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes.dex",
+      "class": "Lcom/android/settingslib/graph/SignalDrawable;",
+      "method": "onLevelChange",
+      "descriptor": "(I)Z",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "6e",
+          "units": [
+            8302,
+            38311,
+            16
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "unpackLevel",
+            "descriptor": "(I)I"
+          }
+        },
+        {
+          "offset": 3,
+          "opcode": "0a",
+          "units": [
+            266
+          ]
+        },
+        {
+          "offset": 4,
+          "opcode": "6f",
+          "units": [
+            8303,
+            2107,
+            16
+          ],
+          "method": {
+            "owner": "Landroid/graphics/drawable/DrawableWrapper;",
+            "name": "onLevelChange",
+            "descriptor": "(I)Z"
+          }
+        },
+        {
+          "offset": 7,
+          "opcode": "6e",
+          "units": [
+            4206,
+            38312,
+            0
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "updateAnimation",
+            "descriptor": "()V"
+          }
+        },
+        {
+          "offset": 10,
+          "opcode": "54",
+          "units": [
+            340,
+            28824
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "mForegroundPaint",
+            "type": "Landroid/graphics/Paint;"
+          }
+        },
+        {
+          "offset": 12,
+          "opcode": "6e",
+          "units": [
+            4206,
+            1746,
+            1
+          ],
+          "method": {
+            "owner": "Landroid/graphics/Paint;",
+            "name": "getColor",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 15,
+          "opcode": "0a",
+          "units": [
+            266
+          ]
+        },
+        {
+          "offset": 16,
+          "opcode": "71",
+          "units": [
+            4209,
+            1363,
+            1
+          ],
+          "method": {
+            "owner": "Landroid/content/res/ColorStateList;",
+            "name": "valueOf",
+            "descriptor": "(I)Landroid/content/res/ColorStateList;"
+          }
+        },
+        {
+          "offset": 19,
+          "opcode": "0c",
+          "units": [
+            268
+          ]
+        },
+        {
+          "offset": 20,
+          "opcode": "6e",
+          "units": [
+            8302,
+            38309,
+            16
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "setTintList",
+            "descriptor": "(Landroid/content/res/ColorStateList;)V"
+          }
+        },
+        {
+          "offset": 23,
+          "opcode": "6e",
+          "units": [
+            4206,
+            2103,
+            0
+          ],
+          "method": {
+            "owner": "Landroid/graphics/drawable/DrawableWrapper;",
+            "name": "invalidateSelf",
+            "descriptor": "()V"
+          }
+        },
+        {
+          "offset": 26,
+          "opcode": "12",
+          "units": [
+            4114
+          ]
+        },
+        {
+          "offset": 27,
+          "opcode": "0f",
+          "units": [
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes.dex",
+      "class": "Lcom/android/settingslib/graph/SignalDrawable;",
+      "method": "unpackLevel",
+      "descriptor": "(I)I",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "14",
+          "units": [
+            20,
+            65280,
+            0
+          ]
+        },
+        {
+          "offset": 3,
+          "opcode": "b5",
+          "units": [
+            16565
+          ]
+        },
+        {
+          "offset": 4,
+          "opcode": "e1",
+          "units": [
+            225,
+            2048
+          ]
+        },
+        {
+          "offset": 6,
+          "opcode": "71",
+          "units": [
+            113,
+            3574,
+            0
+          ],
+          "method": {
+            "owner": "Landroid/telephony/CellSignalStrength;",
+            "name": "getNumSignalStrengthLevels",
+            "descriptor": "()I"
+          }
+        },
+        {
+          "offset": 9,
+          "opcode": "0a",
+          "units": [
+            266
+          ]
+        },
+        {
+          "offset": 10,
+          "opcode": "d8",
+          "units": [
+            472,
+            257
+          ]
+        },
+        {
+          "offset": 12,
+          "opcode": "12",
+          "units": [
+            530
+          ]
+        },
+        {
+          "offset": 13,
+          "opcode": "33",
+          "units": [
+            4147,
+            5
+          ]
+        },
+        {
+          "offset": 15,
+          "opcode": "13",
+          "units": [
+            19,
+            10
+          ]
+        },
+        {
+          "offset": 17,
+          "opcode": "28",
+          "units": [
+            552
+          ]
+        },
+        {
+          "offset": 18,
+          "opcode": "01",
+          "units": [
+            8193
+          ]
+        },
+        {
+          "offset": 19,
+          "opcode": "d5",
+          "units": [
+            17621,
+            255
+          ]
+        },
+        {
+          "offset": 21,
+          "opcode": "12",
+          "units": [
+            8466
+          ]
+        },
+        {
+          "offset": 22,
+          "opcode": "6e",
+          "units": [
+            8302,
+            38304,
+            19
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "isInState",
+            "descriptor": "(I)Z"
+          }
+        },
+        {
+          "offset": 25,
+          "opcode": "0a",
+          "units": [
+            778
+          ]
+        },
+        {
+          "offset": 26,
+          "opcode": "38",
+          "units": [
+            824,
+            4
+          ]
+        },
+        {
+          "offset": 28,
+          "opcode": "13",
+          "units": [
+            531,
+            20
+          ]
+        },
+        {
+          "offset": 30,
+          "opcode": "b0",
+          "units": [
+            1200
+          ]
+        },
+        {
+          "offset": 31,
+          "opcode": "b0",
+          "units": [
+            9392
+          ]
+        },
+        {
+          "offset": 32,
+          "opcode": "0f",
+          "units": [
+            1039
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes.dex",
+      "class": "Lcom/android/settingslib/graph/SignalDrawable;",
+      "method": "updateAnimation",
+      "descriptor": "()V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "12",
+          "units": [
+            12306
+          ]
+        },
+        {
+          "offset": 1,
+          "opcode": "6e",
+          "units": [
+            8302,
+            38304,
+            2
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "isInState",
+            "descriptor": "(I)Z"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "0a",
+          "units": [
+            10
+          ]
+        },
+        {
+          "offset": 5,
+          "opcode": "38",
+          "units": [
+            56,
+            10
+          ]
+        },
+        {
+          "offset": 7,
+          "opcode": "6e",
+          "units": [
+            4206,
+            2104,
+            2
+          ],
+          "method": {
+            "owner": "Landroid/graphics/drawable/DrawableWrapper;",
+            "name": "isVisible",
+            "descriptor": "()Z"
+          }
+        },
+        {
+          "offset": 10,
+          "opcode": "0a",
+          "units": [
+            10
+          ]
+        },
+        {
+          "offset": 11,
+          "opcode": "38",
+          "units": [
+            56,
+            4
+          ]
+        },
+        {
+          "offset": 13,
+          "opcode": "12",
+          "units": [
+            4114
+          ]
+        },
+        {
+          "offset": 14,
+          "opcode": "28",
+          "units": [
+            552
+          ]
+        },
+        {
+          "offset": 15,
+          "opcode": "12",
+          "units": [
+            18
+          ]
+        },
+        {
+          "offset": 16,
+          "opcode": "55",
+          "units": [
+            8533,
+            28818
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "mAnimating",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 18,
+          "opcode": "33",
+          "units": [
+            4147,
+            3
+          ]
+        },
+        {
+          "offset": 20,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        },
+        {
+          "offset": 21,
+          "opcode": "5c",
+          "units": [
+            8284,
+            28818
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "mAnimating",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 23,
+          "opcode": "38",
+          "units": [
+            56,
+            8
+          ]
+        },
+        {
+          "offset": 25,
+          "opcode": "54",
+          "units": [
+            8788,
+            28821
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "mChangeDot",
+            "type": "Lcom/android/settingslib/graph/SignalDrawable$1;"
+          }
+        },
+        {
+          "offset": 27,
+          "opcode": "6e",
+          "units": [
+            4206,
+            38296,
+            2
+          ],
+          "method": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable$1;",
+            "name": "run",
+            "descriptor": "()V"
+          }
+        },
+        {
+          "offset": 30,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        },
+        {
+          "offset": 31,
+          "opcode": "54",
+          "units": [
+            8276,
+            28826
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "mHandler",
+            "type": "Landroid/os/Handler;"
+          }
+        },
+        {
+          "offset": 33,
+          "opcode": "54",
+          "units": [
+            8788,
+            28821
+          ],
+          "field": {
+            "owner": "Lcom/android/settingslib/graph/SignalDrawable;",
+            "name": "mChangeDot",
+            "type": "Lcom/android/settingslib/graph/SignalDrawable$1;"
+          }
+        },
+        {
+          "offset": 35,
+          "opcode": "6e",
+          "units": [
+            8302,
+            3036,
+            32
+          ],
+          "method": {
+            "owner": "Landroid/os/Handler;",
+            "name": "removeCallbacks",
+            "descriptor": "(Ljava/lang/Runnable;)V"
+          }
+        },
+        {
+          "offset": 38,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+      "method": "onCarrierRoamingNtnModeChanged",
+      "descriptor": "(Z)V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            24660,
+            44650
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$logger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "54",
+          "units": [
+            24916,
+            44651
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$this_run",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "52",
+          "units": [
+            4434,
+            45047
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+            "name": "subId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "54",
+          "units": [
+            84,
+            43822
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+            "name": "buffer",
+            "type": "Lcom/android/systemui/log/LogBuffer;"
+          }
+        },
+        {
+          "offset": 8,
+          "opcode": "62",
+          "units": [
+            610,
+            11642
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/core/LogLevel;",
+            "name": "INFO",
+            "type": "Lcom/android/systemui/log/core/LogLevel;"
+          }
+        },
+        {
+          "offset": 10,
+          "opcode": "22",
+          "units": [
+            802,
+            15356
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger$$ExternalSyntheticLambda0;"
+        },
+        {
+          "offset": 12,
+          "opcode": "12",
+          "units": [
+            13330
+          ]
+        },
+        {
+          "offset": 13,
+          "opcode": "70",
+          "units": [
+            8304,
+            41530,
+            67
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger$$ExternalSyntheticLambda0;",
+            "name": "<init>",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "12",
+          "units": [
+            1042
+          ]
+        },
+        {
+          "offset": 17,
+          "opcode": "1a",
+          "units": [
+            1306,
+            29497
+          ]
+        },
+        {
+          "offset": 19,
+          "opcode": "6e",
+          "units": [
+            21614,
+            14576,
+            12880
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "obtain",
+            "descriptor": "(Ljava/lang/String;Lcom/android/systemui/log/core/LogLevel;Lkotlin/jvm/functions/Function1;Ljava/lang/Throwable;)Lcom/android/systemui/log/core/LogMessage;"
+          }
+        },
+        {
+          "offset": 22,
+          "opcode": "0c",
+          "units": [
+            524
+          ]
+        },
+        {
+          "offset": 23,
+          "opcode": "07",
+          "units": [
+            8967
+          ]
+        },
+        {
+          "offset": 24,
+          "opcode": "1f",
+          "units": [
+            799,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 26,
+          "opcode": "59",
+          "units": [
+            12633,
+            11586
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int1",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 28,
+          "opcode": "07",
+          "units": [
+            8455
+          ]
+        },
+        {
+          "offset": 29,
+          "opcode": "1f",
+          "units": [
+            287,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 31,
+          "opcode": "5c",
+          "units": [
+            5980,
+            11579
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "bool1",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 33,
+          "opcode": "6e",
+          "units": [
+            8302,
+            14572,
+            32
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "commit",
+            "descriptor": "(Lcom/android/systemui/log/core/LogMessage;)V"
+          }
+        },
+        {
+          "offset": 36,
+          "opcode": "54",
+          "units": [
+            26196,
+            44649
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$$this$callbackFlow",
+            "type": "Lkotlinx/coroutines/channels/ProducerScope;"
+          }
+        },
+        {
+          "offset": 38,
+          "opcode": "22",
+          "units": [
+            34,
+            15478
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnCarrierRoamingNtnModeChanged;"
+        },
+        {
+          "offset": 40,
+          "opcode": "70",
+          "units": [
+            8304,
+            42025,
+            112
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnCarrierRoamingNtnModeChanged;",
+            "name": "<init>",
+            "descriptor": "(Z)V"
+          }
+        },
+        {
+          "offset": 43,
+          "opcode": "1f",
+          "units": [
+            1567,
+            20216
+          ],
+          "type": "Lkotlinx/coroutines/channels/ProducerCoroutine;"
+        },
+        {
+          "offset": 45,
+          "opcode": "6e",
+          "units": [
+            8302,
+            54014,
+            6
+          ],
+          "method": {
+            "owner": "Lkotlinx/coroutines/channels/ProducerCoroutine;",
+            "name": "trySend-JP2dKIU",
+            "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 48,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+      "method": "onServiceStateChanged",
+      "descriptor": "(Landroid/telephony/ServiceState;)V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            8276,
+            44650
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$logger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "54",
+          "units": [
+            8532,
+            44651
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$this_run",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "52",
+          "units": [
+            4434,
+            45047
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+            "name": "subId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "6e",
+          "units": [
+            12398,
+            41536,
+            784
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+            "name": "logOnServiceStateChanged",
+            "descriptor": "(ILandroid/telephony/ServiceState;)V"
+          }
+        },
+        {
+          "offset": 9,
+          "opcode": "54",
+          "units": [
+            8788,
+            44649
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$$this$callbackFlow",
+            "type": "Lkotlinx/coroutines/channels/ProducerScope;"
+          }
+        },
+        {
+          "offset": 11,
+          "opcode": "22",
+          "units": [
+            34,
+            15484
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnServiceStateChanged;"
+        },
+        {
+          "offset": 13,
+          "opcode": "70",
+          "units": [
+            8304,
+            42049,
+            48
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnServiceStateChanged;",
+            "name": "<init>",
+            "descriptor": "(Landroid/telephony/ServiceState;)V"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "1f",
+          "units": [
+            543,
+            20216
+          ],
+          "type": "Lkotlinx/coroutines/channels/ProducerCoroutine;"
+        },
+        {
+          "offset": 18,
+          "opcode": "6e",
+          "units": [
+            8302,
+            54014,
+            2
+          ],
+          "method": {
+            "owner": "Lkotlinx/coroutines/channels/ProducerCoroutine;",
+            "name": "trySend-JP2dKIU",
+            "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 21,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+      "method": "onSignalStrengthsChanged",
+      "descriptor": "(Landroid/telephony/SignalStrength;)V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            8276,
+            44650
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$logger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "54",
+          "units": [
+            8532,
+            44651
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$this_run",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "52",
+          "units": [
+            4434,
+            45047
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl;",
+            "name": "subId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "6e",
+          "units": [
+            12398,
+            41537,
+            304
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+            "name": "logOnSignalStrengthsChanged",
+            "descriptor": "(Landroid/telephony/SignalStrength;I)V"
+          }
+        },
+        {
+          "offset": 9,
+          "opcode": "54",
+          "units": [
+            8788,
+            44649
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl$callbackEvents$1$1$callback$1;",
+            "name": "$$this$callbackFlow",
+            "type": "Lkotlinx/coroutines/channels/ProducerScope;"
+          }
+        },
+        {
+          "offset": 11,
+          "opcode": "22",
+          "units": [
+            34,
+            15485
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnSignalStrengthChanged;"
+        },
+        {
+          "offset": 13,
+          "opcode": "70",
+          "units": [
+            8304,
+            42053,
+            48
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnSignalStrengthChanged;",
+            "name": "<init>",
+            "descriptor": "(Landroid/telephony/SignalStrength;)V"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "1f",
+          "units": [
+            543,
+            20216
+          ],
+          "type": "Lkotlinx/coroutines/channels/ProducerCoroutine;"
+        },
+        {
+          "offset": 18,
+          "opcode": "6e",
+          "units": [
+            8302,
+            54014,
+            2
+          ],
+          "method": {
+            "owner": "Lkotlinx/coroutines/channels/ProducerCoroutine;",
+            "name": "trySend-JP2dKIU",
+            "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;"
+          }
+        },
+        {
+          "offset": 21,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+      "method": "onCarrierRoamingNtnModeChanged",
+      "descriptor": "(Z)V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            24660,
+            45129
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "$logger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "54",
+          "units": [
+            24916,
+            45130
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "this$0",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "52",
+          "units": [
+            4434,
+            45213
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+            "name": "subId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "54",
+          "units": [
+            84,
+            43822
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+            "name": "buffer",
+            "type": "Lcom/android/systemui/log/LogBuffer;"
+          }
+        },
+        {
+          "offset": 8,
+          "opcode": "62",
+          "units": [
+            610,
+            11642
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/core/LogLevel;",
+            "name": "INFO",
+            "type": "Lcom/android/systemui/log/core/LogLevel;"
+          }
+        },
+        {
+          "offset": 10,
+          "opcode": "22",
+          "units": [
+            802,
+            15356
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger$$ExternalSyntheticLambda0;"
+        },
+        {
+          "offset": 12,
+          "opcode": "12",
+          "units": [
+            13330
+          ]
+        },
+        {
+          "offset": 13,
+          "opcode": "70",
+          "units": [
+            8304,
+            41530,
+            67
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger$$ExternalSyntheticLambda0;",
+            "name": "<init>",
+            "descriptor": "(I)V"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "12",
+          "units": [
+            1042
+          ]
+        },
+        {
+          "offset": 17,
+          "opcode": "1a",
+          "units": [
+            1306,
+            29497
+          ]
+        },
+        {
+          "offset": 19,
+          "opcode": "6e",
+          "units": [
+            21614,
+            14576,
+            12880
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "obtain",
+            "descriptor": "(Ljava/lang/String;Lcom/android/systemui/log/core/LogLevel;Lkotlin/jvm/functions/Function1;Ljava/lang/Throwable;)Lcom/android/systemui/log/core/LogMessage;"
+          }
+        },
+        {
+          "offset": 22,
+          "opcode": "0c",
+          "units": [
+            524
+          ]
+        },
+        {
+          "offset": 23,
+          "opcode": "07",
+          "units": [
+            8967
+          ]
+        },
+        {
+          "offset": 24,
+          "opcode": "1f",
+          "units": [
+            799,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 26,
+          "opcode": "59",
+          "units": [
+            12633,
+            11586
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "int1",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 28,
+          "opcode": "07",
+          "units": [
+            8455
+          ]
+        },
+        {
+          "offset": 29,
+          "opcode": "1f",
+          "units": [
+            287,
+            5816
+          ],
+          "type": "Lcom/android/systemui/log/LogMessageImpl;"
+        },
+        {
+          "offset": 31,
+          "opcode": "5c",
+          "units": [
+            5980,
+            11579
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/log/LogMessageImpl;",
+            "name": "bool1",
+            "type": "Z"
+          }
+        },
+        {
+          "offset": 33,
+          "opcode": "6e",
+          "units": [
+            8302,
+            14572,
+            32
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/log/LogBuffer;",
+            "name": "commit",
+            "descriptor": "(Lcom/android/systemui/log/core/LogMessage;)V"
+          }
+        },
+        {
+          "offset": 36,
+          "opcode": "54",
+          "units": [
+            26196,
+            45128
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "$$this$coalescingEvents",
+            "type": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;"
+          }
+        },
+        {
+          "offset": 38,
+          "opcode": "22",
+          "units": [
+            34,
+            15478
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnCarrierRoamingNtnModeChanged;"
+        },
+        {
+          "offset": 40,
+          "opcode": "70",
+          "units": [
+            8304,
+            42025,
+            112
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnCarrierRoamingNtnModeChanged;",
+            "name": "<init>",
+            "descriptor": "(Z)V"
+          }
+        },
+        {
+          "offset": 43,
+          "opcode": "6e",
+          "units": [
+            8302,
+            8925,
+            6
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;",
+            "name": "emit",
+            "descriptor": "(Ljava/lang/Object;)V"
+          }
+        },
+        {
+          "offset": 46,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+      "method": "onServiceStateChanged",
+      "descriptor": "(Landroid/telephony/ServiceState;)V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            8276,
+            45129
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "$logger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "54",
+          "units": [
+            8532,
+            45130
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "this$0",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "52",
+          "units": [
+            4434,
+            45213
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+            "name": "subId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "6e",
+          "units": [
+            12398,
+            41536,
+            784
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+            "name": "logOnServiceStateChanged",
+            "descriptor": "(ILandroid/telephony/ServiceState;)V"
+          }
+        },
+        {
+          "offset": 9,
+          "opcode": "54",
+          "units": [
+            8788,
+            45128
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "$$this$coalescingEvents",
+            "type": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;"
+          }
+        },
+        {
+          "offset": 11,
+          "opcode": "22",
+          "units": [
+            34,
+            15484
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnServiceStateChanged;"
+        },
+        {
+          "offset": 13,
+          "opcode": "70",
+          "units": [
+            8304,
+            42049,
+            48
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnServiceStateChanged;",
+            "name": "<init>",
+            "descriptor": "(Landroid/telephony/ServiceState;)V"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "6e",
+          "units": [
+            8302,
+            8925,
+            2
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;",
+            "name": "emit",
+            "descriptor": "(Ljava/lang/Object;)V"
+          }
+        },
+        {
+          "offset": 19,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "dex": "classes2.dex",
+      "class": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+      "method": "onSignalStrengthsChanged",
+      "descriptor": "(Landroid/telephony/SignalStrength;)V",
+      "instructions": [
+        {
+          "offset": 0,
+          "opcode": "54",
+          "units": [
+            8276,
+            45129
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "$logger",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;"
+          }
+        },
+        {
+          "offset": 2,
+          "opcode": "54",
+          "units": [
+            8532,
+            45130
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "this$0",
+            "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;"
+          }
+        },
+        {
+          "offset": 4,
+          "opcode": "52",
+          "units": [
+            4434,
+            45213
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl;",
+            "name": "subId",
+            "type": "I"
+          }
+        },
+        {
+          "offset": 6,
+          "opcode": "6e",
+          "units": [
+            12398,
+            41537,
+            304
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/MobileInputLogger;",
+            "name": "logOnSignalStrengthsChanged",
+            "descriptor": "(Landroid/telephony/SignalStrength;I)V"
+          }
+        },
+        {
+          "offset": 9,
+          "opcode": "54",
+          "units": [
+            8788,
+            45128
+          ],
+          "field": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryKairosImpl$callbackEvents$1$2$callback$1;",
+            "name": "$$this$coalescingEvents",
+            "type": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;"
+          }
+        },
+        {
+          "offset": 11,
+          "opcode": "22",
+          "units": [
+            34,
+            15485
+          ],
+          "type": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnSignalStrengthChanged;"
+        },
+        {
+          "offset": 13,
+          "opcode": "70",
+          "units": [
+            8304,
+            42053,
+            48
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/statusbar/pipeline/mobile/data/repository/prod/CallbackEvent$OnSignalStrengthChanged;",
+            "name": "<init>",
+            "descriptor": "(Landroid/telephony/SignalStrength;)V"
+          }
+        },
+        {
+          "offset": 16,
+          "opcode": "6e",
+          "units": [
+            8302,
+            8925,
+            2
+          ],
+          "method": {
+            "owner": "Lcom/android/systemui/kairos/internal/BuildScopeImpl$coalescingEvents$1$1;",
+            "name": "emit",
+            "descriptor": "(Ljava/lang/Object;)V"
+          }
+        },
+        {
+          "offset": 19,
+          "opcode": "0e",
+          "units": [
+            14
+          ]
+        }
+      ]
+    }
+  ],
+  "runtime_preflight": {
+    "SignalStrength.getPrimary": {
+      "status": "unverified-framework-not-archived",
+      "descriptor": "()Landroid/telephony/CellSignalStrength;",
+      "requirement": "runtime declared zero-argument method, exact return type and accessibility before hooks; fail closed"
+    }
+  },
+  "adaptation_notes": [
+    "SignalDrawable state: low8=level; bits8..15=numberOfLevels; bits16..23=state. Normal=0 cutout=2 carrierChange=3.",
+    "getState=level|(count<<8)|((exclamation?2:0)<<16); carrierChange=(3<<16)|(count<<8).",
+    "Drawable vector unpack inflation +10 is internal drawing code, not an extra signal bar.",
+    "Standard mobile binder only; unsupported stacked Compose rendering remains native."
+  ]
+}

@@ -19,11 +19,13 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
+    var signalDisplay by remember { mutableStateOf(ShadeStore.read(context).getBoolean("signalDisplay")) }
     DisposableEffect(context) {
         val prefs = ShadeStore.preferences(context)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             enabled = ShadeStore.read(context).getBoolean("enabled")
             offset = ShadeStore.offset(context)
+            signalDisplay = ShadeStore.read(context).getBoolean("signalDisplay")
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
@@ -35,6 +37,9 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         }
         GroupTitle("状态栏")
         SettingsGroup {
+            ToggleRow("信号显示调整", "调整 5G 信号格分档，仅影响显示，不增强信号", value = signalDisplay) {
+                ShadeStore.setSignalDisplay(context, it)
+            }
             SliderRow("图标垂直位置", value = offset, range = -32..32, unit = " dp") {
                 ShadeStore.setOffset(context, it)
             }

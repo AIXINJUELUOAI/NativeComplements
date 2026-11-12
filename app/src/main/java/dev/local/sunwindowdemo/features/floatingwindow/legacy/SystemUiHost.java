@@ -204,7 +204,6 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         return suggestions.rotationSuggestion(click,restore);
     }
     void publishRotationSettings(){if(suggestions!=null)suggestions.publishRotationSettings();}
-    void rotationIcon(android.graphics.drawable.Drawable icon){if(suggestions!=null)suggestions.rotationIcon(icon);}
     private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
     boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
     private volatile boolean backendReady;

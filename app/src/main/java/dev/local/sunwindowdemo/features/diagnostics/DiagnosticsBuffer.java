@@ -12,7 +12,7 @@ final class DiagnosticsBuffer {
     static final Set<String> EVENTS = Set.of("process_loaded", "hook_installed", "hook_failed",
             "enabled", "disabled", "operation_ok", "operation_failed",
             "rotation_proposed", "rotation_shown", "rotation_cancelled", "rotation_clicked",
-            "window_opened", "window_closed", "window_swap_started", "window_swap_ok", "window_swap_failed",
+            "window_opened", "window_closed",
             "call_allowed", "call_blocked", "contacts_unavailable", "fan_shown");
     static final Set<String> EXCEPTIONS = Set.of("", "SecurityException", "IllegalStateException",
             "IllegalArgumentException", "NoSuchMethodException", "ClassNotFoundException",

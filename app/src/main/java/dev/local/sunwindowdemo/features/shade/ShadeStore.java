@@ -21,7 +21,14 @@ public final class ShadeStore {
         Bundle result = new Bundle();
         result.putBoolean("enabled", preferences(context).getBoolean("enabled", false));
         result.putInt("statusBarOffset", offset(context));
+        result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         return result;
+    }
+
+    public static void setSignalDisplay(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("signal_display", enabled).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 
     public static int offset(Context context) {

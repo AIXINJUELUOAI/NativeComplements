@@ -44,6 +44,7 @@ public final class BackBridge extends XposedModule {
                         catch(RuntimeException unavailable){note("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
                         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}
                         catch(RuntimeException unavailable){note("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
+                        dev.local.sunwindowdemo.features.shade.SignalDisplay.connect(app);
                         dev.local.sunwindowdemo.RotationSuggestion.connect(app);
                         try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}
                     });
@@ -52,6 +53,7 @@ public final class BackBridge extends XposedModule {
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
         dev.local.sunwindowdemo.features.shade.LandscapeShade.install(this,p.getDefaultClassLoader(),this::note);
         dev.local.sunwindowdemo.features.shade.StatusBarOffset.install(this,p.getDefaultClassLoader(),this::note);
+        dev.local.sunwindowdemo.features.shade.SignalDisplay.install(this,p.getDefaultClassLoader(),this::note);
         dev.local.sunwindowdemo.RotationSuggestion.install(this,p.getDefaultClassLoader(),this::note);
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         installSuggestionNotifications(p.getDefaultClassLoader());

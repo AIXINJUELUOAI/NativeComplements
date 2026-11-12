@@ -58,8 +58,6 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         try{restore.run();}finally{rotationRestoring=false;}
     }
     private Runnable rotationClick,rotationRestore;
-    private Drawable rotationIcon;
-    void rotationIcon(Drawable icon){rotationIcon=icon;}
     private int openGeneration;
     private String lastTorchCamera,requestedTorchCamera;
     private Boolean requestedTorchMode;
@@ -388,13 +386,10 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     else paint(map,SuggestionTones.tone(night(),SuggestionTones.MAP_LIGHT,SuggestionTones.MAP_DARK));}
             }
             if(enabled("rotate")&&rotationClick!=null){
-                ImageView rotate=addButton(row,rotationIcon!=null?rotationIcon:glyph("ic_suggestion_rotate"),"旋转屏幕",this::rotateScreen,
+                // A fixed rotation symbol does not guess the native proposal's direction.
+                ImageView rotate=addButton(row,glyph("ic_suggestion_rotate"),"旋转屏幕",this::rotateScreen,
                     ()->{rotationClick=null;rotationRestore=null;});
                 paint(rotate,SuggestionTones.tone(night(),SuggestionTones.ROTATE_LIGHT,SuggestionTones.ROTATE_DARK));
-                if(rotationIcon instanceof android.graphics.drawable.Animatable animation){
-                    if(rotationIcon instanceof android.graphics.drawable.AnimatedVectorDrawable vector)vector.reset();
-                    animation.start();
-                }
             }
         }
         if(row.getChildCount()==0)return;

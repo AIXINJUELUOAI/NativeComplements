@@ -69,7 +69,6 @@ final class LauncherRotationSuggestion {
         }
         void publish(boolean shown){
             Bundle extras=new Bundle();extras.putBinder("proposal",this);
-            if(shown)try{extras.putInt("icon",(Integer)owner.getClass().getMethod("getIconResId").invoke(owner));}catch(Exception ignored){}
             context.sendBroadcast(new Intent(ACTION).setPackage(BackBridge.PACKAGE).putExtras(extras).putExtra("shown",shown),null,
                 android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
         }

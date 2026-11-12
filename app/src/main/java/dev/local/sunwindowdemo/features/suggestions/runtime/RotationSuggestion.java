@@ -34,9 +34,6 @@ final class RotationSuggestion {
                     if(!shown){if(launcherProposal==proposal){launcherProposal=null;host.rotationSuggestion(null,null);}return;}
                     Runnable click=()->{if(launcherProposal==proposal){launcherProposal=null;LauncherRotationSuggestion.send(proposal,2);}};
                     Runnable restore=()->{if(launcherProposal==proposal){launcherProposal=null;LauncherRotationSuggestion.send(proposal,3);}};
-                    try{host.rotationIcon(c.getPackageManager().getResourcesForApplication(LauncherGuard.PACKAGE)
-                        .getDrawable(intent.getIntExtra("icon",0),c.getTheme()).mutate());}
-                    catch(Exception unavailable){host.rotationIcon(null);}
                     launcherProposal=proposal;
                     proposal.linkToDeath(()->new android.os.Handler(Looper.getMainLooper()).post(()->{
                         if(launcherProposal==proposal){launcherProposal=null;if(SystemUiHost.live!=null)SystemUiHost.live.rotationSuggestion(null,null);}
@@ -80,11 +77,6 @@ final class RotationSuggestion {
                     RotationDiagnostics.update("host", view==null?"原生按钮为空":"原生按钮尚无点击监听");
                     return chain.proceed();
                 }
-                try{
-                    android.graphics.drawable.Drawable nativeIcon=((android.widget.ImageView)view).getDrawable();
-                    android.graphics.drawable.Drawable.ConstantState copy=nativeIcon==null?null:nativeIcon.getConstantState();
-                    host.rotationIcon(copy==null?null:copy.newDrawable(view.getResources()).mutate());
-                }catch(Exception unavailable){host.rotationIcon(null);}
                 int target = proposal.getInt(owner);
                 Runnable click = () -> {
                     try {

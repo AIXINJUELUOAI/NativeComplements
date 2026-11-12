@@ -118,6 +118,15 @@ public class ShadeTest {
         assertEquals(0, ShadeStore.read(context).getInt("statusBarOffset", -1));
     }
 
+    @Test public void signalDisplayIsOneIndependentDefaultOffSwitch() {
+        assertFalse(ShadeStore.read(context).getBoolean("signalDisplay"));
+        ShadeStore.setSignalDisplay(context,true);
+        assertTrue(ShadeStore.read(context.createDeviceProtectedStorageContext()).getBoolean("signalDisplay"));
+        assertFalse(ShadeStore.read(context).getBoolean("enabled"));
+        ShadeStore.setSignalDisplay(context,false);
+        assertFalse(ShadeStore.read(context).getBoolean("signalDisplay"));
+    }
+
     @Test public void settingsDefaultOffAndUseDeviceProtectedStorage() {
         assertFalse(ShadeStore.read(context).getBoolean("enabled"));
         ShadeStore.setEnabled(context, true);

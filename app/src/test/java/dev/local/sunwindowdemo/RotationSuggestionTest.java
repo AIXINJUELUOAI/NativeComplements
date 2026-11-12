@@ -111,11 +111,13 @@ public class RotationSuggestionTest {
             settings.putBoolean("rotate",true);
             int auto=Settings.System.getInt(activity.getContentResolver(),Settings.System.ACCELEROMETER_ROTATION,0);
             int rotation=Settings.System.getInt(activity.getContentResolver(),Settings.System.USER_ROTATION,0);
-            android.graphics.drawable.Drawable nativeIcon=new android.graphics.drawable.ColorDrawable(android.graphics.Color.WHITE);
-            host.rotationIcon(nativeIcon);
             assertTrue(host.rotationSuggestion(clicks::incrementAndGet,()->{}));
             View button=find((View)get(host,"view"),"旋转屏幕");assertNotNull(button);
-            assertSame(nativeIcon,((android.widget.ImageView)button).getDrawable());
+            android.graphics.drawable.Drawable icon=((android.widget.ImageView)button).getDrawable();
+            assertNotNull(icon);
+            assertTrue(icon instanceof android.graphics.drawable.VectorDrawable);
+            assertEquals(0f,button.getRotation(),0f);
+            assertEquals(1f,button.getScaleX(),0f);
             button.performClick();button.performClick();assertEquals(1,clicks.get());
             assertEquals(auto,Settings.System.getInt(activity.getContentResolver(),Settings.System.ACCELEROMETER_ROTATION,0));
             assertEquals(rotation,Settings.System.getInt(activity.getContentResolver(),Settings.System.USER_ROTATION,0));

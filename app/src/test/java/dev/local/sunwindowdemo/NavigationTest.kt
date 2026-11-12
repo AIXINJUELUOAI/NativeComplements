@@ -126,6 +126,20 @@ class NavigationTest {
         compose.onNodeWithText("选择位置并导出 ZIP").assertExists()
     }
 
+    @Test fun shadeHasOneSignalDisplaySwitchAndPersistsIt() {
+        launch(intent(Page.Shade))
+        compose.onNodeWithText("信号显示调整").performScrollTo().assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            org.junit.Assert.assertTrue(dev.local.sunwindowdemo.features.shade.ShadeStore.read(
+                ApplicationProvider.getApplicationContext()).getBoolean("signalDisplay"))
+        }
+        compose.onNodeWithText("信号显示调整").performClick()
+        compose.runOnIdle {
+            org.junit.Assert.assertFalse(dev.local.sunwindowdemo.features.shade.ShadeStore.read(
+                ApplicationProvider.getApplicationContext()).getBoolean("signalDisplay"))
+        }
+    }
+
     @Test fun barrageEntryStartsNativeSettingsAboveHome() {
         val (_, home) = launch(intent())
         compose.onNodeWithText("游戏助手").assertDoesNotExist()
