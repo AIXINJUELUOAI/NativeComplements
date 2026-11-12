@@ -39,6 +39,17 @@ public class ShadeTest {
         assertFalse(LandscapeShade.forceSplit(true, c));
     }
 
+    @Test public void deoptimizationIncludesIndependentQsLayoutAndOtherNativeConsumers() {
+        var callers = java.util.Arrays.stream(LandscapeShade.CALLERS)
+                .map(value -> value[0] + "#" + value[1]).collect(java.util.stream.Collectors.toSet());
+        assertEquals(11, callers.size());
+        assertTrue(callers.contains("shade.QuickSettingsControllerImpl#updateResources"));
+        assertTrue(callers.contains("shade.NotificationsQSContainerController#updateResources"));
+        assertTrue(callers.contains("statusbar.notification.stack.NotificationStackScrollLayout#updateSplitNotificationShade"));
+        assertTrue(callers.stream().anyMatch(value -> value.endsWith("#emit")));
+        assertEquals(5, LandscapeShade.CONSTRUCTORS.length);
+    }
+
     @Test public void settingsDefaultOffAndUseDeviceProtectedStorage() {
         assertFalse(ShadeStore.read(context).getBoolean("enabled"));
         ShadeStore.setEnabled(context, true);

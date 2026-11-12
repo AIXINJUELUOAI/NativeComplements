@@ -5,6 +5,14 @@
       "dex": "classes2.dex",
       "methods": [{"name": "shouldUseSplitNotificationShade", "descriptor": "(Landroid/content/res/Resources;)Z"}]
     },
+    "Lcom/android/systemui/shade/QuickSettingsControllerImpl;": {
+      "dex": "classes2.dex",
+      "methods": [{"name": "updateResources", "descriptor": "()V"}]
+    },
+    "Lcom/android/systemui/shade/NotificationsQSContainerController;": {
+      "dex": "classes2.dex",
+      "methods": [{"name": "updateResources", "descriptor": "()V"}]
+    },
     "Lcom/android/systemui/shade/NotificationPanelViewController;": {
       "dex": "classes2.dex",
       "methods": [{"name": "updateResources", "descriptor": "()V"}],

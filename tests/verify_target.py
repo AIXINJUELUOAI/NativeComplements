@@ -189,6 +189,8 @@ assert shade['sha256']==game['sha256']
 for cls,kind,name,descriptor in [
  ('Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;','methods','shouldUseSplitNotificationShade','(Landroid/content/res/Resources;)Z'),
  ('Lcom/android/systemui/shade/NotificationPanelViewController;','methods','updateResources','()V'),
+ ('Lcom/android/systemui/shade/QuickSettingsControllerImpl;','methods','updateResources','()V'),
+ ('Lcom/android/systemui/shade/NotificationsQSContainerController;','methods','updateResources','()V'),
  ('Lcom/android/systemui/shade/NotificationPanelViewController;','fields','mSplitShadeStateController','Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;'),
  ('Lcom/android/systemui/shade/NotificationPanelViewController;','fields','mResources','Landroid/content/res/Resources;')]:
  assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==descriptor
