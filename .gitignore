@@ -11,6 +11,16 @@ local.properties
 *.p12
 *.pfx
 
+# Local assistant configuration and root-level device captures
+.claude/
+/dumpsys-*.txt
+/getprop.txt
+/ip-*.txt
+/logcat-*.txt
+/run-info.txt
+/_files.txt
+/scaled_*.png
+
 # Reproducible outputs and temporary work
 **/build/
 deliverables/
