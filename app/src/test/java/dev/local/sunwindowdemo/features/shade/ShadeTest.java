@@ -107,6 +107,17 @@ public class ShadeTest {
         } finally { list.clear(); method.set(null, null); }
     }
 
+    @Test public void statusBarOffsetClampsToThirtyTwoAndStaysIndependentFromSplitShade() {
+        ShadeStore.setOffset(context, 40);
+        assertEquals(32, ShadeStore.offset(context));
+        assertFalse("offset must not enable split shade", ShadeStore.read(context).getBoolean("enabled"));
+        assertEquals(32, ShadeStore.read(context).getInt("statusBarOffset"));
+        ShadeStore.setOffset(context, -40);
+        assertEquals(-32, ShadeStore.offset(context));
+        ShadeStore.setOffset(context, 0);
+        assertEquals(0, ShadeStore.read(context).getInt("statusBarOffset", -1));
+    }
+
     @Test public void settingsDefaultOffAndUseDeviceProtectedStorage() {
         assertFalse(ShadeStore.read(context).getBoolean("enabled"));
         ShadeStore.setEnabled(context, true);

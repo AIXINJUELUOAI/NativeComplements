@@ -14,7 +14,7 @@ public final class SuggestionStore {
     public static SharedPreferences preferences(Context c){return c.createDeviceProtectedStorageContext().getSharedPreferences("suggestions",0);}
     public static Bundle read(Context c){
         SharedPreferences p=preferences(c);Bundle b=new Bundle();
-        for(String key:new String[]{"enabled","torch","bluetooth","otp","links","maps","awake","hide_sms","window"})
+        for(String key:new String[]{"enabled","torch","bluetooth","otp","links","maps","awake","hide_sms","window","rotate"})
             b.putBoolean(key,p.getBoolean(key,!key.equals("enabled")&&!key.equals("hide_sms")&&!key.equals("window")));
         b.putInt("delay",Math.max(50,Math.min(500,p.getInt("delay",100))));
         b.putInt("duration",Math.max(5,Math.min(300,p.getInt("duration",60))));
@@ -23,7 +23,7 @@ public final class SuggestionStore {
         b.putString("bluetooth_app",p.getString("bluetooth_app",""));return b;
     }
     public static void setBoolean(Context c,String key,boolean value){
-        if(!java.util.Set.of("enabled","torch","bluetooth","otp","links","maps","awake","hide_sms","window","right").contains(key))throw new IllegalArgumentException("suggestion setting");
+        if(!java.util.Set.of("enabled","torch","bluetooth","otp","links","maps","awake","hide_sms","window","right","rotate").contains(key))throw new IllegalArgumentException("suggestion setting");
         preferences(c).edit().putBoolean(key,value).apply();changed(c);
     }
     public static void setDelay(Context c,int value){preferences(c).edit().putInt("delay",Math.max(50,Math.min(500,value))).apply();changed(c);}

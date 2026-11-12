@@ -99,6 +99,7 @@ class NavigationTest {
         val (_, shade) = launch(shadeIntent)
         compose.onNodeWithTag("page-title-通知与控制中心").assertIsDisplayed()
         compose.onNodeWithText("横屏双栏").assertIsDisplayed()
+        compose.onNodeWithText("图标垂直位置").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.runOnIdle { assertTrue(shade.isFinishing) }
     }

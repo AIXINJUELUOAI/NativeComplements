@@ -14,6 +14,7 @@ import android.hardware.display.DisplayManager;
 import android.media.*;
 import android.net.Uri;
 import android.os.*;
+import android.provider.Settings;
 import android.provider.Telephony;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
@@ -44,7 +45,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private SuggestionDrag drag;
     private final Set<String> litCameras=new HashSet<>();
     private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,inputRunning,chooser;
-    private boolean torchDismissed,opening;
+    private boolean torchDismissed,opening,rotationSuggested;
     private int openGeneration;
     private String lastTorchCamera,requestedTorchCamera;
     private Boolean requestedTorchMode;
@@ -272,6 +273,24 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         ImageView button=addButton(row,drawable,description,click,dismiss);
         int pad=buttonPadding(4);button.setBackground(null);button.setElevation(0);button.setPadding(pad,pad,pad,pad);return button;
     }
+    void rotationSuggestion(boolean shown){
+        if(rotationSuggested==shown)return;
+        rotationSuggested=shown;render();
+    }
+    private void rotateScreen(){
+        rotationSuggested=false;
+        try{
+            Display display=windowContext.getDisplay();
+            int next=((display==null?0:display.getRotation())+1)%4;
+            Settings.System.putInt(context.getContentResolver(),Settings.System.USER_ROTATION,next);
+            try{
+                Object service=Class.forName("android.view.WindowManagerGlobal").getDeclaredMethod("getWindowManagerService").invoke(null);
+                try{service.getClass().getMethod("freezeRotation",int.class,String.class).invoke(service,next,"NativeComplements");}
+                catch(NoSuchMethodException older){service.getClass().getMethod("freezeRotation",int.class).invoke(service,next);}
+            }catch(Exception ignored){}
+            render();
+        }catch(RuntimeException failure){status("ROTATE_FAILED");}
+    }
     private void render(){
         try{renderContent();}catch(RuntimeException failure){removeView();status("RENDER_UNAVAILABLE");}
     }
@@ -342,6 +361,11 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     if(maps.size()==1)openMap(maps.get(0));else{chooser=true;render();}
                 },()->{mapText=null;chooser=false;});if(maps.size()==1){int pad=buttonPadding(4);map.setBackground(null);map.setElevation(0);map.setPadding(pad,pad,pad,pad);}
                     else paint(map,SuggestionTones.tone(night(),SuggestionTones.MAP_LIGHT,SuggestionTones.MAP_DARK));}
+            }
+            if(enabled("rotate")&&rotationSuggested){
+                ImageView rotate=addButton(row,glyph("ic_suggestion_rotate"),"旋转屏幕",this::rotateScreen,
+                    ()->{rotationSuggested=false;render();});
+                paint(rotate,SuggestionTones.tone(night(),SuggestionTones.ROTATE_LIGHT,SuggestionTones.ROTATE_DARK));
             }
         }
         if(row.getChildCount()==0)return;

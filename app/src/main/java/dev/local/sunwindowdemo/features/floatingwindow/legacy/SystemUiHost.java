@@ -199,6 +199,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);});
     }
     void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);if(barrage!=null)barrage.notificationRemoved(key);});}
+    void rotationSuggestion(boolean shown){main.post(()->{if(suggestions!=null)suggestions.rotationSuggestion(shown);});}
     private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
     boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
     private volatile boolean backendReady;

@@ -20,7 +20,18 @@ public final class ShadeStore {
     public static Bundle read(Context context) {
         Bundle result = new Bundle();
         result.putBoolean("enabled", preferences(context).getBoolean("enabled", false));
+        result.putInt("statusBarOffset", offset(context));
         return result;
+    }
+
+    public static int offset(Context context) {
+        return Math.max(-32, Math.min(32, preferences(context).getInt("status_bar_offset", 0)));
+    }
+
+    public static void setOffset(Context context, int dp) {
+        preferences(context).edit().putInt("status_bar_offset", Math.max(-32, Math.min(32, dp))).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 
     public static void setEnabled(Context context, boolean enabled) {

@@ -19,6 +19,14 @@ class SuggestionTonesTest {
         assertEquals(0xFF2E7D32.toInt(), SuggestionTones.MAP_LIGHT)
     }
 
+    @Test fun rotationSuggestionDefaultsOnAndCanBeDisabled() {
+        val context = org.robolectric.RuntimeEnvironment.getApplication()
+        SuggestionStore.preferences(context).edit().clear().commit()
+        assertEquals(true, SuggestionStore.read(context).getBoolean("rotate"))
+        SuggestionStore.setBoolean(context, "rotate", false)
+        assertEquals(false, SuggestionStore.read(context).getBoolean("rotate"))
+    }
+
     @Test fun containerKeepsAFixedTonalTintOverTheSurface() {
         val surface = 0xFFF6F3FA.toInt()
         val container = SuggestionTones.container(surface, SuggestionTones.TORCH_LIGHT)

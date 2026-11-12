@@ -78,6 +78,7 @@ fun SuggestionScreen(controller: WindowController) {
     val otpTone = tone(SuggestionTones.OTP_LIGHT.toLong(), SuggestionTones.OTP_DARK.toLong())
     val linkTone = tone(0xFF7B4DBD, 0xFFC4A7FF)
     val locationTone = tone(SuggestionTones.MAP_LIGHT.toLong(), SuggestionTones.MAP_DARK.toLong())
+    val rotateTone = tone(SuggestionTones.ROTATE_LIGHT.toLong(), SuggestionTones.ROTATE_DARK.toLong())
     val buttonTone = tone(0xFF6750A4, 0xFFD0BCFF)
     val windowTone = tone(0xFF00639B, 0xFF8ECDF8)
 
@@ -99,6 +100,8 @@ fun SuggestionScreen(controller: WindowController) {
             leading = { SuggestionIcon(R.drawable.ic_suggestion_link, linkTone) })
         IconToggleRow("地址与地点", value = config.getBoolean("maps"), onChange = { toggle("maps", it) },
             leading = { SuggestionIcon(R.drawable.ic_suggestion_location, locationTone) })
+        IconToggleRow("屏幕旋转", value = config.getBoolean("rotate"), onChange = { toggle("rotate", it) },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_rotate, rotateTone) })
     }
     GroupTitle("按钮与打开方式")
     SettingsGroup {
