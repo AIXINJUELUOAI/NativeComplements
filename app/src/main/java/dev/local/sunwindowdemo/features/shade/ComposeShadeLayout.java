@@ -16,7 +16,7 @@ final class ComposeShadeLayout {
     private static final ThreadLocal<Boolean> readingShadeConfig = new ThreadLocal<>();
     private static final List<WeakReference<Object>> callbacks = new ArrayList<>();
     private static Method onConfigChanged;
-    private static int splitId, fullWidthId;
+    private static volatile int splitId, fullWidthId;
     private ComposeShadeLayout() {}
 
     static void install(XposedModule module, ClassLoader loader, List<XposedInterface.HookHandle> hooks,
@@ -25,9 +25,6 @@ final class ComposeShadeLayout {
         Class<?> interactor = Class.forName("com.android.systemui.shade.domain.interactor.ShadeModeInteractorImpl", false, loader);
         Class<?> emitter = Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository$special$$inlined$map$1$2", false, loader);
         Class<?> callback = Class.forName("com.android.systemui.common.ui.data.repository.ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1", false, loader);
-        Class<?> bools = Class.forName("com.android.systemui.R$bool", false, loader);
-        splitId = bools.getField("config_use_split_notification_shade").getInt(null);
-        fullWidthId = bools.getField("config_isFullWidthShade").getInt(null);
         onConfigChanged = callback.getDeclaredMethod("onConfigChanged", Configuration.class);
         onConfigChanged.setAccessible(true);
         repository.getDeclaredField("legacyUseSplitShade");
@@ -36,9 +33,12 @@ final class ComposeShadeLayout {
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                     Object original = chain.proceed();
                     int id = (Integer) chain.getArg(0);
-                    if (!Boolean.TRUE.equals(readingShadeConfig.get()) || (id != splitId && id != fullWidthId)) return original;
+                    if (!Boolean.TRUE.equals(readingShadeConfig.get())) return original;
+                    Resources resources = (Resources) chain.getThisObject();
+                    resolveResourceIds(resources);
+                    if (id != splitId && id != fullWidthId) return original;
                     return overrideBoolean(original, id, true,
-                            force.test((Resources) chain.getThisObject()), splitId, fullWidthId);
+                            force.test(resources), splitId, fullWidthId);
                 }));
         hooks.add(module.hook(emit).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
             Boolean before = readingShadeConfig.get();
@@ -63,6 +63,17 @@ final class ComposeShadeLayout {
             }));
         }
         if (!module.deoptimize(emit)) throw new IllegalStateException("compose shade emitter deoptimize");
+    }
+
+    // R classes can be removed by R8 even when JADX prints symbolic R.bool references.
+    // Resolve from the actual host resource table, never the module's resource namespace.
+    static synchronized void resolveResourceIds(Resources resources) {
+        if (splitId != 0 && fullWidthId != 0) return;
+        int split = resources.getIdentifier("config_use_split_notification_shade", "bool", "com.android.systemui");
+        int fullWidth = resources.getIdentifier("config_isFullWidthShade", "bool", "com.android.systemui");
+        if (split == 0 || fullWidth == 0) throw new Resources.NotFoundException("SystemUI shade booleans");
+        splitId = split;
+        fullWidthId = fullWidth;
     }
 
     private static void restoreScope(Boolean before) {

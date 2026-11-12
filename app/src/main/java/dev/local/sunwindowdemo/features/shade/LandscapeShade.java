@@ -104,7 +104,7 @@ public final class LandscapeShade {
             enabled = false;
             for (XposedInterface.HookHandle hook : hooks) try { hook.unhook(); } catch (Throwable ignored) {}
             hooks.clear();
-            note("SHADE_UNAVAILABLE " + failure.getClass().getSimpleName());
+            note("SHADE_UNAVAILABLE " + failure);
         }
     }
 

@@ -58,6 +58,31 @@ public class ShadeTest {
         assertEquals(false, ComposeShadeLayout.overrideBoolean(false, 3, true, true, 1, 2));
     }
 
+    @Test public void composeIdsComeFromHostResourcesWithoutRuntimeRClass() throws Exception {
+        var split = ComposeShadeLayout.class.getDeclaredField("splitId"); split.setAccessible(true);
+        var full = ComposeShadeLayout.class.getDeclaredField("fullWidthId"); full.setAccessible(true);
+        var base = context.getResources();
+        var host = new android.content.res.Resources(base.getAssets(), base.getDisplayMetrics(), base.getConfiguration()) {
+            @Override public int getIdentifier(String name, String kind, String pkg) {
+                assertEquals("bool", kind); assertEquals("com.android.systemui", pkg);
+                return switch (name) {
+                    case "config_use_split_notification_shade" -> 101;
+                    case "config_isFullWidthShade" -> 102;
+                    default -> 0;
+                };
+            }
+        };
+        try {
+            split.setInt(null, 0); full.setInt(null, 0);
+            ComposeShadeLayout.resolveResourceIds(host);
+            assertEquals(101, split.getInt(null)); assertEquals(102, full.getInt(null));
+            split.setInt(null, 0); full.setInt(null, 0);
+            assertThrows(android.content.res.Resources.NotFoundException.class,
+                    () -> ComposeShadeLayout.resolveResourceIds(base));
+            assertEquals(0, split.getInt(null)); assertEquals(0, full.getInt(null));
+        } finally { split.setInt(null, 0); full.setInt(null, 0); }
+    }
+
     public static class ConfigCallback {
         Configuration last;
         int calls;
