@@ -253,7 +253,9 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private boolean night(){return (windowContext.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;}
     /** Same tonal circle and glyph colour as the in-app suggestion rows. */
     private void paint(ImageView button,int tone){
+        int padding=button.getPaddingLeft();
         button.setBackground(buttonBackground(circle(SuggestionTones.container(surface(),tone))));
+        button.setPadding(padding,padding,padding,padding);
         button.setImageTintList(ColorStateList.valueOf(tone));
     }
     private Drawable background(){GradientDrawable bg=new GradientDrawable();bg.setColor(surface());bg.setCornerRadius(dp(28));return bg;}
@@ -274,11 +276,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         return List.copyOf(result);
     }
     private int buttonSize(){return Math.max(32,Math.min(80,settings.getInt("size",48)));}
-    private int buttonPadding(float base){int size=buttonSize();return dp((Math.max(48,size)-size)/2f+base*size/48f);}
+    // Image content scales with the visible diameter; only the minimum touch target stays 48dp.
+    private int buttonPadding(float iconRatio){int size=buttonSize();return Math.round((dp(Math.max(48,size))-dp(size*iconRatio))/2f);}
     private Drawable buttonBackground(Drawable drawable){int inset=dp((Math.max(48,buttonSize())-buttonSize())/2f);return inset==0?drawable:new InsetDrawable(drawable,inset);}
     private ImageView addButton(LinearLayout row,Drawable drawable,String description,Runnable click,Runnable dismiss){
         ImageView button=new ImageView(windowContext);button.setImageDrawable(drawable);button.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        int pad=buttonPadding(9);button.setPadding(pad,pad,pad,pad);button.setBackground(buttonBackground(background()));button.setElevation(dp(4));
+        button.setBackground(buttonBackground(circle(surface())));int pad=buttonPadding(.625f);button.setPadding(pad,pad,pad,pad);button.setElevation(dp(4));
         button.setContentDescription(description);button.setFocusable(false);button.setClickable(true);
         button.setOnClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.CONFIRM);click.run();});
         if(drag!=null)drag.attach(button,()->{dismiss.run();render();});
@@ -290,9 +293,10 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(line==null||line.getChildCount()>=columns){line=new LinearLayout(windowContext);row.addView(line);}
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(touch,touch);p.setMargins(dp(5),dp(5),dp(5),dp(5));line.addView(button,p);return button;
     }
+    /** App icons keep the same circular container and footprint as the functional buttons. */
     private ImageView addAppButton(LinearLayout row,Drawable drawable,String description,Runnable click,Runnable dismiss){
         ImageView button=addButton(row,drawable,description,click,dismiss);
-        int pad=buttonPadding(4);button.setBackground(null);button.setElevation(0);button.setPadding(pad,pad,pad,pad);return button;
+        int pad=buttonPadding(.75f);button.setPadding(pad,pad,pad,pad);return button;
     }
     boolean rotationSuggestion(Runnable click,Runnable restore){
         if(click==null){rotationClick=null;rotationRestore=null;render();return false;}
@@ -380,10 +384,14 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 },()->link=null);
             }
             if(enabled("maps")&&mapText!=null){
-                maps=mapApps();if(!maps.isEmpty()){ImageView map=addButton(row,maps.size()==1?icon(maps.get(0)):glyph("ic_suggestion_navigation"),"用地图搜索地点",()->{
-                    if(maps.size()==1)openMap(maps.get(0));else{chooser=true;render();}
-                },()->{mapText=null;chooser=false;});if(maps.size()==1){int pad=buttonPadding(4);map.setBackground(null);map.setElevation(0);map.setPadding(pad,pad,pad,pad);}
-                    else paint(map,SuggestionTones.tone(night(),SuggestionTones.MAP_LIGHT,SuggestionTones.MAP_DARK));}
+                maps=mapApps();if(!maps.isEmpty()){
+                    if(maps.size()==1){
+                        addAppButton(row,icon(maps.get(0)),"用地图搜索地点",()->openMap(maps.get(0)),()->{mapText=null;chooser=false;});
+                    }else{
+                        ImageView map=addButton(row,glyph("ic_suggestion_navigation"),"用地图搜索地点",()->{chooser=true;render();},()->{mapText=null;chooser=false;});
+                        paint(map,SuggestionTones.tone(night(),SuggestionTones.MAP_LIGHT,SuggestionTones.MAP_DARK));
+                    }
+                }
             }
             if(enabled("rotate")&&rotationClick!=null){
                 // A fixed rotation symbol does not guess the native proposal's direction.
