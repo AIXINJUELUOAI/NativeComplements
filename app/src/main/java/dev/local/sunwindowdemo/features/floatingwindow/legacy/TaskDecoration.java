@@ -10,7 +10,21 @@ final class TaskDecoration {
     void dimAmount(int percent){dimAmount=Rules.clamp(percent,0,100)/100f;}
     private final FrameworkAccess a;
     private SurfaceControl bar,dim;
-    private boolean drawn;
+    private boolean drawn,dimReady,dimEnabled=true;
+    void enableDim(){dimEnabled=true;}
+    void transferDimTo(TaskDecoration next,Object task)throws Exception{
+        if(dim==null){next.enableDim();return;}
+        if(next.dim!=null&&next.dim!=dim){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},next.dim);next.dim.release();}
+        next.dim=dim;next.dimReady=dimReady;next.dimEnabled=true;
+        if(dim!=null){
+            Object t=a.transaction(task);
+            tx(t,"reparent",new Class<?>[]{SurfaceControl.class,SurfaceControl.class},dim,(SurfaceControl)a.field(a.call(task,"getParent"),"mSurfaceControl"));
+            tx(t,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},dim,(SurfaceControl)a.field(task,"mSurfaceControl"),-1);
+            tx(t,"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},dim,dimAmount);
+            tx(t,"show",new Class<?>[]{SurfaceControl.class},dim);
+        }
+        dim=null;dimReady=false;dimEnabled=false;
+    }
     private int color;
     int color(){return EDGE_BAR_COLOR;}
     private Rect parentBounds;
@@ -26,7 +40,7 @@ final class TaskDecoration {
         a.method(t,"setColor",SurfaceControl.class,float[].class);
         a.method(t,"setAlpha",SurfaceControl.class,float.class);
         a.method(t,"show",SurfaceControl.class);a.method(t,"hide",SurfaceControl.class);
-        a.method(t,"remove",SurfaceControl.class);
+        a.method(t,"remove",SurfaceControl.class);a.method(t,"reparent",SurfaceControl.class,SurfaceControl.class);
         Class<?> controller=a.field(a.wc,"mTransitionController").getType();
         a.method(controller,"isPlaying");a.method(controller,"isCollecting");
         a.field(controller,"mBuildingTransitionLayers");
@@ -62,12 +76,14 @@ final class TaskDecoration {
             drawn=win!=null&&a.bool(win,"isDrawn")&&a.bool(win,"isVisible");
             parentBounds=new Rect((Rect)a.call(parent,"getBounds"));
         }
-        if(!drawn||alpha<=0&&dimAlpha<=0){
-            if(bar!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},bar);
-            if(dim!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},dim);
-            return drawn;
-        }
+        // Page navigation can replace the main window before its first buffer. That
+        // gates the handle, not an already established task backdrop.
+        dimReady|=drawn;
+        if(bar!=null&&(!drawn||alpha<=0))tx(t,"hide",new Class<?>[]{SurfaceControl.class},bar);
+        if(dim!=null&&(!dimEnabled||!dimReady||dimAlpha<=0))tx(t,"hide",new Class<?>[]{SurfaceControl.class},dim);
+        if(!drawn&&(!dimEnabled||!dimReady||dimAlpha<=0))return false;
         SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl");
+        if(drawn&&alpha>0){
         if(bar==null)bar=layer(parent,"SunWindow-handle");
         if(color!=EDGE_BAR_COLOR){color=EDGE_BAR_COLOR;tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,
             new float[]{((color>>16)&255)/255f,((color>>8)&255)/255f,(color&255)/255f});}
@@ -83,6 +99,8 @@ final class TaskDecoration {
         tx(t,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},bar,thickness/2);
         tx(t,"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},bar,Math.max(0,Math.min(1,alpha)));
         tx(t,"show",new Class<?>[]{SurfaceControl.class},bar);
+        }
+        if(!dimEnabled||!dimReady||dimAlpha<=0)return drawn;
         // Keep the dim layer below the task, preserving its brightness and
         // leaving native system/IME windows above it.
         if(dim==null){
@@ -94,7 +112,10 @@ final class TaskDecoration {
         tx(t,"setWindowCrop",new Class<?>[]{SurfaceControl.class,int.class,int.class},dim,parentBounds.width(),parentBounds.height());
         tx(t,"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},dim,dimAmount*Math.max(0,Math.min(1,dimAlpha)));
         tx(t,"show",new Class<?>[]{SurfaceControl.class},dim);
-        return true;
+        return drawn;
+    }
+    void hideHandle(Object task)throws Exception{
+        if(bar!=null)tx(a.transaction(task),"hide",new Class<?>[]{SurfaceControl.class},bar);
     }
     void hide(Object task) throws Exception {
         Object t=a.transaction(task);

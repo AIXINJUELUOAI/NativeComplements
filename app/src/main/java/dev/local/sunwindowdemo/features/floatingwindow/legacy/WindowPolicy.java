@@ -2,6 +2,14 @@ package dev.local.sunwindowdemo;
 
 /** Shared, framework-independent geometry and orientation decisions. */
 final class WindowPolicy {
+    static boolean nativeForeground(Object before,Object target,String beforePackage,String targetPackage,
+            int beforeUser,int targetUser,Object beforeDisplay,Object targetDisplay,int mode,boolean owned){
+        return before!=null&&before==target&&beforePackage!=null&&beforePackage.equals(targetPackage)
+            &&beforeUser==targetUser&&beforeDisplay!=null&&beforeDisplay==targetDisplay&&mode==1&&!owned;
+    }
+    static boolean autoMini(boolean different,boolean sameToken,String previousForm,boolean validMini){
+        return different&&!sameToken&&"normal".equals(previousForm)&&!validMini;
+    }
     static boolean entryBusy(boolean animating,int relativeRotation){return animating||relativeRotation!=0;}
     static boolean morphEntry(boolean delegated,boolean focused,boolean visible,int mode){return !delegated&&focused&&visible&&mode==1;}
     static String failureMessage(String report){

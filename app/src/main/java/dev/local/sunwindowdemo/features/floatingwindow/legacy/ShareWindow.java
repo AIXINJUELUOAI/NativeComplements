@@ -93,6 +93,10 @@ final class ShareWindow {
                 return chain.proceed();
             }));
             handles.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                WindowEngine.NativeForeground previousForeground=engine.launchForeground.get();
+                try{engine.launchForeground.set(engine.nativeForeground());}
+                catch(Exception error){engine.launchForeground.remove();log.accept("WINDOW_FOREGROUND_SNAPSHOT_FAILED "+FrameworkAccess.reason(error));}
+                try{
                 WindowEngine.ShareLaunch selected=null;
                 if(chain.getArg(6)==null&&chain.getArg(7)==null){
                     try{
@@ -109,6 +113,7 @@ final class ShareWindow {
                     engine.shareFinished(selected,chain.getThisObject());
                     if(previous==null)engine.shareLaunch.remove();else engine.shareLaunch.set(previous);
                 }
+                }finally{if(previousForeground==null)engine.launchForeground.remove();else engine.launchForeground.set(previousForeground);}
             }));
             log.accept("SHARE_WINDOW_READY inter-app source/result/URI chain preserved");
         }catch(Throwable error){for(XposedInterface.HookHandle handle:handles)try{handle.unhook();}catch(Throwable ignored){}log.accept("SHARE_WINDOW_UNAVAILABLE "+FrameworkAccess.reason(error));}

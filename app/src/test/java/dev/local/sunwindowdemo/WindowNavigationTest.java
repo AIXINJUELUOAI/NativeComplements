@@ -31,13 +31,13 @@ public class WindowNavigationTest {
 
     @Test public void notificationsKeepTheActualForegroundTargetNativeIncludingDelegatedSenders(){
         WindowNavigation.Launch delegated=new WindowNavigation.Launch(12,"com.example.publisher",null,0,new Binder(),0,"com.example.chat");
-        delegated.targetPackage="com.example.chat";
+        delegated.targetPackage="com.example.chat";delegated.nativeTarget=true;
         assertTrue(delegated.keepNativeForeground());
-        delegated.targetPackage="com.example.browser";
+        delegated.targetPackage="com.example.browser";delegated.nativeTarget=false;
         assertFalse(delegated.keepNativeForeground());
         WindowNavigation.Launch unknown=new WindowNavigation.Launch(12,"com.example.publisher",null,0,new Binder(),0,null);
         unknown.targetPackage="com.example.chat";
-        assertTrue(unknown.keepNativeForeground());
+        assertFalse("Unknown startup focus must not exempt arbitrary notification targets",unknown.keepNativeForeground());
         WindowNavigation.Launch shortcut=new WindowNavigation.Launch(12,"com.example.chat","com.example.chat",0,new Binder(),0,"com.example.chat");
         shortcut.targetPackage="com.example.chat";
         assertFalse("Explicit shortcuts still open their requested window",shortcut.keepNativeForeground());

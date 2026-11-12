@@ -85,6 +85,8 @@ final class TaskCover {
         return (SurfaceControl)a.call(b,"build");
     }
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
+    private boolean continuousDim;
+    void continuousDim(){continuousDim=true;}
     void entryDecorations(boolean entering){decorationEntry=entering;}
     boolean decorate(TaskDecoration value,Geometry.Placement canvas,float density,boolean landscape,float alpha,boolean structural)throws Exception{
         decoration=value;decorationCanvas=canvas;decorationDensity=density;decorationLandscape=landscape;decorationAlpha=alpha;
@@ -97,7 +99,7 @@ final class TaskCover {
             scale,decorationBounds.left,decorationBounds.top);
         MotionStyle.Decoration entry=decorationEntry?MotionStyle.entryDecoration(decorationProgress(),fadeIn):new MotionStyle.Decoration(1,1);
         float alpha=presentationVisible?decorationAlpha*exitAlpha:0;
-        boolean drawn=decoration.update(task,parent,pose,decorationDensity,decorationLandscape,alpha*entry.handle(),alpha*entry.dim(),structural,tx);
+        boolean drawn=decoration.update(task,parent,pose,decorationDensity,decorationLandscape,alpha*entry.handle(),continuousDim?(presentationVisible?1:0):alpha*entry.dim(),structural,tx);
         // Start once the app can present its decorations, including slow cold starts.
         if(decorationEntry&&drawn&&decorationAt<0)decorationAt=SystemClock.elapsedRealtime();
         return drawn;

@@ -19,6 +19,8 @@ final class WindowNavigation {
         volatile int taskId = -1;
         volatile String targetPackage;
         volatile boolean dispatched;
+        WindowEngine.NativeForeground foreground;
+        volatile boolean nativeTarget;
 
         Launch(long generation, String hint, String expectedPackage, int userId, IBinder sender, long sentAt,
                String foregroundPackage) {
@@ -37,7 +39,7 @@ final class WindowNavigation {
         }
 
         boolean keepNativeForeground() {
-            return expectedPackage==null && (foregroundPackage==null || foregroundPackage.equals(targetPackage));
+            return expectedPackage==null && nativeTarget;
         }
     }
 }
