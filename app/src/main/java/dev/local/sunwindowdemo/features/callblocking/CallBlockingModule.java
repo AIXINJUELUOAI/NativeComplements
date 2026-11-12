@@ -20,9 +20,12 @@ public final class CallBlockingModule extends XposedModule {
     private volatile Bundle config=Bundle.EMPTY;
     private Context context;
     private Handler worker;
+    private record Contacts(Set<String> numbers,long expires,int uid){}
+    private volatile Contacts contacts=new Contacts(null,0,-1);
+    private final CallBlockingRules.Repeats repeats=new CallBlockingRules.Repeats();
     private Method managerContext,registrar,account,subscription,incoming,selfManaged,emergency,ecbm,
         hasProperty,target,handle,state,user,builderFrom,allow,reject,addLog,notification,audio,silence,
-        blockReason,appName,component,response,build,emergencySms;
+        blockReason,appName,component,response,build,emergencySms,presentation;
     private Field nativeAllows;
     private final Set<Object> recorded=Collections.newSetFromMap(new WeakHashMap<>());
     private long lastFailure;
@@ -48,6 +51,7 @@ public final class CallBlockingModule extends XposedModule {
             incoming=method(call,"isIncoming");selfManaged=method(call,"isSelfManaged");
             emergency=method(call,"isEmergencyCall");ecbm=method(call,"isInECBM");
             hasProperty=method(call,"hasProperty",int.class);target=method(call,"getTargetPhoneAccount");
+            presentation=method(call,"getHandlePresentation");
             handle=method(call,"getHandle");state=method(call,"getState");user=method(call,"getAssociatedUser");
             builderFrom=method(builder,"from",result);build=method(builder,"build");
             allow=method(builder,"setShouldAllowCall",boolean.class);reject=method(builder,"setShouldReject",boolean.class);
@@ -101,9 +105,13 @@ public final class CallBlockingModule extends XposedModule {
         context=c;
         HandlerThread thread=new HandlerThread("NativeComplements-Calls",android.os.Process.THREAD_PRIORITY_BACKGROUND);
         thread.start();worker=new Handler(thread.getLooper());
+        dev.local.sunwindowdemo.features.diagnostics.Diagnostics.initialize(context,"system");
         worker.post(()->{
             try{context.getContentResolver().registerContentObserver(CallBlockingProvider.CONFIG,true,
                 new ContentObserver(worker){@Override public void onChange(boolean self){reload();}});
+            }catch(Throwable e){failure(e);}
+            try{context.getContentResolver().registerContentObserver(android.provider.ContactsContract.Contacts.CONTENT_URI,true,
+                new ContentObserver(worker){@Override public void onChange(boolean self){contacts=new Contacts(null,0,-1);reloadContacts();}});
             }catch(Throwable e){failure(e);}
             poll();
         });
@@ -120,6 +128,7 @@ public final class CallBlockingModule extends XposedModule {
             if(value==null)throw new IllegalStateException("empty config");
             Bundle previous=config;
             config=new Bundle(value);
+            reloadContacts();
             if(previous==Bundle.EMPTY||previous.getLong("updated_at")!=value.getLong("updated_at")
                 ||previous.getBoolean("enabled")!=value.getBoolean("enabled")){
                 note("CALL_BLOCKING_CONFIG version="+BuildConfig.VERSION_NAME+" enabled="+value.getBoolean("enabled")
@@ -133,6 +142,22 @@ public final class CallBlockingModule extends XposedModule {
             context.getContentResolver().call(CallBlockingProvider.CONFIG,"backend",BuildConfig.VERSION_NAME,status);
         }catch(Throwable e){config=Bundle.EMPTY;failure(e);}
         finally{Binder.restoreCallingIdentity(identity);}
+    }
+
+    /** Called only on the existing worker, never while Telecom holds its call/WM locks. */
+    private void reloadContacts(){
+        Bundle snapshot=config;
+        if(!snapshot.getBoolean("enabled")||!(snapshot.getBoolean("sim1_reject_strangers")
+                ||(!snapshot.getBoolean("sim2_follow_sim1")&&snapshot.getBoolean("sim2_reject_strangers")))){
+            contacts=new Contacts(null,0,-1);return;
+        }
+        try{
+            Bundle out=context.getContentResolver().call(CallBlockingProvider.CONFIG,"contacts",null,null);
+            String[] numbers=out==null?null:out.getStringArray("numbers");
+            if(numbers==null)dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"system","contacts_unavailable");
+            contacts=new Contacts(numbers==null?null:Collections.unmodifiableSet(new HashSet<>(Arrays.asList(numbers))),
+                SystemClock.elapsedRealtime()+65_000,out==null?-1:out.getInt("permission_uid",-1));
+        }catch(Throwable e){contacts=new Contacts(null,0,-1);failure(e);}
     }
 
     private static int ruleCount(Bundle value,String key){String[] rules=value.getStringArray(key);return rules==null?0:rules.length;}
@@ -171,6 +196,20 @@ public final class CallBlockingModule extends XposedModule {
                 snapshot.getBoolean("sim1_reject_all"),snapshot.getStringArray("sim1_patterns"),
                 snapshot.getBoolean("sim2_follow_sim1"),snapshot.getBoolean("sim2_reject_all"),
                 snapshot.getStringArray("sim2_patterns"),number);
+            if(!d.blocked){
+                boolean identifiable=numberUri!=null&&"tel".equals(numberUri.getScheme())
+                    &&(Integer)presentation.invoke(call)==android.telecom.TelecomManager.PRESENTATION_ALLOWED;
+                String recognized=identifiable?CallBlockingRules.normalizeNumber(number):"";
+                boolean repeated=repeats.observe(call,sub,recognized,SystemClock.elapsedRealtime());
+                String prefix=slot==0||snapshot.getBoolean("sim2_follow_sim1")?"sim1_":"sim2_";
+                Contacts book=contacts;
+                boolean ready=book.numbers!=null&&SystemClock.elapsedRealtime()<book.expires&&book.uid>=0
+                    &&context.checkPermission(android.Manifest.permission.READ_CONTACTS,-1,book.uid)
+                        ==android.content.pm.PackageManager.PERMISSION_GRANTED;
+                d=CallBlockingRules.stranger(d,snapshot.getBoolean(prefix+"reject_strangers"),ready,
+                    ready&&book.numbers.contains(recognized),snapshot.getBoolean(prefix+"allow_repeat"),repeated,recognized);
+            }
+            dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"system",d.blocked?"call_blocked":"call_allowed");
             if(!d.blocked)return null;
             Bundle entry=new Bundle();entry.putLong("time",System.currentTimeMillis());
             entry.putString("number",number);entry.putInt("slot_index",slot);entry.putInt("subscription_id",sub);

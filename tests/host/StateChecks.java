@@ -8,8 +8,8 @@ public final class StateChecks {
             eq("mini",GestureMath.horizontalRelease(-48*density,48*density));
             eq("normal",GestureMath.horizontalRelease(0,48*density));
         }
-        if(Math.abs(GestureMath.horizontalScale(.8f,48,48,1)-.82f)>.0001f)throw new AssertionError("horizontal growth");
-        if(Math.abs(GestureMath.horizontalScale(.8f,-48,48,1)-.78f)>.0001f)throw new AssertionError("horizontal shrink");
+        if(Math.abs(GestureMath.horizontalScale(.8f,48,48,1)-.88f)>.0001f)throw new AssertionError("horizontal growth");
+        if(Math.abs(GestureMath.horizontalScale(.8f,-48,48,1)-.72f)>.0001f)throw new AssertionError("horizontal shrink");
         if(GestureMath.horizontalScale(.8f,480,48,.81f)>.81001f)throw new AssertionError("safe fit ceiling");
         eq("normal",GestureMath.release(.75f,.75f,false,false));
         eq("mini",GestureMath.release(.59f,.75f,false,false));

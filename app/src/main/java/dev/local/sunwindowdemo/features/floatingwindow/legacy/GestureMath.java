@@ -28,7 +28,7 @@ final class GestureMath {
             throw new IllegalArgumentException("scale");
         horizontalRelease(delta,threshold);
         float progress=Math.max(-1,Math.min(1,delta/threshold));
-        return Math.min(Math.max(start,maximum),start*(1+.025f*progress));
+        return Math.min(Math.max(start,maximum),start*(1+.10f*progress));
     }
     static float dragScale(float start, float delta, int logicalAxis) {
         if (logicalAxis<=0) throw new IllegalArgumentException("axis");

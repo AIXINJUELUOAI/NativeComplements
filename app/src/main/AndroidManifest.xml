@@ -3,6 +3,7 @@
     <uses-permission android:name="dev.nativecomplements.module.CONTROL" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
@@ -18,6 +19,7 @@
             <intent-filter><action android:name="android.intent.action.CREATE_SHORTCUT" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
+        <provider android:name=".features.diagnostics.DiagnosticsProvider" android:authorities="${applicationId}.diagnostics" android:exported="true" android:grantUriPermissions="false" />
         <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.nativecomplements.module.callblocking" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.motion.MotionProvider" android:authorities="dev.nativecomplements.module.motion" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.nativecomplements.module.iconlayers" android:exported="true" android:directBootAware="true" />

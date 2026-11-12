@@ -19,7 +19,7 @@ import dev.local.sunwindowdemo.R
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
-fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit) {
+fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit, onLogs: () -> Unit = {}) {
     val context = LocalContext.current
     val uri = LocalUriHandler.current
     var versionTaps by remember { mutableIntStateOf(0) }
@@ -42,6 +42,7 @@ fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit) {
         SettingRow("开发者", "AIXINJUELUOAI", { uri.openUri("https://github.com/AIXINJUELUOAI") })
         SettingRow("项目主页", onClick = { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements") })
         SettingRow("反馈问题", onClick = { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements/issues") })
+        SettingRow("诊断日志", "开始记录、复现问题后停止并导出；不会自动上传", onClick = onLogs)
         SettingRow("开源许可", onClick = onLicenses)
     }
     if (toolsVisible) {

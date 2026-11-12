@@ -30,6 +30,10 @@ public final class CallBlockingStore {
         result.putBoolean("sim2_follow_sim1", p.getBoolean("sim2_follow_sim1", false));
         result.putBoolean("sim2_reject_all", p.getBoolean("sim2_reject_all", false));
         result.putStringArray("sim2_patterns", patterns(p, "sim2_patterns"));
+        for (int slot = 0; slot < 2; slot++) {
+            result.putBoolean(key(slot, "reject_strangers"), p.getBoolean(key(slot, "reject_strangers"), false));
+            result.putBoolean(key(slot, "allow_repeat"), p.getBoolean(key(slot, "allow_repeat"), false));
+        }
         result.putLong("updated_at", p.getLong("updated_at", 0));
         result.putLong("backend_seen_at", p.getLong("backend_seen_at", 0));
         result.putString("backend_version", p.getString("backend_version", ""));
@@ -57,6 +61,14 @@ public final class CallBlockingStore {
 
     public static void setRejectAll(Context context, int slot, boolean rejectAll) {
         save(context, preferences(context).edit().putBoolean(key(slot, "reject_all"), rejectAll));
+    }
+
+    public static void setRejectStrangers(Context context, int slot, boolean enabled) {
+        save(context, preferences(context).edit().putBoolean(key(slot, "reject_strangers"), enabled));
+    }
+
+    public static void setAllowRepeat(Context context, int slot, boolean enabled) {
+        save(context, preferences(context).edit().putBoolean(key(slot, "allow_repeat"), enabled));
     }
 
     public static void setFollowSim1(Context context, boolean follow) {

@@ -34,8 +34,16 @@ final class FanView extends View {
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
     private float ox(){return right?getWidth()-icon/2-12:icon/2+12;}
-    private float oy(){return getHeight()-bottom-icon/2-12;}
-    private float radius(){return (float)Math.min(Rules.radius(requested,icon,apps.size()+1),Math.min(getWidth()-icon-28,getHeight()-bottom-icon-28));}
+    private float bottomInset(){
+        float reserved=bottom;
+        if(getWidth()>getHeight()){
+            android.view.WindowInsets insets=getRootWindowInsets();
+            if(insets!=null)reserved=insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom;
+        }
+        return reserved;
+    }
+    private float oy(){return getHeight()-bottomInset()-icon/2-12;}
+    private float radius(){return (float)Math.min(Rules.radius(requested,icon,apps.size()+1),Math.min(getWidth()-icon-28,getHeight()-bottomInset()-icon-28));}
     private float drawnRadius(){return radius()*(.88f+.12f*progress);}
     int pointer(float rawX,float rawY) {
         int[] loc=new int[2];getLocationOnScreen(loc);

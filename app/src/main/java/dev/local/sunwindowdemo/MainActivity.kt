@@ -16,6 +16,7 @@ open class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        dev.local.sunwindowdemo.features.diagnostics.Diagnostics.initialize(this, dev.local.sunwindowdemo.features.diagnostics.Diagnostics.APP)
         controller = WindowController(this)
         setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish, initialAppPackage, ::openIconApp) } }
         if (intent.action == "recover") controller.restore()

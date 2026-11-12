@@ -28,6 +28,46 @@ public final class CallBlockingRules {
         return new Decision(false, "", "");
     }
 
+    /** Only the stranger rule can be waived by a repeat; explicit rules always win. */
+    public static Decision stranger(Decision explicit, boolean rejectStrangers, boolean contactsReady,
+            boolean knownContact, boolean repeatAllowed, boolean repeated, String number) {
+        if (explicit.blocked || !rejectStrangers || !contactsReady || knownContact
+                || normalizeNumber(number).isEmpty() || (repeatAllowed && repeated)) return explicit;
+        return new Decision(true, "stranger", "");
+    }
+
+    public static String normalizeNumber(String number) {
+        if (number == null || number.trim().matches("-[0-9]+")) return "";
+        String value = number.replaceAll("[\\s()（）-]", "");
+        if (value.startsWith("00")) value = "+" + value.substring(2);
+        // Preserve country codes; only unambiguous Chinese mobile national presentation is aliased.
+        if (value.matches("1[3-9][0-9]{9}")) value = "+86" + value;
+        return value.length() <= 64 && value.matches("\\+?[0-9]+") ? value : "";
+    }
+
+    /** Bounded, in-memory only; the same Call callback never advances the repeat window. */
+    public static final class Repeats {
+        private final java.util.WeakHashMap<Object, Boolean> calls = new java.util.WeakHashMap<>();
+        private final java.util.LinkedHashMap<String, Long> recent = new java.util.LinkedHashMap<>();
+        public synchronized boolean observe(Object call, int subscriptionId, String number, long now) {
+            Boolean previous = calls.get(call);
+            if (previous != null) return previous;
+            String normalized = normalizeNumber(number);
+            boolean repeated = false;
+            if (subscriptionId >= 0 && !normalized.isEmpty()) {
+                recent.entrySet().removeIf(e -> now - e.getValue() > 180_000 || now < e.getValue());
+                String key = subscriptionId + ":" + normalized;
+                repeated = recent.containsKey(key);
+                recent.remove(key);
+                recent.put(key, now);
+                // ponytail: 512 active caller keys; oldest loses only repeat exemption, raise if needed.
+                if (recent.size() > 512) recent.remove(recent.keySet().iterator().next());
+            }
+            calls.put(call, repeated);
+            return repeated;
+        }
+    }
+
     /** Formatting characters are ignored; only digits, a leading + and * are accepted. */
     public static String normalizePattern(String input) {
         if (input == null) throw new IllegalArgumentException("请输入号码规则");

@@ -52,6 +52,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
     var records by remember { mutableStateOf(CallBlockingStore.readRecords(context).toList()) }
     var sims by remember { mutableStateOf(activeSims(context)) }
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) }
+    var contactsPermission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) }
     var ruleEdit by remember { mutableStateOf<RuleEdit?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var permissionDenied by remember { mutableStateOf(false) }
@@ -59,6 +60,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
         config = CallBlockingStore.readConfig(context)
         records = CallBlockingStore.readRecords(context).toList()
         sims = activeSims(context)
+        contactsPermission = context.checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
         permission = context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
     }
     fun deleteRule(slot: Int, index: Int) {
@@ -70,6 +72,10 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         permissionDenied = !it
         refresh()
+    }
+    val requestContacts = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        refresh()
+        context.contentResolver.notifyChange(CallBlockingStore.CONFIG_URI, null)
     }
     DisposableEffect(lifecycle, context, permission) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -102,6 +108,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                         val sim = item.getString("sim_label").orEmpty().ifBlank { "SIM ${item.getInt("slot_index") + 1}" }
                         val reason = when (item.getString("reason")) {
                             "all_calls" -> "拦截全部来电"
+                            "stranger" -> "陌生号码（不在系统通讯录）"
                             "pattern" -> "匹配规则 ${item.getString("matched_pattern").orEmpty()}"
                             else -> item.getString("reason").orEmpty()
                         }
@@ -119,6 +126,14 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                     requestPermission.launch(Manifest.permission.READ_PHONE_STATE)
                 })
                 if (permissionDenied) SettingRow("打开应用权限设置", onClick = {
+                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
+                })
+            }
+            if (!contactsPermission) SettingsGroup {
+                SettingRow("允许读取系统通讯录", "未授权或查询失败时，陌生号码规则自动放行", onClick = {
+                    requestContacts.launch(Manifest.permission.READ_CONTACTS)
+                })
+                SettingRow("打开应用权限设置", onClick = {
                     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
                 })
             }
@@ -144,6 +159,12 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                             CallBlockingStore.setRejectAll(context, slot, it)
                         }
                         if (!rejectAll) {
+                            ToggleRow("拦截陌生号码", "不在系统通讯录；未授权、查询失败、缓存过期或有效号码超过 4000 个时此规则放行",  value = config.getBoolean(ownPrefix + "reject_strangers")) {
+                                CallBlockingStore.setRejectStrangers(context, slot, it)
+                            }
+                            ToggleRow("三分钟重复来电放行", "同卡同号码的第二通仅豁免陌生规则，不豁免手动号码规则", value = config.getBoolean(ownPrefix + "allow_repeat")) {
+                                CallBlockingStore.setAllowRepeat(context, slot, it)
+                            }
                             patterns.forEachIndexed { index, rule ->
                                 SettingRow(rule, onClick = { ruleEdit = RuleEdit(slot, index, rule) },
                                     trailing = {
@@ -157,7 +178,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                         }
                     } else {
                         SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截全部来电"
-                            else if (patterns.isEmpty()) "跟随 SIM 1：暂无号码规则" else "跟随 SIM 1：${patterns.size} 条号码规则")
+                            else "跟随 SIM 1：${patterns.size} 条号码规则；陌生拦截${if (config.getBoolean("sim1_reject_strangers")) "开" else "关"}；重复放行${if (config.getBoolean("sim1_allow_repeat")) "开" else "关"}")
                     }
                 }
             }

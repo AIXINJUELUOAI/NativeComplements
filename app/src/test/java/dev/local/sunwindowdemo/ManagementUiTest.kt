@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import dev.local.sunwindowdemo.core.ui.ComplementsTheme
@@ -37,7 +36,7 @@ import java.io.File
 @Config(sdk = [35], qualifiers = "zh-rCN-w412dp-h915dp-420dpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ManagementUiTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createRobolectricComposeRule()
     private lateinit var captureView: View
 
     private fun screenshot(name: String) {

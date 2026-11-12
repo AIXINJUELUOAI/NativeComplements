@@ -14,10 +14,12 @@ final class Geometry {
     static Placement miniTopRight(Placement p,float normal,int left,int top,int right,int bottom,float margin,boolean large){
         if(p==null||p.width()<=0||p.height()<=0||!Float.isFinite(normal)||normal<=0
             ||!Float.isFinite(margin)||right<=left||bottom<=top||margin<0)throw new IllegalArgumentException("safe area");
-        // SunOS small=.28, large portrait=.43 / landscape=.517. Keep the large
-        // preview below the normal size and fit the actual display safe area.
+        // Only the expanded mini changes: a landscape preview on a portrait display
+        // spans the safe width, giving equal side margins like the reference preview.
         float small=Math.min(.28f,normal);
-        float scale=large?Math.max(small,Math.min(normal*.9f,p.width()>p.height()?.517f:.43f)):small;
+        boolean widePreview=large&&p.width()>p.height()&&bottom-top>right-left;
+        float scale=widePreview?(right-left-2*margin)/p.width()
+            :large?Math.max(small,Math.min(normal*.95f,p.width()>p.height()?.60f:.50f)):small;
         scale=Math.min(scale,Math.min((right-left-2*margin)/p.width(),(bottom-top-2*margin)/p.height()));
         if(scale<=0)throw new IllegalArgumentException("mini fit");
         return new Placement(p.width(),p.height(),scale,right-margin-p.width()*scale,top+margin);
@@ -79,8 +81,8 @@ final class Geometry {
         if (availableW <= 0 || availableH <= 0) throw new IllegalArgumentException("safe area");
         float fit=Math.min((float)availableW/w,(float)availableH/h);
         scale=displayPortrait?Math.min(scale,fit):fit;
-        // Leave room for the rightward +2.5% handle feedback on a landscape canvas.
-        if(!displayPortrait&&appLandscape)scale*=.95f;
+        // Leave room for the rightward +10% handle feedback on a landscape canvas.
+        if(!displayPortrait&&appLandscape)scale*=.90f;
         if (!Float.isFinite(scale) || scale <= 0) throw new IllegalArgumentException("scale");
         return new Placement(w, h, scale,
             displayPortrait ? left + (right - left - w * scale) / 2f : left + margin,

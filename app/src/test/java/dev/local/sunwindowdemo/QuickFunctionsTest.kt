@@ -17,7 +17,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.core.app.ApplicationProvider
@@ -41,7 +40,7 @@ import java.io.File
 @Config(sdk = [35], qualifiers = "zh-rCN-w412dp-h915dp-420dpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class QuickFunctionsTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createRobolectricComposeRule()
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var captureView: View
     private lateinit var menu: View

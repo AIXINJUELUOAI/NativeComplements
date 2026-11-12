@@ -14,7 +14,6 @@ import android.hardware.display.DisplayManager;
 import android.media.*;
 import android.net.Uri;
 import android.os.*;
-import android.provider.Settings;
 import android.provider.Telephony;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
@@ -45,7 +44,22 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private SuggestionDrag drag;
     private final Set<String> litCameras=new HashSet<>();
     private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,inputRunning,chooser;
-    private boolean torchDismissed,opening,rotationSuggested;
+    private boolean torchDismissed,opening,rotationRestoring;
+    private final Binder rotationLease=new Binder();
+    void publishRotationSettings(){
+        Bundle extras=new Bundle();extras.putBinder("lease",rotationLease);
+        context.sendBroadcast(new Intent(LauncherRotationSuggestion.CONFIG).setPackage(LauncherGuard.PACKAGE)
+            .putExtras(extras).putExtra("enabled",!closed&&wm!=null&&enabled("rotate")),null,
+            BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+    }
+    private void restoreRotation(){
+        Runnable restore=rotationRestore;rotationClick=null;rotationRestore=null;
+        if(restore==null)return;rotationRestoring=true;
+        try{restore.run();}finally{rotationRestoring=false;}
+    }
+    private Runnable rotationClick,rotationRestore;
+    private Drawable rotationIcon;
+    void rotationIcon(Drawable icon){rotationIcon=icon;}
     private int openGeneration;
     private String lastTorchCamera,requestedTorchCamera;
     private Boolean requestedTorchMode;
@@ -72,7 +86,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 long time=intent.getLongExtra("time",0);
                 if(getSentFromUid()==1000&&enabled("awake")&&!locked()&&SystemClock.uptimeMillis()-time>=0
                         &&SystemClock.uptimeMillis()-time<2000&&(awakeLock==null||!awakeLock.isHeld())){awakeUntil=offerUntil();render();}
-            }else if(Intent.ACTION_SCREEN_OFF.equals(action)){awakeUntil=0;releaseAwake();removeView();chooser=false;}
+            }else if(Intent.ACTION_SCREEN_OFF.equals(action)){rotationClick=null;rotationRestore=null;awakeUntil=0;releaseAwake();removeView();chooser=false;}
             else render();
         }
     };
@@ -111,9 +125,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             try{cameras.registerTorchCallback(torchCallback,main);}catch(RuntimeException e){status("TORCH_UNAVAILABLE");}
             try{audio.registerAudioDeviceCallback(audioCallback,main);updateAudio();}catch(RuntimeException e){status("AUDIO_UNAVAILABLE");}
             loadSettings();
-        }catch(Exception e){status("INIT_UNAVAILABLE");removeView();}
+        }catch(Exception e){RotationDiagnostics.update("host","初始化失败: "+e.getClass().getSimpleName());status("INIT_UNAVAILABLE");removeView();}
     }
-    private void status(String value){android.util.Log.i("NativeComplements","SUGGESTIONS_"+value);}
+    private void status(String value){
+        if(value.endsWith("FAILED")||value.endsWith("UNAVAILABLE"))dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"systemui","operation_failed");
+        android.util.Log.i("NativeComplements","SUGGESTIONS_"+value);
+    }
     private boolean enabled(String feature){return settings.getBoolean("enabled")&&settings.getBoolean(feature);}
     private void loadSettings(){
         if(closed)return;main.removeCallbacks(retry);
@@ -130,14 +147,20 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     boolean offerBluetooth=next.getBoolean("enabled")&&next.getBoolean("bluetooth")&&(!enabled("bluetooth")
                         ||!Objects.equals(settings.getString("bluetooth_app"),next.getString("bluetooth_app")));
                     settings=next;
+                    RotationDiagnostics.update("settings","已读取: enabled="+settings.getBoolean("enabled")+", rotate="+settings.getBoolean("rotate"));
                     if(offerBluetooth&&audioConnected){bluetoothUsed=false;bluetoothUntil=offerUntil();}
                     if(!enabled("otp")){code=null;smsBody=null;displayedSmsBody=null;notices.clear();}
                     if(!enabled("awake")){awakeUntil=0;releaseAwake();}
+                    if(!enabled("rotate"))restoreRotation();
+                    publishRotationSettings();
                     if(!settings.getBoolean("enabled")){link=null;mapText=null;clipboardTimestamp=0;}
                     if(!enabled("links"))link=null;if(!enabled("maps"))mapText=null;
                     render();
                 });
-            }catch(Exception e){main.post(()->{if(!closed){settings=new Bundle();removeView();main.postDelayed(retry,3000);}});}
+            }catch(Exception e){main.post(()->{if(!closed){
+                RotationDiagnostics.update("settings","读取失败: "+e.getClass().getSimpleName());
+                settings=new Bundle();removeView();restoreRotation();publishRotationSettings();main.postDelayed(retry,3000);
+            }});}
         });
     }
     void environment(boolean overlay,int keyboardTop){
@@ -273,23 +296,25 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         ImageView button=addButton(row,drawable,description,click,dismiss);
         int pad=buttonPadding(4);button.setBackground(null);button.setElevation(0);button.setPadding(pad,pad,pad,pad);return button;
     }
-    void rotationSuggestion(boolean shown){
-        if(rotationSuggested==shown)return;
-        rotationSuggested=shown;render();
+    boolean rotationSuggestion(Runnable click,Runnable restore){
+        if(click==null){rotationClick=null;rotationRestore=null;render();return false;}
+        String refusal=rotationRestoring?"正在恢复原生":closed?"宿主已关闭":wm==null?"窗口服务未就绪":!enabled("rotate")?"配置未启用或尚未读取"
+            :systemOverlay?"系统面板遮挡":chooser?"地图选择面板显示中":locked()?"锁屏或息屏":null;
+        if(refusal!=null){RotationDiagnostics.update("host",refusal);return false;}
+        RotationDiagnostics.update("host","正在接管SystemUI旋转建议");
+        dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"systemui","rotation_proposed");
+        rotationClick=click;rotationRestore=restore;render();
+        if(view!=null){dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"systemui","rotation_shown");return true;}
+        dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"systemui","operation_failed");
+        rotationClick=null;rotationRestore=null;return false;
     }
     private void rotateScreen(){
-        rotationSuggested=false;
-        try{
-            Display display=windowContext.getDisplay();
-            int next=((display==null?0:display.getRotation())+1)%4;
-            Settings.System.putInt(context.getContentResolver(),Settings.System.USER_ROTATION,next);
-            try{
-                Object service=Class.forName("android.view.WindowManagerGlobal").getDeclaredMethod("getWindowManagerService").invoke(null);
-                try{service.getClass().getMethod("freezeRotation",int.class,String.class).invoke(service,next,"NativeComplements");}
-                catch(NoSuchMethodException older){service.getClass().getMethod("freezeRotation",int.class).invoke(service,next);}
-            }catch(Exception ignored){}
-            render();
-        }catch(RuntimeException failure){status("ROTATE_FAILED");}
+        Runnable click=rotationClick;rotationClick=null;rotationRestore=null;
+        if(click!=null&&enabled("rotate")&&!locked()){
+            dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"systemui","rotation_clicked");
+            try{click.run();}catch(RuntimeException failure){status("ROTATE_FAILED");}
+        }
+        render();
     }
     private void render(){
         try{renderContent();}catch(RuntimeException failure){removeView();status("RENDER_UNAVAILABLE");}
@@ -362,10 +387,14 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 },()->{mapText=null;chooser=false;});if(maps.size()==1){int pad=buttonPadding(4);map.setBackground(null);map.setElevation(0);map.setPadding(pad,pad,pad,pad);}
                     else paint(map,SuggestionTones.tone(night(),SuggestionTones.MAP_LIGHT,SuggestionTones.MAP_DARK));}
             }
-            if(enabled("rotate")&&rotationSuggested){
-                ImageView rotate=addButton(row,glyph("ic_suggestion_rotate"),"旋转屏幕",this::rotateScreen,
-                    ()->{rotationSuggested=false;render();});
+            if(enabled("rotate")&&rotationClick!=null){
+                ImageView rotate=addButton(row,rotationIcon!=null?rotationIcon:glyph("ic_suggestion_rotate"),"旋转屏幕",this::rotateScreen,
+                    ()->{rotationClick=null;rotationRestore=null;});
                 paint(rotate,SuggestionTones.tone(night(),SuggestionTones.ROTATE_LIGHT,SuggestionTones.ROTATE_DARK));
+                if(rotationIcon instanceof android.graphics.drawable.Animatable animation){
+                    if(rotationIcon instanceof android.graphics.drawable.AnimatedVectorDrawable vector)vector.reset();
+                    animation.start();
+                }
             }
         }
         if(row.getChildCount()==0)return;
@@ -377,7 +406,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         android.graphics.Insets bars=metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()|WindowInsets.Type.displayCutout());
         p.x=(settings.getBoolean("right")?bars.right:bars.left)+dp(12);
         p.y=Math.max(bars.bottom,imeTop==Integer.MAX_VALUE?0:Math.max(0,bounds.bottom-imeTop))+dp(12);
-        try{view=row;wm.addView(row,p);}catch(RuntimeException e){view=null;status("OVERLAY_UNAVAILABLE");}
+        try{view=row;wm.addView(row,p);if(rotationClick!=null)RotationDiagnostics.update("window","模块旋转按钮窗口已添加");}
+        catch(RuntimeException e){view=null;RotationDiagnostics.update("window","窗口添加失败: "+e.getClass().getSimpleName());status("OVERLAY_UNAVAILABLE");}
     }
     private void open(Intent intent,String pkg,Runnable completed){
         if(intent==null||locked()||opening)return;
@@ -446,7 +476,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     @Override public void onConfigurationChanged(Configuration config){render();}
     @Override public void onLowMemory(){}
     @Override public void close(){
-        closed=true;releaseAwake();removeView();main.removeCallbacksAndMessages(null);worker.shutdownNow();
+        closed=true;restoreRotation();publishRotationSettings();releaseAwake();removeView();main.removeCallbacksAndMessages(null);worker.shutdownNow();
         if(registered){context.unregisterReceiver(receiver);context.unregisterComponentCallbacks(this);}
         if(clipboard!=null)clipboard.removePrimaryClipChangedListener(clipListener);
         if(cameras!=null)cameras.unregisterTorchCallback(torchCallback);

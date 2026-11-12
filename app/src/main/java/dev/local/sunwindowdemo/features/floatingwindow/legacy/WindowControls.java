@@ -123,11 +123,11 @@ final class WindowControls {
                         cv.drawRoundRect(left,top,left+dp(4),top+dp(48),dp(2),dp(2),edgePaint);
                     }
                 }
-            };mini.setContentDescription("迷你窗：单击还原，双击全屏，长按调整大小或静音，拖出侧边隐藏；侧边白条点击或向内拖动还原");
+            };mini.setContentDescription("迷你窗：单击还原，双击与全屏任务互换，长按调整大小或静音，拖出侧边隐藏；侧边白条点击或向内拖动还原");
             GestureDetector taps=new GestureDetector(c,new GestureDetector.SimpleOnGestureListener(){
                 @Override public boolean onDown(MotionEvent e){return true;}
                 @Override public boolean onSingleTapConfirmed(MotionEvent e){if(Objects.equals(boundToken,token)&&"mini".equals(frame)){if(menu!=null)hideMenu();else send("NORMAL",0,0,0);}return true;}
-                @Override public boolean onDoubleTap(MotionEvent e){if(Objects.equals(boundToken,token)&&"mini".equals(frame)){hideMenu();send("FULL",0,0,0);}return true;}
+                @Override public boolean onDoubleTap(MotionEvent e){if(Objects.equals(boundToken,token)&&"mini".equals(frame)){hideMenu();send("SWAP",0,0,0);}return true;}
                 @Override public void onLongPress(MotionEvent e){
                     if(Objects.equals(boundToken,token)&&"mini".equals(frame)&&!dragging&&!transitioning&&!systemBlocked){
                         mini.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);

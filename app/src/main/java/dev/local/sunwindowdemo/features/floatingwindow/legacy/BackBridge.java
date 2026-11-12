@@ -44,8 +44,7 @@ public final class BackBridge extends XposedModule {
                         catch(RuntimeException unavailable){note("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
                         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}
                         catch(RuntimeException unavailable){note("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
-                        try{dev.local.sunwindowdemo.RotationSuggestion.connect(app);}
-                        catch(RuntimeException unavailable){note("ROTATION_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
+                        dev.local.sunwindowdemo.RotationSuggestion.connect(app);
                         try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}
                     });
                     return result;

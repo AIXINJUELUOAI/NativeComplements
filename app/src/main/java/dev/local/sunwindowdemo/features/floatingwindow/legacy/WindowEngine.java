@@ -96,7 +96,7 @@ final class WindowEngine {
             data.enforceInterface(Wire.CHANNEL);
             Intent i=Intent.CREATOR.createFromParcel(data);data.enforceNoDataAvail();
             String op=i.getStringExtra("op");
-            if(!java.util.Set.of("RESIZE","END_RESIZE","MOVE","RELEASE","DOCK","MINI","NORMAL","FULL","CLOSE","MINI_SIZE","MUTE","RESTORE_MINI","MINI_DRAG","MINI_DRAG_CANCEL","EDGE_DRAG","EDGE_DOCK","EDGE_BAR_DRAG","EDGE_BAR_DOCK","EDGE_DRAG_CANCEL").contains(op==null?"":op))return false;
+            if(!java.util.Set.of("RESIZE","END_RESIZE","MOVE","RELEASE","DOCK","MINI","NORMAL","FULL","SWAP","CLOSE","MINI_SIZE","MUTE","RESTORE_MINI","MINI_DRAG","MINI_DRAG_CANCEL","EDGE_DRAG","EDGE_DOCK","EDGE_BAR_DRAG","EDGE_BAR_DOCK","EDGE_DRAG_CANCEL").contains(op==null?"":op))return false;
             handler.post(()->enqueueControl(i));return true;
         }
     };
@@ -281,6 +281,16 @@ final class WindowEngine {
     // Task objects and originals stay alive across switches. Only presentation changes.
     private static final int MAX_LINKED_TASKS=8;
     private record SwitchStart(Session from,Session target,boolean created,long generation) {}
+    private Swap swap;
+    private static final class Swap {
+        final Session source,target,previousActive,previousPinned;
+        final Geometry.Placement placement;
+        boolean rollback,sourceMini;
+        int attempts;
+        Swap(Session source,Session target,Session active,Session pinned){
+            this.source=source;this.target=target;previousActive=active;previousPinned=pinned;placement=source.placement;
+        }
+    }
 
     WindowEngine(FrameworkAccess access, Consumer<String> logger) {
         a=access;log=logger;trace=new EntryTrace(a,logger);
@@ -290,6 +300,7 @@ final class WindowEngine {
         if (attached) return;
         try {
             wms = service; context = (Context) a.field(wms, "mContext");
+            dev.local.sunwindowdemo.features.diagnostics.Diagnostics.initialize(context,"system");
             root = a.field(wms, "mRoot"); lock = a.field(wms, "mGlobalLock"); atm = a.field(wms, "mAtmService");
             trace.attach(lock);
             HandlerThread worker = new HandlerThread("SunWindowDemo5",android.os.Process.THREAD_PRIORITY_DISPLAY); worker.start();
@@ -372,6 +383,7 @@ final class WindowEngine {
                 if(next!=hideRecents){hideRecents=next;saveHistory();notifyRecents();}
             }
             if ("STATUS".equals(op)) { pushHistory();report("STATUS"); return; }
+            if(swap!=null&&!"RESTORE".equals(op)){note("SWAP_PENDING：正在互换或恢复，请稍候");return;}
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
             if ("OTP_INPUT".equals(op)) {
                 if(suggestionInput!=null)suggestionInput.start(i);
@@ -381,7 +393,7 @@ final class WindowEngine {
             if ("CANCEL_OPEN".equals(op)) { cancelRecoveryOpen(i.getStringExtra("token"));return; }
             if ("GESTURE".equals(op)) { openGeneration++;cancelRecoveryOpen(null);cancelStart("gesture");trace.stop();gestureStart(new Intent(i).putExtra("generation",openGeneration));return; }
             if ("OPEN".equals(op)) { openGeneration++;cancelRecoveryOpen(null);cancelStart("open");trace.stop();open(new Intent(i).putExtra("generation",openGeneration),0); return; }
-            if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)||"RESTORE_MINI".equals(op)||"MINI_DRAG".equals(op)||"MINI_DRAG_CANCEL".equals(op)||"EDGE_DRAG".equals(op)||"EDGE_DOCK".equals(op)||"EDGE_BAR_DRAG".equals(op)||"EDGE_BAR_DOCK".equals(op)||"EDGE_DRAG_CANCEL".equals(op)) {
+            if ("CLOSE".equals(op)||"NORMAL".equals(op)||"MINI".equals(op)||"FULL".equals(op)||"SWAP".equals(op)||"RESIZE".equals(op)||"END_RESIZE".equals(op)||"RELEASE".equals(op)||"MOVE".equals(op)||"DOCK".equals(op)||"MINI_SIZE".equals(op)||"MUTE".equals(op)||"RESTORE_MINI".equals(op)||"MINI_DRAG".equals(op)||"MINI_DRAG_CANCEL".equals(op)||"EDGE_DRAG".equals(op)||"EDGE_DOCK".equals(op)||"EDGE_BAR_DRAG".equals(op)||"EDGE_BAR_DOCK".equals(op)||"EDGE_DRAG_CANCEL".equals(op)) {
                 control(i); return;
             }
             if ("RESTORE".equals(op)) {
@@ -1155,6 +1167,7 @@ final class WindowEngine {
             }
             frameReport(op);return;
         }
+        if("SWAP".equals(op)){swap(s);return;}
         s.resizing="RESIZE".equals(op);
         s.animationRev++;s.transitioning=false;s.radiusFactor=1;
         if("CLOSE".equals(op)){s.miniDragBase=null;changeForm(s,"closed");return;}
@@ -1434,6 +1447,136 @@ final class WindowEngine {
             s.miniPlacement=end;animate(s,start,end,false,0,0);
         }
     }
+    private void swapNotice(String event,String message){
+        note(event+"："+message);
+        handler.post(()->{try{android.widget.Toast.makeText(context,message,android.widget.Toast.LENGTH_LONG).show();}
+            catch(RuntimeException error){log.accept("SWAP_NOTICE_FAILED "+FrameworkAccess.reason(error));}});
+    }
+    /** Capture the actual focused task before any focus/hierarchy mutation. No package relaunch. */
+    private void swap(Session source) throws Exception {
+        synchronized(lock){
+            requireUnlocked("先解锁屏幕后再互换");
+            boolean ready=visible(source)&&!source.restoring&&!source.closing&&!source.transitioning
+                &&!source.entering&&!source.fullTransition&&!source.screenSuspended&&!source.rotation.active()
+                &&source.cover==null&&!source.edgeHidden&&source.miniDragBase==null&&source.edgeDragBase==null
+                &&pendingStart==null&&!recovering&&swap==null;
+            String rejection=SwapPolicy.rejection("mini".equals(source.frame),ready,
+                sessions.size()==1&&sessions.contains(source),source.returnTo!=null||source.parked,false,true,true);
+            if(rejection!=null){swapNotice("SWAP_BLOCKED",rejection);return;}
+            Object focused=a.focused.invoke(root);
+            // Home/recents/no focused application retains the old double-tap fullscreen behavior.
+            if(focused==null||a.integer(focused,"getActivityType")!=1){changeForm(source,"full");return;}
+            rejection=SwapPolicy.rejection(true,true,true,false,sessionFor(focused)!=null,
+                a.call(focused,"getDisplayContent")==a.call(source.task,"getDisplayContent"),
+                a.integer(focused,"getWindowingMode")==1);
+            if(rejection!=null){swapNotice("SWAP_BLOCKED",rejection);return;}
+            if(find(source.taskId)!=source.task||!identity(source.task,source)||a.animating(source.task)
+                ||a.presentationLeashed(source.task))throw new IllegalStateException("迷你窗任务正在变化，请稍后重试");
+            ComponentName component=(ComponentName)a.field(focused,"realActivity");
+            if(component==null||!Wire.allowedPackage(component.getPackageName()))throw new IllegalStateException("当前全屏应用身份不可用");
+            Session target=snapshot((Integer)a.field(focused,"mTaskId"),component.getPackageName(),Wire.token());
+            if(target.uid<10000||a.call(focused,"topRunningActivity")==null||!a.bool(focused,"isVisibleRequested"))
+                throw new IllegalStateException("当前全屏任务不是可见普通应用");
+            if(target.task!=focused||find(target.taskId)!=focused||!identity(focused,target)
+                ||a.focused.invoke(root)!=focused)throw new IllegalStateException("当前全屏任务已改变");
+            if(source.lease==null||!source.lease.isBinderAlive())throw new IllegalStateException("控制进程已退出");
+            target.miniLarge=source.miniLarge;
+            bindAndSave(target,source.lease); // Both originals durable BEFORE the first mutation.
+            Swap ticket=new Swap(source,target,active,pinned);swap=ticket;
+            source.restoring=true;source.restoreForeground=true;source.animationRev++;
+            target.restoring=true;target.restoreForeground=true;
+            // Neither task is an active normal: repairNormalFocus must not steal B's focus.
+            active=null;pinned=null;
+            dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"system","window_swap_started");
+            report("SWAP_PENDING");handler.post(()->advanceSwap(ticket));
+        }
+    }
+    private void enterSwapMini(Session s,Geometry.Placement placement) throws Exception {
+        if(find(s.taskId)!=s.task||!identity(s.task,s)||a.call(s.task,"getParent")!=s.parent)
+            throw new IllegalStateException("互换任务身份或层级已改变");
+        if(a.animating(s.task)||a.presentationLeashed(s.task)||a.integer(s.task,"getRelativeDisplayRotation")!=0)
+            throw new IllegalStateException("互换任务转场尚未稳定");
+        s.frame="mini";s.restoring=false;s.restoreForeground=false;s.fullTransition=false;
+        s.transitioning=false;s.entering=false;s.closing=false;s.parked=false;s.opacity=1;s.barAlpha=1;
+        s.backRequested=false;s.backComplete=false;
+        prepareGeometry(s);
+        if(placement!=null){s.placement=placement;s.miniPlacement=placement;}
+        else if(swap!=null&&s==swap.target&&swap.source.miniBounds!=null&&s.miniBounds!=null){
+            Rect old=swap.source.miniBounds,next=s.miniBounds;
+            s.placement=Geometry.remapMini(swap.placement,s.placement,s.defaultScale,
+                old.left,old.top,old.right,old.bottom,swap.source.placementMargin,
+                next.left,next.top,next.right,next.bottom,s.placementMargin,s.miniLarge);
+            s.miniPlacement=s.placement;
+        }
+        if(s.decoration==null)s.decoration=new TaskDecoration(a);
+        active=s;pinned=null;
+        a.call(atm,"deferWindowLayout");
+        try{
+            a.call(a.field(s.task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},s.task);
+            a.call(s.task,"setForceTranslucent",new Class<?>[]{boolean.class},true);
+            if(!a.bool(s.task,"isForceTranslucent"))throw new IllegalStateException("系统未保留迷你窗下方内容");
+            a.call(s.task,"setWindowingMode",new Class<?>[]{int.class},5);
+            a.call(s.task,"setAlwaysOnTop",new Class<?>[]{boolean.class},true);
+            a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},false);
+            refresh(s);renderFrame(s);
+            if(a.integer(s.task,"getWindowingMode")!=5)throw new IllegalStateException("互换任务未进入 freeform");
+            a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
+        }finally{a.call(atm,"continueWindowLayout");}
+    }
+    private void advanceSwap(Swap ticket){
+        if(swap!=ticket)return;
+        try{synchronized(lock){
+            if(recovering)return;
+            requireUnlocked("互换等待解锁");
+            if(!ticket.source.lease.isBinderAlive())throw new IllegalStateException("控制进程已退出");
+            if(ticket.rollback){
+                if(!ticket.sourceMini){
+                    try{
+                        // A may already be fullscreen. Re-journal before reapplying mini geometry.
+                        save(ticket.source);enterSwapMini(ticket.source,ticket.placement);ticket.sourceMini=true;
+                        active=ticket.previousActive;pinned=ticket.previousPinned;
+                    }catch(Throwable sourceError){
+                        ticket.source.restoring=true;note("SWAP_SOURCE_PENDING："+FrameworkAccess.reason(sourceError));
+                    }
+                }
+                ticket.target.restoring=true;ticket.target.restoreForeground=true;
+                // Even when A cannot be reattached, always attempt to return B to its original foreground.
+                if(!SwapPolicy.restoreThenForget(()->restoreTask(ticket.target,true)&&ticket.sourceMini,
+                    ()->forget(ticket.target))){retrySwap(ticket);return;}
+                swap=null;
+                dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"system","window_swap_failed");
+                report("SWAP_ROLLED_BACK");note("SWAP_FAILED：互换未完成，已保留原迷你窗并还原原全屏任务");
+                handler.postDelayed(()->tick(ticket.source),250);return;
+            }
+            if(!restoreTask(ticket.source,true)){retrySwap(ticket);return;}
+            enterSwapMini(ticket.target,null);
+            if(ticket.rollback||a.focused.invoke(root)!=ticket.source.task||a.integer(ticket.source.task,"getWindowingMode")!=1)
+                throw new IllegalStateException("互换后原迷你窗未保持全屏焦点");
+            history.windowed(new WindowHistory.Entry(ticket.target.taskId,ticket.target.userId,ticket.target.pkg,ticket.target.component,ticket.target.baseId));
+            saveHistory();notifyRecents();
+            forget(ticket.source);swap=null;
+            dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"system","window_swap_ok");
+            report("SWAPPED");note("SWAPPED：已互换原任务，未重新启动应用");
+            handler.postDelayed(()->tick(ticket.target),250);
+        }}catch(Throwable error){
+            synchronized(lock){
+                if(swap!=ticket)return;
+                ticket.rollback=true;
+                // Do not release either journal entry until its endpoint is verified.
+                ticket.target.restoring=true;ticket.target.restoreForeground=true;
+                note("SWAP_RECOVERING："+FrameworkAccess.reason(error));retrySwap(ticket);
+            }
+        }
+    }
+    private void retrySwap(Swap ticket){
+        // ponytail: bounded local retry; explicit recovery remains available after a stalled ROM transition.
+        if(++ticket.attempts>100){
+            if(!ticket.rollback){ticket.rollback=true;ticket.attempts=0;}
+            else{note("SWAP_PENDING：互换恢复待完成，请使用手动恢复；原任务记录已保留");return;}
+        }
+        handler.postDelayed(()->advanceSwap(ticket),100);
+    }
+
     private void fullscreen(Session s) throws Exception {
         rememberOrientation(s);
         Geometry.Placement start=s.placement;
@@ -2589,6 +2732,12 @@ final class WindowEngine {
         });
     }
     private void failure(Session s, Throwable e) {
+        Swap ticket=swap;
+        if(ticket!=null&&(ticket.source==s||ticket.target==s)){
+            ticket.rollback=true;s.restoring=true;
+            if(ticket.source==s)ticket.sourceMini=false;
+            handler.post(()->advanceSwap(ticket));return;
+        }
         // Disarm transform hooks before posting recovery; never throw into a WM caller.
         s.restoring = true;
         if (handler != null) handler.post(() -> { if (sessions.contains(s)) recover("适配异常：" + FrameworkAccess.reason(e)); });
@@ -2647,7 +2796,7 @@ final class WindowEngine {
         }
     }
     private void tick(Session s) {
-        if(!sessions.contains(s)||s.restoring||recovering)return;
+        if(swap!=null||!sessions.contains(s)||s.restoring||recovering)return;
         try {
             if(!visible(s)){
                 synchronized(lock){if(find(s.taskId)!=s.task||a.call(s.task,"topRunningActivity")==null){retire(s);return;}apply(s);}
@@ -2946,6 +3095,7 @@ final class WindowEngine {
     }
     private void recover(String why){
         try{synchronized(lock){
+            swap=null; // Explicit/controller-death recovery owns the retained originals from here.
             // A new open can recheck an existing recovery. Keep one retry queue,
             // otherwise a leftover callback could restore the newly opened task.
             if(recoveryRetry!=null){handler.removeCallbacks(recoveryRetry);recoveryRetry=null;}

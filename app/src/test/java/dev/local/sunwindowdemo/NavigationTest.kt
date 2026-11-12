@@ -113,6 +113,19 @@ class NavigationTest {
         nextPage(about, Page.Tools)
     }
 
+    @Test fun diagnosticsEntryOpensScrollableContentWithoutNestedInfiniteHeight() {
+        val (aboutScenario, about) = launch(intent(Page.About))
+        compose.onNodeWithText("诊断日志").performScrollTo().performClick()
+        val logsIntent = nextPage(about, Page.Logs)
+        aboutScenario.moveToState(Lifecycle.State.CREATED)
+        launch(logsIntent)
+        compose.onNodeWithTag("page-title-诊断日志").assertIsDisplayed()
+        compose.onNodeWithText("模块诊断 · 本地记录").assertIsDisplayed()
+        // Render through ModuleApp's scrolling SettingsPage: a nested verticalScroll throws here.
+        compose.onNodeWithText("删除本地记录").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("选择位置并导出 ZIP").assertExists()
+    }
+
     @Test fun barrageEntryStartsNativeSettingsAboveHome() {
         val (_, home) = launch(intent())
         compose.onNodeWithText("游戏助手").assertDoesNotExist()

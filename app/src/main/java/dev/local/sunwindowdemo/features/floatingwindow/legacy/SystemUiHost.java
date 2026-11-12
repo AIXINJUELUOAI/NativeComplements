@@ -199,7 +199,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);});
     }
     void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);if(barrage!=null)barrage.notificationRemoved(key);});}
-    void rotationSuggestion(boolean shown){main.post(()->{if(suggestions!=null)suggestions.rotationSuggestion(shown);});}
+    boolean rotationSuggestion(Runnable click,Runnable restore){
+        if(suggestions==null){RotationDiagnostics.update("host","建议宿主未初始化");return false;}
+        return suggestions.rotationSuggestion(click,restore);
+    }
+    void publishRotationSettings(){if(suggestions!=null)suggestions.publishRotationSettings();}
+    void rotationIcon(android.graphics.drawable.Drawable icon){if(suggestions!=null)suggestions.rotationIcon(icon);}
     private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
     boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
     private volatile boolean backendReady;
@@ -297,7 +302,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             keyboard,config.keyboardOff(),config.blocked().contains(foreground));
     }
     private int dp(float value){return (int)(value*getResources().getDisplayMetrics().density+.5f);}
-    private int bottom(){return wm.getCurrentWindowMetrics().getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()).bottom;}
+    private int bottom(){
+        WindowMetrics metrics=wm.getCurrentWindowMetrics();
+        WindowInsets insets=metrics.getWindowInsets();
+        // In immersive landscape do not reserve a hidden navigation bar's full height.
+        return metrics.getBounds().width()>metrics.getBounds().height()
+            ?insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+            :insets.getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()).bottom;
+    }
     private WindowManager.LayoutParams params(int width,int height,int flags) {
         WindowManager.LayoutParams p=new WindowManager.LayoutParams(width,height,OVERLAY_TYPE,flags,PixelFormat.TRANSLUCENT);
         p.setFitInsetsTypes(0);p.setTitle("NativeComplements-corner");trust(p);return p;
@@ -326,6 +338,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(panel!=null)return;
         List<ShortcutTarget> selected=selectedTargets();
         List<ShortcutTarget> shortcuts=selected.subList(0,Math.min(config.fanCount(),selected.size()));
+        dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(this,"systemui","fan_shown");
         fan=new FanView(this,shortcuts,isRight,dp(config.icon()),dp(config.radius()),bottom(),config.selectionDistance());lastSelection=-1;
         WindowManager.LayoutParams p=params(-1,-1,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN);
         p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;

@@ -16,6 +16,29 @@ public final class CallBlockingProvider extends ContentProvider {
             throw new SecurityException("call blocking bridge");
         switch(method){
             case "read": return CallBlockingStore.readConfig(getContext());
+            case "contacts": {
+                if(uid!=1000)throw new SecurityException("system contacts snapshot");
+                Bundle out=new Bundle();
+                if(getContext().checkSelfPermission(android.Manifest.permission.READ_CONTACTS)
+                        !=android.content.pm.PackageManager.PERMISSION_GRANTED)return out;
+                long identity=Binder.clearCallingIdentity();
+                java.util.HashSet<String> numbers=new java.util.HashSet<>();
+                try(Cursor cursor=getContext().getContentResolver().query(
+                        android.provider.ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        new String[]{android.provider.ContactsContract.CommonDataKinds.Phone.NUMBER},null,null,null)){
+                    if(cursor==null)return out;
+                    while(cursor.moveToNext()){
+                        String number=CallBlockingRules.normalizeNumber(cursor.getString(0));
+                        if(!number.isEmpty())numbers.add(number);
+                        // ponytail: keep Binder snapshots bounded; oversized books disable only stranger blocking.
+                        if(numbers.size()>4_000)return out;
+                    }
+                    out.putInt("permission_uid",getContext().getApplicationInfo().uid);
+                    out.putStringArray("numbers",numbers.toArray(new String[0]));
+                }catch(RuntimeException unavailable){return Bundle.EMPTY;}
+                finally{Binder.restoreCallingIdentity(identity);}
+                return out;
+            }
             case "record": {
                 if(extras==null)throw new IllegalArgumentException("record");
                 Bundle out=new Bundle();

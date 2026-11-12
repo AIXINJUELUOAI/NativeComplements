@@ -40,7 +40,7 @@ enum class Page(val title: String) {
     Home("类原生补全计划"), Window("小窗设置"), Shade("通知与控制中心"), Barrage("弹幕通知"), BarrageHistory("弹幕记录"), Suggestions("快捷建议"),
     IconLayers("图标适配"), IconApp("图标设置"), Motion("加速度传感器控制"), EdgeTouch("边缘防误触"), Calls("来电拦截"), Records("拦截记录"),
     Gestures("手势与菜单"), Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"),
-    About("关于"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
+    About("关于"), Logs("诊断日志"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
 }
 
 @Composable
@@ -52,6 +52,7 @@ fun ModuleApp(
     appPackage: String? = null,
     openIconApp: (String) -> Unit = {},
 ) {
+    val context = LocalContext.current
     val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
     // Standard Activity navigation leaves predictive Back and its animation with Android.
     SettingsPage(
@@ -86,7 +87,21 @@ fun ModuleApp(
                     Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Prevention -> PreventionScreen(controller.preferences, controller::boolean, { navigate(Page.Blocked) })
-                    Page.About -> AboutScreen(onLicenses = { navigate(Page.Licenses) }, onTools = { navigate(Page.Tools) })
+                    Page.About -> AboutScreen(onLicenses = { navigate(Page.Licenses) }, onTools = { navigate(Page.Tools) }, onLogs = { navigate(Page.Logs) })
+                    Page.Logs -> {
+                        LaunchedEffect(Unit) {
+                            withContext(Dispatchers.IO) {
+                                val c = context.createDeviceProtectedStorageContext()
+                                val keys = listOf("floating_window" to "corner", "barrage" to "barrage", "call_blocking" to "call_blocking", "edge_touch" to "edge_touch", "suggestions" to "suggestions", "motion" to "motion_access", "icon_layers" to "icon_layers", "shade" to "landscape_shade")
+                                keys.forEach { (name, prefs) ->
+                                    val storeContext = if (name == "floating_window") context else c
+                                    val snapshot = storeContext.getSharedPreferences(prefs, android.content.Context.MODE_PRIVATE)
+                                    dev.local.sunwindowdemo.features.diagnostics.DiagnosticsStore.setting(name, snapshot.getBoolean("enabled", name == "floating_window"))
+                                }
+                            }
+                        }
+                        dev.local.sunwindowdemo.features.diagnostics.DiagnosticsScreen(bottomInset)
+                    }
                     Page.Licenses -> LicensesScreen()
                     Page.Tools -> DeveloperTools(onWindow = { navigate(Page.Diagnostics) }, onIcons = { navigate(Page.IconDiagnostics) })
                     Page.Diagnostics -> DiagnosticsScreen(controller)
@@ -149,6 +164,13 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
     val context = LocalContext.current
     var calls by remember { mutableStateOf(CallBlockingStore.readConfig(context)) }
     var motion by remember { mutableStateOf(MotionStore.read(context)) }
+    fun rotationStatus(): String {
+        val p = context.createDeviceProtectedStorageContext().getSharedPreferences("rotation_status", 0)
+        return listOf("version", "hook", "launcher_hook", "request", "host", "settings", "window", "click").joinToString("\n") {
+            "$it: ${p.getString(it, "尚无记录") }"
+        }
+    }
+    var rotation by remember { mutableStateOf(rotationStatus()) }
     SettingsGroup {
         SettingRow("小窗诊断与恢复", onClick = onWindow)
         SettingRow("图标实验与诊断", onClick = onIcons)
@@ -161,7 +183,8 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
         SettingRow("加速度传感器控制", motion.getString("backend_error").orEmpty().ifBlank {
             if (motion.getLong("backend_seen") == 0L) "尚未连接" else "最近运行版本：${motion.getString("backend_version")}"
         })
-        SettingRow("刷新状态", onClick = { calls = CallBlockingStore.readConfig(context); motion = MotionStore.read(context) })
+        SettingRow("旋转建议诊断", rotation)
+        SettingRow("刷新状态", onClick = { calls = CallBlockingStore.readConfig(context); motion = MotionStore.read(context); rotation = rotationStatus() })
     }
 }
 
