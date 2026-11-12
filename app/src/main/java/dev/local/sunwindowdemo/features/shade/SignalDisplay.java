@@ -25,6 +25,10 @@ public final class SignalDisplay {
     private static Method primary,emergencyOnly;
     private static Class<?> signalDrawable,cellular;
     private static Consumer<String> log=ignored->{};
+    // Module-owned observable state: invalidates Compose readers without writing native flows.
+    private static Object stackedRevision;
+    private static Method stackedRevisionRead,stackedRevisionWrite;
+    private static boolean stackedSeen,stackedApplied,stackedFailure;
     private record Binding(Drawable drawable,int subId){}
     private static final class Radio {
         WeakReference<Object> owner;
@@ -132,10 +136,58 @@ public final class SignalDisplay {
                     }));
                 }
             }
-            log.accept("SIGNAL_DISPLAY_READY standard mobile drawable only");
+            installStacked(module,loader);
+            log.accept("SIGNAL_DISPLAY_READY standard mobile drawable");
         }catch(Throwable failure){
             enabled=false;for(var hook:HOOKS)try{hook.unhook();}catch(Throwable ignored){}HOOKS.clear();
             log.accept("SIGNAL_DISPLAY_UNAVAILABLE "+failure.getClass().getSimpleName());
+        }
+    }
+    private static void installStacked(XposedModule module,ClassLoader loader){
+        List<XposedInterface.HookHandle> hooks=new ArrayList<>();
+        try{
+            String prefix="com.android.systemui.statusbar.pipeline.";
+            Class<?> dual=Class.forName(prefix+"mobile.ui.model.DualSim",false,loader);
+            Class<?> parser=Class.forName(prefix+"mobile.ui.model.DualSimKt",false,loader);
+            Class<?> pair=Class.forName("kotlin.Pair",false,loader);
+            Method parse=parser.getDeclaredMethod("tryParseDualSim",List.class);
+            if(parse.getReturnType()!=dual)throw new NoSuchMethodException("dual SIM parser");
+            StackedSignalDisplay adapter=new StackedSignalDisplay(dual,cellular,pair,parse);
+            Class<?> state=Class.forName("androidx.compose.runtime.ParcelableSnapshotMutableIntState",false,loader);
+            Object revision=state.getDeclaredConstructor(int.class).newInstance(0);
+            Method read=state.getDeclaredMethod("getIntValue"),write=state.getDeclaredMethod("setIntValue",int.class);
+            Class<?> composer=Class.forName("androidx.compose.runtime.Composer",false,loader);
+            Class<?> modifier=Class.forName("androidx.compose.ui.Modifier",false,loader);
+            Class<?> draw=Class.forName(prefix+"shared.ui.composable.StackedMobileIconKt",false,loader);
+            Method render=draw.getDeclaredMethod("StackedMobileIcon-sW7UJKQ",dual,long.class,String.class,modifier,composer,int.class);
+            if(render.getReturnType()!=void.class||read.getReturnType()!=int.class)throw new NoSuchMethodException("stacked render");
+            hooks.add(module.hook(render).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object input=chain.getArg(0),nativeModel=adapter.original(input),adjusted=nativeModel;
+                try{
+                    read.invoke(revision); // Register this composition's dependency on our own state.
+                    adjusted=adapter.adjust(nativeModel,SignalDisplay::adjusted);
+                    if(!stackedSeen){stackedSeen=true;log.accept("SIGNAL_STACKED_RENDER_SEEN");}
+                    if(adjusted!=nativeModel&&!stackedApplied){stackedApplied=true;log.accept("SIGNAL_STACKED_APPLIED");}
+                }catch(Exception failure){
+                    if(!stackedFailure){stackedFailure=true;log.accept("SIGNAL_STACKED_RENDER_FAILED "+failure.getClass().getSimpleName());}
+                }
+                Object[] args=chain.getArgs().toArray();args[0]=adjusted;
+                // A radio/config revision can change our copy while the native model is equal.
+                // Mark only DualSim as changed so Compose does not skip this render.
+                args[5]=((Integer)args[5]&~14)|4;
+                return chain.proceed(args);
+            }));
+            // The restart callback and parent composable may inline the render entry.
+            Class<?> parentVm=Class.forName(prefix+"mobile.ui.viewmodel.StackedMobileIconViewModel",false,loader);
+            Method parent=draw.getDeclaredMethod("StackedMobileIcon",parentVm,modifier,composer,int.class);
+            Class<?> restart=Class.forName(prefix+"shared.ui.composable.StackedMobileIconKt$$ExternalSyntheticLambda6",false,loader);
+            if(!module.deoptimize(parent)||!module.deoptimize(restart.getDeclaredMethod("invoke",Object.class,Object.class)))
+                throw new IllegalStateException("stacked caller deoptimize");
+            stackedRevision=revision;stackedRevisionRead=read;stackedRevisionWrite=write;
+            HOOKS.addAll(hooks);log.accept("SIGNAL_STACKED_READY explicit subscription presentation copies");
+        }catch(Throwable failure){
+            for(var hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
+            log.accept("SIGNAL_STACKED_UNAVAILABLE "+failure.getClass().getSimpleName());
         }
     }
     private record Callback(Field repo,Field sub,Method strength,Method service,Method ntn){}
@@ -178,6 +230,10 @@ public final class SignalDisplay {
     private static final Runnable REDRAW=()->{
         Binding previous=BINDING.get();BINDING.remove();
         try{
+            if(stackedRevision!=null)try{
+                int revision=(Integer)stackedRevisionRead.invoke(stackedRevision);
+                stackedRevisionWrite.invoke(stackedRevision,revision+1);
+            }catch(Exception failure){log.accept("SIGNAL_STACKED_REFRESH_FAILED "+failure.getClass().getSimpleName());}
             List<Paint> snapshot;
             synchronized(PAINTS){PAINTS.removeIf(p->p.drawable.get()==null);snapshot=new ArrayList<>(PAINTS);}
             for(Paint p:snapshot){
