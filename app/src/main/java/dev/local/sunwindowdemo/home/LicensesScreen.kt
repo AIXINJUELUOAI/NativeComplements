@@ -39,7 +39,7 @@ private fun NoticeGroup(title: String, items: List<Notice>) {
     val uri = LocalUriHandler.current
     GroupTitle(title)
     SettingsGroup {
-        for (item in items) SettingRow(item.name, "${item.owner} · ${item.license}\n${item.usage}",
+        for (item in items) SettingRow(item.name, "${item.owner} · ${item.license}",
             item.url?.let { url -> { runCatching { uri.openUri(url) } } })
     }
 }
@@ -49,7 +49,6 @@ fun LicensesScreen() {
     SettingsGroup {
         SettingRow("类原生补全计划", "版本 ${BuildConfig.VERSION_NAME} · 本模块以 Apache-2.0 发布")
     }
-    Hint("以下为本模块参考或使用的开源项目，点击条目打开项目主页。参考代码已按各自许可注明来源与修改，详见源码仓库 NOTICE.md。")
     NoticeGroup("参考项目", references)
     NoticeGroup("依赖库", libraries)
 }

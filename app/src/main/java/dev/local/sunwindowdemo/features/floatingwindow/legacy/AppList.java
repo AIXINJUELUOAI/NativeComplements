@@ -30,7 +30,7 @@ import java.util.function.Consumer;
 import java.util.function.BiConsumer;
 
 /** A View card inside the existing SystemUI overlay. Never starts an Activity or owns a task. */
-final class AppList {
+public final class AppList {
     interface SaveAction { void save(List<ShortcutTarget> targets,Consumer<Boolean> done); }
 
     static View create(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
@@ -38,8 +38,8 @@ final class AppList {
         return new Panel(c,all,selected,launch,save);
     }
     static View create(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
-            Consumer<ShortcutTarget> launch,SaveAction save,View quick) {
-        return new Tabs(c,new Panel(c,all,selected,launch,save),quick);
+            Consumer<ShortcutTarget> launch,SaveAction save,List<QuickEntry> quickEntries,Consumer<String> quickAction) {
+        return new Tabs(c,new Panel(c,all,selected,launch,save,null,true),quickEntries,quickAction);
     }
     static boolean back(View content){
         if(content instanceof Tabs tabs&&tabs.quickShown){
@@ -88,7 +88,7 @@ final class AppList {
         dev.local.sunwindowdemo.core.ui.MenuBackground.bind(view,enabled,panel.container,panel.dp(28));
     }
 
-    record QuickEntry(String id,String label,Drawable icon,Boolean checked) {}
+    public record QuickEntry(String id,String label,Drawable icon) {}
     static View quickPage(Context c,List<QuickEntry> entries,Consumer<String> action){return new QuickPage(c,entries,action);}
     static void updateQuick(View page,List<QuickEntry> entries){((QuickPage)page).update(entries);}
     private static int pixels(Context c,float value){return Math.round(value*c.getResources().getDisplayMetrics().density);}
@@ -103,9 +103,12 @@ final class AppList {
     private static final class IconTile extends LinearLayout {
         final FrameLayout artwork;final ImageView image;final TextView title;
         IconTile(Context c,boolean compact,String label,Drawable icon,int text,int accent){
-            this(c,compact,false,label,icon,text,accent);
+            this(c,compact,false,false,label,icon,text,accent);
         }
         IconTile(Context c,boolean compact,boolean page,String label,Drawable icon,int text,int accent){
+            this(c,compact,page,false,label,icon,text,accent);
+        }
+        IconTile(Context c,boolean compact,boolean page,boolean quick,String label,Drawable icon,int text,int accent){
             super(c);setOrientation(VERTICAL);setGravity(Gravity.CENTER_HORIZONTAL);
             setPadding(pixels(c,2),pixels(c,page?6:compact?2:4),pixels(c,2),pixels(c,2));
             GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(pixels(c,22));
@@ -113,8 +116,20 @@ final class AppList {
             artwork=new FrameLayout(c);addView(artwork,new LinearLayout.LayoutParams(-1,pixels(c,page?60:compact?36:40)));
             image=new ImageView(c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
             if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
-            image.setImageDrawable(icon);int size=pixels(c,page?52:compact?32:36);
-            artwork.addView(image,new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
+            image.setImageDrawable(icon);
+            if(quick){
+                // Fixed white disc and black glyph: the on/off state never changes this appearance.
+                image.setImageTintList(ColorStateList.valueOf(0xff1b1c1f));
+                FrameLayout disc=new FrameLayout(c);
+                GradientDrawable circle=new GradientDrawable();circle.setShape(GradientDrawable.OVAL);circle.setColor(Color.WHITE);
+                disc.setBackground(circle);
+                int discSize=pixels(c,compact?32:36),glyph=pixels(c,compact?18:20);
+                artwork.addView(disc,new FrameLayout.LayoutParams(discSize,discSize,Gravity.CENTER));
+                disc.addView(image,new FrameLayout.LayoutParams(glyph,glyph,Gravity.CENTER));
+            }else{
+                int size=pixels(c,page?52:compact?32:36);
+                artwork.addView(image,new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
+            }
             title=new TextView(c);title.setText(label);title.setTextSize(page?13:11);title.setTextColor(text);
             title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setSingleLine(true);title.setIncludeFontPadding(false);title.setEllipsize(TextUtils.TruncateAt.END);
             addView(title,new LinearLayout.LayoutParams(-1,pixels(c,page?20:17)));setContentDescription(label);
@@ -133,11 +148,17 @@ final class AppList {
         }
         void update(List<QuickEntry> entries){
             List<String> next=entries.stream().map(QuickEntry::id).toList();Context c=getContext();
+            if(entries.isEmpty()){
+                keys=List.of();cells.clear();rows.removeAllViews();
+                TextView hint=new TextView(c);hint.setText("全部快捷功能都已添加");hint.setTextSize(12);hint.setTextColor(text);hint.setAlpha(.7f);
+                hint.setGravity(android.view.Gravity.CENTER);rows.addView(hint,new LinearLayout.LayoutParams(-1,pixels(c,compact?66:72)));
+                return;
+            }
             if(!keys.equals(next)){
                 keys=next;cells.clear();rows.removeAllViews();LinearLayout row=null;
                 for(int i=0;i<entries.size();i++){
                     if(i%4==0){row=new LinearLayout(c);rows.addView(row,new LinearLayout.LayoutParams(-1,pixels(c,compact?66:72)));}
-                    QuickEntry entry=entries.get(i);IconTile cell=new IconTile(c,compact,entry.label(),entry.icon(),text,accent);
+                    QuickEntry entry=entries.get(i);IconTile cell=new IconTile(c,compact,false,true,entry.label(),entry.icon(),text,accent);
                     cell.setOnClickListener(v->action.accept(entry.id()));cells.add(cell);
                     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(pixels(c,2),0,pixels(c,2),0);row.addView(cell,p);
                 }
@@ -146,8 +167,7 @@ final class AppList {
             for(int i=0;i<entries.size();i++){
                 QuickEntry entry=entries.get(i);IconTile cell=cells.get(i);
                 cell.title.setText(entry.label());cell.image.setImageDrawable(entry.icon());
-                cell.image.setImageTintList(ColorStateList.valueOf(Boolean.TRUE.equals(entry.checked())?accent:text));
-                cell.setContentDescription(entry.label());cell.setStateDescription(entry.checked()==null?null:entry.checked()?"已开启":"已关闭");
+                cell.setContentDescription(entry.label());
             }
         }
     }
@@ -155,18 +175,33 @@ final class AppList {
     private static final class Tabs extends LinearLayout {
         final Panel apps;final View quick;
         final TextView appTab,quickTab;boolean quickShown;
-        Tabs(Context c,Panel apps,View quick){
-            super(c);this.apps=apps;this.quick=quick;setOrientation(VERTICAL);setClipToOutline(true);
+        Tabs(Context c,Panel apps,List<QuickEntry> quickEntries,Consumer<String> quickAction){
+            super(c);this.apps=apps;setOrientation(VERTICAL);setClipToOutline(true);
             apps.setBackgroundColor(Color.TRANSPARENT);apps.setClipToOutline(false);
-            LinearLayout tabs=new LinearLayout(c);tabs.setPadding(apps.dp(12),apps.dp(8),apps.dp(12),apps.dp(4));
+            apps.quickAction=quickAction;
+            // The shared title/selected area stays above both tabs; the tab row
+            // replaces the old divider and never jumps when switching pages.
+            addView(apps.header,new LinearLayout.LayoutParams(-1,-2));
+            LinearLayout tabs=new LinearLayout(c);tabs.setPadding(apps.dp(12),apps.dp(6),apps.dp(12),apps.dp(4));
             appTab=apps.button("应用",()->select(false));quickTab=apps.button("快捷功能",()->select(true));
             tabs.addView(appTab,new LinearLayout.LayoutParams(0,apps.dp(40),1));tabs.addView(quickTab,new LinearLayout.LayoutParams(0,apps.dp(40),1));addView(tabs);
+            apps.manage.setOnClickListener(v->apps.toggleEditing());
+            quick=new QuickPage(c,availableQuick(quickEntries),id->{
+                if(apps.editing)apps.toggleQuick(id);else quickAction.accept(id);
+            });
+            apps.quickRefresher=()->updateQuick((QuickPage)quick,availableQuick(quickEntries));
+            quick.setOnScrollChangeListener((v,sx,sy,oldX,oldY)->apps.setSelectedCollapsed(sy>0));
             FrameLayout pages=new FrameLayout(c);addView(pages,new LinearLayout.LayoutParams(-1,0,1));
             pages.addView(apps,new FrameLayout.LayoutParams(-1,-1));pages.addView(quick,new FrameLayout.LayoutParams(-1,-1));select(false);
         }
+        private List<QuickEntry> availableQuick(List<QuickEntry> all){
+            ArrayList<QuickEntry> visible=new ArrayList<>();
+            for(QuickEntry entry:all)if(apps.selectedIndex(QuickActionCatalog.key(entry.id()))<0)visible.add(entry);
+            return visible;
+        }
         void select(boolean show){
             if(apps.saving)return;
-            quickShown=show;apps.setVisibility(show?GONE:VISIBLE);quick.setVisibility(show?VISIBLE:GONE);
+            quickShown=show;apps.setVisibility(show?GONE:VISIBLE);quick.setVisibility(show?VISIBLE:GONE);apps.setSelectedCollapsed(false);
             for(TextView tab:new TextView[]{appTab,quickTab}){
                 boolean active=(tab==quickTab)==show;tab.setSelected(active);tab.setTextColor(active?apps.accent:apps.secondary);
                 tab.setBackground(active?apps.round(apps.tonal,20):null);
@@ -201,7 +236,7 @@ final class AppList {
     private static final class Panel extends LinearLayout {
         static final String ALPHABET="ABCDEFGHIJKLMNOPQRSTUVWXYZ#";
         final Context c;
-        final boolean compact,page;
+        final boolean compact,page,sharedHeader;
         List<AppCatalog.App> apps;
         final ArrayList<ShortcutTarget> appRows=new ArrayList<>(),chosen=new ArrayList<>(),visible=new ArrayList<>();
         final ArrayList<AppRow> rows=new ArrayList<>();
@@ -211,6 +246,7 @@ final class AppList {
         final Handler main=new Handler(Looper.getMainLooper());
         final int surface,container,text,secondary,accent,tonal;
         final TextView manage,help,empty,bubble;
+        final LinearLayout header;
         final LinearLayout selectedScroll;
         final View divider;
         final LinearLayout selectedRows;
@@ -223,6 +259,11 @@ final class AppList {
         int dragFrom=-1;
         boolean editing,saving,disposed;
         BiConsumer<Boolean,Boolean> editState;
+        Consumer<String> quickAction=id->{};
+        Runnable quickRefresher;
+        boolean selectedCollapsed;
+        int selectedExpandedHeight;
+        android.animation.ValueAnimator selectedAnimator;
         int hover=-1;
         float dragX,dragY;
 
@@ -234,12 +275,16 @@ final class AppList {
 
         Panel(Context context,List<AppCatalog.App> all,List<ShortcutTarget> initial,
                 Consumer<ShortcutTarget> launch,SaveAction save) {
-            this(context,all,initial,launch,save,null);
+            this(context,all,initial,launch,save,null,false);
         }
         Panel(Context context,List<AppCatalog.App> all,List<ShortcutTarget> initial,
                 Consumer<ShortcutTarget> launch,SaveAction save,int[] colors) {
+            this(context,all,initial,launch,save,colors,false);
+        }
+        Panel(Context context,List<AppCatalog.App> all,List<ShortcutTarget> initial,
+                Consumer<ShortcutTarget> launch,SaveAction save,int[] colors,boolean sharedHeader) {
             super(context);c=context;apps=List.copyOf(all);this.launch=launch;this.save=save;
-            page=colors!=null;
+            page=colors!=null;this.sharedHeader=sharedHeader;
             compact=context.getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE;
             surface=colors==null?color(android.R.attr.colorBackground,0xfff8f7fc):colors[0];
             text=colors==null?color(android.R.attr.textColorPrimary,0xff1d1b20):colors[1];
@@ -252,20 +297,25 @@ final class AppList {
             setNestedScrollingEnabled(colors!=null);
             for(AppCatalog.App app:apps)appRows.add(ShortcutTarget.app(c,app));
             for(ShortcutTarget item:initial)if(item!=null&&ShortcutTarget.validKey(item.key())&&selectedIndex(item.key())<0&&chosen.size()<Config.MAX_TARGETS)chosen.add(item);
-            LinearLayout header=new LinearLayout(c);header.setGravity(Gravity.CENTER_VERTICAL);
+            header=new LinearLayout(c);header.setOrientation(VERTICAL);
             manage=button("管理",this::toggleEditing);manage.setBackground(null);manage.setTextColor(text);manage.setIncludeFontPadding(false);manage.setGravity(Gravity.CENTER_VERTICAL|Gravity.RIGHT);
             if(!page){
-                header.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
-                header.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));addView(header);
+                LinearLayout row=new LinearLayout(c);row.setGravity(Gravity.CENTER_VERTICAL);
+                TextView title=label("更多",14,text);title.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));title.setIncludeFontPadding(false);
+                row.addView(title,new LinearLayout.LayoutParams(0,dp(compact?36:42),1));
+                row.addView(manage,new LinearLayout.LayoutParams(dp(72),dp(compact?36:42)));
+                header.addView(row);
+                if(!sharedHeader)addView(header);else header.setPadding(dp(12),0,dp(12),0);
             }
 
             selectedScroll=new LinearLayout(c);selectedScroll.setOrientation(VERTICAL);
             selectedRows=new LinearLayout(c);selectedRows.setOrientation(VERTICAL);selectedScroll.addView(selectedRows,new LinearLayout.LayoutParams(-1,-2));
             selectedScroll.setOnDragListener((view,event)->drag(event));
-            help=label("长按图标拖动排序；点击 + 添加、− 移除，完成后保存",11,secondary);
-            help.setPadding(dp(4),dp(2),dp(4),dp(4));help.setMaxLines(2);selectedScroll.addView(help);
+            help=label("",11,secondary);help.setPadding(dp(4),dp(2),dp(4),dp(4));help.setMaxLines(2);
             divider=new View(c);divider.setBackgroundColor(blend(container,text,.12f));
-            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));selectedScroll.addView(divider,line);
+            LinearLayout.LayoutParams line=new LinearLayout.LayoutParams(-1,dp(1));line.setMargins(0,dp(6),0,dp(6));
+            if(!sharedHeader)selectedScroll.addView(divider,line);
+            if(sharedHeader)header.addView(selectedScroll,new LinearLayout.LayoutParams(-1,-2));
 
             body=new FrameLayout(c);body.setClipChildren(false);body.setClipToPadding(false);addView(body,new LinearLayout.LayoutParams(-1,0,1));
             list=colors==null?new ListView(c):new MenuList(c);list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);list.setPadding(0,dp(2),0,dp(2));
@@ -301,7 +351,7 @@ final class AppList {
                     return row;
                 }
             };
-            list.addHeaderView(selectedScroll,null,false);list.setAdapter(adapter);
+            if(!sharedHeader)list.addHeaderView(selectedScroll,null,false);list.setAdapter(adapter);
             empty=label("",14,secondary);empty.setGravity(Gravity.CENTER);empty.setPadding(dp(16),0,dp(16),0);empty.setLayoutParams(new AbsListView.LayoutParams(-1,dp(72)));list.addFooterView(empty,null,false);
             bubble=label("",22,accent);bubble.setGravity(Gravity.CENTER);bubble.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));
             bubble.setBackground(round(tonal,20));bubble.setVisibility(GONE);bubble.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -309,7 +359,7 @@ final class AppList {
             index=new IndexBar(c);index.setVisibility(INVISIBLE);index.setBackground(round((container&0x00ffffff)|0xe6000000,13));body.addView(index,new FrameLayout.LayoutParams(dp(26),-1,Gravity.RIGHT));
             list.setOnScrollListener(new AbsListView.OnScrollListener(){
                 public void onScrollStateChanged(AbsListView v,int state){scrolling=state!=SCROLL_STATE_IDLE;updateIndex();}
-                public void onScroll(AbsListView v,int first,int count,int total){updateIndex();}
+                public void onScroll(AbsListView v,int first,int count,int total){updateIndex();setSelectedCollapsed(first>0);}
             });
             renderSelected();refreshRows();
         }
@@ -319,7 +369,7 @@ final class AppList {
         void updateIndex(){
             if(index==null)return;
             boolean scrolled=list.getFirstVisiblePosition()>0
-                || selectedScroll.getTop()+divider.getBottom()<=list.getPaddingTop();
+                || (!sharedHeader&&selectedScroll.getTop()+divider.getBottom()<=list.getPaddingTop());
             main.removeCallbacks(hideIndex);
             if(rows.isEmpty()||!scrolled){index.animate().cancel();index.setVisibility(INVISIBLE);bubble.setVisibility(GONE);}
             else if(scrolling||indexTouching){index.animate().cancel();index.setAlpha(1);index.setVisibility(VISIBLE);}
@@ -340,9 +390,36 @@ final class AppList {
         TextView label(String value,int size,int color){TextView t=new TextView(c);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setGravity(Gravity.CENTER_VERTICAL);return t;}
         TextView button(String value,Runnable action){TextView t=label(value,14,accent);t.setGravity(Gravity.CENTER);t.setTypeface(Typeface.create("sans-serif-medium",Typeface.NORMAL));t.setBackground(ripple(Color.TRANSPARENT));t.setOnClickListener(v->action.run());return t;}
         int selectedIndex(String key){for(int i=0;i<chosen.size();i++)if(chosen.get(i).key().equals(key))return i;return -1;}
+        /** Roll the selected strip away while the catalogue scrolls, so browsing keeps the full height. */
+        void setSelectedCollapsed(boolean value){
+            if(page||!sharedHeader||selectedCollapsed==value||selectedScroll==null)return;
+            selectedCollapsed=value;
+            int current=selectedScroll.getHeight(),target;
+            if(value){
+                if(current>0)selectedExpandedHeight=current;
+                target=0;
+            }else{
+                if(selectedExpandedHeight<=0){
+                    int width=selectedScroll.getWidth()>0?selectedScroll.getWidth():getWidth();
+                    selectedScroll.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1,width),View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+                    selectedExpandedHeight=selectedScroll.getMeasuredHeight();
+                }
+                target=selectedExpandedHeight;
+            }
+            if(selectedAnimator!=null)selectedAnimator.cancel();
+            selectedAnimator=android.animation.ValueAnimator.ofInt(current,target);
+            selectedAnimator.setDuration(160);
+            selectedAnimator.addUpdateListener(animation->{
+                int height=(int)animation.getAnimatedValue();ViewGroup.LayoutParams params=selectedScroll.getLayoutParams();
+                if(params!=null){params.height=height;selectedScroll.setLayoutParams(params);}
+                selectedScroll.setAlpha(selectedExpandedHeight<=0?1f:Math.min(1f,height/(float)Math.max(1,selectedExpandedHeight)));
+            });
+            selectedAnimator.start();
+        }
         void toggleEditing(){
             if(saving)return;
-            if(!editing){editing=true;renderSelected();adapter.notifyDataSetChanged();return;}
+            if(!editing){editing=true;renderSelected();adapter.notifyDataSetChanged();setSelectedCollapsed(false);return;}
             saving=true;renderSelected();adapter.notifyDataSetChanged();
             try{save.save(List.copyOf(chosen),success->main.post(()->finishSaving(Boolean.TRUE.equals(success))));}
             catch(RuntimeException failure){finishSaving(false);}
@@ -357,17 +434,23 @@ final class AppList {
             int position=selectedIndex(target.key());
             if(position>=0)chosen.remove(position);
             else if(chosen.size()<Config.MAX_TARGETS)chosen.add(target);
-            else{Toast.makeText(c,"快捷入口已达容量上限",Toast.LENGTH_SHORT).show();return;}
+            else{Toast.makeText(c,"最多添加 12 个快捷入口",Toast.LENGTH_SHORT).show();return;}
             renderSelected();refreshRows();
+        }
+        void toggleQuick(String id){
+            QuickActionCatalog.Action action=QuickActionCatalog.find(id);
+            ShortcutTarget target=action==null?null:ShortcutTarget.fromKey(c,QuickActionCatalog.key(id),apps);
+            if(target!=null)toggle(target);
         }
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
+            if(selectedCollapsed)selectedExpandedHeight=0;
             manage.setText(saving?"保存中…":editing?"完成":"管理");manage.setEnabled(!saving);
             if(editState!=null)editState.accept(editing,saving);
             help.setVisibility(editing&&!compact?VISIBLE:GONE);
             selectedRows.removeAllViews();
             if(chosen.isEmpty()){
-                TextView hint=label(editing?"点击下方应用添加":"点击管理添加应用",12,secondary);hint.setGravity(Gravity.CENTER);
+                TextView hint=label(editing?"点击下方应用或快捷功能添加":"点击管理添加快捷入口",12,secondary);hint.setGravity(Gravity.CENTER);
                 selectedRows.addView(hint,new LinearLayout.LayoutParams(-1,dp(appTileHeight())));
             }
             for(int start=0;start<chosen.size();start+=4){
@@ -376,13 +459,14 @@ final class AppList {
                     int position=start+column;View child;
                     if(position<chosen.size()){
                         ShortcutTarget target=chosen.get(position);child=tile(target);child.setTag(position);
-                        child.setOnClickListener(v->{if(!saving){if(editing)toggle(target);else launch.accept(target);}});
+                        child.setOnClickListener(v->{if(!saving){if(editing)toggle(target);else if(target.quick)quickAction.accept(target.action);else launch.accept(target);}});
                         child.setOnLongClickListener(v->editing&&!saving&&v.startDragAndDrop(ClipData.newPlainText("shortcut-target",target.key()),new View.DragShadowBuilder(v),target.key(),0));
-                        child.setContentDescription(target.label+(editing?"，点击移除，长按拖动调整顺序":"，点击打开"));
+                        child.setContentDescription(target.label+(editing?"，点击移除，长按拖动调整顺序":target.quick?"，点击执行":"，点击打开"));
                     }else child=new View(c);
                     LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(dp(2),0,dp(2),0);row.addView(child,p);
                 }
             }
+            if(quickRefresher!=null)quickRefresher.run();
             selectedScroll.post(this::updateIndex);requestLayout();
         }
         int dropIndex(float px,float py){
@@ -454,7 +538,7 @@ final class AppList {
             return true;
         }
         View tile(ShortcutTarget target){
-            IconTile cell=new IconTile(c,compact,page,target.label,target.icon,text,accent);
+            IconTile cell=new IconTile(c,compact,page,target.quick,target.label,target.icon,text,accent);
             if(editing) {
                 TextView badge=label(selectedIndex(target.key())>=0?"−":"+",16,accent);badge.setGravity(Gravity.CENTER);badge.setBackground(round(tonal,12));badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
                 FrameLayout.LayoutParams b=new FrameLayout.LayoutParams(dp(22),dp(22),Gravity.TOP|Gravity.RIGHT);cell.artwork.addView(badge,b);

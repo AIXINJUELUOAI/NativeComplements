@@ -10,7 +10,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -24,7 +23,6 @@ import dev.local.sunwindowdemo.core.ui.*
 fun MotionScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var config by remember { mutableStateOf(MotionStore.read(context)) }
-    var query by rememberSaveable { mutableStateOf("") }
     var editing by remember { mutableStateOf<LaunchableApp?>(null) }
     DisposableEffect(context) {
         val prefs = MotionStore.prefs(context)
@@ -37,24 +35,19 @@ fun MotionScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0
     val selected = packages.mapIndexed { i, p -> p to modes.getOrElse(i) { 0 } }.toMap()
     val defaultMode = config.getInt("default_mode", 0)
     val enabled = config.getBoolean("enabled")
-    val visible = remember(apps, query, selected, defaultMode) {
-        apps.filter { it.packageName !in setOf("dev.nativecomplements.module", "com.android.systemui", "com.google.android.apps.nexuslauncher") &&
-            (it.label.contains(query, true) || it.packageName.contains(query, true)) }
+    val visible = remember(apps, selected, defaultMode) {
+        apps.filter { it.packageName !in setOf("dev.nativecomplements.module", "com.android.systemui", "com.google.android.apps.nexuslauncher") }
             .sortedByDescending { selected[it.packageName] ?: defaultMode }
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize(), contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 32.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item { SettingsGroup { ToggleRow("启用控制", "默认：${modeLabel(defaultMode)}", enabled) { MotionStore.enabled(context, it) } } }
-            item { Hint("当前控制也会影响所选应用的陀螺仪等传感器；依赖体感操作的应用请保持允许。") }
-            item { OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(vertical = 12.dp), singleLine = true,
-                placeholder = { Text("搜索应用或包名") }) }
             if (!loaded) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            if (loaded && visible.isEmpty()) item { Hint("没有匹配的应用") }
+            if (loaded && visible.isEmpty()) item { Hint("暂无可显示的应用") }
             items(visible, key = { it.packageName }) { app ->
                 SettingRow(app.label, modeLabel(selected[app.packageName] ?: defaultMode), onClick = { editing = app }, leading = { MotionAppIcon(app) })
             }
-            item { Hint("更改后自动保存。7 秒结束或关闭总开关会恢复应用的原生传感器状态。限制期间依赖传感器的功能也会暂停。") }
         }
     }
     editing?.let { app ->

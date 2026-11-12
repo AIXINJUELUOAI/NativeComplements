@@ -5,22 +5,43 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.local.sunwindowdemo.R
 import dev.local.sunwindowdemo.WindowController
 import dev.local.sunwindowdemo.core.ui.*
 
+private enum class SuggestionSheet { Bluetooth, Otp, Button }
+
+@Composable
+private fun SuggestionIcon(@DrawableRes icon: Int, tone: Color) {
+    Box(Modifier.size(44.dp).background(tone.copy(alpha = .16f), CircleShape),
+        contentAlignment = Alignment.Center) {
+        Icon(painterResource(icon), null, Modifier.size(22.dp), tint = tone)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SuggestionScreen(controller: WindowController) {
     val context = LocalContext.current
@@ -41,54 +62,103 @@ fun SuggestionScreen(controller: WindowController) {
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener); lifecycle.removeObserver(observer) }
     }
     fun toggle(key: String, value: Boolean) = SuggestionStore.setBoolean(context, key, value)
-    var selectingApp by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var sheet by remember { mutableStateOf<SuggestionSheet?>(null) }
     val selected = config.getString("bluetooth_app", "")
-    SettingsGroup {
-        ToggleRow("启用快捷建议", "在屏幕底部显示当前可用的操作按钮", config.getBoolean("enabled")) { toggle("enabled", it) }
+    val selectedLabel = controller.apps.firstOrNull { it.packageName == selected }?.label
+    val bluetoothSubtitle = when {
+        selected.isBlank() -> null
+        selectedLabel != null -> "已选择 $selectedLabel"
+        else -> "已选择 $selected"
     }
-    GroupTitle("设备")
+    val dark = isSystemInDarkTheme()
+    fun tone(light: Long, night: Long) = Color(if (dark) night else light)
+    val torchTone = tone(0xFFB26A00, 0xFFFFB74D)
+    val awakeTone = tone(0xFFC58A00, 0xFFFFD54F)
+    val bluetoothTone = tone(0xFF1A73E8, 0xFF8AB4F8)
+    val otpTone = tone(0xFF00897B, 0xFF4DB6AC)
+    val linkTone = tone(0xFF7B4DBD, 0xFFC4A7FF)
+    val locationTone = tone(0xFF2E7D32, 0xFF81C784)
+    val buttonTone = tone(0xFF6750A4, 0xFFD0BCFF)
+    val windowTone = tone(0xFF00639B, 0xFF8ECDF8)
+
     SettingsGroup {
-        ToggleRow("手电筒", "手电筒开启时显示关闭按钮", config.getBoolean("torch")) { toggle("torch", it) }
-        ToggleRow("本次常亮", "息屏前变暗后，触摸唤亮时显示按钮；点击保持亮屏，直到下次熄屏或锁屏", config.getBoolean("awake")) { toggle("awake", it) }
-        ToggleRow("蓝牙音频设备", "耳机、音箱或车载音频连接后显示应用按钮", config.getBoolean("bluetooth")) { toggle("bluetooth", it) }
-        SettingRow("蓝牙连接后打开", controller.apps.firstOrNull { it.packageName == selected }?.label ?: "选择一个应用", { selectingApp = true })
+        IconToggleRow("启用快捷建议", value = config.getBoolean("enabled"), onChange = { toggle("enabled", it) },
+            leading = { Glyph("spark") })
     }
-    GroupTitle("验证码")
+    GroupTitle("建议内容")
     SettingsGroup {
-        ToggleRow("验证码填充", "从新短信或复制的内容提取验证码，点击按钮后逐位输入", config.getBoolean("otp")) { toggle("otp", it) }
-        SettingRow("短信读取", if (smsGranted) "已允许 · 仅处理新收到的验证码，不读取短信历史" else "点击允许接收新短信，以便及时提取验证码", {
-            if (!smsGranted) permission.launch(Manifest.permission.RECEIVE_SMS)
-        })
-        SliderRow("逐位输入间隔", "先选中输入框，再点击验证码按钮；切换窗口会停止输入", config.getInt("delay"), 50..500, " ms") { SuggestionStore.setDelay(context, it) }
-        ToggleRow("隐藏对应验证码通知", "仅在按钮已显示且能与一条新短信准确对应时移除通知；普通或合并短信通知保留", config.getBoolean("hide_sms")) { toggle("hide_sms", it) }
+        IconToggleRow("手电筒", value = config.getBoolean("torch"), onChange = { toggle("torch", it) },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_torch, torchTone) })
+        IconToggleRow("本次常亮", value = config.getBoolean("awake"), onChange = { toggle("awake", it) },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_awake, awakeTone) })
+        SplitSwitchRow("蓝牙音频设备", bluetoothSubtitle, config.getBoolean("bluetooth"), { toggle("bluetooth", it) },
+            { sheet = SuggestionSheet.Bluetooth }, leading = { SuggestionIcon(R.drawable.ic_suggestion_bluetooth, bluetoothTone) })
+        SplitSwitchRow("验证码填充", value = config.getBoolean("otp"), onToggle = { toggle("otp", it) },
+            onDetails = { sheet = SuggestionSheet.Otp }, leading = { SuggestionIcon(R.drawable.ic_suggestion_otp, otpTone) })
+        IconToggleRow("链接与分享口令", value = config.getBoolean("links"), onChange = { toggle("links", it) },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_link, linkTone) })
+        IconToggleRow("地址与地点", value = config.getBoolean("maps"), onChange = { toggle("maps", it) },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_location, locationTone) })
     }
-    GroupTitle("复制内容")
+    GroupTitle("按钮与打开方式")
     SettingsGroup {
-        ToggleRow("链接与分享口令", "淘宝、京东、拼多多、抖音、快手、哔哩哔哩、小红书、知乎、微博、美团", config.getBoolean("links")) { toggle("links", it) }
-        ToggleRow("地址与地点", "复制地址、店铺或地名后显示地图搜索；安装多个地图时点击选择", config.getBoolean("maps")) { toggle("maps", it) }
+        SettingRow("按钮显示", onClick = { sheet = SuggestionSheet.Button },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_tune, buttonTone) },
+            trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) })
+        IconToggleRow("以小窗打开", value = config.getBoolean("window"), onChange = { toggle("window", it) },
+            leading = { SuggestionIcon(R.drawable.ic_qs_current_window, windowTone) })
     }
-    GroupTitle("按钮显示")
-    SettingsGroup {
-        SliderRow("显示时长", "5–300 秒；手电筒操作后仍保留 5 秒供反向切换", config.getInt("duration", 60), 5..300, " 秒") { SuggestionStore.setDuration(context, it) }
-        SliderRow("按钮大小", "图标和背景一起缩放，小尺寸仍保留至少 48 dp 的触摸区域", config.getInt("size", 48), 32..80, " dp") { SuggestionStore.setSize(context, it) }
-        ToggleRow("显示在右下角", "关闭时显示在左下角；键盘弹出时沿所选一侧上移", config.getBoolean("right")) { toggle("right", it) }
-    }
-    GroupTitle("打开方式")
-    SettingsGroup {
-        ToggleRow("以小窗打开", "应用、链接和地图使用现有小窗；关闭后全屏打开", config.getBoolean("window")) { toggle("window", it) }
-    }
-    if (selectingApp) AlertDialog(onDismissRequest = { selectingApp = false }, title = { Text("选择一个应用") }, text = {
-        Column {
-            OutlinedTextField(query, { query = it }, singleLine = true, placeholder = { Text("搜索应用") }, modifier = Modifier.fillMaxWidth())
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                items(controller.apps.filter { it.label.contains(query, true) || it.packageName.contains(query, true) }, key = { it.packageName }) { app ->
-                    Row(Modifier.fillMaxWidth().clickable { SuggestionStore.setApp(context, app.packageName); selectingApp = false }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected == app.packageName, onClick = null)
-                        Text(app.label, Modifier.padding(start = 12.dp))
+
+    val active = sheet
+    if (active != null) {
+        ModalBottomSheet(onDismissRequest = { sheet = null }) {
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                when (active) {
+                    SuggestionSheet.Bluetooth -> {
+                        Text("蓝牙连接后打开", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+                        if (!controller.catalogLoaded) LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 16.dp))
+                        else if (controller.apps.isEmpty()) Text("暂无可显示的应用", Modifier.padding(vertical = 16.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                            items(controller.apps, key = { it.packageName }) { app ->
+                                Row(Modifier.fillMaxWidth().clickable {
+                                    SuggestionStore.setApp(context, app.packageName); sheet = null
+                                }.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    RadioButton(selected == app.packageName, onClick = null)
+                                    Text(app.label, Modifier.padding(start = 12.dp))
+                                }
+                            }
+                        }
+                    }
+                    SuggestionSheet.Otp -> {
+                        Text("验证码填充", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+                        SettingsGroup {
+                            val requestSms: (() -> Unit)? = if (smsGranted) null else ({ permission.launch(Manifest.permission.RECEIVE_SMS) })
+                            SettingRow("短信读取", if (smsGranted) "已允许" else null, onClick = requestSms,
+                                leading = { SuggestionIcon(R.drawable.ic_suggestion_otp, otpTone) },
+                                trailing = { if (smsGranted) Icon(Icons.Default.Check, null, tint = MaterialTheme.colorScheme.primary) })
+                            IconSliderRow("逐位输入间隔", value = config.getInt("delay"), range = 50..500, unit = " ms",
+                                onCommit = { SuggestionStore.setDelay(context, it) },
+                                leading = { SuggestionIcon(R.drawable.ic_suggestion_tune, buttonTone) })
+                            IconToggleRow("隐藏对应验证码通知", value = config.getBoolean("hide_sms"), onChange = { toggle("hide_sms", it) },
+                                leading = { SuggestionIcon(R.drawable.ic_suggestion_otp, otpTone) })
+                        }
+                    }
+                    SuggestionSheet.Button -> {
+                        Text("按钮显示", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+                        SettingsGroup {
+                            IconSliderRow("显示时长", value = config.getInt("duration", 60), range = 5..300, unit = " 秒",
+                                onCommit = { SuggestionStore.setDuration(context, it) },
+                                leading = { SuggestionIcon(R.drawable.ic_suggestion_tune, buttonTone) })
+                            IconSliderRow("按钮大小", value = config.getInt("size", 48), range = 32..80, unit = " dp",
+                                onCommit = { SuggestionStore.setSize(context, it) },
+                                leading = { SuggestionIcon(R.drawable.ic_qs_current_window, windowTone) })
+                            IconToggleRow("显示在右下角", value = config.getBoolean("right"), onChange = { toggle("right", it) },
+                                leading = { SuggestionIcon(R.drawable.ic_suggestion_tune, buttonTone) })
+                        }
                     }
                 }
             }
         }
-    }, confirmButton = { TextButton(onClick = { selectingApp = false }) { Text("取消") } })
+    }
 }

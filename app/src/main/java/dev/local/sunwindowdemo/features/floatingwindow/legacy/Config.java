@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 public final class Config {
-    static final int MAX_TARGETS=512;
+    static final int MAX_TARGETS=12;
     static final int DEFAULT_WINDOW_DIM=20;
     final SharedPreferences prefs;
     static volatile SharedPreferences hostPreferences;
@@ -56,7 +56,8 @@ public final class Config {
             try{org.json.JSONObject old=new org.json.JSONObject(prefs.getString("targetLabels","{}"));
                 for(String key:result)labels.put(key,old.optString(key,""));
             }catch(org.json.JSONException ignored){}
-            prefs.edit().putString("targets",clean).putString("apps",String.join(",",result)).putString("targetLabels",labels.toString()).apply();
+            List<String> packages=new ArrayList<>();for(String key:result)if(Rules.validPackage(key))packages.add(key);
+            prefs.edit().putString("targets",clean).putString("apps",String.join(",",packages)).putString("targetLabels",labels.toString()).apply();
         }
         return result;
     }

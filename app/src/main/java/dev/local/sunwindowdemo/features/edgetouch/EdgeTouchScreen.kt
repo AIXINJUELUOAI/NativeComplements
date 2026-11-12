@@ -39,10 +39,10 @@ fun EdgeTouchScreen(bottomInset: Dp = 0.dp) {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
         SettingsGroup {
-            ToggleRow("开启边缘防误触", "忽略指定屏幕边缘的触点，减少单手握持时的误触", config.getBoolean("enabled")) {
+            ToggleRow("开启边缘防误触", value = config.getBoolean("enabled")) {
                 EdgeTouchStore.setBoolean(context, "enabled", it)
             }
-            ToggleRow("显示实际禁触区", "开启防误触后，在屏幕边缘按真实尺寸显示范围，便于调整大小", config.getBoolean("show_regions")) {
+            ToggleRow("显示实际禁触区", value = config.getBoolean("show_regions")) {
                 EdgeTouchStore.setBoolean(context, "show_regions", it)
             }
         }
@@ -50,35 +50,33 @@ fun EdgeTouchScreen(bottomInset: Dp = 0.dp) {
         Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
             RegionPreview(config)
         }
-        Hint("小预览用于了解范围；打开“显示实际禁触区”可在屏幕边缘查看真实大小。灰色表示已关闭；固定禁区不会自动识别手掌。")
         GroupTitle("左侧")
         SettingsGroup {
-            ToggleRow("左侧禁触区", "仅拦截从左侧设定范围内按下的触点", config.getBoolean("left_enabled")) {
+            ToggleRow("左侧禁触区", value = config.getBoolean("left_enabled")) {
                 EdgeTouchStore.setBoolean(context, "left_enabled", it)
             }
-            SliderRow("左侧宽度", "从屏幕左边缘向内", config.getInt("left_width_dp"), 1..48, " dp") {
+            SliderRow("左侧宽度", value = config.getInt("left_width_dp"), range = 1..48, unit = " dp") {
                 EdgeTouchStore.setNumber(context, "left_width_dp", it)
             }
         }
         GroupTitle("右侧")
         SettingsGroup {
-            ToggleRow("右侧禁触区", "仅拦截从右侧设定范围内按下的触点", config.getBoolean("right_enabled")) {
+            ToggleRow("右侧禁触区", value = config.getBoolean("right_enabled")) {
                 EdgeTouchStore.setBoolean(context, "right_enabled", it)
             }
-            SliderRow("右侧宽度", "从屏幕右边缘向内", config.getInt("right_width_dp"), 1..48, " dp") {
+            SliderRow("右侧宽度", value = config.getInt("right_width_dp"), range = 1..48, unit = " dp") {
                 EdgeTouchStore.setNumber(context, "right_width_dp", it)
             }
         }
         GroupTitle("纵向范围")
         SettingsGroup {
-            SliderRow("覆盖高度", "相对于状态栏与导航栏之间的可用高度", config.getInt("height_percent"), 20..100, "%") {
+            SliderRow("覆盖高度", value = config.getInt("height_percent"), range = 20..100, unit = "%") {
                 EdgeTouchStore.setNumber(context, "height_percent", it)
             }
-            SliderRow("纵向位置", "0% 靠顶部，50% 居中，100% 靠底部；覆盖整个高度时保持不变", config.getInt("position_percent"), 0..100, "%") {
+            SliderRow("纵向位置", value = config.getInt("position_percent"), range = 0..100, unit = "%") {
                 EdgeTouchStore.setNumber(context, "position_percent", it)
             }
         }
-        Hint("不占用状态栏与底部导航区；锁屏、键盘或系统浮层出现时暂停。小窗手柄和菜单热区自动避让，屏幕旋转后重新计算范围。")
     }
 }
 

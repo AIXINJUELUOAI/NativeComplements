@@ -1,11 +1,8 @@
 package dev.local.sunwindowdemo.core.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,19 +20,12 @@ fun SettingsPage(
     title: String,
     onBack: (() -> Unit)? = null,
     expandedTitle: Boolean = true,
-    help: String? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (bottomInset: Dp) -> Unit,
 ) {
-    var showHelp by remember { mutableStateOf(false) }
     val useLargeTitle = expandedTitle && LocalConfiguration.current.screenHeightDp >= 480
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val barActions: @Composable RowScope.() -> Unit = {
-        actions()
-        if (help != null) IconButton(onClick = { showHelp = true }) {
-            Icon(Icons.Default.Info, contentDescription = "使用说明")
-        }
-    }
+    val barActions: @Composable RowScope.() -> Unit = { actions() }
     val navigation: @Composable () -> Unit = {
         if (onBack != null) IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -67,10 +57,4 @@ fun SettingsPage(
             }
         }
     }
-    if (showHelp && help != null) AlertDialog(
-        onDismissRequest = { showHelp = false },
-        title = { Text("使用说明") },
-        text = { Text(help, Modifier.verticalScroll(rememberScrollState())) },
-        confirmButton = { TextButton(onClick = { showHelp = false }) { Text("知道了") } },
-    )
 }

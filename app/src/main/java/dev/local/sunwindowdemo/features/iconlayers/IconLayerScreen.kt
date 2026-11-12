@@ -36,7 +36,6 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
     var state by remember { mutableStateOf(IconLayerStore.read(context)) }
     val installed = apps
     var library by remember { mutableStateOf(emptySet<String>()) }
-    var query by remember { mutableStateOf("") }
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf("") }
@@ -84,25 +83,22 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
     }
     val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { if (it != null) prepare(it, false) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { if (it != null) prepare(it, true) }
-    val matched = remember(installed, query) {
-        installed.filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }
-    }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(bottom = 32.dp + bottomInset)) {
             item {
                 SettingsGroup {
-                    ToggleRow("启用图标适配", "图标包优先，未匹配时保留应用原图", state.getBoolean("enabled")) {
+                    ToggleRow("启用图标适配", value = state.getBoolean("enabled")) {
                         IconLayerStore.enabled(context, it); refreshState()
                     }
-                    ToggleRow("通知图标替换", "默认不处理；开启后仍按逐应用的通知设置生效", state.getBoolean("notifications")) {
+                    ToggleRow("通知图标替换", value = state.getBoolean("notifications")) {
                         IconLayerStore.notifications(context, it); refreshState()
                     }
                     SettingRow(if (state.getInt("count") > 0) state.getString("title") ?: "当前图标库" else "尚未导入图标库",
-                        if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else "未导入素材时保留原图，算法需要逐应用开启")
-                    SettingRow("导入本地 ZIP", "包名/0.png 为背景，1.png 为透明前景", onClick = if (busy || pending != null) null else { { zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) } })
-                    SettingRow("导入本地文件夹", "素材由用户自行提供，模块不内置第三方素材", onClick = if (busy || pending != null) null else { { folderPicker.launch(null) } })
-                    SettingRow("刷新图标", "刷新桌面及已生成的算法缓存，保留桌面排列", onClick = { IconLayerStore.refreshAll(context); message = "已请求刷新，宿主正在重新加载" })
-                    if (state.getInt("count") > 0) SettingRow("移除图标库", "保留逐应用设置、上传图片和算法补全", onClick = if (busy) null else { { removeDialog = true } })
+                        if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else null)
+                    SettingRow("导入本地 ZIP", onClick = if (busy || pending != null) null else { { zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) } })
+                    SettingRow("导入本地文件夹", onClick = if (busy || pending != null) null else { { folderPicker.launch(null) } })
+                    SettingRow("刷新图标", onClick = { IconLayerStore.refreshAll(context); message = "已请求刷新，宿主正在重新加载" })
+                    if (state.getInt("count") > 0) SettingRow("移除图标库", onClick = if (busy) null else { { removeDialog = true } })
                 }
                 if (busy) {
                     Spacer(Modifier.height(16.dp))
@@ -113,9 +109,8 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
                 }
                 if (message.isNotBlank()) Hint(message)
                 GroupTitle("逐应用设置")
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), singleLine = true, label = { Text("搜索已安装应用") })
             }
-            items(matched, key = { it.packageName }) { app ->
+            items(installed, key = { it.packageName }) { app ->
                 val policy = remember(app.packageName, state.getString("policies"), state.getStringArrayList("originals").toString()) { IconPolicy.read(context, app.packageName) }
                 SettingsGroup {
                     SettingRow(app.label, when (policy.color) {
@@ -128,7 +123,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
                 Spacer(Modifier.height(2.dp))
             }
             item {
-                if (matched.isEmpty()) Hint("未找到应用")
+                if (installed.isEmpty()) Hint("暂无可显示的应用")
                 if (!state.getString("error").isNullOrBlank()) Hint(state.getString("error")!!)
             }
         }
@@ -141,7 +136,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
             confirmButton = {}, dismissButton = { TextButton(onClick = { dismiss() }) { Text("取消") } })
     }
     if (removeDialog) AlertDialog(onDismissRequest = { removeDialog = false }, title = { Text("移除当前图标库？") },
-        text = { Text("保留手动图片和逐应用设置，自动模式将恢复应用原图。") }, confirmButton = { TextButton(onClick = {
+        confirmButton = { TextButton(onClick = {
             removeDialog = false; scope.launch { withContext(Dispatchers.IO) { IconLibrary.remove(context) }; refreshState() }
         }) { Text("移除") } }, dismissButton = { TextButton(onClick = { removeDialog = false }) { Text("取消") } })
 }
@@ -220,14 +215,11 @@ private fun IconEditor(app: LaunchableApp, generation: String, matched: Boolean,
                         }
                     }
                 }
-                Text("莫奈颜色为当前主题示意；通知留空表示保留原图。选择后自动保存。", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.bodySmall)
                 Text("彩色图标", style = MaterialTheme.typography.titleSmall)
                 ModeRow(listOf("自动", "手动前后景", "算法补全", "不处理"), policy.color, !loading) { policy.color = it; save() }
-                if (policy.color == IconPolicy.ALGORITHM) Text("下次启动该应用后生成并缓存；生成前保留原图。", style = MaterialTheme.typography.bodySmall)
                 if (policy.color == IconPolicy.MANUAL) {
                     TextButton(onClick = { upload(0) }, enabled = !loading) { Text(if (policy.background.isEmpty()) "上传背景图片" else "更换背景图片") }
                     TextButton(onClick = { upload(1) }, enabled = !loading) { Text(if (policy.foreground.isEmpty()) "上传透明前景" else "更换前景图片") }
-                    if (policy.background.isEmpty() || policy.foreground.isEmpty()) Text("前后景选齐后生效，当前暂用原图", style = MaterialTheme.typography.bodySmall)
                 }
                 HorizontalDivider(Modifier.padding(vertical = 12.dp))
                 Text("莫奈图标", style = MaterialTheme.typography.titleSmall)
@@ -237,7 +229,6 @@ private fun IconEditor(app: LaunchableApp, generation: String, matched: Boolean,
                 Text("状态栏通知小图标", style = MaterialTheme.typography.titleSmall)
                 ModeRow(listOf("跟随前景", "上传图片", "不处理"), policy.notification, !loading) { policy.notification = it; save() }
                 if (policy.notification == IconPolicy.UPLOAD) TextButton(onClick = { upload(3) }, enabled = !loading) { Text(if (policy.notificationImage.isEmpty()) "选择图片" else "更换图片") }
-                Text("透明图会转换为单色轮廓，适用于状态栏、锁屏/AOD 的应用身份小图标；会话头像、系统状态图标及展开通知卡片头部保持原样。", style = MaterialTheme.typography.bodySmall)
                 if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }

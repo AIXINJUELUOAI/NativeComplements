@@ -6,6 +6,7 @@ import android.graphics.Color;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.MotionEvent;
 import android.view.WindowManager;
 import android.widget.ImageView;
@@ -33,9 +34,9 @@ public class PanelInteractionTest {
     }
     @Test public void quickTabIsAlwaysVisibleAndBackReturnsToApplicationsWithoutLosingEdits()throws Exception{
         AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
-        View quick=new View(context);
         View menu=AppList.create(context,List.of(alpha),List.of(ShortcutTarget.app(context,alpha)),target->{},
-            (targets,done)->done.accept(true),quick);
+            (targets,done)->done.accept(true),List.of(),id->{});
+        View quick=(View)field(menu,"quick");
         View apps=(View)field(menu,"apps");
         assertEquals(View.VISIBLE,apps.getVisibility());assertEquals(View.GONE,quick.getVisibility());
         assertEquals(View.VISIBLE,((View)field(menu,"quickTab")).getVisibility());
@@ -53,8 +54,8 @@ public class PanelInteractionTest {
     @Test public void iconReloadPreservesUnsavedOrderAndCurrentQuickTab()throws Exception{
         AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
         AppCatalog.App beta=new AppCatalog.App("example.beta","Beta",new ColorDrawable(Color.BLUE));
-        View quick=new View(context);
-        View menu=AppList.create(context,List.of(alpha,beta),List.of(ShortcutTarget.app(context,alpha)),target->{},(targets,done)->done.accept(true),quick);
+        View menu=AppList.create(context,List.of(alpha,beta),List.of(ShortcutTarget.app(context,alpha)),target->{},(targets,done)->done.accept(true),List.of(),id->{});
+        View quick=(View)field(menu,"quick");
         Object panel=field(menu,"apps");invoke(panel,"toggleEditing",new Class<?>[]{});
         invoke(panel,"toggle",new Class<?>[]{ShortcutTarget.class},ShortcutTarget.app(context,beta));
         ((View)field(menu,"quickTab")).performClick();
@@ -81,6 +82,21 @@ public class PanelInteractionTest {
         assertTrue(sections[0]>=1);
         ListView list=(ListView)field(panel,"list");assertEquals(0,list.getPaddingRight());
     }
+    @Test public void mixedSelectionCapsAtTwelveAndThreeRows() throws Exception {
+        List<AppCatalog.App> apps=new ArrayList<>();
+        List<ShortcutTarget> selected=new ArrayList<>();
+        for(int i=0;i<13;i++){
+            AppCatalog.App app=new AppCatalog.App("example.app"+i,"App "+i,new ColorDrawable(Color.rgb(i*10,20,30)));
+            apps.add(app);selected.add(ShortcutTarget.app(context,app));
+        }
+        View menu=AppList.create(context,apps,selected,target->{},(targets,done)->done.accept(true),List.of(),id->{});
+        Object panel=field(menu,"apps");
+        assertEquals(12,((List<?>)field(panel,"chosen")).size());
+        android.widget.LinearLayout rows=(android.widget.LinearLayout)field(panel,"selectedRows");
+        assertEquals(3,rows.getChildCount());
+        assertEquals(4,((ViewGroup)rows.getChildAt(0)).getChildCount());
+    }
+
     @SuppressWarnings("unchecked")
     @Test public void thirdPartyShortcutsAreDiscardedAndDoneKeepsThePanel()throws Exception{
         AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));

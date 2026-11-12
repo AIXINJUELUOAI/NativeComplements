@@ -98,17 +98,16 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                             "$sim · $reason\n${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(item.getLong("time")))}")
                     }
                 }
-                Hint("仅保存在本机，最多保留最近 200 条。")
             }
         } else {
             SettingsGroup {
-                ToggleRow("启用来电拦截", "按 SIM 卡和号码规则拦截来电", config.getBoolean("enabled")) { CallBlockingStore.setEnabled(context, it) }
+                ToggleRow("启用来电拦截", value = config.getBoolean("enabled")) { CallBlockingStore.setEnabled(context, it) }
             }
             if (!permission) SettingsGroup {
-                SettingRow("识别 SIM 卡", "允许电话权限以显示两张卡的名称和状态", {
+                SettingRow("识别 SIM 卡", onClick = {
                     requestPermission.launch(Manifest.permission.READ_PHONE_STATE)
                 })
-                if (permissionDenied) SettingRow("打开应用权限设置", "在权限中允许“电话”后返回", {
+                if (permissionDenied) SettingRow("打开应用权限设置", onClick = {
                     context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${context.packageName}")))
                 })
             }
@@ -125,11 +124,11 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                         entry == null -> "此卡槽暂无已启用的 SIM 卡"
                         else -> "已识别 · 卡槽 ${slot + 1}"
                     })
-                    if (slot == 1) ToggleRow("跟随 SIM 1", "实时使用 SIM 1 的设置；关闭后恢复 SIM 2 的独立设置", follows) {
+                    if (slot == 1) ToggleRow("跟随 SIM 1", value = follows) {
                         CallBlockingStore.setFollowSim1(context, it)
                     }
                     if (!follows) {
-                        ToggleRow("拦截全部来电", "保留移动数据与短信，仅挂断此卡的来电", config.getBoolean(ownPrefix + "reject_all")) {
+                        ToggleRow("拦截全部来电", value = config.getBoolean(ownPrefix + "reject_all")) {
                             CallBlockingStore.setRejectAll(context, slot, it)
                         }
                         SettingRow("号码过滤规则", if (patterns.isEmpty()) "未设置" else "${patterns.size} 条 · ${patterns.take(3).joinToString("、")}", { editingSlot = slot })
@@ -140,7 +139,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                 }
             }
             GroupTitle("记录")
-            SettingsGroup { SettingRow("拦截记录", "${records.size} 条 · 查看号码、SIM 卡与拦截原因", onRecords) }
+            SettingsGroup { SettingRow("拦截记录", "${records.size} 条", onRecords) }
         }
     }
     editingSlot?.let { slot ->
@@ -151,7 +150,6 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
             })
     }
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清空拦截记录？") },
-        text = { Text("号码规则和 SIM 卡设置会保留。") },
         confirmButton = { TextButton(onClick = { CallBlockingStore.clearRecords(context); confirmClear = false }) { Text("清空") } },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }
@@ -162,7 +160,6 @@ private fun PatternEditor(initial: Array<out String>, slot: Int, onDismiss: () -
     var error by remember { mutableStateOf<String?>(null) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("SIM ${slot + 1} 号码规则") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("每行一条。* 匹配任意长度，例如 952*；空白保存会清除全部规则。")
             OutlinedTextField(value = input, onValueChange = { input = it; error = null },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp),
                 label = { Text("号码或通配规则") }, isError = error != null,

@@ -38,16 +38,14 @@ fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit) {
             Modifier.clickable { versionTaps++; if (versionTaps >= 7) toolsVisible = true }.padding(12.dp),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    Text("为类原生 Android 补充便捷的小窗、游戏工具、图标适配与日常操作，让系统更顺手。",
-        Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp), style = MaterialTheme.typography.bodyLarge)
     SettingsGroup {
         SettingRow("开发者", "AIXINJUELUOAI", { uri.openUri("https://github.com/AIXINJUELUOAI") })
-        SettingRow("项目主页", "查看源码与版本更新", { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements") })
-        SettingRow("反馈问题", "提交使用反馈与功能建议", { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements/issues") })
-        SettingRow("开源许可", "项目与依赖库的许可和致谢", onLicenses)
+        SettingRow("项目主页", onClick = { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements") })
+        SettingRow("反馈问题", onClick = { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements/issues") })
+        SettingRow("开源许可", onClick = onLicenses)
     }
     if (toolsVisible) {
         Spacer(Modifier.height(24.dp))
-        SettingsGroup { SettingRow("开发者工具", "诊断、实验与窗口恢复", onTools) }
+        SettingsGroup { SettingRow("开发者工具", onClick = onTools) }
     }
 }

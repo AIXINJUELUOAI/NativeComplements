@@ -1,5 +1,6 @@
 package dev.local.sunwindowdemo
 
+import android.app.Activity
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -19,12 +20,14 @@ import androidx.test.core.app.ApplicationProvider
 import dev.local.sunwindowdemo.core.ui.ComplementsTheme
 import dev.local.sunwindowdemo.features.floatingwindow.ui.GestureScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.WindowScreen
+import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
 import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.navigation.Page
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -76,17 +79,50 @@ class ManagementUiTest {
             ComplementsTheme(dynamic = false) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        androidx.compose.material3.Text("小窗", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 24.dp, 12.dp, 28.dp))
+                        androidx.compose.material3.Text("小窗设置", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 24.dp, 12.dp, 28.dp))
                         WindowScreen(WindowPreferences(), { page = it }, {})
                     }
                 }
             }
         }
         screenshot("window-light")
-        compose.onNodeWithText("快捷应用").performClick()
-        compose.runOnIdle { assertEquals(Page.Apps, page) }
+        compose.onNodeWithText("手势与菜单").performClick()
+        compose.runOnIdle { assertEquals(Page.Gestures, page) }
+        compose.onNodeWithText("快捷应用").assertDoesNotExist()
         compose.onNodeWithText("诊断与恢复").assertDoesNotExist()
         compose.onNodeWithText("启用小窗").assertExists()
+    }
+
+    @Test fun suggestionPageUsesIconListAndButtonSheet() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        val controller = WindowController(activity.get())
+        try {
+            compose.setContent {
+                captureView = LocalView.current
+                ComplementsTheme(dynamic = false) {
+                    Surface(color = MaterialTheme.colorScheme.background) {
+                        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            SuggestionScreen(controller)
+                        }
+                    }
+                }
+            }
+            compose.onNodeWithText("启用快捷建议").assertExists()
+            compose.onNodeWithText("手电筒").assertExists()
+            compose.onNodeWithText("本次常亮").assertExists()
+            compose.onNodeWithText("蓝牙音频设备").assertExists()
+            compose.onNodeWithText("验证码填充").assertExists()
+            compose.onNodeWithText("链接与分享口令").assertExists()
+            compose.onNodeWithText("地址与地点").assertExists()
+            compose.onNodeWithText("以小窗打开").assertExists()
+            compose.onNodeWithText("短信读取").assertDoesNotExist()
+            screenshot("suggestion-page")
+            compose.onNodeWithText("按钮显示").performClick()
+            compose.onNodeWithText("显示时长").assertExists()
+            compose.onNodeWithText("按钮大小").assertExists()
+        } finally {
+            controller.close(); activity.destroy()
+        }
     }
 
     @Test fun gestureToggleWritesOriginalPreferenceAndSurvivesReload() {

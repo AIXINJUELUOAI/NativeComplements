@@ -60,14 +60,10 @@ class NavigationTest {
         val windowIntent = nextPage(home, Page.Window)
         homeScenario.moveToState(Lifecycle.State.CREATED)
         val (windowScenario, window) = launch(windowIntent)
-        compose.onNodeWithTag("page-title-小窗").assertIsDisplayed()
-        compose.onNodeWithContentDescription("小窗设置").performClick()
-        val settingsIntent = nextPage(window, Page.WindowSettings)
-        windowScenario.moveToState(Lifecycle.State.CREATED)
-        val (settingsScenario, settings) = launch(settingsIntent)
+        compose.onNodeWithTag("page-title-小窗设置").assertIsDisplayed()
         compose.onNodeWithText("手势与菜单").performClick()
-        val gestureIntent = nextPage(settings, Page.Gestures)
-        settingsScenario.moveToState(Lifecycle.State.CREATED)
+        val gestureIntent = nextPage(window, Page.Gestures)
+        windowScenario.moveToState(Lifecycle.State.CREATED)
         val (gestureScenario, gesture) = launch(gestureIntent)
         compose.onNodeWithTag("page-title-手势与菜单").assertIsDisplayed()
         compose.runOnIdle {
@@ -85,9 +81,8 @@ class NavigationTest {
             assertFalse(home.isFinishing)
         }
         gestureScenario.close()
-        settingsScenario.close()
         windowScenario.moveToState(Lifecycle.State.RESUMED)
-        compose.onNodeWithTag("page-title-小窗").assertIsDisplayed()
+        compose.onNodeWithTag("page-title-小窗设置").assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.runOnIdle { assertTrue(window.isFinishing) }
         windowScenario.close()
@@ -116,7 +111,7 @@ class NavigationTest {
 
     @Test fun legacySettingsEntryStillOpensWindowAndRecreationKeepsDestination() {
         val (scenario, _) = launch(Intent(ApplicationProvider.getApplicationContext(), SettingsActivity::class.java))
-        compose.onNodeWithTag("page-title-小窗").assertIsDisplayed()
+        compose.onNodeWithTag("page-title-小窗设置").assertIsDisplayed()
         scenario.close()
         val (routed, _) = launch(intent(Page.Gestures))
         compose.onNodeWithTag("page-title-手势与菜单").assertIsDisplayed()

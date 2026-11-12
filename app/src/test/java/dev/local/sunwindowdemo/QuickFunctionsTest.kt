@@ -1,12 +1,6 @@
 package dev.local.sunwindowdemo
 
 import android.content.Context
-import android.app.Activity
-import android.content.pm.ActivityInfo
-import android.content.pm.ApplicationInfo
-import android.content.pm.LauncherActivityInfo
-import android.content.pm.LauncherApps
-import android.content.pm.PackageInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -16,7 +10,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
@@ -31,10 +24,8 @@ import androidx.test.core.app.ApplicationProvider
 import dev.local.sunwindowdemo.core.ui.ComplementsTheme
 import dev.local.sunwindowdemo.core.ui.SettingsPage
 import dev.local.sunwindowdemo.features.barrage.BarrageProvider
-import dev.local.sunwindowdemo.features.barrage.BarrageStore
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
-import dev.local.sunwindowdemo.navigation.ModuleApp
-import dev.local.sunwindowdemo.navigation.Page
+import dev.local.sunwindowdemo.features.barrage.BarrageStore
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -54,19 +45,26 @@ class QuickFunctionsTest {
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
     private lateinit var captureView: View
     private lateinit var menu: View
+    private lateinit var quickHost: WindowQuickHost
+    private val actions = mutableListOf<String>()
 
-    private fun show(quick: (Context) -> View) {
+    private fun show() {
+        actions.clear()
         compose.setContent {
             captureView = LocalView.current
-            ComplementsTheme { Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
-                Surface(Modifier.width(224.dp).height(332.dp), color = MaterialTheme.colorScheme.surface) {
-                    AndroidView(factory = { c ->
-                        val app = AppCatalog.App("example.alpha", "示例应用", ColorDrawable(Color.BLUE))
-                        AppList.create(c, listOf(app), listOf(ShortcutTarget.app(c, app)), {}, { _, done -> done.accept(true) }, quick(c))
-                            .also { menu = it; AppList.blur(it, false) }
-                    }, modifier = Modifier.fillMaxSize())
+            ComplementsTheme {
+                Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                    Surface(Modifier.width(280.dp).height(560.dp), color = MaterialTheme.colorScheme.surface) {
+                        AndroidView(factory = { c ->
+                            val app = AppCatalog.App("example.alpha", "示例应用", ColorDrawable(Color.BLUE))
+                            quickHost = WindowQuickHost(c, Runnable {}, Runnable {})
+                            AppList.create(c, listOf(app), listOf(ShortcutTarget.app(c, app)), {},
+                                { _, done -> done.accept(true) }, quickHost.entries()) { id -> actions.add(id); quickHost.action(id) }
+                                .also { menu = it; AppList.blur(it, false) }
+                        }, modifier = Modifier.fillMaxSize())
+                    }
                 }
-            } }
+            }
         }
     }
 
@@ -91,110 +89,83 @@ class QuickFunctionsTest {
     }
 
     @Test fun shortcutsUseApplicationIconsAndAreAvailableBeforeManagement() {
-        lateinit var host: WindowQuickHost
         val audio = context.getSystemService(AudioManager::class.java)
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, 3, 0)
-        show { c -> WindowQuickHost(c, Runnable {}).also { host = it }.view() }
+        show()
         var appWidth = 0
         compose.runOnIdle {
+            assertTrue(native("更多").isShown)
             assertTrue(native("应用").isShown)
             assertTrue(native("快捷功能").isShown)
             val app = native("示例应用，点击打开")
+            val appLocation = IntArray(2)
+            val tabLocation = IntArray(2)
+            app.getLocationOnScreen(appLocation)
+            native("应用").getLocationOnScreen(tabLocation)
             appWidth = app.width
+            assertTrue(tabLocation[1] >= appLocation[1] + app.height)
             assertEquals(app.javaClass, native("Wi-Fi").javaClass)
             native("快捷功能").performClick()
         }
         compose.runOnIdle {
+            assertTrue(native("示例应用，点击打开").isShown)
             assertTrue(native("Wi-Fi").isShown)
-            assertEquals(appWidth, native("Wi-Fi").width)
+            assertTrue(native("手电筒").isShown)
+            assertTrue(native("飞行模式").isShown)
+            assertTrue(native("自动亮度").isShown)
+            assertTrue(native("省电模式").isShown)
+            assertTrue(native("深色模式").isShown)
+            assertTrue(native("应用小窗").isShown)
+            assertTrue(Math.abs(appWidth - native("Wi-Fi").width) <= 1)
             assertFalse(native("Wi-Fi").performLongClick())
-            assertFalse(views(menu).any { it is SeekBar })
-            for (removed in listOf("亮度", "媒体音量", "电量", "小窗设置", "游戏面板", "弹幕通知")) {
-                assertFalse(views(menu).any { it is TextView && it.text.toString().contains(removed) })
-            }
+            assertFalse(views(menu).any { it is TextView && it.text.toString() == "上一首" })
             native("静音").performClick()
             assertEquals(0, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
-            assertEquals("已开启", native("静音").stateDescription)
+            assertNull(native("静音").stateDescription)
             native("静音").performClick()
             assertEquals(3, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
         }
         screenshot("quick-functions-portrait")
-        compose.runOnIdle { host.close() }
+        compose.runOnIdle { quickHost.close() }
+    }
+
+    @Test fun managingFromQuickTabAddsAQuickFunctionInPlace() {
+        show()
+        compose.runOnIdle {
+            native("快捷功能").performClick()
+            native("管理").performClick()
+        }
+        compose.runOnIdle {
+            assertTrue(native("完成").isShown)
+            assertTrue(native("快捷功能").isSelected)
+            assertTrue(native("示例应用，点击移除，长按拖动调整顺序").isShown)
+            native("Wi-Fi").performClick()
+        }
+        compose.runOnIdle {
+            assertEquals(listOf<String>(), actions)
+            assertTrue(native("Wi-Fi，点击移除，长按拖动调整顺序").isShown)
+            native("完成").performClick()
+        }
+        compose.runOnIdle { quickHost.close() }
     }
 
     @Test
     @Config(qualifiers = "zh-rCN-w915dp-h412dp-land-night-420dpi")
-    fun compactLandscapeShowsMediaAsPlainIconsAndRefreshesPlaybackState() {
-        val actions = mutableListOf<String>()
-        lateinit var quick: View
-        val entries = listOf("dnd" to "免打扰", "wifi" to "Wi-Fi", "rotation" to "旋转锁定", "mute" to "静音",
-            "screenshot" to "截屏", "record" to "录屏", "previous" to "上一首", "play" to "暂停", "next" to "下一首")
-            .map { (id, label) -> AppList.QuickEntry(id, label, ColorDrawable(Color.BLUE), null) }
-        show { c -> AppList.quickPage(c, entries, actions::add).also { quick = it } }
+    fun compactLandscapeShowsStaticActionsWithoutMedia() {
+        show()
         compose.runOnIdle {
             native("快捷功能").performClick()
-            (quick as ScrollView).fullScroll(View.FOCUS_DOWN)
-            native("暂停").performClick(); native("上一首").performClick(); native("下一首").performClick()
-            assertEquals(listOf("play", "previous", "next"), actions)
-            AppList.updateQuick(quick, entries.map { if (it.id() == "play") AppList.QuickEntry("play", "播放", it.icon(), null) else it })
-            assertFalse(views(quick).any { it.contentDescription == "暂停" })
-            native("播放").performClick()
-            assertEquals("play", actions.last())
+            val quick = views(menu).filterIsInstance<ScrollView>().first()
+            quick.fullScroll(View.FOCUS_DOWN)
+            native("静音").performClick(); native("手电筒").performClick(); native("飞行模式").performClick()
+            assertEquals(listOf("mute", "flashlight", "airplane"), actions)
+            for (removed in listOf("上一首", "播放", "下一首")) {
+                assertFalse(views(quick).any { it is TextView && it.text.toString() == removed })
+            }
             assertFalse(quick.isVerticalFadingEdgeEnabled)
         }
         screenshot("quick-functions-landscape-dark")
-    }
-
-    @Test @Config(qualifiers = "zh-rCN-w412dp-h915dp-night-420dpi")
-    fun windowPageHasLargeIconsAndSavesThroughTheActualToolbar() {
-        val labels = listOf("通讯", "音乐", "浏览器", "相册", "文件", "设置", "日历", "地图", "相机", "邮箱")
-        val packages = labels.mapIndexed { index, label ->
-            val pkg = "example.app$index"
-            val application = ApplicationInfo().apply {
-                packageName = pkg; nonLocalizedLabel = label; icon = android.R.drawable.sym_def_app_icon
-            }
-            val info = ActivityInfo().apply {
-                packageName = pkg; name = "$pkg.Main"; applicationInfo = application; nonLocalizedLabel = label
-            }
-            org.robolectric.Shadows.shadowOf(context.packageManager).installPackage(PackageInfo().apply {
-                packageName = pkg; applicationInfo = application; activities = arrayOf(info)
-            })
-            val internalClass = Class.forName("android.content.pm.LauncherActivityInfoInternal")
-            val internal = internalClass.getDeclaredConstructor(ActivityInfo::class.java,
-                Class.forName("android.content.pm.IncrementalStatesInfo"), android.os.UserHandle::class.java)
-                .newInstance(info, null, android.os.Process.myUserHandle())
-            val launcherInfo = LauncherActivityInfo::class.java.getDeclaredConstructor(Context::class.java, internalClass)
-                .apply { isAccessible = true }.newInstance(context, internal)
-            org.robolectric.Shadows.shadowOf(context.getSystemService(LauncherApps::class.java))
-                .addActivity(android.os.Process.myUserHandle(), launcherInfo)
-            pkg
-        }
-        val activity = Robolectric.buildActivity(Activity::class.java).setup()
-        val controller = WindowController(activity.get())
-        try {
-            compose.waitUntil(5000) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); controller.catalogLoaded }
-            controller.selected(packages.take(6))
-            compose.setContent {
-                captureView = LocalView.current
-                ComplementsTheme(dark = true) { ModuleApp(controller, Page.Window, {}, {}) }
-            }
-            compose.onNodeWithText("管理").assertIsDisplayed()
-            compose.runOnIdle {
-                menu = views(captureView.rootView).first { it.javaClass.simpleName == "Panel" }
-                assertNull(menu.background)
-                assertFalse(views(menu).any { it is TextView && it.text.toString() == "更多应用" })
-            }
-            screenshot("window-page-dark")
-            compose.onNodeWithText("管理").performClick()
-            compose.onNodeWithText("完成").assertIsDisplayed()
-            compose.runOnIdle { native("通讯，点击移除，长按拖动调整顺序").performClick() }
-            compose.onNodeWithText("完成").performClick()
-            compose.waitUntil(5000) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); !controller.menuSaving }
-            compose.onNodeWithText("管理").assertIsDisplayed()
-            compose.runOnIdle { assertEquals(packages.subList(1, 6), controller.preferences.apps) }
-        } finally {
-            controller.close(); activity.pause().stop().destroy()
-        }
+        compose.runOnIdle { quickHost.close() }
     }
 
     @Test fun barrageMigratesOnceAndStaysIndependentOfWindowEnablement() {

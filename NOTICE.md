@@ -1,8 +1,11 @@
 # Source attribution
 
-Game panel icons: Google Material Symbols Rounded, filled 24px Android vectors, Apache-2.0.
+Feature-entry, menu, quick-function and suggestion icons: Google Material Symbols Rounded, filled 24px Android vectors, Apache-2.0.
 Source: https://github.com/google/material-design-icons/tree/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android
-Assets are stored as ic_game_*.xml; Compose supplies dynamic theme tint.
+Assets are stored as ic_game_*.xml, ic_qs_*.xml, ic_suggestion_*.xml and ic_barrage_notes.xml. The flashlight and airplane glyphs reuse the Android Open Source Project SystemUI vectors
+ic_flashlight_off and ic_statusbar_airplanemode (ic_qs_flashlight.xml, ic_qs_airplane.xml), Apache-2.0.
+Source: https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/packages/SystemUI/res/drawable/
+Theme/state tint is applied by the native ImageView; the fixed white disc and black glyph styling are module UI code.
 
 Geometry.java adapts the mini-window scale constants, 9:16 canvas ratio and opposite-orientation scale factor from WindowResizingAlgorithm.java, Copyright (C) 2023-2024 The Nameless-AOSP Project, SPDX-License-Identifier: Apache-2.0.
 

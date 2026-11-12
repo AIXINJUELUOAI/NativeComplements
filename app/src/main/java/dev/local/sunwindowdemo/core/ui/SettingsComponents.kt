@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -55,7 +57,7 @@ fun SettingRow(title: String, subtitle: String? = null, onClick: (() -> Unit)? =
 }
 
 @Composable
-fun ToggleRow(title: String, subtitle: String, value: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(title: String, subtitle: String? = null, value: Boolean, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
         .background(MaterialTheme.colorScheme.surfaceContainerLow)
         .toggleable(value, role = Role.Switch, onValueChange = onChange)
@@ -63,14 +65,78 @@ fun ToggleRow(title: String, subtitle: String, value: Boolean, onChange: (Boolea
         horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = value, onCheckedChange = null)
     }
 }
 
 @Composable
-fun SliderRow(title: String, subtitle: String, value: Int, range: IntRange, unit: String, onCommit: (Int) -> Unit) {
+fun IconToggleRow(title: String, subtitle: String? = null, value: Boolean, onChange: (Boolean) -> Unit,
+                  leading: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
+        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+        .toggleable(value, role = Role.Switch, onValueChange = onChange)
+        .padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        leading()
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = value, onCheckedChange = null)
+    }
+}
+
+@Composable
+fun IconSliderRow(title: String, subtitle: String? = null, value: Int, range: IntRange, unit: String,
+                  onCommit: (Int) -> Unit, leading: @Composable () -> Unit) {
+    var pending by remember(value) { mutableFloatStateOf(value.toFloat()) }
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)
+        .padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        leading()
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text("${pending.roundToInt()}$unit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            Slider(value = pending, onValueChange = { pending = it.roundToInt().toFloat() }, onValueChangeFinished = { onCommit(pending.roundToInt()) },
+                valueRange = range.first.toFloat()..range.last.toFloat(),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = title })
+            if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** A switch with a separate details target: the left side opens a sheet, the switch only toggles. */
+@Composable
+fun SplitSwitchRow(title: String, subtitle: String? = null, value: Boolean, onToggle: (Boolean) -> Unit,
+                   onDetails: () -> Unit, leading: (@Composable () -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
+        .background(MaterialTheme.colorScheme.surfaceContainerLow), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f).clickable(role = Role.Button, onClick = onDetails)
+            .padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            leading?.invoke()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, Modifier.size(24.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Box(Modifier.width(1.dp).height(24.dp).background(MaterialTheme.colorScheme.outlineVariant))
+        Row(Modifier.toggleable(value, role = Role.Switch, onValueChange = onToggle)
+            .padding(horizontal = 14.dp, vertical = 14.dp)
+            .semantics { contentDescription = title }, verticalAlignment = Alignment.CenterVertically) {
+            Switch(checked = value, onCheckedChange = null)
+        }
+    }
+}
+
+@Composable
+fun SliderRow(title: String, subtitle: String? = null, value: Int, range: IntRange, unit: String, onCommit: (Int) -> Unit) {
     var pending by remember(value) { mutableFloatStateOf(value.toFloat()) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)
         .padding(horizontal = 16.dp, vertical = 16.dp)) {
@@ -81,7 +147,7 @@ fun SliderRow(title: String, subtitle: String, value: Int, range: IntRange, unit
         Slider(value = pending, onValueChange = { pending = it.roundToInt().toFloat() }, onValueChangeFinished = { onCommit(pending.roundToInt()) },
             valueRange = range.first.toFloat()..range.last.toFloat(),
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = title })
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -95,7 +161,7 @@ fun Hint(text: String) {
 fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
           foreground: Color = MaterialTheme.colorScheme.primary) {
     val vector = when (kind) {
-        "barrage" -> R.drawable.ic_game_chat_bubble
+        "barrage" -> R.drawable.ic_barrage_notes
         "phone" -> R.drawable.ic_call_blocking
         "shake" -> R.drawable.ic_motion
         "edge" -> R.drawable.ic_edge_touch

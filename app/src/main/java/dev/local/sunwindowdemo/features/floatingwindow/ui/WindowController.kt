@@ -30,10 +30,6 @@ class WindowController(private val activity: Activity) {
     var runtime by mutableStateOf(WindowRuntime()); private set
     var apps by mutableStateOf<List<LaunchableApp>>(emptyList()); private set
     var catalogLoaded by mutableStateOf(false); private set
-    var menuEditing by mutableStateOf(false); private set
-    var menuSaving by mutableStateOf(false); private set
-    private var menu: android.view.View? = null
-    private var catalog: List<AppCatalog.App> = emptyList()
     private val handler = Handler(Looper.getMainLooper())
     private var destroyed = false
     private var catalogGeneration = 0
@@ -74,8 +70,7 @@ class WindowController(private val activity: Activity) {
         Thread({
             val loaded = runCatching { AppCatalog.load(context) }.getOrDefault(emptyList())
             handler.post { if (!destroyed && generation == catalogGeneration) {
-                catalog = loaded; apps = loaded.map { LaunchableApp(it.pkg, it.label, it.icon) }; catalogLoaded = true
-                menu?.let { AppList.updateApps(it, loaded) }
+                apps = loaded.map { LaunchableApp(it.pkg, it.label, it.icon) }; catalogLoaded = true
             } }
         }, "settings-app-catalog").start()
     }
@@ -95,29 +90,8 @@ class WindowController(private val activity: Activity) {
     }
     fun boolean(key: String, value: Boolean) = store.boolean(key, value)
     fun number(key: String, value: Int) = store.number(key, value)
-    fun selected(packages: List<String>) = store.apps(packages)
     fun blocked(packages: Set<String>) = store.blocked(packages)
     fun toggleControl() = store.boolean("enabled", !preferences.enabled)
-    fun menuView(context: Context, colors: IntArray): android.view.View {
-        val selected = preferences.apps.mapNotNull { ShortcutTarget.fromKey(context, it, catalog) }
-        return AppList.createPage(context, catalog, selected, { target ->
-            if (preferences.enabled && runtime.compatible && runtime.hostConnected) Wire.openApp(activity, target.pkg, false)
-            else toast("请先启用小窗并等待系统服务就绪")
-        }, { targets, done ->
-            Thread({
-                val saved = runCatching {
-                    Config(activity).targets(targets.map { it.key() }, targets.map { it.label })
-                    ConfigProvider.changed(activity)
-                }.isSuccess
-                handler.post { if (!destroyed) done.accept(saved) }
-            }, "settings-menu-save").start()
-        }, colors, { editing, saving -> menuEditing = editing; menuSaving = saving }).also { menu = it }
-    }
-    fun editMenu() { menu?.let { AppList.edit(it) } }
-    fun releaseMenu(view: android.view.View) {
-        if (menu === view) { menu = null; menuEditing = false; menuSaving = false }
-    }
-    fun menuInsets(view: android.view.View, bottom: Int) = AppList.bottomInset(view, bottom)
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")
     fun notifications() {

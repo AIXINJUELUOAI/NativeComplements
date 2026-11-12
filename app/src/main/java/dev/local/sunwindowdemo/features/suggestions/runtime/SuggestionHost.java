@@ -42,7 +42,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private SuggestionDrag drag;
     private final Set<String> litCameras=new HashSet<>();
     private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,inputRunning,chooser;
-    private boolean torchUsed,opening;
+    private boolean torchDismissed,opening;
     private int openGeneration;
     private String lastTorchCamera,requestedTorchCamera;
     private Boolean requestedTorchMode;
@@ -51,7 +51,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private long clipboardTimestamp;
     private String code,smsBody,mapText,displayedSmsBody;
     private long displayedSmsUntil;
-    private long codeUntil,contentUntil,torchUntil,torchOfferUntil,bluetoothUntil,awakeUntil;
+    private long codeUntil,contentUntil,torchUntil,bluetoothUntil,awakeUntil;
     private SuggestionRules.Link link;
     private List<String> maps=List.of();
     private final Map<String,Notice> notices=new LinkedHashMap<>();
@@ -78,7 +78,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             boolean changed=litCameras.contains(camera)!=enabled;
             if(enabled){litCameras.add(camera);lastTorchCamera=camera;}else litCameras.remove(camera);
             if(camera.equals(requestedTorchCamera)&&requestedTorchMode!=null&&requestedTorchMode==enabled){requestedTorchCamera=null;requestedTorchMode=null;}
-            else if(changed){torchUsed=false;torchUntil=0;torchOfferUntil=enabled?offerUntil():0;}
+            if(changed){torchDismissed=false;torchUntil=enabled?0:offerUntil();}
             render();
         }
         @Override public void onTorchModeUnavailable(String camera){litCameras.remove(camera);render();}
@@ -123,12 +123,10 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     long delta=(next.getInt("duration",60)-settings.getInt("duration",60))*1000L;
                     long time=now();
                     if(codeUntil>time)codeUntil+=delta;if(contentUntil>time)contentUntil+=delta;
-                    if(torchOfferUntil>time)torchOfferUntil+=delta;if(bluetoothUntil>time)bluetoothUntil+=delta;if(awakeUntil>time)awakeUntil+=delta;
-                    boolean offerTorch=next.getBoolean("enabled")&&next.getBoolean("torch")&&!enabled("torch");
+                    if(torchUntil>time)torchUntil+=delta;if(bluetoothUntil>time)bluetoothUntil+=delta;if(awakeUntil>time)awakeUntil+=delta;
                     boolean offerBluetooth=next.getBoolean("enabled")&&next.getBoolean("bluetooth")&&(!enabled("bluetooth")
                         ||!Objects.equals(settings.getString("bluetooth_app"),next.getString("bluetooth_app")));
                     settings=next;
-                    if(offerTorch&&!litCameras.isEmpty()){torchUsed=false;torchOfferUntil=offerUntil();}
                     if(offerBluetooth&&audioConnected){bluetoothUsed=false;bluetoothUntil=offerUntil();}
                     if(!enabled("otp")){code=null;smsBody=null;displayedSmsBody=null;notices.clear();}
                     if(!enabled("awake")){awakeUntil=0;releaseAwake();}
@@ -274,7 +272,6 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(displayedSmsUntil>now())main.postDelayed(expire,displayedSmsUntil-now());
         for(Notice notice:notices.values())main.postDelayed(expire,Math.max(1,notice.received+60000-now()));
         if(torchUntil>now())main.postDelayed(expire,torchUntil-now());
-        if(torchOfferUntil>now())main.postDelayed(expire,torchOfferUntil-now());
         if(bluetoothUntil>now())main.postDelayed(expire,bluetoothUntil-now());
         if(awakeUntil>now())main.postDelayed(expire,awakeUntil-now());
         removeView();if(locked()){awakeUntil=0;releaseAwake();return;}
@@ -290,9 +287,10 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 item.setOnClickListener(v->{v.performHapticFeedback(HapticFeedbackConstants.CONFIRM);openMap(pkg);});row.addView(item,new LinearLayout.LayoutParams(dp(228),dp(50)));
             }
         }else{
-            if(enabled("torch")&&(!torchUsed&&!litCameras.isEmpty()&&torchOfferUntil>now()||torchUntil>now())){
-                ImageView torch=addButton(row,glyph(litCameras.isEmpty()?"ic_suggestion_torch_off":"ic_suggestion_torch"),litCameras.isEmpty()?"打开手电筒":"关闭手电筒",this::toggleTorch,()->{torchUsed=true;torchUntil=0;torchOfferUntil=0;});
-                torch.setBackground(buttonBackground(circle(litCameras.isEmpty()?0xff73777f:0xffc59618)));
+            boolean torchOn=!litCameras.isEmpty();
+            if(enabled("torch")&&(torchOn?!torchDismissed:torchUntil>now())){
+                ImageView torch=addButton(row,glyph(torchOn?"ic_suggestion_torch":"ic_suggestion_torch_off"),torchOn?"关闭手电筒":"打开手电筒",this::toggleTorch,()->{torchDismissed=true;torchUntil=0;});
+                torch.setBackground(buttonBackground(circle(torchOn?0xffc59618:0xff73777f)));
                 torch.setEnabled(requestedTorchMode==null);torch.setAlpha(requestedTorchMode==null?1:.5f);
             }
             if(enabled("awake")&&awakeUntil>now()){
@@ -399,7 +397,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(requestedTorchMode!=null)return;
         boolean on=litCameras.isEmpty();String camera=on?lastTorchCamera:litCameras.iterator().next();if(camera==null)return;
         try{
-            requestedTorchCamera=camera;requestedTorchMode=on;torchUsed=true;torchUntil=now()+5000;
+            requestedTorchCamera=camera;requestedTorchMode=on;torchDismissed=false;
             cameras.setTorchMode(camera,on);render();
             main.postDelayed(()->{if(camera.equals(requestedTorchCamera)){requestedTorchCamera=null;requestedTorchMode=null;render();}},1500);
         }catch(Exception e){requestedTorchCamera=null;requestedTorchMode=null;Toast.makeText(context,"手电筒暂不可操作",Toast.LENGTH_SHORT).show();render();}

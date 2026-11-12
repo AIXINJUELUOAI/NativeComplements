@@ -61,14 +61,20 @@ final class FanView extends View {
             float cx=x+(right?-1:1)*r*(float)Math.cos(a),cy=y-r*(float)Math.sin(a);
             float size=icon*(selected==i?1.12f:1);
             if(i==0){paint.setColor(themeColor(android.R.attr.colorAccent,0xff6750a4));paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2+5,paint);}
-            if(i>0) {
-                android.graphics.drawable.Drawable drawable=apps.get(i-1).icon;
+            if(i>0&&apps.get(i-1).icon!=null) {
+                ShortcutTarget target=apps.get(i-1);
+                android.graphics.drawable.Drawable drawable=target.icon;
                 int saved=c.save();Rect bounds=new Rect(drawable.getBounds());int alpha=drawable.getAlpha();
                 try{
+                    if(target.quick){
+                        paint.setColor(Color.WHITE);paint.setAlpha((int)(255*progress));c.drawCircle(cx,cy,size/2,paint);
+                        drawable.setTint(0xff1b1c1f);
+                    }
                     c.translate(cx-size/2,cy-size/2);c.clipRect(0,0,size,size);
-                    drawable.setBounds(0,0,Math.round(size),Math.round(size));
+                    if(target.quick){float inset=size*.22f;drawable.setBounds(Math.round(inset),Math.round(inset),Math.round(size-inset),Math.round(size-inset));}
+                    else drawable.setBounds(0,0,Math.round(size),Math.round(size));
                     drawable.setAlpha((int)(255*progress));drawable.draw(c);
-                }finally{drawable.setBounds(bounds);drawable.setAlpha(alpha);c.restoreToCount(saved);}
+                }finally{drawable.setBounds(bounds);drawable.setAlpha(alpha);if(target.quick)drawable.setTintList(null);c.restoreToCount(saved);}
             } else {
                 int background=themeColor(android.R.attr.colorAccent,0xff6750a4);
                 paint.setColor(Color.luminance(background)>.45?Color.BLACK:Color.WHITE);paint.setAlpha((int)(255*progress));

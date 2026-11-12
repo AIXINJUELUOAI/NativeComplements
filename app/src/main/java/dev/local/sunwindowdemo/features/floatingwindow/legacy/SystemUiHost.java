@@ -244,7 +244,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         controls=new WindowControls(this);miniControls=new WindowControls(this);
         try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
         edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
-        quick=new WindowQuickHost(this,this::hidePanel);
+        quick=new WindowQuickHost(this,()->{hidePanel();hideFan();},()->{hidePanel();hideFan();floatCurrent(0,true);});
         try{barrage=new BarrageHost(this);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
@@ -398,7 +398,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             @Override public boolean dispatchKeyEvent(KeyEvent e){if(e.getKeyCode()==KeyEvent.KEYCODE_BACK){if(e.getAction()==KeyEvent.ACTION_UP)backPanel();return true;}return super.dispatchKeyEvent(e);}
         };
         outside.setBackgroundColor(Color.TRANSPARENT);outside.setOnClickListener(v->hidePanel());
-        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key(),false);},this::saveTargets,quick.view());menuContent=content;
+        View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key(),false);},this::saveTargets,
+            quick==null?List.of():quick.entries(),this::quickAction);menuContent=content;
         AppList.blur(content,config.menuBlur());
         content.setOnClickListener(v->{});
         WindowMetrics metrics=wm.getCurrentWindowMetrics();
@@ -417,10 +418,11 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         });
         outside.setAlpha(0);
         try{wm.addView(outside,p);outside.animate().alpha(1).setDuration(150).start();updateOverlayPriority();publish(false);}
-        catch(RuntimeException failure){panel=null;menuContent=null;quick.detach();Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
+        catch(RuntimeException failure){panel=null;menuContent=null;Toast.makeText(this,"应用面板打开失败",Toast.LENGTH_SHORT).show();}
     }
     private void backPanel(){if(menuContent==null||!AppList.back(menuContent))hidePanel();}
-    private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;menuContent=null;if(quick!=null)quick.detach();updateOverlayPriority();publish(false);}}
+    private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;menuContent=null;updateOverlayPriority();publish(false);}}
+    private void quickAction(String id){if(quick!=null)quick.action(id);}
     private IntentFilter settingsFilter(){IntentFilter filter=new IntentFilter(ConfigProvider.CHANGED);filter.addAction(WindowShortcutActivity.ACTION);return filter;}
     private void updateOpenWait(Intent frame){
         if(!frame.hasExtra("waitingOpen"))return;
@@ -504,7 +506,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         try{Wire.openNotification(this,notice.getPackageName(),pending,fill,reply);}
         catch(RuntimeException error){reply.send(0,null);}
     }
-    private void floatCurrent(int attempt){
+    private void floatCurrent(int attempt){floatCurrent(attempt,false);}
+    private void floatCurrent(int attempt,boolean quiet){
         if(!ready()||!config.enabled()||!backendReady||!dropAvailable()||getSystemService(KeyguardManager.class).isKeyguardLocked()){
             Toast.makeText(this,"请先启用小窗控制，并留出默认小窗位置",Toast.LENGTH_SHORT).show();return;
         }
@@ -512,16 +515,19 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(1);
             if(tasks.isEmpty()||tasks.get(0).topActivity==null)return;
             var task=tasks.get(0);String pkg=task.topActivity.getPackageName();
-            if(Wire.PKG.equals(pkg)&&attempt<20){main.postDelayed(()->floatCurrent(attempt+1),32);return;}
-            if(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task)!=0||Wire.PKG.equals(pkg)||BackBridge.PACKAGE.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg)||!Wire.allowedPackage(pkg)){
-                Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
+            if(Wire.PKG.equals(pkg)&&attempt<20){main.postDelayed(()->floatCurrent(attempt+1,quiet),32);return;}
+            if(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task)!=0||Wire.PKG.equals(pkg)
+                ||"com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg)||!Wire.allowedPackage(pkg)){
+                if(!quiet)Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
             }
+            if(activeTask>0&&task.taskId==activeTask){if(!quiet)Toast.makeText(this,"当前应用已经是小窗",Toast.LENGTH_SHORT).show();return;}
             cancelOpenWait();Wire.send(this,"GESTURE",pkg,task.taskId,Wire.token(),false);
         }catch(Exception error){Toast.makeText(this,"当前应用转换失败，请稍后重试",Toast.LENGTH_SHORT).show();}
     }
     private void launch(String key,boolean wakeStep) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
         ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
+        if(target.quick){hidePanel();hideFan();quickAction(target.action);return;}
         cancelOpenWait();
         main.postDelayed(()->{
             if(cleaned)return;
