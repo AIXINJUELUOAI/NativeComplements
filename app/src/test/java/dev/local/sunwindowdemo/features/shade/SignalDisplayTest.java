@@ -4,7 +4,7 @@ import static org.junit.Assert.*;
 
 public class SignalDisplayTest {
     @Test public void thresholdsAndAdjacentDbmAreExact(){
-        int[] input={-156,-126,-125,-116,-115,-106,-105,-96,-95,-31};
+        int[] input={-156,-121,-120,-111,-110,-101,-100,-91,-90,-31};
         int[] expected={0,0,1,1,2,2,3,3,4,4};
         for(int i=0;i<input.length;i++)assertEquals("dBm="+input[i],expected[i],SignalDisplayPolicy.level(1,true,true,true,input[i]));
     }
@@ -21,5 +21,14 @@ public class SignalDisplayTest {
         assertEquals(2,SignalDisplayPolicy.level(2,true,true,false,-96));
         for(int value:new int[]{Integer.MAX_VALUE,Integer.MIN_VALUE,0,-157,-30})
             assertEquals(1,SignalDisplayPolicy.level(1,true,true,true,value));
+    }
+    @Test public void realWorldCasesMatchExpectations(){
+        // User's actual signal: -96 dBm should show 3 bars
+        assertEquals(3,SignalDisplayPolicy.level(1,true,true,true,-96));
+        // Common NR signal ranges
+        assertEquals(4,SignalDisplayPolicy.level(1,true,true,true,-85));  // Excellent
+        assertEquals(3,SignalDisplayPolicy.level(1,true,true,true,-95));  // Good
+        assertEquals(2,SignalDisplayPolicy.level(1,true,true,true,-105)); // Fair
+        assertEquals(1,SignalDisplayPolicy.level(1,true,true,true,-115)); // Poor
     }
 }
