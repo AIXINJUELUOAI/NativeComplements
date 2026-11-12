@@ -95,6 +95,8 @@ public final class LandscapeShade {
             // Install the shared getter before dropping compiled copies in all consumers.
             if (!module.deoptimize(updateResources)) throw new IllegalStateException("shade update deoptimize");
             deoptimizeCallers(module, loader);
+            ComposeShadeLayout.install(module, loader, hooks,
+                    value -> ready && forceSplit(enabled, value.getConfiguration()));
             ready = true;
             note("SHADE_READY");
         } catch (Throwable failure) {
@@ -226,11 +228,20 @@ public final class LandscapeShade {
             Object panel = it.next().get();
             if (panel == null) it.remove(); else targets.add(panel);
         }
+        try {
+            if (context != null) ComposeShadeLayout.refresh(context.getResources().getConfiguration());
+        } catch (Exception failure) {
+            enabled = false;
+            ready = false;
+            try { ComposeShadeLayout.refresh(context.getResources().getConfiguration()); } catch (Exception ignored) {}
+            note("SHADE_COMPOSE_REFRESH_FAILED " + failure.getClass().getSimpleName());
+        }
         for (Object panel : targets) try { updateResources.invoke(panel); }
         catch (Exception failure) {
             enabled = false;
             ready = false;
-            // A prior panel may already have switched; restore every live target once.
+            // Restore the Compose flow and every panel after a partially applied override.
+            try { if (context != null) ComposeShadeLayout.refresh(context.getResources().getConfiguration()); } catch (Exception ignored) {}
             for (Object target : targets) try { updateResources.invoke(target); } catch (Exception ignored) {}
             note("SHADE_REFRESH_FAILED restart SystemUI manually: " + failure.getClass().getSimpleName());
             break;

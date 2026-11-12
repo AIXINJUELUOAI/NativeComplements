@@ -1,6 +1,14 @@
 {
   "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972",
   "classes": {
+    "Lcom/android/systemui/common/ui/data/repository/ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1;": {
+      "dex": "classes.dex",
+      "methods": [{"name": "onConfigChanged", "descriptor": "(Landroid/content/res/Configuration;)V"}]
+    },
+    "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$special$$inlined$map$1$2;": {
+      "dex": "classes2.dex",
+      "methods": [{"name": "emit", "descriptor": "(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;"}]
+    },
     "Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;": {
       "dex": "classes2.dex",
       "methods": [{"name": "shouldUseSplitNotificationShade", "descriptor": "(Landroid/content/res/Resources;)Z"}]

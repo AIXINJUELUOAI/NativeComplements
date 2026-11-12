@@ -50,6 +50,38 @@ public class ShadeTest {
         assertEquals(5, LandscapeShade.CONSTRUCTORS.length);
     }
 
+    @Test public void composeResourceOverrideIsScopedAndRestoresNativeOutsideForcedLandscape() {
+        assertEquals(true, ComposeShadeLayout.overrideBoolean(false, 1, true, true, 1, 2));
+        assertEquals(false, ComposeShadeLayout.overrideBoolean(true, 2, true, true, 1, 2));
+        assertEquals(false, ComposeShadeLayout.overrideBoolean(false, 1, false, true, 1, 2));
+        assertEquals(true, ComposeShadeLayout.overrideBoolean(true, 2, true, false, 1, 2));
+        assertEquals(false, ComposeShadeLayout.overrideBoolean(false, 3, true, true, 1, 2));
+    }
+
+    public static class ConfigCallback {
+        Configuration last;
+        int calls;
+        public void onConfigChanged(Configuration value) { last = value; calls++; }
+    }
+    @Test public void composeRefreshUsesNativeRepositoryCallbackAndUnmodifiedConfiguration() throws Exception {
+        var type = ComposeShadeLayout.class;
+        var refs = type.getDeclaredField("callbacks"); refs.setAccessible(true);
+        var method = type.getDeclaredField("onConfigChanged"); method.setAccessible(true);
+        var list = (java.util.List<java.lang.ref.WeakReference<Object>>) refs.get(null);
+        ConfigCallback callback = new ConfigCallback();
+        Configuration real = new Configuration();
+        real.orientation = Configuration.ORIENTATION_LANDSCAPE; real.screenWidthDp = 874;
+        real.densityDpi = 489;
+        try {
+            method.set(null, ConfigCallback.class.getDeclaredMethod("onConfigChanged", Configuration.class));
+            list.add(new java.lang.ref.WeakReference<>(callback));
+            ComposeShadeLayout.refresh(real);
+            assertEquals(1, callback.calls);
+            assertNotSame(real, callback.last);
+            assertEquals(real, callback.last);
+        } finally { list.clear(); method.set(null, null); }
+    }
+
     @Test public void settingsDefaultOffAndUseDeviceProtectedStorage() {
         assertFalse(ShadeStore.read(context).getBoolean("enabled"));
         ShadeStore.setEnabled(context, true);

@@ -191,6 +191,8 @@ for cls,kind,name,descriptor in [
  ('Lcom/android/systemui/shade/NotificationPanelViewController;','methods','updateResources','()V'),
  ('Lcom/android/systemui/shade/QuickSettingsControllerImpl;','methods','updateResources','()V'),
  ('Lcom/android/systemui/shade/NotificationsQSContainerController;','methods','updateResources','()V'),
+ ('Lcom/android/systemui/common/ui/data/repository/ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1;','methods','onConfigChanged','(Landroid/content/res/Configuration;)V'),
+ ('Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$special$$inlined$map$1$2;','methods','emit','(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;'),
  ('Lcom/android/systemui/shade/NotificationPanelViewController;','fields','mSplitShadeStateController','Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;'),
  ('Lcom/android/systemui/shade/NotificationPanelViewController;','fields','mResources','Landroid/content/res/Resources;')]:
  assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==descriptor

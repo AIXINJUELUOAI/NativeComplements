@@ -19,4 +19,4 @@
 - 电话拦截位于 features/callblocking；使用独立 CallBlockingModule 和 UID 检查的 CallBlockingProvider，设备保护存储。只使用既有 system 作用域，按实际来电 PhoneAccount 识别卡槽，不轮询铃响猜 SIM，不接管默认电话角色。
 
 - 快捷控制位于小窗悬浮菜单的“快捷功能”，不再提供独立游戏助手与侧边提示条。弹幕通知独立位于 features/barrage，使用 UID 检查的配置读取／受限历史写入 Provider 和设备保护存储，不依赖小窗总开关；成功显示并记录历史后取消对应原通知，不做投递前拦截。截图不隐藏或重建当前弹幕，键盘、其他系统面板和锁屏规则保留。
-- 横屏双栏位于 features/shade，独立设备保护配置与 UID 校验只读 Provider，默认关闭，仅适配已核实的 legacy Split Shade；不强开 Scene、不改 DPI、不依赖小窗开关。
+- 横屏双栏位于 features/shade，独立设备保护配置与 UID 校验只读 Provider，默认关闭，仅适配已核实的 legacy Split Shade；不强开 Scene、不改 DPI、不依赖小窗开关；Compose QS 通过其原生配置资源流同步分栏模式，不直接改 readonly StateFlow 或硬编码磁贴列数。
