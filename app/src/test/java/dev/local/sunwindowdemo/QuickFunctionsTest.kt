@@ -217,6 +217,7 @@ class QuickFunctionsTest {
             }
         }
         compose.onNodeWithText("启用弹幕通知").performClick()
+        compose.onNodeWithText("逐应用设置").assertIsDisplayed()
         compose.onNodeWithText("示例应用").performScrollTo().performClick()
         compose.runOnIdle {
             assertTrue(BarrageStore.read(context).getBoolean("enabled"))

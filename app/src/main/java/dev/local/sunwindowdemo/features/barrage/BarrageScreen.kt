@@ -33,6 +33,7 @@ fun BarrageScreen(apps: List<LaunchableApp>,loaded: Boolean,bottomInset: Dp=0.dp
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,4.dp,16.dp,32.dp+bottomInset),verticalArrangement=Arrangement.spacedBy(2.dp)) {
         item {SettingsGroup {ToggleRow("启用弹幕通知", value=config.getBoolean("enabled")) {BarrageStore.enabled(context,it)}}}
         item {SettingsGroup {SettingRow("弹幕记录","${historyCount} 条",onHistory)}}
+        item {GroupTitle("逐应用设置")}
         if(!loaded)item {LinearProgressIndicator(Modifier.fillMaxWidth())}
         items(visible,key={it.packageName}) {app ->
             SettingRow(app.label,onClick={BarrageStore.select(context,app.packageName,app.packageName !in selected)},

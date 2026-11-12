@@ -72,12 +72,12 @@ fun SuggestionScreen(controller: WindowController) {
     }
     val dark = isSystemInDarkTheme()
     fun tone(light: Long, night: Long) = Color(if (dark) night else light)
-    val torchTone = tone(0xFFB26A00, 0xFFFFB74D)
-    val awakeTone = tone(0xFFC58A00, 0xFFFFD54F)
+    val torchTone = tone(SuggestionTones.TORCH_LIGHT.toLong(), SuggestionTones.TORCH_DARK.toLong())
+    val awakeTone = tone(SuggestionTones.AWAKE_LIGHT.toLong(), SuggestionTones.AWAKE_DARK.toLong())
     val bluetoothTone = tone(0xFF1A73E8, 0xFF8AB4F8)
-    val otpTone = tone(0xFF00897B, 0xFF4DB6AC)
+    val otpTone = tone(SuggestionTones.OTP_LIGHT.toLong(), SuggestionTones.OTP_DARK.toLong())
     val linkTone = tone(0xFF7B4DBD, 0xFFC4A7FF)
-    val locationTone = tone(0xFF2E7D32, 0xFF81C784)
+    val locationTone = tone(SuggestionTones.MAP_LIGHT.toLong(), SuggestionTones.MAP_DARK.toLong())
     val buttonTone = tone(0xFF6750A4, 0xFFD0BCFF)
     val windowTone = tone(0xFF00639B, 0xFF8ECDF8)
 

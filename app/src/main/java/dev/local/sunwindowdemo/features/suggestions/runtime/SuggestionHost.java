@@ -2,6 +2,7 @@ package dev.local.sunwindowdemo;
 
 import android.app.*;
 import android.content.*;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -20,6 +21,7 @@ import android.view.*;
 import android.widget.*;
 import dev.local.sunwindowdemo.features.suggestions.SuggestionRules;
 import dev.local.sunwindowdemo.features.suggestions.SuggestionStore;
+import dev.local.sunwindowdemo.features.suggestions.SuggestionTones;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -225,7 +227,14 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         try{if(windowContext.getTheme().resolveAttribute(attr,v,true))return v.resourceId!=0?windowContext.getColor(v.resourceId):v.data;}catch(RuntimeException ignored){}return fallback;
     }
     private Drawable circle(int color){GradientDrawable bg=new GradientDrawable();bg.setShape(GradientDrawable.OVAL);bg.setColor(color);return bg;}
-    private Drawable background(){GradientDrawable bg=new GradientDrawable();bg.setColor(color(android.R.attr.colorBackground,0xfff6f3fa));bg.setCornerRadius(dp(28));return bg;}
+    private int surface(){return color(android.R.attr.colorBackground,0xfff6f3fa);}
+    private boolean night(){return (windowContext.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;}
+    /** Same tonal circle and glyph colour as the in-app suggestion rows. */
+    private void paint(ImageView button,int tone){
+        button.setBackground(buttonBackground(circle(SuggestionTones.container(surface(),tone))));
+        button.setImageTintList(ColorStateList.valueOf(tone));
+    }
+    private Drawable background(){GradientDrawable bg=new GradientDrawable();bg.setColor(surface());bg.setCornerRadius(dp(28));return bg;}
     private Drawable icon(String pkg){
         try{return AppCatalog.normalized(windowContext,context.getPackageManager().getApplicationIcon(pkg));}catch(Exception e){return null;}
     }
@@ -291,7 +300,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             boolean torchOn=!litCameras.isEmpty();
             if(enabled("torch")&&(torchOn?!torchDismissed:torchUntil>now())){
                 ImageView torch=addButton(row,glyph(torchOn?"ic_suggestion_torch":"ic_suggestion_torch_off"),torchOn?"关闭手电筒":"打开手电筒",this::toggleTorch,()->{torchDismissed=true;torchUntil=0;});
-                torch.setBackground(buttonBackground(circle(torchOn?0xffc59618:0xff73777f)));
+                paint(torch,SuggestionTones.tone(night(),SuggestionTones.TORCH_LIGHT,SuggestionTones.TORCH_DARK));
                 torch.setEnabled(requestedTorchMode==null);torch.setAlpha(requestedTorchMode==null?1:.5f);
             }
             if(enabled("awake")&&awakeUntil>now()){
@@ -299,7 +308,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 if(locked())return;
                 try{awakeLock.acquire();awakeUntil=0;render();}catch(RuntimeException e){Toast.makeText(context,"常亮暂不可用",Toast.LENGTH_SHORT).show();}
                 },()->awakeUntil=0);
-                awake.setBackground(buttonBackground(circle(0xfff2d87d)));
+                paint(awake,SuggestionTones.tone(night(),SuggestionTones.AWAKE_LIGHT,SuggestionTones.AWAKE_DARK));
             }
             String bluetooth=settings.getString("bluetooth_app","");
             if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&bluetoothUntil>now()&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
@@ -307,7 +316,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             },()->bluetoothUsed=true);
             if(enabled("otp")&&code!=null&&!inputRunning){
                 ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input,()->{code=null;smsBody=null;displayedSmsBody=null;displayedSmsUntil=0;});
-                otp.setBackground(buttonBackground(circle(0xff2866c7)));
+                paint(otp,SuggestionTones.tone(night(),SuggestionTones.OTP_LIGHT,SuggestionTones.OTP_DARK));
                 otp.setEnabled(!inputRunning);otp.setAlpha(inputRunning?.5f:1);
                 int generation=renderGeneration;
                 row.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener(){
@@ -331,7 +340,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             if(enabled("maps")&&mapText!=null){
                 maps=mapApps();if(!maps.isEmpty()){ImageView map=addButton(row,maps.size()==1?icon(maps.get(0)):glyph("ic_suggestion_navigation"),"用地图搜索地点",()->{
                     if(maps.size()==1)openMap(maps.get(0));else{chooser=true;render();}
-                },()->{mapText=null;chooser=false;});if(maps.size()==1){int pad=buttonPadding(4);map.setBackground(null);map.setElevation(0);map.setPadding(pad,pad,pad,pad);}}
+                },()->{mapText=null;chooser=false;});if(maps.size()==1){int pad=buttonPadding(4);map.setBackground(null);map.setElevation(0);map.setPadding(pad,pad,pad,pad);}
+                    else paint(map,SuggestionTones.tone(night(),SuggestionTones.MAP_LIGHT,SuggestionTones.MAP_DARK));}
             }
         }
         if(row.getChildCount()==0)return;

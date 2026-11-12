@@ -43,6 +43,7 @@ fun MotionScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0
         LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize(), contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 32.dp + bottomInset),
             verticalArrangement = Arrangement.spacedBy(2.dp)) {
             item { SettingsGroup { ToggleRow("启用控制", "默认：${modeLabel(defaultMode)}", enabled) { MotionStore.enabled(context, it) } } }
+            item { GroupTitle("逐应用设置") }
             if (!loaded) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             if (loaded && visible.isEmpty()) item { Hint("暂无可显示的应用") }
             items(visible, key = { it.packageName }) { app ->
