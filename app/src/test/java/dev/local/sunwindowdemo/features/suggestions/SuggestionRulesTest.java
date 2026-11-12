@@ -33,9 +33,10 @@ public class SuggestionRulesTest {
         assertEquals("杭州西湖",SuggestionRules.address("杭州西湖"));
         assertEquals("星光商场",SuggestionRules.address("星光商场"));
         assertEquals("北京市朝阳区建国路88号",SuggestionRules.address("北京市朝阳区建国路88号"));
+        assertEquals("杭州市西湖区文三路100号",SuggestionRules.address("杭州市西湖区文三路100号"));
         for(String address:new String[]{"221B Baker Street, London","1600 Amphitheatre Parkway","123 Main St","10 Downing Street"})
             assertEquals(address,SuggestionRules.address(address));
-        for(String phrase:new String[]{"hello","world","hello world","test","随便聊聊","street","Main Street"})
+        for(String phrase:new String[]{"hello","world","hello world","test","随便聊聊","版本号","版本号123456","订单号","订单号123456","公司代码","公司代码123456","请打开门","请到星光商场集合","street","Main Street"})
             assertNull(phrase,SuggestionRules.address(phrase));
         assertNull(SuggestionRules.address("001234"));assertNull(SuggestionRules.address("https://example.org/a"));
         String link="https://uri.amap.com/marker?position=120.1,30.2";

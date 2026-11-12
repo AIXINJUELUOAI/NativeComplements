@@ -79,7 +79,7 @@ public final class SuggestionRules {
         if(value.length()<2||value.length()>120||value.contains("\n")||firstUrl(value)!=null
                 ||value.matches("[0-9\\s+.,-]+")||otp(value,true)!=null)return null;
         // Require a local place/street structure, not just a short clipboard phrase.
-        if(value.matches(".*[\\p{IsHan}0-9]+(?:[省市区县镇乡村路街巷号店站园厦馆湾桥山湖岛院楼门]|广场|中心|商场|公园|景点|学校|大学|医院|机场|酒店|餐厅|小区|公司).*")
+        if(value.matches("[\\p{IsHan}]{2,}(?:[省市区县镇乡村路街巷店站园厦馆湾桥山湖岛院楼]|广场|中心|商场|公园|景点|学校|大学|医院|机场|酒店|餐厅|小区|公司)(?:[0-9]+(?:号|栋|单元|室|楼|层|门))*")
                 ||value.matches("(?i)\\d+[a-z]?[- ]+[a-z][a-z .'-]*\\s(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|boulevard|blvd|way|court|ct|place|pl|square|sq|parkway|pkwy)\\b.*"))return value;
         return null;
     }
