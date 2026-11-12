@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IconAppScreen(app: LaunchableApp?, bottomInset: Dp = 0.dp) {
     if (app == null) {
@@ -46,6 +47,7 @@ fun IconAppScreen(app: LaunchableApp?, bottomInset: Dp = 0.dp) {
     var field by remember { mutableIntStateOf(0) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var manualSheet by remember { mutableStateOf(false) }
     fun save() {
         IconPolicy.save(context, app.packageName, policy)
         revision++
@@ -117,49 +119,45 @@ fun IconAppScreen(app: LaunchableApp?, bottomInset: Dp = 0.dp) {
         item { GroupTitle("彩色图标") }
         item {
             SettingsGroup {
-                ModeRows(listOf("自动", "手动前后景", "算法补全", "不处理"), policy.color, !loading) {
-                    policy.color = it; save()
-                }
-                if (policy.color == IconPolicy.MANUAL) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                        TextButton(onClick = { upload(0) }, enabled = !loading) {
-                            Text(if (policy.background.isEmpty()) "上传背景图片" else "更换背景图片")
-                        }
-                        TextButton(onClick = { upload(1) }, enabled = !loading) {
-                            Text(if (policy.foreground.isEmpty()) "上传透明前景" else "更换前景图片")
-                        }
-                    }
+                ModeRows(listOf("自动", "手动前后景", "算法补全", "不处理"), policy.color, !loading) { choice ->
+                    policy.color = choice; save()
+                    if (choice == IconPolicy.MANUAL) manualSheet = true
                 }
             }
         }
         item { GroupTitle("莫奈图标") }
         item {
             SettingsGroup {
-                ModeRows(listOf("跟随前景", "上传单色图片", "不处理"), policy.monochrome, !loading) {
-                    policy.monochrome = it; save()
-                }
-                if (policy.monochrome == IconPolicy.UPLOAD) {
-                    TextButton(onClick = { upload(2) }, enabled = !loading, modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Text(if (policy.monoImage.isEmpty()) "选择图片" else "更换图片")
-                    }
+                ModeRows(listOf("跟随前景", "上传单色图片", "不处理"), policy.monochrome, !loading) { choice ->
+                    policy.monochrome = choice; save()
+                    if (choice == IconPolicy.UPLOAD) upload(2)
                 }
             }
         }
         item { GroupTitle("状态栏通知小图标") }
         item {
             SettingsGroup {
-                ModeRows(listOf("跟随前景", "上传图片", "不处理"), policy.notification, !loading) {
-                    policy.notification = it; save()
-                }
-                if (policy.notification == IconPolicy.UPLOAD) {
-                    TextButton(onClick = { upload(3) }, enabled = !loading, modifier = Modifier.padding(horizontal = 8.dp)) {
-                        Text(if (policy.notificationImage.isEmpty()) "选择图片" else "更换图片")
-                    }
+                ModeRows(listOf("跟随前景", "上传图片", "不处理"), policy.notification, !loading) { choice ->
+                    policy.notification = choice; save()
+                    if (choice == IconPolicy.UPLOAD) upload(3)
                 }
             }
         }
         if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 12.dp)) }
         if (error.isNotBlank()) item { Hint(error) }
+    }
+    if (manualSheet) {
+        ModalBottomSheet(onDismissRequest = { manualSheet = false }) {
+            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+                Text("手动前后景", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+                SettingsGroup {
+                    SettingRow("背景图", if (policy.background.isEmpty()) "未选择" else "已选择",
+                        onClick = if (loading) null else { { manualSheet = false; upload(0) } })
+                    SettingRow("透明前景", if (policy.foreground.isEmpty()) "未选择" else "已选择",
+                        onClick = if (loading) null else { { manualSheet = false; upload(1) } })
+                }
+            }
+        }
     }
 }
 

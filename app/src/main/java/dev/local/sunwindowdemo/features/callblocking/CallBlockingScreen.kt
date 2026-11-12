@@ -139,19 +139,22 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                         CallBlockingStore.setFollowSim1(context, it)
                     }
                     if (!follows) {
-                        ToggleRow("拦截全部来电", value = config.getBoolean(ownPrefix + "reject_all")) {
+                        val rejectAll = config.getBoolean(ownPrefix + "reject_all")
+                        ToggleRow("拦截全部来电", value = rejectAll) {
                             CallBlockingStore.setRejectAll(context, slot, it)
                         }
-                        patterns.forEachIndexed { index, rule ->
-                            SettingRow(rule, onClick = { ruleEdit = RuleEdit(slot, index, rule) },
-                                trailing = {
-                                    IconButton(onClick = { deleteRule(slot, index) }) {
-                                        Icon(Icons.Default.Delete, contentDescription = "删除 $rule")
-                                    }
-                                })
+                        if (!rejectAll) {
+                            patterns.forEachIndexed { index, rule ->
+                                SettingRow(rule, onClick = { ruleEdit = RuleEdit(slot, index, rule) },
+                                    trailing = {
+                                        IconButton(onClick = { deleteRule(slot, index) }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "删除 $rule")
+                                        }
+                                    })
+                            }
+                            SettingRow("添加号码规则", onClick = { ruleEdit = RuleEdit(slot, null, "") },
+                                leading = { Icon(Icons.Default.Add, null) })
                         }
-                        SettingRow("添加号码规则", onClick = { ruleEdit = RuleEdit(slot, null, "") },
-                            leading = { Icon(Icons.Default.Add, null) })
                     } else {
                         SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截全部来电"
                             else if (patterns.isEmpty()) "跟随 SIM 1：暂无号码规则" else "跟随 SIM 1：${patterns.size} 条号码规则")
