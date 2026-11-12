@@ -166,15 +166,13 @@ public final class SignalDisplay {
         try{synchronized(RADIOS){
             Radio radio=RADIOS.get(subscription);
             if(radio==null||radio.owner.get()==null||radio.strength==null||radio.service==null||radio.ntn)return nativeState;
+            if(nativeLevel!=radio.strength.getLevel())return nativeState;
             if(!registeredNr(radio.service))return nativeState;
             Object current=primary.invoke(radio.strength);
             if(!(current instanceof CellSignalStrengthNr nr))return nativeState;
             int dbm=nr.getSsRsrp();
             if(dbm < -156||dbm > -31)return nativeState;
-            int adjusted=SignalDisplayPolicy.level(nativeLevel,true,true,true,dbm);
-            if(adjusted==nativeLevel)return nativeState;
-            log.accept(String.format("SIGNAL_ADJUSTED sub=%d native=%d->%d rsrp=%d",subscription,nativeLevel,adjusted,dbm));
-            return SignalDisplayPolicy.encode(nativeState,adjusted);
+            return SignalDisplayPolicy.encode(nativeState,SignalDisplayPolicy.level(0,true,true,true,dbm));
         }}catch(Exception unavailable){return nativeState;}
     }
     private static final Runnable REDRAW=()->{

@@ -10,11 +10,10 @@ final class SignalDisplayPolicy {
     }
     static int level(int original,boolean enabled,boolean inService,boolean terrestrialNr,int ssRsrp){
         if(!enabled||!inService||!terrestrialNr||ssRsrp < -156||ssRsrp > -31)return original;
-        // Adjusted thresholds based on real-world NR SS-RSRP distribution
-        if(ssRsrp>=-90)return 4;  // Excellent: ≥-90
-        if(ssRsrp>=-100)return 3; // Good: ≥-100
-        if(ssRsrp>=-110)return 2; // Fair: ≥-110
-        if(ssRsrp>=-120)return 1; // Poor: ≥-120
-        return 0;                  // Very poor: <-120
+        if(ssRsrp>=-95)return 4;
+        if(ssRsrp>=-105)return 3;
+        if(ssRsrp>=-115)return 2;
+        if(ssRsrp>=-125)return 1;
+        return 0;
     }
 }
