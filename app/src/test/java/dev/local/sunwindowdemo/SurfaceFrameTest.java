@@ -110,7 +110,8 @@ public class SurfaceFrameTest {
         set(decoration,"bar",bar);set(decoration,"dim",dim);
         SurfaceControl.Transaction frame=new SurfaceControl.Transaction();TransactionShadow transaction=Shadow.extract(frame);
         assertTrue(decoration.update(task,parent,new Geometry.Placement(900,1600,.7f,200,300),1,false,0,.5f,true,frame));
-        assertEquals(0,transaction.alpha.get(bar),0);assertEquals(.2f,transaction.alpha.get(dim),0);
+        assertFalse("Zero-opacity handle stays hidden while the backdrop is visible",transaction.shown.contains(bar));
+        assertEquals(.2f,transaction.alpha.get(dim),0);
         assertFalse(((TransactionShadow)Shadow.extract(task.pending)).alpha.containsKey(dim));
     }
     @Test public void backdropStrengthDefaultsToTwentyPercentAndClampsWithoutDimmingTheTask()throws Exception{

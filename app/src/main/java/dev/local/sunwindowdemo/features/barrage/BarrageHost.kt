@@ -15,6 +15,13 @@ import java.util.concurrent.Executors
 
 /** Notification display is independent of small-window enablement and has no input monitor. */
 class BarrageHost(private val context: Context): AutoCloseable {
+    companion object {
+        // ScreenshotUI is the native screenshot window, not an arbitrary SystemUI panel.
+        // Screenshot focus must not hide/recreate the in-flight line or reset its animation.
+        @JvmStatic fun shouldSuspend(systemOverlay: Boolean, overlayTitle: String?, keyboard: Boolean,
+                                     menu: Boolean, waiting: Boolean): Boolean =
+            keyboard || menu || waiting || (systemOverlay && overlayTitle != "ScreenshotUI")
+    }
     private val main=Handler(Looper.getMainLooper())
     private val worker=Executors.newSingleThreadExecutor()
     private val wm=context.getSystemService(WindowManager::class.java)

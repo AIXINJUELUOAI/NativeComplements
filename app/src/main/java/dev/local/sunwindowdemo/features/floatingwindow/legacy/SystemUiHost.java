@@ -71,6 +71,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final android.os.Binder lease=new android.os.Binder();
     private int[] published,publishedHandles;
     private boolean screenshotVisible,systemFocus,immersive;
+    private String systemOverlayTitle="";
     private android.window.OnBackInvokedDispatcher panelDispatcher;
     private final android.window.OnBackInvokedCallback panelBack=this::backPanel;
     private android.window.OnBackInvokedDispatcher openWaitDispatcher;
@@ -211,6 +212,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         backendReady=true;backendState=i.getStringExtra("state");normalOccupied=i.getBooleanExtra("normalOccupied",true);
         updateOpenWait(i);
         if(i.hasExtra("foreground")){foreground=i.getStringExtra("foreground");keyboard=i.getBooleanExtra("imeVisible",false);systemFocus=i.getBooleanExtra("systemOverlay",false);
+            systemOverlayTitle=i.getStringExtra("systemOverlayTitle");
             suggestionImeTop=i.getIntExtra("imeTop",Integer.MAX_VALUE);
             updateOverlayPriority();controls.imeTop(suggestionImeTop);miniControls.imeTop(suggestionImeTop);refresh();}
         if(i.hasExtra("immersive"))immersive=i.getBooleanExtra("immersive",false);
@@ -280,7 +282,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             int next=screenshotVisible||systemFocus?p.flags|mask:p.flags&~mask;
             if(next!=p.flags){p.flags=next;try{wm.updateViewLayout(overlay,p);}catch(RuntimeException ignored){}}
         }
-        if(barrage!=null)barrage.environment(foreground,screenshotVisible||systemFocus||keyboard||panel!=null||openWait!=null);
+        if(barrage!=null)barrage.environment(foreground,BarrageHost.shouldSuspend(systemFocus,systemOverlayTitle,keyboard,panel!=null,openWait!=null));
         if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panel!=null||openWait!=null,suggestionImeTop);
         if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);
         if(miniControls!=null)miniControls.systemOverlay(screenshotVisible||systemFocus);

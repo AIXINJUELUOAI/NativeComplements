@@ -22,6 +22,7 @@
         <provider android:name=".features.motion.MotionProvider" android:authorities="dev.nativecomplements.module.motion" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.nativecomplements.module.iconlayers" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.nativecomplements.module.edgetouch" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.shade.ShadeProvider" android:authorities="dev.nativecomplements.module.shade" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.barrage.BarrageProvider" android:authorities="dev.nativecomplements.module.barrage" android:exported="true" android:directBootAware="true" />
         <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>

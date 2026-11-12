@@ -182,3 +182,15 @@ for cls,name,kind in [
  ('Transitions.ActiveTransition','mMerged','ArrayList'),('Transitions.ActiveTransition','mInfo','TransitionInfo')]:
  assert any(f['name']==name and f['type']==kind for f in back_classes['com.android.wm.shell.transition.'+cls]['fields']),(cls,name,kind)
 print('PASS: archived Shell cached/merged finish transaction boundary; live flash-frame result remains unverified')
+
+# 0.9.7: exact legacy Split Shade members checked in the pulled API37 SystemUI.
+shade=json.loads((root/'tests/target/shade-members.json').read_text())
+assert shade['sha256']==game['sha256']
+for cls,kind,name,descriptor in [
+ ('Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;','methods','shouldUseSplitNotificationShade','(Landroid/content/res/Resources;)Z'),
+ ('Lcom/android/systemui/shade/NotificationPanelViewController;','methods','updateResources','()V'),
+ ('Lcom/android/systemui/shade/NotificationPanelViewController;','fields','mSplitShadeStateController','Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;'),
+ ('Lcom/android/systemui/shade/NotificationPanelViewController;','fields','mResources','Landroid/content/res/Resources;')]:
+ assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==descriptor
+            for m in shade['classes'][cls][kind]),(cls,name,descriptor)
+print('PASS: archived legacy Split Shade members; on-device Hook/layout remain unverified')

@@ -68,8 +68,12 @@ public final class LandscapeShade {
             updateResources.setAccessible(true);
             // The tiny boolean getter may have been ART-inlined into these verified callers.
             if (!module.deoptimize(updateResources)) throw new IllegalStateException("shade update deoptimize");
-            for (Constructor<?> constructor : panel.getDeclaredConstructors())
-                if (!module.deoptimize(constructor)) throw new IllegalStateException("shade constructor deoptimize");
+            for (Constructor<?> constructor : panel.getDeclaredConstructors()) {
+                // The hooked constructor queues updateResources after it finishes. Some ART
+                // versions cannot deoptimize constructors; that refresh remains authoritative.
+                try { if (!module.deoptimize(constructor)) note("SHADE_CONSTRUCTOR_DEOPT_SKIPPED"); }
+                catch (RuntimeException unsupported) { note("SHADE_CONSTRUCTOR_DEOPT_SKIPPED"); }
+            }
             main = new Handler(Looper.getMainLooper());
             hooks.add(module.hook(updateResources).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed();

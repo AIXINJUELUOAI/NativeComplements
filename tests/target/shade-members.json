@@ -1,0 +1,17 @@
+{
+  "sha256": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972",
+  "classes": {
+    "Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;": {
+      "dex": "classes2.dex",
+      "methods": [{"name": "shouldUseSplitNotificationShade", "descriptor": "(Landroid/content/res/Resources;)Z"}]
+    },
+    "Lcom/android/systemui/shade/NotificationPanelViewController;": {
+      "dex": "classes2.dex",
+      "methods": [{"name": "updateResources", "descriptor": "()V"}],
+      "fields": [
+        {"name": "mSplitShadeStateController", "type": "Lcom/android/systemui/statusbar/policy/SplitShadeStateControllerImpl;"},
+        {"name": "mResources", "type": "Landroid/content/res/Resources;"}
+      ]
+    }
+  }
+}

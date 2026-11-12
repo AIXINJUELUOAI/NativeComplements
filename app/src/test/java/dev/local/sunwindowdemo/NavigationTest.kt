@@ -91,6 +91,18 @@ class NavigationTest {
         compose.runOnIdle { assertFalse(home.isFinishing) }
     }
 
+    @Test fun landscapeShadeHasIndependentSettingsAndNativeNavigation() {
+        val (homeScenario, home) = launch(intent())
+        compose.onNodeWithText("通知与控制中心").performScrollTo().performClick()
+        val shadeIntent = nextPage(home, Page.Shade)
+        homeScenario.moveToState(Lifecycle.State.CREATED)
+        val (_, shade) = launch(shadeIntent)
+        compose.onNodeWithTag("page-title-通知与控制中心").assertIsDisplayed()
+        compose.onNodeWithText("横屏双栏").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.runOnIdle { assertTrue(shade.isFinishing) }
+    }
+
     @Test fun developerToolsStayHiddenUntilSevenVersionTaps() {
         val (_, about) = launch(intent(Page.About))
         compose.onNodeWithText("开发者").assertIsDisplayed()

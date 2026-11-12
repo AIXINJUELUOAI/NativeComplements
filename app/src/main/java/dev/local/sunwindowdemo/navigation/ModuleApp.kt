@@ -31,12 +31,13 @@ import dev.local.sunwindowdemo.features.iconlayers.IconLayerScreen
 import dev.local.sunwindowdemo.features.motion.MotionScreen
 import dev.local.sunwindowdemo.features.motion.MotionStore
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
+import dev.local.sunwindowdemo.features.shade.ShadeScreen
 import dev.local.sunwindowdemo.home.AboutScreen
 import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.home.LicensesScreen
 
 enum class Page(val title: String) {
-    Home("类原生补全计划"), Window("小窗设置"), Barrage("弹幕通知"), BarrageHistory("弹幕记录"), Suggestions("快捷建议"),
+    Home("类原生补全计划"), Window("小窗设置"), Shade("通知与控制中心"), Barrage("弹幕通知"), BarrageHistory("弹幕记录"), Suggestions("快捷建议"),
     IconLayers("图标适配"), IconApp("图标设置"), Motion("加速度传感器控制"), EdgeTouch("边缘防误触"), Calls("来电拦截"), Records("拦截记录"),
     Gestures("手势与菜单"), Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"),
     About("关于"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
@@ -64,6 +65,7 @@ fun ModuleApp(
         when (page) {
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
+            Page.Shade -> ShadeScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
@@ -77,6 +79,7 @@ fun ModuleApp(
                         onCalls = { navigate(Page.Calls) }, onEdgeTouch = { navigate(Page.EdgeTouch) },
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onBarrage = { navigate(Page.Barrage) },
+                        onShade = { navigate(Page.Shade) },
                     )
                     Page.Window -> WindowScreen(controller.preferences, navigate, controller::toggleControl)
                     Page.Suggestions -> SuggestionScreen(controller)

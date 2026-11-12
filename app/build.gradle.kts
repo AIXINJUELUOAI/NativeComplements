@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 83
-        versionName = "0.9.6"
+        versionCode = 84
+        versionName = "0.9.7"
     }
     signingConfigs {
         create("demoUpdate") {
@@ -51,6 +51,7 @@ android {
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
     compileOnly(files("libs/libxposed-api-101.0.1.jar"))
+    testRuntimeOnly(files("libs/libxposed-api-101.0.1.jar"))
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.ui:ui")

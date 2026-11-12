@@ -1,7 +1,7 @@
 # NativeComplements
 
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
-- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制与图标适配，不创建其他功能的占位页面或接口。
+- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制、图标适配与通知／控制中心横屏双栏，不创建其他功能的占位页面或接口。
 - 管理页面共用 SettingsPage 标题栏和系统安全区，页面内部不重复创建标题与 Scaffold。开发者工具仅从“关于”连续点击版本号七次后显示，日常页面不展示后端连接及实验信息。
 - 单 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。
 - 第一版行为基线是 Demo8.2。基线原有26个Java文件，当前变更清单记录于 tests/runtime-changes.json，代码位于 features/floatingwindow/legacy，Java 源码包路径保持 dev.local.sunwindowdemo。修改小窗时记录原因，不改基线摘要来隐藏差异。
@@ -18,4 +18,5 @@
 
 - 电话拦截位于 features/callblocking；使用独立 CallBlockingModule 和 UID 检查的 CallBlockingProvider，设备保护存储。只使用既有 system 作用域，按实际来电 PhoneAccount 识别卡槽，不轮询铃响猜 SIM，不接管默认电话角色。
 
-- 快捷控制位于小窗悬浮菜单的“快捷功能”，不再提供独立游戏助手与侧边提示条。弹幕通知独立位于 features/barrage，使用 UID 检查的只读 Provider 和设备保护存储，不依赖小窗总开关，不拦截原生通知。
+- 快捷控制位于小窗悬浮菜单的“快捷功能”，不再提供独立游戏助手与侧边提示条。弹幕通知独立位于 features/barrage，使用 UID 检查的配置读取／受限历史写入 Provider 和设备保护存储，不依赖小窗总开关；成功显示并记录历史后取消对应原通知，不做投递前拦截。截图不隐藏或重建当前弹幕，键盘、其他系统面板和锁屏规则保留。
+- 横屏双栏位于 features/shade，独立设备保护配置与 UID 校验只读 Provider，默认关闭，仅适配已核实的 legacy Split Shade；不强开 Scene、不改 DPI、不依赖小窗开关。

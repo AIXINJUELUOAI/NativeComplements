@@ -39,10 +39,15 @@ public final class BackBridge extends XposedModule {
             hook(Instrumentation.class.getDeclaredMethod("callApplicationOnCreate",Application.class))
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object result=chain.proceed();Application app=(Application)chain.getArg(0);
-                    if(PACKAGE.equals(app.getPackageName()))main.post(()->{try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}});
+                    if(PACKAGE.equals(app.getPackageName()))main.post(()->{
+                        try{dev.local.sunwindowdemo.features.shade.LandscapeShade.connect(app);}
+                        catch(RuntimeException unavailable){note("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
+                        try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}
+                    });
                     return result;
                 });
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
+        dev.local.sunwindowdemo.features.shade.LandscapeShade.install(this,p.getDefaultClassLoader(),this::note);
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         installSuggestionNotifications(p.getDefaultClassLoader());
         WindowTools.install(this,p.getDefaultClassLoader(),this::note);
