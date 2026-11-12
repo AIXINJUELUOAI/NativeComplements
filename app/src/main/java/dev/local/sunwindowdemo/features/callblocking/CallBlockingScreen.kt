@@ -13,9 +13,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,6 +33,7 @@ import java.text.DateFormat
 import java.util.Date
 
 private data class SimEntry(val slot: Int, val name: String, val subscriptionId: Int)
+private data class RuleEdit(val slot: Int, val index: Int?, val value: String)
 
 @Suppress("MissingPermission")
 private fun activeSims(context: Context): List<SimEntry> {
@@ -47,7 +52,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
     var records by remember { mutableStateOf(CallBlockingStore.readRecords(context).toList()) }
     var sims by remember { mutableStateOf(activeSims(context)) }
     var permission by remember { mutableStateOf(context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) }
-    var editingSlot by remember { mutableStateOf<Int?>(null) }
+    var ruleEdit by remember { mutableStateOf<RuleEdit?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
     var permissionDenied by remember { mutableStateOf(false) }
     fun refresh() {
@@ -55,6 +60,12 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
         records = CallBlockingStore.readRecords(context).toList()
         sims = activeSims(context)
         permission = context.checkSelfPermission(Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED
+    }
+    fun deleteRule(slot: Int, index: Int) {
+        val current = config.getStringArray("sim${slot + 1}_patterns").orEmpty().toMutableList()
+        if (index !in current.indices) return
+        current.removeAt(index)
+        CallBlockingStore.setPatterns(context, slot, current.toTypedArray())
     }
     val requestPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         permissionDenied = !it
@@ -131,7 +142,16 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                         ToggleRow("拦截全部来电", value = config.getBoolean(ownPrefix + "reject_all")) {
                             CallBlockingStore.setRejectAll(context, slot, it)
                         }
-                        SettingRow("号码过滤规则", if (patterns.isEmpty()) "未设置" else "${patterns.size} 条 · ${patterns.take(3).joinToString("、")}", { editingSlot = slot })
+                        patterns.forEachIndexed { index, rule ->
+                            SettingRow(rule, onClick = { ruleEdit = RuleEdit(slot, index, rule) },
+                                trailing = {
+                                    IconButton(onClick = { deleteRule(slot, index) }) {
+                                        Icon(Icons.Default.Delete, contentDescription = "删除 $rule")
+                                    }
+                                })
+                        }
+                        SettingRow("添加号码规则", onClick = { ruleEdit = RuleEdit(slot, null, "") },
+                            leading = { Icon(Icons.Default.Add, null) })
                     } else {
                         SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截全部来电"
                             else if (patterns.isEmpty()) "跟随 SIM 1：暂无号码规则" else "跟随 SIM 1：${patterns.size} 条号码规则")
@@ -142,11 +162,27 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
             SettingsGroup { SettingRow("拦截记录", "${records.size} 条", onRecords) }
         }
     }
-    editingSlot?.let { slot ->
-        PatternEditor(config.getStringArray("sim${slot + 1}_patterns").orEmpty(), slot,
-            onDismiss = { editingSlot = null }, onSave = {
-                CallBlockingStore.setPatterns(context, slot, it)
-                editingSlot = null
+    ruleEdit?.let { edit ->
+        RuleDialog(edit.slot, edit.index, edit.value,
+            onDismiss = { ruleEdit = null },
+            onSave = { normalized: String ->
+                val current = config.getStringArray("sim${edit.slot + 1}_patterns").orEmpty().toMutableList()
+                val duplicate = current.indexOf(normalized)
+                when {
+                    duplicate >= 0 && duplicate != edit.index -> "规则已存在"
+                    edit.index == null && current.size >= 100 -> "每张卡最多保存 100 条规则"
+                    edit.index == null -> {
+                        current.add(normalized)
+                        CallBlockingStore.setPatterns(context, edit.slot, current.toTypedArray())
+                        null
+                    }
+                    edit.index in current.indices -> {
+                        current[edit.index] = normalized
+                        CallBlockingStore.setPatterns(context, edit.slot, current.toTypedArray())
+                        null
+                    }
+                    else -> "规则已不存在"
+                }
             })
     }
     if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清空拦截记录？") },
@@ -155,22 +191,40 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
 }
 
 @Composable
-private fun PatternEditor(initial: Array<out String>, slot: Int, onDismiss: () -> Unit, onSave: (Array<String>) -> Unit) {
-    var input by remember { mutableStateOf(initial.joinToString("\n")) }
+private fun RuleDialog(slot: Int, index: Int?, initial: String, onDismiss: () -> Unit, onSave: (String) -> String?) {
+    var input by remember(initial) { mutableStateOf(initial) }
     var error by remember { mutableStateOf<String?>(null) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("SIM ${slot + 1} 号码规则") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(value = input, onValueChange = { input = it; error = null },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 320.dp),
-                label = { Text("号码或通配规则") }, isError = error != null,
-                supportingText = { error?.let { Text(it) } }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
-        }
-    }, confirmButton = { TextButton(onClick = {
-        runCatching {
-            val values = input.lineSequence().map(String::trim).filter(String::isNotEmpty)
-                .map(CallBlockingRules::normalizePattern).distinct().toList()
-            require(values.size <= 100) { "每张卡最多保存 100 条规则" }
-            onSave(values.toTypedArray())
-        }.onFailure { error = it.message ?: "规则格式有误" }
-    }) { Text("保存") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } })
+    fun submit() {
+        val raw = input.trim()
+        if (raw.isEmpty()) { error = "请输入号码或通配规则"; return }
+        val normalized = runCatching { CallBlockingRules.normalizePattern(raw) }
+            .getOrElse { error = it.message ?: "规则格式有误"; return }
+        val failure = onSave(normalized)
+        if (failure == null) onDismiss() else error = failure
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("${if (index == null) "添加" else "编辑"} SIM ${slot + 1} 号码规则") },
+        text = {
+            TextField(
+                value = input,
+                onValueChange = { input = it; error = null },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("号码或通配规则") },
+                isError = error != null,
+                supportingText = { error?.let { Text(it) } },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                    focusedIndicatorColor = MaterialTheme.colorScheme.primary,
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outline,
+                ),
+            )
+        },
+        confirmButton = { TextButton(onClick = { submit() }) { Text("保存") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }

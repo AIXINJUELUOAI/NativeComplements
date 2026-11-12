@@ -195,7 +195,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private View menuContent;
     private int suggestionImeTop=Integer.MAX_VALUE;
     void suggestionNotification(android.service.notification.NotificationListenerService source,android.service.notification.StatusBarNotification notification){
-        main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(notification);});
+        main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);});
     }
     void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);if(barrage!=null)barrage.notificationRemoved(key);});}
     private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;

@@ -187,6 +187,25 @@ class QuickFunctionsTest {
         assertThrows(IllegalArgumentException::class.java) { BarrageStore.select(context, "bad", true) }
     }
 
+    @Test fun barrageHistoryIsBoundedAndNewestFirst() {
+        BarrageStore.prefs(context).edit().clear().commit()
+        repeat(105) { index ->
+            BarrageStore.addHistory(context, Bundle().apply {
+                putString("package", "example.alpha")
+                putLong("time", index.toLong())
+                putString("app", "示例应用")
+                putString("source", "好友A")
+                putString("text", "消息$index")
+            })
+        }
+        val history = BarrageStore.readHistory(context)
+        assertEquals(100, history.size)
+        assertEquals("消息104", history.first().getString("text"))
+        assertEquals("好友A", history.first().getString("source"))
+        BarrageStore.clearHistory(context)
+        assertTrue(BarrageStore.readHistory(context).isEmpty())
+    }
+
     @Test fun independentBarragePageSavesItsSwitchAndSelectedForegroundApps() {
         BarrageStore.prefs(context).edit().clear().putBoolean("migrated", true).commit()
         compose.setContent {

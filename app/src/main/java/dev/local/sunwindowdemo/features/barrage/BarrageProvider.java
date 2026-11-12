@@ -10,8 +10,23 @@ public final class BarrageProvider extends ContentProvider {
     @Override public boolean onCreate(){return true;}
     @Override public Bundle call(String method,String arg,Bundle extras){
         int uid=Binder.getCallingUid();
-        try{if(uid!=getContext().getApplicationInfo().uid&&uid!=getContext().getPackageManager().getApplicationInfo("com.android.systemui",0).uid)throw new SecurityException("barrage reader");}
-        catch(android.content.pm.PackageManager.NameNotFoundException e){throw new SecurityException(e);}
+        int appUid=getContext().getApplicationInfo().uid;
+        int systemUid=-1;
+        if(uid!=appUid){
+            try{systemUid=getContext().getPackageManager().getApplicationInfo("com.android.systemui",0).uid;}
+            catch(android.content.pm.PackageManager.NameNotFoundException e){throw new SecurityException(e);}
+            if(uid!=systemUid)throw new SecurityException("barrage reader");
+        }
+        if("addHistory".equals(method)){
+            if(uid!=systemUid||extras==null)throw new SecurityException("barrage history writer");
+            BarrageStore.addHistory(getContext(),extras);
+            Bundle saved=new Bundle();saved.putBoolean("saved",true);return saved;
+        }
+        if("history".equals(method)){
+            Bundle out=new Bundle();
+            out.putParcelableArrayList("entries",BarrageStore.readHistory(getContext()));
+            return out;
+        }
         if(!"read".equals(method))throw new IllegalArgumentException("method");
         return BarrageStore.read(getContext());
     }

@@ -16,6 +16,7 @@ import dev.local.sunwindowdemo.features.callblocking.CallBlockingScreen
 import dev.local.sunwindowdemo.features.callblocking.CallBlockingStore
 import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
+import dev.local.sunwindowdemo.features.barrage.BarrageHistoryScreen
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconDiagnosticsScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconLayerScreen
@@ -27,7 +28,7 @@ import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.home.LicensesScreen
 
 enum class Page(val title: String) {
-    Home("类原生补全计划"), Window("小窗设置"), Barrage("弹幕通知"), Suggestions("快捷建议"),
+    Home("类原生补全计划"), Window("小窗设置"), Barrage("弹幕通知"), BarrageHistory("弹幕记录"), Suggestions("快捷建议"),
     IconLayers("图标适配"), Motion("加速度传感器控制"), EdgeTouch("边缘防误触"), Calls("来电拦截"), Records("拦截记录"),
     Gestures("手势与菜单"), Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"),
     About("关于"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
@@ -47,7 +48,8 @@ fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
-            Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset)
+            Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
+            Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
             Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset)
             Page.Blocked -> AppPickerScreen(controller, bottomInset = bottomInset)
             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {

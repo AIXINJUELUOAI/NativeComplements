@@ -18,12 +18,13 @@ import dev.local.sunwindowdemo.LaunchableApp
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
-fun BarrageScreen(apps: List<LaunchableApp>,loaded: Boolean,bottomInset: Dp=0.dp) {
+fun BarrageScreen(apps: List<LaunchableApp>,loaded: Boolean,bottomInset: Dp=0.dp,onHistory:()->Unit={}) {
     val context=LocalContext.current
     var config by remember {mutableStateOf(BarrageStore.read(context))}
+    var historyCount by remember {mutableStateOf(BarrageStore.historyCount(context))}
     DisposableEffect(context) {
         val prefs=BarrageStore.prefs(context)
-        val listener=SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> config=BarrageStore.read(context) }
+        val listener=SharedPreferences.OnSharedPreferenceChangeListener { _,_ -> config=BarrageStore.read(context);historyCount=BarrageStore.historyCount(context) }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose {prefs.unregisterOnSharedPreferenceChangeListener(listener)}
     }
@@ -31,6 +32,7 @@ fun BarrageScreen(apps: List<LaunchableApp>,loaded: Boolean,bottomInset: Dp=0.dp
     val visible=remember(apps,selected) {apps.filter {it.packageName!="dev.nativecomplements.module"}.sortedByDescending {it.packageName in selected}}
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(16.dp,4.dp,16.dp,32.dp+bottomInset),verticalArrangement=Arrangement.spacedBy(2.dp)) {
         item {SettingsGroup {ToggleRow("启用弹幕通知", value=config.getBoolean("enabled")) {BarrageStore.enabled(context,it)}}}
+        item {SettingsGroup {SettingRow("弹幕记录","${historyCount} 条",onHistory)}}
         if(!loaded)item {LinearProgressIndicator(Modifier.fillMaxWidth())}
         items(visible,key={it.packageName}) {app ->
             SettingRow(app.label,onClick={BarrageStore.select(context,app.packageName,app.packageName !in selected)},
@@ -42,9 +44,9 @@ fun BarrageScreen(apps: List<LaunchableApp>,loaded: Boolean,bottomInset: Dp=0.dp
 }
 
 @Composable
-private fun BarrageAppIcon(app: LaunchableApp) {
-    val bitmap = remember(app.packageName, app.icon) {
-        app.icon?.let { drawable ->
+internal fun BarrageAppIcon(app: LaunchableApp?) {
+    val bitmap = remember(app?.packageName, app?.icon) {
+        app?.icon?.let { drawable ->
             Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also {
                 val old = android.graphics.Rect(drawable.bounds)
                 drawable.setBounds(0, 0, 96, 96)

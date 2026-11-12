@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.drawable.Drawable
 import android.text.TextPaint
 import android.view.View
 import android.view.animation.LinearInterpolator
@@ -14,6 +15,7 @@ import android.view.animation.LinearInterpolator
 internal class BarrageLyricsView(
     context: Context,
     private val text: String,
+    private val icon: Drawable?,
     private val onFinished: () -> Unit,
 ) : View(context) {
     private val density = resources.displayMetrics.density
@@ -23,6 +25,8 @@ internal class BarrageLyricsView(
         color = Color.WHITE
     }
     private val speed = 100f * density / 1000f
+    private val iconSize = 20f * density
+    private val iconGap = 6f * density
     private var animator: ValueAnimator? = null
     private var started = false
     private var cancelled = false
@@ -34,8 +38,9 @@ internal class BarrageLyricsView(
         if (started || cancelled) return
         started = true
         val textWidth = paint.measureText(text)
-        duration = (((width + textWidth) / speed).toLong()).coerceAtLeast(1)
-        animator = ValueAnimator.ofFloat(width, -textWidth).apply {
+        val contentWidth = textWidth + if (icon != null) iconSize + iconGap else 0f
+        duration = (((width + contentWidth) / speed).toLong()).coerceAtLeast(1)
+        animator = ValueAnimator.ofFloat(width, -contentWidth).apply {
             duration = this@BarrageLyricsView.duration
             interpolator = LinearInterpolator()
             addUpdateListener { animation ->
@@ -68,9 +73,35 @@ internal class BarrageLyricsView(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         if (drawAlpha <= 0f) return
-        paint.alpha = (drawAlpha * 255).toInt()
+        val alphaInt = (drawAlpha * 255).toInt()
+        val textX = if (icon != null) {
+            val top = (height - iconSize) / 2f
+            val oldAlpha = icon.alpha
+            icon.setBounds(Math.round(x), Math.round(top), Math.round(x + iconSize), Math.round(top + iconSize))
+            icon.alpha = alphaInt
+            icon.draw(canvas)
+            icon.alpha = oldAlpha
+            x + iconSize + iconGap
+        } else x
+        paint.alpha = alphaInt
         val baseline = height / 2f - (paint.ascent() + paint.descent()) / 2f
-        canvas.drawText(text, x, baseline, paint)
+        canvas.drawText(text, textX, baseline, paint)
+    }
+
+    fun pause() {
+        if (cancelled) return
+        visibility = INVISIBLE
+        animator?.pause()
+    }
+
+    fun resume() {
+        if (cancelled) return
+        visibility = VISIBLE
+        val running = animator
+        when {
+            running == null && !started && width > 0 -> start(width.toFloat())
+            running != null && running.isPaused -> running.resume()
+        }
     }
 
     fun cancel() {

@@ -5,10 +5,12 @@ import android.content.*
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.*
+import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.view.*
 import android.view.WindowInsets
 import dev.local.sunwindowdemo.features.barrage.BarrageStore
+import dev.local.sunwindowdemo.features.iconlayers.IconAssets
 import java.util.concurrent.Executors
 
 /** Notification display is independent of small-window enablement and has no input monitor. */
@@ -22,6 +24,7 @@ class BarrageHost(private val context: Context): AutoCloseable {
     private var closed=false
     private var view: BarrageLyricsView?=null
     private var key: String?=null
+    private var ignoredRemovalKey: String?=null
     private val expire=Runnable {hide()}
     private val receiver=object: BroadcastReceiver() {
         override fun onReceive(c: Context,i: Intent) {
@@ -47,25 +50,42 @@ class BarrageHost(private val context: Context): AutoCloseable {
         }
     }
     fun environment(pkg: String?,suspended: Boolean) {
-        if(foreground!=pkg.orEmpty()||suspended)hide()
+        val changed=foreground!=pkg.orEmpty()
+        if(changed)hide()
         foreground=pkg.orEmpty();blocked=suspended
-        if(!eligible())hide()
+        if(changed)return
+        if(suspended){view?.pause();return}
+        if(!eligible()){hide();return}
+        view?.resume()
     }
     private fun eligible()=!closed&&!blocked&&config.getBoolean("enabled")&&config.getStringArrayList("apps")?.contains(foreground)==true&&
         context.getSystemService(PowerManager::class.java).isInteractive&&!context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
-    fun notification(sbn: StatusBarNotification) {
+    fun notification(source: NotificationListenerService,sbn: StatusBarNotification) {
         if(!eligible())return
         val n=sbn.notification
         if(sbn.user!=Process.myUserHandle()||n.flags and (Notification.FLAG_GROUP_SUMMARY or Notification.FLAG_ONGOING_EVENT)!=0||
             n.visibility==Notification.VISIBILITY_SECRET||n.category in listOf(Notification.CATEGORY_CALL,Notification.CATEGORY_ALARM,Notification.CATEGORY_TRANSPORT))return
         val title=n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.take(80).orEmpty()
         val text=n.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.take(180).orEmpty()
-        val line=text.ifBlank {title}.replace('\n',' ').replace('\r',' ').take(120)
-        if(line.isBlank())return
+        val appLabel=runCatching {context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(sbn.packageName,0)).toString()}
+            .getOrDefault(sbn.packageName)
+        val conversation=n.extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()?.trim().orEmpty()
+        val sender=conversation.ifBlank {title.trim()}.ifBlank {appLabel}.take(40)
+        val message=text.replace('\n',' ').replace('\r',' ').trim().take(120)
+        if(sender.isBlank()&&message.isBlank())return
+        val line=when {
+            message.isBlank() -> sender
+            sender.isBlank() -> message
+            else -> "$sender：$message"
+        }
+        val icon=runCatching {
+            val original=context.packageManager.getApplicationIcon(sbn.packageName)
+            if(IconAssets.ready()) AppCatalog.icon(context,sbn.packageName,original) else original
+        }.getOrNull()
         hide()
         try {
             lateinit var lyrics: BarrageLyricsView
-            lyrics=BarrageLyricsView(context,line) {main.post {if(lyrics===view)hide()}}
+            lyrics=BarrageLyricsView(context,line,icon) {main.post {if(lyrics===view)hide()}}
             val density=context.resources.displayMetrics.density
             val metrics=wm.currentWindowMetrics
             val safe=metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.displayCutout() or WindowInsets.Type.systemBars())
@@ -78,12 +98,34 @@ class BarrageHost(private val context: Context): AutoCloseable {
             p.setFitInsetsTypes(0);p.title="NativeComplements-barrage";p.windowAnimations=0;SystemUiHost.trust(p)
             wm.addView(lyrics,p);view=lyrics;key=sbn.key
             main.postDelayed(expire,30_000)
+            recordHistory(sbn,appLabel,sender,message) {saved->
+                if(saved&&lyrics===view){
+                    ignoredRemovalKey=sbn.key
+                    runCatching {source.cancelNotification(sbn.key)}
+                }
+            }
         } catch(error: Throwable) {hide();android.util.Log.w("NativeComplements","BARRAGE_UNAVAILABLE",error)}
     }
-    fun notificationRemoved(removed: String) {if(key==removed)hide()}
+    private fun recordHistory(sbn: StatusBarNotification,app:String,source:String,text:String,done:(Boolean)->Unit){
+        worker.execute {
+            val saved=runCatching {
+                val extras=Bundle().apply {
+                    putLong("time",System.currentTimeMillis());putString("package",sbn.packageName)
+                    putString("app",app);putString("source",source);putString("text",text)
+                }
+                val result=context.contentResolver.call(Uri.parse("content://${BarrageStore.AUTHORITY}"),"addHistory",null,extras)
+                result?.getBoolean("saved")==true
+            }.getOrDefault(false)
+            main.post {done(saved)}
+        }
+    }
+    fun notificationRemoved(removed: String) {
+        if(removed==ignoredRemovalKey){ignoredRemovalKey=null;return}
+        if(key==removed)hide()
+    }
     private fun hide() {
         main.removeCallbacks(expire)
-        val old=view;view=null;key=null
+        val old=view;view=null;key=null;ignoredRemovalKey=null
         old?.cancel()
         old?.let {runCatching {wm.removeViewImmediate(it)}}
     }
