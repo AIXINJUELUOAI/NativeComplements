@@ -163,6 +163,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             clipboardTimestamp=timestamp;clipboardHash=value.hashCode();
             String extracted=enabled("otp")?SuggestionRules.otp(value,true):null;
             if(extracted!=null){if(!extracted.equals(code))smsBody=null;code=extracted;codeUntil=offerUntil();}
+            else if(smsBody==null){code=null;codeUntil=0;}
             link=enabled("links")?SuggestionRules.link(value):null;
             mapText=enabled("maps")&&link==null&&extracted==null?SuggestionRules.address(value):null;
             contentUntil=offerUntil();chooser=false;render();

@@ -190,7 +190,7 @@ public final class AppList {
                 if(apps.editing)apps.toggleQuick(id);else quickAction.accept(id);
             });
             apps.quickRefresher=()->updateQuick((QuickPage)quick,availableQuick(quickEntries));
-            quick.setOnScrollChangeListener((v,sx,sy,oldX,oldY)->apps.setSelectedCollapsed(sy>0));
+            quick.setOnScrollChangeListener((v,sx,sy,oldX,oldY)->{if(quickShown)apps.setSelectedCollapsed(sy>0);});
             FrameLayout pages=new FrameLayout(c);addView(pages,new LinearLayout.LayoutParams(-1,0,1));
             pages.addView(apps,new FrameLayout.LayoutParams(-1,-1));pages.addView(quick,new FrameLayout.LayoutParams(-1,-1));select(false);
         }
@@ -262,7 +262,6 @@ public final class AppList {
         Consumer<String> quickAction=id->{};
         Runnable quickRefresher;
         boolean selectedCollapsed;
-        int selectedExpandedHeight;
         android.animation.ValueAnimator selectedAnimator;
         int hover=-1;
         float dragX,dragY;
@@ -359,7 +358,7 @@ public final class AppList {
             index=new IndexBar(c);index.setVisibility(INVISIBLE);index.setBackground(round((container&0x00ffffff)|0xe6000000,13));body.addView(index,new FrameLayout.LayoutParams(dp(26),-1,Gravity.RIGHT));
             list.setOnScrollListener(new AbsListView.OnScrollListener(){
                 public void onScrollStateChanged(AbsListView v,int state){scrolling=state!=SCROLL_STATE_IDLE;updateIndex();}
-                public void onScroll(AbsListView v,int first,int count,int total){updateIndex();setSelectedCollapsed(first>0);}
+                public void onScroll(AbsListView v,int first,int count,int total){updateIndex();if(getVisibility()==VISIBLE)setSelectedCollapsed(first>0);}
             });
             renderSelected();refreshRows();
         }
@@ -394,28 +393,31 @@ public final class AppList {
         void setSelectedCollapsed(boolean value){
             if(page||!sharedHeader||selectedCollapsed==value||selectedScroll==null)return;
             selectedCollapsed=value;
-            int current=selectedScroll.getHeight(),target;
-            if(value){
-                if(current>0)selectedExpandedHeight=current;
-                target=0;
-            }else{
-                if(selectedExpandedHeight<=0){
-                    int width=selectedScroll.getWidth()>0?selectedScroll.getWidth():getWidth();
-                    selectedScroll.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1,width),View.MeasureSpec.EXACTLY),
-                        View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
-                    selectedExpandedHeight=selectedScroll.getMeasuredHeight();
-                }
-                target=selectedExpandedHeight;
-            }
+            int current=selectedScroll.getHeight();
             if(selectedAnimator!=null)selectedAnimator.cancel();
-            selectedAnimator=android.animation.ValueAnimator.ofInt(current,target);
+            int width=selectedScroll.getWidth()>0?selectedScroll.getWidth():header.getWidth();
+            selectedScroll.measure(View.MeasureSpec.makeMeasureSpec(Math.max(1,width),View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+            int expanded=selectedScroll.getMeasuredHeight();
+            selectedAnimator=android.animation.ValueAnimator.ofInt(current,value?0:expanded);
             selectedAnimator.setDuration(160);
             selectedAnimator.addUpdateListener(animation->{
                 int height=(int)animation.getAnimatedValue();ViewGroup.LayoutParams params=selectedScroll.getLayoutParams();
                 if(params!=null){params.height=height;selectedScroll.setLayoutParams(params);}
-                selectedScroll.setAlpha(selectedExpandedHeight<=0?1f:Math.min(1f,height/(float)Math.max(1,selectedExpandedHeight)));
+                selectedScroll.setAlpha(expanded<=0?1f:Math.min(1f,height/(float)expanded));
+            });
+            selectedAnimator.addListener(new android.animation.AnimatorListenerAdapter(){
+                @Override public void onAnimationEnd(android.animation.Animator animation){
+                    selectedAnimator=null;resetSelectedHeight();
+                }
             });
             selectedAnimator.start();
+        }
+        void resetSelectedHeight(){
+            if(selectedAnimator!=null)selectedAnimator.cancel();
+            ViewGroup.LayoutParams params=selectedScroll.getLayoutParams();
+            if(params!=null){params.height=selectedCollapsed?0:ViewGroup.LayoutParams.WRAP_CONTENT;selectedScroll.setLayoutParams(params);}
+            selectedScroll.setAlpha(selectedCollapsed?0f:1f);
         }
         void toggleEditing(){
             if(saving)return;
@@ -444,7 +446,7 @@ public final class AppList {
         }
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
-            if(selectedCollapsed)selectedExpandedHeight=0;
+            resetSelectedHeight();
             manage.setText(saving?"保存中…":editing?"完成":"管理");manage.setEnabled(!saving);
             if(editState!=null)editState.accept(editing,saving);
             help.setVisibility(editing&&!compact?VISIBLE:GONE);
@@ -559,7 +561,7 @@ public final class AppList {
             empty.setText("暂无可启动的应用");
             empty.setVisibility(noRows?VISIBLE:GONE);list.setVisibility(VISIBLE);updateIndex();bubble.setVisibility(GONE);
         }
-        @Override protected void onDetachedFromWindow(){disposed=true;main.removeCallbacksAndMessages(null);super.onDetachedFromWindow();}
+        @Override protected void onDetachedFromWindow(){disposed=true;main.removeCallbacksAndMessages(null);resetSelectedHeight();super.onDetachedFromWindow();}
 
         final class IndexBar extends View {
             final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);

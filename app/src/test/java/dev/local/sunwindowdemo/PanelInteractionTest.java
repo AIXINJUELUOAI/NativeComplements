@@ -97,6 +97,73 @@ public class PanelInteractionTest {
         assertEquals(4,((ViewGroup)rows.getChildAt(0)).getChildCount());
     }
 
+    private static void quickScroll(View quick,int y){
+        Object info=org.robolectric.util.ReflectionHelpers.getField(quick,"mListenerInfo");
+        View.OnScrollChangeListener listener=org.robolectric.util.ReflectionHelpers.getField(info,"mOnScrollChangeListener");
+        listener.onScrollChange(quick,0,y,0,0);
+    }
+    private static void layoutMenu(View menu){
+        menu.measure(View.MeasureSpec.makeMeasureSpec(480,View.MeasureSpec.EXACTLY),View.MeasureSpec.makeMeasureSpec(800,View.MeasureSpec.EXACTLY));
+        menu.layout(0,0,480,800);
+    }
+    @Test public void mixedSelectedRowsRestoreAfterQuickReverseAndContentChanges()throws Exception{
+        List<AppCatalog.App> apps=new ArrayList<>();List<ShortcutTarget> chosen=new ArrayList<>();
+        for(int i=0;i<5;i++){
+            AppCatalog.App app=new AppCatalog.App("example.app"+i,"App "+i,new ColorDrawable(Color.RED));
+            apps.add(app);chosen.add(ShortcutTarget.app(context,app));
+        }
+        chosen.add(ShortcutTarget.fromKey(context,"quick:wifi",apps));
+        View menu=AppList.create(context,apps,chosen,t->{},(targets,done)->done.accept(true),QuickActionCatalog.entries(context),id->{});
+        Object panel=field(menu,"apps");View strip=(View)field(panel,"selectedScroll");layoutMenu(menu);
+        int expanded=strip.getHeight();assertTrue(expanded>0);
+        invoke(panel,"setSelectedCollapsed",new Class<?>[]{boolean.class},true);
+        android.animation.ValueAnimator collapse=(android.animation.ValueAnimator)field(panel,"selectedAnimator");
+        collapse.setCurrentPlayTime(80);layoutMenu(menu);assertTrue(strip.getHeight()<expanded);
+        ((View)field(menu,"quickTab")).performClick();
+        ((android.animation.ValueAnimator)field(panel,"selectedAnimator")).end();layoutMenu(menu);
+        assertEquals(expanded,strip.getHeight());assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT,strip.getLayoutParams().height);
+        View quick=(View)field(menu,"quick");
+        android.widget.AbsListView.OnScrollListener appScroll=org.robolectric.util.ReflectionHelpers.getField(field(panel,"list"),"mOnScrollListener");
+        appScroll.onScroll((ListView)field(panel,"list"),2,2,20);
+        assertFalse((Boolean)field(panel,"selectedCollapsed"));
+        quickScroll(quick,10);assertTrue((Boolean)field(panel,"selectedCollapsed"));
+        AppList.back(menu);((android.animation.ValueAnimator)field(panel,"selectedAnimator")).end();layoutMenu(menu);
+        quickScroll(quick,10);assertFalse((Boolean)field(panel,"selectedCollapsed"));
+        invoke(panel,"toggle",new Class<?>[]{ShortcutTarget.class},chosen.get(0));
+        invoke(panel,"toggle",new Class<?>[]{ShortcutTarget.class},chosen.get(1));layoutMenu(menu);
+        assertTrue(strip.getHeight()<expanded);
+        ((View)field(menu,"quickTab")).performClick();
+        invoke(panel,"setSelectedCollapsed",new Class<?>[]{boolean.class},true);
+        ((android.animation.ValueAnimator)field(panel,"selectedAnimator")).end();layoutMenu(menu);
+        invoke(panel,"toggle",new Class<?>[]{ShortcutTarget.class},chosen.get(0));
+        invoke(panel,"setSelectedCollapsed",new Class<?>[]{boolean.class},false);
+        ((android.animation.ValueAnimator)field(panel,"selectedAnimator")).end();layoutMenu(menu);
+        assertEquals(expanded,strip.getHeight());assertEquals(1f,strip.getAlpha(),0);
+        invoke(panel,"setSelectedCollapsed",new Class<?>[]{boolean.class},true);
+        ((android.animation.ValueAnimator)field(panel,"selectedAnimator")).setCurrentPlayTime(80);
+        invoke(panel,"toggle",new Class<?>[]{ShortcutTarget.class},chosen.get(1));
+        assertNull(field(panel,"selectedAnimator"));assertEquals(0,strip.getLayoutParams().height);
+        invoke(panel,"setSelectedCollapsed",new Class<?>[]{boolean.class},false);
+        ((android.animation.ValueAnimator)field(panel,"selectedAnimator")).end();layoutMenu(menu);
+        assertEquals(expanded,strip.getHeight());
+    }
+    @Test public void rejectedClipboardClearsOnlyClipboardCodeNotSms()throws Exception{
+        SuggestionHost host=new SuggestionHost(context);
+        android.os.Bundle settings=new android.os.Bundle();settings.putBoolean("enabled",true);settings.putBoolean("otp",true);
+        org.robolectric.util.ReflectionHelpers.setField(host,"settings",settings);
+        android.content.ClipboardManager clipboard=context.getSystemService(android.content.ClipboardManager.class);
+        org.robolectric.util.ReflectionHelpers.setField(host,"clipboard",clipboard);
+        try{
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("","验证码 001234"));
+            invoke(host,"clipboardChanged",new Class<?>[]{});assertEquals("001234",field(host,"code"));
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("","123456"));
+            invoke(host,"clipboardChanged",new Class<?>[]{});assertNull(field(host,"code"));
+            invoke(host,"sms",new Class<?>[]{String.class},"验证码 998877");
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("","hello world"));
+            invoke(host,"clipboardChanged",new Class<?>[]{});
+            assertEquals("998877",field(host,"code"));assertEquals("验证码 998877",field(host,"smsBody"));
+        }finally{host.close();}
+    }
     @SuppressWarnings("unchecked")
     @Test public void thirdPartyShortcutsAreDiscardedAndDoneKeepsThePanel()throws Exception{
         AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));

@@ -32,7 +32,6 @@ public final class SuggestionRules {
         StringBuilder normalized=new StringBuilder();
         for(char ch:bounded(text).toCharArray())normalized.append(ch>='０'&&ch<='９'?(char)('0'+ch-'０'):ch);
         String value=normalized.toString();
-        if(clipboard&&value.matches("[0-9]{4,8}"))return value;
         Matcher words=KEYWORD.matcher(value);String result=null;int best=Integer.MAX_VALUE;
         while(words.find()){
             Matcher codes=CODE.matcher(value);
@@ -79,10 +78,9 @@ public final class SuggestionRules {
         if(mapOwner(value)!=null)return value;
         if(value.length()<2||value.length()>120||value.contains("\n")||firstUrl(value)!=null
                 ||value.matches("[0-9\\s+.,-]+")||otp(value,true)!=null)return null;
-        // User-triggered search: include landmarks/shops, rather than require a complete street address.
-        if(value.matches(".*[省市区县镇乡村路街巷号店站园厦馆湾桥山湖岛院楼门].*")
-                ||value.matches(".*(广场|中心|商场|公园|景点|学校|大学|医院|机场|酒店|餐厅|小区|公司).*")
-                ||value.length()<=24&&!value.matches(".*[。！？!?；;].*"))return value;
+        // Require a local place/street structure, not just a short clipboard phrase.
+        if(value.matches(".*[\\p{IsHan}0-9]+(?:[省市区县镇乡村路街巷号店站园厦馆湾桥山湖岛院楼门]|广场|中心|商场|公园|景点|学校|大学|医院|机场|酒店|餐厅|小区|公司).*")
+                ||value.matches("(?i)\\d+[a-z]?[- ]+[a-z][a-z .'-]*\\s(?:street|st|road|rd|avenue|ave|lane|ln|drive|dr|boulevard|blvd|way|court|ct|place|pl|square|sq|parkway|pkwy)\\b.*"))return value;
         return null;
     }
 }

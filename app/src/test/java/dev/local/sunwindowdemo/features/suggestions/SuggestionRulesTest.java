@@ -7,7 +7,9 @@ public class SuggestionRulesTest {
     @Test public void codesPreserveLeadingZerosWithoutTreatingPhoneNumbersAsCodes(){
         assertEquals("001234",SuggestionRules.otp("【示例服务】2026年您的验证码为001234，请勿泄露。",false));
         assertEquals("000321",SuggestionRules.otp("Your verification code is 000321",false));
-        assertEquals("001234",SuggestionRules.otp("００１２３４",true));
+        assertEquals("001234",SuggestionRules.otp("验证码：００１２３４",true));
+        for(String bare:new String[]{"1234","001234","12345678","００１２３４","hello 123456"})
+            assertNull(bare,SuggestionRules.otp(bare,true));
         assertEquals("987654",SuggestionRules.otp("987654是您的验证码",false));
         assertNull(SuggestionRules.otp("订单 001234 已送达",false));
         assertNull(SuggestionRules.otp("验证码服务电话 13800138000",false));
@@ -30,6 +32,11 @@ public class SuggestionRulesTest {
     @Test public void mapSearchIncludesLandmarksAndPreservesMapShareLinks(){
         assertEquals("杭州西湖",SuggestionRules.address("杭州西湖"));
         assertEquals("星光商场",SuggestionRules.address("星光商场"));
+        assertEquals("北京市朝阳区建国路88号",SuggestionRules.address("北京市朝阳区建国路88号"));
+        for(String address:new String[]{"221B Baker Street, London","1600 Amphitheatre Parkway","123 Main St","10 Downing Street"})
+            assertEquals(address,SuggestionRules.address(address));
+        for(String phrase:new String[]{"hello","world","hello world","test","随便聊聊","street","Main Street"})
+            assertNull(phrase,SuggestionRules.address(phrase));
         assertNull(SuggestionRules.address("001234"));assertNull(SuggestionRules.address("https://example.org/a"));
         String link="https://uri.amap.com/marker?position=120.1,30.2";
         assertEquals(link,SuggestionRules.address(link));assertEquals("com.autonavi.minimap",SuggestionRules.mapOwner(link));
