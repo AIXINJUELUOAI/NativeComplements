@@ -3,13 +3,21 @@ package dev.local.sunwindowdemo.navigation
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import dev.local.sunwindowdemo.features.iconlayers.IconAppScreen
+import dev.local.sunwindowdemo.features.iconlayers.IconLayerStore
+import dev.local.sunwindowdemo.features.iconlayers.IconLibrary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.features.callblocking.CallBlockingScreen
@@ -29,19 +37,28 @@ import dev.local.sunwindowdemo.home.LicensesScreen
 
 enum class Page(val title: String) {
     Home("类原生补全计划"), Window("小窗设置"), Barrage("弹幕通知"), BarrageHistory("弹幕记录"), Suggestions("快捷建议"),
-    IconLayers("图标适配"), Motion("加速度传感器控制"), EdgeTouch("边缘防误触"), Calls("来电拦截"), Records("拦截记录"),
+    IconLayers("图标适配"), IconApp("图标设置"), Motion("加速度传感器控制"), EdgeTouch("边缘防误触"), Calls("来电拦截"), Records("拦截记录"),
     Gestures("手势与菜单"), Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"),
     About("关于"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
 }
 
 @Composable
-fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit, back: () -> Unit) {
+fun ModuleApp(
+    controller: WindowController,
+    page: Page,
+    navigate: (Page) -> Unit,
+    back: () -> Unit,
+    appPackage: String? = null,
+    openIconApp: (String) -> Unit = {},
+) {
+    val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
     // Standard Activity navigation leaves predictive Back and its animation with Android.
     SettingsPage(
-        title = page.title,
+        title = if (page == Page.IconApp) iconApp?.label ?: "图标设置" else page.title,
         onBack = if (page == Page.Home) null else back,
         actions = {
             if (page == Page.Motion) MotionActions()
+            if (page == Page.IconLayers) IconLayerActions()
         },
     ) { bottomInset ->
         when (page) {
@@ -50,7 +67,8 @@ fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
-            Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset)
+            Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset, openIconApp)
+            Page.IconApp -> IconAppScreen(iconApp, bottomInset)
             Page.Blocked -> AppPickerScreen(controller, bottomInset = bottomInset)
             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
                 when (page) {
@@ -89,6 +107,38 @@ private fun MotionActions() {
             }
         }
     }
+}
+
+@Composable
+private fun IconLayerActions() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var menu by remember { mutableStateOf(false) }
+    var remove by remember { mutableStateOf(false) }
+    IconButton(onClick = {
+        IconLayerStore.refreshAll(context)
+        Toast.makeText(context, "已请求刷新图标", Toast.LENGTH_SHORT).show()
+    }) { Icon(Icons.Default.Refresh, contentDescription = "刷新图标") }
+    Box {
+        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "更多") }
+        DropdownMenu(menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("移除图标库") }, onClick = { menu = false; remove = true })
+        }
+    }
+    if (remove) AlertDialog(
+        onDismissRequest = { remove = false },
+        title = { Text("移除图标库？") },
+        confirmButton = {
+            TextButton(onClick = {
+                remove = false
+                scope.launch {
+                    withContext(Dispatchers.IO) { IconLibrary.remove(context) }
+                    Toast.makeText(context, "图标库已移除", Toast.LENGTH_SHORT).show()
+                }
+            }) { Text("移除") }
+        },
+        dismissButton = { TextButton(onClick = { remove = false }) { Text("取消") } },
+    )
 }
 
 @Composable

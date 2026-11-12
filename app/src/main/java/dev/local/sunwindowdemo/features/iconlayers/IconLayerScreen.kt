@@ -2,10 +2,6 @@ package dev.local.sunwindowdemo.features.iconlayers
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.PorterDuff
-import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,13 +9,14 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,8 +26,9 @@ import dev.local.sunwindowdemo.core.ui.*
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
+fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (String) -> Unit = {}) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(IconLayerStore.read(context)) }
@@ -41,8 +39,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
     var progress by remember { mutableStateOf("") }
     var fraction by remember { mutableFloatStateOf(-1f) }
     var pending by remember { mutableStateOf<IconArchive?>(null) }
-    var removeDialog by remember { mutableStateOf(false) }
-    var editor by remember { mutableStateOf<LaunchableApp?>(null) }
+    var showImport by remember { mutableStateOf(false) }
     val cancel = remember { AtomicBoolean(false) }
     DisposableEffect(Unit) { onDispose { cancel.set(true); if (!busy) pending?.close() } }
     LaunchedEffect(Unit) {
@@ -93,12 +90,10 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
                     ToggleRow("通知图标替换", value = state.getBoolean("notifications")) {
                         IconLayerStore.notifications(context, it); refreshState()
                     }
-                    SettingRow(if (state.getInt("count") > 0) state.getString("title") ?: "当前图标库" else "尚未导入图标库",
-                        if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else null)
-                    SettingRow("导入本地 ZIP", onClick = if (busy || pending != null) null else { { zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) } })
-                    SettingRow("导入本地文件夹", onClick = if (busy || pending != null) null else { { folderPicker.launch(null) } })
-                    SettingRow("刷新图标", onClick = { IconLayerStore.refreshAll(context); message = "已请求刷新，宿主正在重新加载" })
-                    if (state.getInt("count") > 0) SettingRow("移除图标库", onClick = if (busy) null else { { removeDialog = true } })
+                    SettingRow("导入图标库",
+                        if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else "ZIP 或文件夹",
+                        onClick = if (busy || pending != null) null else { { showImport = true } },
+                        leading = { Icon(Icons.Default.Add, null) })
                 }
                 if (busy) {
                     Spacer(Modifier.height(16.dp))
@@ -118,7 +113,8 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
                         IconPolicy.ALGORITHM -> "算法补全"
                         IconPolicy.ORIGINAL -> "彩色图标不处理"
                         else -> if (app.packageName in library) "自动 · 素材库" else "自动 · 应用原图"
-                    }, onClick = { editor = app })
+                    }, onClick = { onApp(app.packageName) }, leading = { IconRowAppIcon(app) },
+                        trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) })
                 }
                 Spacer(Modifier.height(2.dp))
             }
@@ -128,17 +124,27 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp) {
             }
         }
     }
-    editor?.let { app -> IconEditor(app, state.getString("generation", ""), app.packageName in library) { editor = null; refreshState() } }
+    if (showImport) ModalBottomSheet(onDismissRequest = { showImport = false }) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text("导入图标库", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 4.dp, bottom = 14.dp))
+            SettingsGroup {
+                SettingRow("选择 ZIP 文件", onClick = {
+                    showImport = false
+                    zipPicker.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream"))
+                })
+                SettingRow("选择文件夹", onClick = {
+                    showImport = false
+                    folderPicker.launch(null)
+                })
+            }
+        }
+    }
     pending?.let { archive ->
         fun dismiss() { pending = null; scope.launch(Dispatchers.IO) { archive.close() } }
         AlertDialog(onDismissRequest = { dismiss() }, title = { Text("选择图标源") },
             text = { LazyColumn { items(archive.sources) { source -> TextButton(onClick = { install(archive, source) }) { Text("${source.title} · ${source.completeCount()} 个", Modifier.fillMaxWidth()) } } } },
             confirmButton = {}, dismissButton = { TextButton(onClick = { dismiss() }) { Text("取消") } })
     }
-    if (removeDialog) AlertDialog(onDismissRequest = { removeDialog = false }, title = { Text("移除当前图标库？") },
-        confirmButton = { TextButton(onClick = {
-            removeDialog = false; scope.launch { withContext(Dispatchers.IO) { IconLibrary.remove(context) }; refreshState() }
-        }) { Text("移除") } }, dismissButton = { TextButton(onClick = { removeDialog = false }) { Text("取消") } })
 }
 
 @Composable
@@ -160,90 +166,16 @@ fun IconDiagnosticsScreen() {
 }
 
 @Composable
-private fun IconEditor(app: LaunchableApp, generation: String, matched: Boolean, close: () -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val policy = remember(app.packageName) { IconPolicy.read(context, app.packageName) }
-    var revision by remember { mutableIntStateOf(0) }
-    var field by remember { mutableIntStateOf(0) }
-    var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
-    fun save() { IconPolicy.save(context, app.packageName, policy); revision++ }
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) scope.launch {
-            loading = true
-            try {
-                val id = withContext(Dispatchers.IO) { IconOverrides.importImage(context, uri) }
-                when (field) {
-                    0 -> { policy.background = id; policy.color = IconPolicy.MANUAL }
-                    1 -> { policy.foreground = id; policy.color = IconPolicy.MANUAL }
-                    2 -> { policy.monoImage = id; policy.monochrome = IconPolicy.UPLOAD }
-                    3 -> { policy.notificationImage = id; policy.notification = IconPolicy.UPLOAD }
-                }
-                error = ""; save()
-            } catch (e: Exception) { error = e.message ?: "导入图片失败" } finally { loading = false }
+private fun IconRowAppIcon(app: LaunchableApp) {
+    val bitmap = remember(app.packageName, app.icon) {
+        app.icon?.let { drawable ->
+            Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also {
+                val old = android.graphics.Rect(drawable.bounds)
+                drawable.setBounds(0, 0, 96, 96)
+                drawable.draw(Canvas(it))
+                drawable.bounds = old
+            }.asImageBitmap()
         }
     }
-    fun upload(which: Int) { field = which; picker.launch(arrayOf("image/*")) }
-    val entry by produceState<IconAssets.Entry?>(null, app.packageName, generation, revision) {
-        value = withContext(Dispatchers.IO) { runCatching { IconAssets.resolve(context, app.packageName, policy, if (matched) generation else "", 192, true) }.getOrNull() }
-    }
-    val primary = MaterialTheme.colorScheme.onPrimaryContainer.toArgb()
-    val previews by produceState<List<ImageBitmap?>>(listOf(null,null,null), entry, primary, revision) {
-        value = withContext(Dispatchers.IO) {
-            fun draw(drawable: Drawable?): ImageBitmap? = drawable?.let { IconImages.render(it, 192).asImageBitmap() }
-            val current = entry
-            listOf(
-                draw(if (current != null && current.colorChanged() && !current.nativeColor()) ImportedIcon(context.resources, current.background(), current.foreground(), current.mono()) else context.packageManager.getApplicationIcon(app.packageName)),
-                draw(current?.mono()?.let { BitmapDrawable(context.resources, it).apply { setColorFilter(primary, PorterDuff.Mode.SRC_IN) } }),
-                draw(current?.notification()?.let { BitmapDrawable(context.resources, it).apply { setColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN) } })
-            )
-        }
-    }
-    AlertDialog(onDismissRequest = { if (!loading) close() }, title = { Text(app.label) }, text = {
-        LazyColumn {
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    listOf("彩色", "莫奈", "通知").forEachIndexed { index, title ->
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Surface(color = if (index == 2) MaterialTheme.colorScheme.inverseSurface else MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.medium) {
-                                Box(Modifier.size(68.dp), contentAlignment = Alignment.Center) {
-                                    previews[index]?.let { Image(it, null, Modifier.size(if (index == 2) 28.dp else 54.dp)) } ?: Text("—")
-                                }
-                            }
-                            Text(title, style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-                Text("彩色图标", style = MaterialTheme.typography.titleSmall)
-                ModeRow(listOf("自动", "手动前后景", "算法补全", "不处理"), policy.color, !loading) { policy.color = it; save() }
-                if (policy.color == IconPolicy.MANUAL) {
-                    TextButton(onClick = { upload(0) }, enabled = !loading) { Text(if (policy.background.isEmpty()) "上传背景图片" else "更换背景图片") }
-                    TextButton(onClick = { upload(1) }, enabled = !loading) { Text(if (policy.foreground.isEmpty()) "上传透明前景" else "更换前景图片") }
-                }
-                HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                Text("莫奈图标", style = MaterialTheme.typography.titleSmall)
-                ModeRow(listOf("跟随前景", "上传单色图片", "不处理"), policy.monochrome, !loading) { policy.monochrome = it; save() }
-                if (policy.monochrome == IconPolicy.UPLOAD) TextButton(onClick = { upload(2) }, enabled = !loading) { Text(if (policy.monoImage.isEmpty()) "选择图片" else "更换图片") }
-                HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                Text("状态栏通知小图标", style = MaterialTheme.typography.titleSmall)
-                ModeRow(listOf("跟随前景", "上传图片", "不处理"), policy.notification, !loading) { policy.notification = it; save() }
-                if (policy.notification == IconPolicy.UPLOAD) TextButton(onClick = { upload(3) }, enabled = !loading) { Text(if (policy.notificationImage.isEmpty()) "选择图片" else "更换图片") }
-                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
-            }
-        }
-    }, confirmButton = { TextButton(onClick = close, enabled = !loading) { Text("完成") } })
-}
-
-@Composable
-private fun ModeRow(labels: List<String>, selected: Int, enabled: Boolean, choose: (Int) -> Unit) {
-    Column {
-        labels.forEachIndexed { index, label ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected == index, onClick = { choose(index) }, enabled = enabled)
-                TextButton(onClick = { choose(index) }, enabled = enabled) { Text(label) }
-            }
-        }
-    }
+    if (bitmap == null) Glyph("apps") else Image(bitmap, null, Modifier.size(42.dp))
 }
