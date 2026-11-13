@@ -76,6 +76,9 @@ fun EdgeTouchScreen(bottomInset: Dp = 0.dp) {
             SliderRow("纵向位置", value = config.getInt("position_percent"), range = 0..100, unit = "%") {
                 EdgeTouchStore.setNumber(context, "position_percent", it)
             }
+            SliderRow("握持侧角落范围",value=config.getInt("corner_dp"),range=0..64,unit=" dp") {
+                EdgeTouchStore.setNumber(context,"corner_dp",it)
+            }
         }
     }
 }
@@ -89,9 +92,9 @@ private fun RegionPreview(config: Bundle) {
     }
     val bounds = metrics.bounds
     val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-    val rectangles = EdgeTouchGeometry.build(bounds.width(), bounds.height(), insets.top, insets.bottom,
-        context.resources.displayMetrics.density, true, true, config.getInt("left_width_dp"), config.getInt("right_width_dp"),
-        config.getInt("height_percent"), config.getInt("position_percent"), intArrayOf())
+    val rectangles = EdgeTouchGeometry.buildSuppression(bounds.width(), bounds.height(), insets.top, insets.bottom,
+        context.resources.displayMetrics.density,config.getBoolean("left_enabled"),config.getBoolean("right_enabled"),config.getInt("left_width_dp"),config.getInt("right_width_dp"),
+        config.getInt("height_percent"),config.getInt("position_percent"),intArrayOf(),context.display?.rotation?:0,config.getInt("corner_dp"))
     val foreground = MaterialTheme.colorScheme.primary
     val neutral = MaterialTheme.colorScheme.outline
     val surface = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -103,7 +106,7 @@ private fun RegionPreview(config: Bundle) {
         val top = (size.height - height) / 2
         drawRoundRect(surface, Offset(left, top), Size(width, height), CornerRadius(12.dp.toPx()))
         for (i in rectangles.indices step 4) {
-            val enabled = config.getBoolean("enabled") && config.getBoolean(if (rectangles[i] == 0) "left_enabled" else "right_enabled")
+            val enabled = config.getBoolean("enabled")
             drawRect(if (enabled) foreground.copy(alpha = .7f) else neutral.copy(alpha = .35f),
                 Offset(left + rectangles[i] * scale, top + rectangles[i + 1] * scale),
                 Size((rectangles[i + 2] - rectangles[i]) * scale, (rectangles[i + 3] - rectangles[i + 1]) * scale))

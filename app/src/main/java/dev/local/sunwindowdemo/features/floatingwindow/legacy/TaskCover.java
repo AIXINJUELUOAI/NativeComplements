@@ -26,6 +26,7 @@ final class TaskCover {
     private long began=SystemClock.elapsedRealtime(),notBefore;
     private final long duration,fadeDuration;
     private long entryAt=-1,fadeAt=-1,hiddenAt=-1;
+    private long frameClock=-1;
     private boolean closed,exiting;
     private float ownerAlpha;
     private final boolean fadeIn;
@@ -36,6 +37,7 @@ final class TaskCover {
     private long decorationAt=-1;
     private boolean decorationLandscape,decorationEntry,presentationVisible=true;
     private int preparedWidth,preparedHeight;
+    private int reusedFrames,preparedFrames;
     private float preparedDensity,drawnAlpha;
     private boolean preparingReveal;
     @FunctionalInterface interface Reveal { void prepare() throws Exception; }
@@ -93,16 +95,19 @@ final class TaskCover {
     void beforeReveal(Reveal callback){beforeReveal=callback;}
     boolean canRetarget(){return !closed&&!exiting&&fadeAt<0&&mask.holding();}
     void prepared(Geometry.Placement canvas,float density){
+        preparedFrames++;
         preparedWidth=canvas.width();preparedHeight=canvas.height();preparedDensity=density;
     }
     boolean reusesPresentation(Geometry.Placement canvas){
-        return !closed&&!preparingReveal&&presentationVisible&&drawnAlpha>=1&&mask.holding()
+        boolean reuse=!closed&&!preparingReveal&&presentationVisible&&drawnAlpha>=1&&mask.holding()
             &&preparedWidth==canvas.width()&&preparedHeight==canvas.height();
+        if(reuse)reusedFrames++;
+        return reuse;
     }
     float preparedDensity(){return preparedDensity;}
     String state(){
         return "closed="+closed+" exiting="+exiting+" holding="+mask.holding()+" fading="+(fadeAt>=0)
-            +" alpha="+drawnAlpha+" from="+from+" to="+to
+            +" alpha="+drawnAlpha+" reusedFrames="+reusedFrames+" preparedFrames="+preparedFrames+" from="+from+" to="+to
             +" backgroundValid="+(background!=null&&background.isValid())+" iconValid="+(icon!=null&&icon.isValid());
     }
     private boolean continuousDim;
@@ -125,7 +130,7 @@ final class TaskCover {
         return drawn;
     }
     private float decorationProgress(){
-        return decorationAt<0?0:duration==0?1:Math.min(1,(SystemClock.elapsedRealtime()-decorationAt)/(float)duration);
+        return decorationAt<0?0:duration==0?1:Math.min(1,((frameClock<0?SystemClock.elapsedRealtime():frameClock)-decorationAt)/(float)duration);
     }
     void target(RectF bounds){if(!exiting)to.set(bounds);}
     void resumeTo(RectF bounds,float radius){to.set(bounds);radiusTo=radius;began=SystemClock.elapsedRealtime();}
@@ -138,9 +143,16 @@ final class TaskCover {
         return fadeDuration;
     }
     boolean step(boolean ready,boolean visible)throws Exception{
+        return step(ready,visible,SystemClock.elapsedRealtime());
+    }
+    boolean step(boolean ready,boolean visible,long now)throws Exception{
+        frameClock=now;
+        try{return stepFrame(ready,visible,now);}
+        finally{frameClock=-1;}
+    }
+    private boolean stepFrame(boolean ready,boolean visible,long now)throws Exception{
         if(closed)return false;
         presentationVisible=visible;
-        long now=SystemClock.elapsedRealtime();
         if(!visible){
             if(hiddenAt<0)hiddenAt=now;
             if(mask.holding())mask.hold();

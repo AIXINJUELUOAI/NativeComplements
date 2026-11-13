@@ -184,6 +184,13 @@ class QuickFunctionsTest {
         assertTrue(BarrageStore.read(context).getBoolean("enabled"))
         assertFalse(context.getSharedPreferences("corner", 0).getBoolean("enabled", true))
         assertThrows(IllegalArgumentException::class.java) { BarrageStore.select(context, "bad", true) }
+        assertEquals(3,BarrageStore.read(context).getInt("lines"))
+        listOf(3,5,0).forEach { count ->
+            BarrageStore.lines(context,count)
+            assertEquals(count,BarrageStore.read(context).getInt("lines"))
+        }
+        BarrageStore.lines(context,-2)
+        assertEquals(3,BarrageStore.read(context).getInt("lines"))
     }
 
     @Test fun barrageHistoryIsBoundedAndNewestFirst() {
@@ -216,6 +223,12 @@ class QuickFunctionsTest {
             }
         }
         compose.onNodeWithText("启用弹幕通知").performClick()
+        compose.onNodeWithText("同时显示条数").performClick()
+        compose.onNodeWithText("五条").performClick()
+        compose.runOnIdle { assertEquals(5,BarrageStore.read(context).getInt("lines")) }
+        compose.onNodeWithText("同时显示条数").performClick()
+        compose.onNodeWithText("无限").performClick()
+        compose.runOnIdle { assertEquals(0,BarrageStore.read(context).getInt("lines")) }
         compose.onNodeWithText("逐应用设置").assertIsDisplayed()
         compose.onNodeWithText("示例应用").performScrollTo().performClick()
         compose.runOnIdle {

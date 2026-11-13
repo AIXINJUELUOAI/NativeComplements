@@ -27,6 +27,7 @@ public final class StatusBarOffset {
     private static volatile int contentId = -1;
     private static Consumer<String> logger = ignored -> {};
     private static boolean installed, connected;
+    private static Runnable retryLoad;
     private StatusBarOffset() {}
 
     public static synchronized void install(XposedModule module, ClassLoader loader, Consumer<String> log) {
@@ -92,12 +93,16 @@ public final class StatusBarOffset {
     }
 
     private static void load(Context context) {
+        if(retryLoad!=null)main.removeCallbacks(retryLoad);
         try {
             Bundle result = context.getContentResolver()
                     .call(Uri.parse("content://" + ShadeStore.AUTHORITY), "read", null, null);
-            if (result != null) set(result.getInt("statusBarOffset", 0));
+            if(result==null)throw new IllegalStateException("empty status bar settings");
+            set(result.getInt("statusBarOffset", 0));
         } catch (Exception failure) {
-            note("STATUS_BAR_SETTINGS_FAILED " + failure.getClass().getSimpleName());
+            note("STATUS_BAR_SETTINGS_FAILED " + failure);
+            android.util.Log.w("NativeComplements","STATUS_BAR_SETTINGS_FAILED",failure);
+            retryLoad=()->load(context);main.postDelayed(retryLoad,3000);
         }
     }
 

@@ -19,15 +19,26 @@ final class NotificationWindow {
     private final Method run,start;
     private NotificationWindow(ClassLoader loader,Consumer<String> log)throws Exception{
         String base="com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter";
-        Class<?> runner=Class.forName(base+"$$ExternalSyntheticLambda7",false,loader);
-        Class<?> sender=Class.forName(base+"$$ExternalSyntheticLambda10",false,loader);
         Class<?> entry=Class.forName("com.android.systemui.statusbar.notification.collection.NotificationEntry",false,loader);
+        Class<?> runner=clickAdapter(loader,base,entry,true);
+        Class<?> sender=clickAdapter(loader,base,entry,false);
         run=runner.getDeclaredMethod("run");start=sender.getDeclaredMethod("startPendingIntent",Class.forName("android.view.RemoteAnimationAdapter",false,loader));
         if(run.getReturnType()!=void.class||start.getReturnType()!=int.class)throw new NoSuchMethodException("notification click signatures");
         runEntry=field(runner,"f$1",entry);runPending=field(runner,"f$3",PendingIntent.class);runAnimate=field(runner,"f$5",boolean.class);
         startEntry=field(sender,"f$5",entry);startPending=field(sender,"f$3",PendingIntent.class);
         startFill=field(sender,"f$4",Intent.class);startDisplay=field(sender,"f$2",int.class);
         sbn=field(entry,"mSbn",StatusBarNotification.class);
+    }
+    private static Class<?> clickAdapter(ClassLoader loader,String base,Class<?> entry,boolean runner)throws Exception{
+        for(int number:runner?new int[]{7,6}:new int[]{10,12})try{
+            Class<?> type=Class.forName(base+"$$ExternalSyntheticLambda"+number,false,loader);
+            field(type,runner?"f$1":"f$5",entry);
+            field(type,"f$3",PendingIntent.class);
+            if(runner){field(type,"f$5",boolean.class);type.getDeclaredMethod("run");}
+            else{field(type,"f$4",Intent.class);field(type,"f$2",int.class);type.getDeclaredMethod("startPendingIntent",Class.forName("android.view.RemoteAnimationAdapter",false,loader));}
+            return type;
+        }catch(ClassNotFoundException|NoSuchFieldException|NoSuchMethodException mismatch){ }
+        throw new NoSuchMethodException("notification click adapter");
     }
     private static Field field(Class<?> owner,String name,Class<?> type)throws Exception{
         Field f=owner.getDeclaredField(name);if(f.getType()!=type||Modifier.isStatic(f.getModifiers()))throw new NoSuchFieldException(name);

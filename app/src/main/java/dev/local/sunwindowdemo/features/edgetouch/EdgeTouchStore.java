@@ -11,6 +11,8 @@ public final class EdgeTouchStore {
     public static final String AUTHORITY = "dev.nativecomplements.module.edgetouch";
     public static final String CHANGED = "dev.nativecomplements.module.EDGE_TOUCH_CHANGED";
     public static final String SYSTEM_UI = "com.android.systemui";
+    public static final String REGIONS = "dev.nativecomplements.module.EDGE_INPUT_REGIONS";
+    public static final String BACKEND = "dev.nativecomplements.module.EDGE_INPUT_BACKEND";
     private EdgeTouchStore() {}
 
     public static SharedPreferences preferences(Context context) {
@@ -30,6 +32,7 @@ public final class EdgeTouchStore {
         b.putInt("right_width_dp", clamp(p.getInt("right_width_dp", 8), 1, 48));
         b.putInt("height_percent", clamp(p.getInt("height_percent", 80), 20, 100));
         b.putInt("position_percent", clamp(p.getInt("position_percent", 50), 0, 100));
+        b.putInt("corner_dp",clamp(p.getInt("corner_dp",24),0,64));
         return b;
     }
 
@@ -47,6 +50,7 @@ public final class EdgeTouchStore {
             case "left_width_dp": case "right_width_dp": min = 1; max = 48; break;
             case "height_percent": min = 20; max = 100; break;
             case "position_percent": min = 0; max = 100; break;
+            case "corner_dp": min = 0; max = 64; break;
             default: throw new IllegalArgumentException("edge touch preference");
         }
         preferences(context).edit().putInt(key, clamp(value, min, max)).apply();

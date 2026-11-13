@@ -23,11 +23,20 @@ final class ComposeShadeLayout {
                         Predicate<Resources> force) throws Exception {
         Class<?> repository = Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository", false, loader);
         Class<?> interactor = Class.forName("com.android.systemui.shade.domain.interactor.ShadeModeInteractorImpl", false, loader);
-        Class<?> emitter = Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository$special$$inlined$map$1$2", false, loader);
+        Class<?> emitter;
+        boolean hydrated;
+        try {
+            repository.getDeclaredField("legacyUseSplitShade");
+            emitter=Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository$special$$inlined$map$1$2",false,loader);
+            hydrated=false;
+        } catch (NoSuchFieldException newer) {
+            repository.getDeclaredField("legacyUseSplitShade$delegate");
+            emitter=Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository$onActivated$2$1$1",false,loader);
+            hydrated=true;
+        }
         Class<?> callback = Class.forName("com.android.systemui.common.ui.data.repository.ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1", false, loader);
         onConfigChanged = callback.getDeclaredMethod("onConfigChanged", Configuration.class);
         onConfigChanged.setAccessible(true);
-        repository.getDeclaredField("legacyUseSplitShade");
         Method emit = emitter.getDeclaredMethod("emit", Object.class, Class.forName("kotlin.coroutines.Continuation", false, loader));
         hooks.add(module.hook(Resources.class.getDeclaredMethod("getBoolean", int.class))
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
@@ -46,7 +55,7 @@ final class ComposeShadeLayout {
             try { return chain.proceed(); }
             finally { restoreScope(before); }
         }));
-        for (Constructor<?> constructor : interactor.getDeclaredConstructors()) {
+        for (Constructor<?> constructor : (hydrated?repository:interactor).getDeclaredConstructors()) {
             hooks.add(module.hook(constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Boolean before = readingShadeConfig.get();
                 readingShadeConfig.set(true);

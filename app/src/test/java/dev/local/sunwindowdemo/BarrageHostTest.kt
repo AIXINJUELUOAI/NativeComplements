@@ -42,10 +42,12 @@ class BarrageHostTest {
 
     private class Provider : ContentProvider() {
         val history = mutableListOf<Bundle>()
+        var lines = 3
         override fun onCreate() = true
         override fun call(method: String, arg: String?, extras: Bundle?): Bundle = when (method) {
             "read" -> Bundle().apply {
                 putBoolean("enabled", true)
+                putInt("lines",lines)
                 putStringArrayList("apps", arrayListOf("example.game"))
             }
             "addHistory" -> {
@@ -144,6 +146,27 @@ class BarrageHostTest {
         assertSame(original, entries().getValue(0))
         drain()
         assertEquals(2, provider.history.size)
+    }
+
+    @Test fun lineLimitChangesToFiveAndUnlimitedWithoutRemovingCurrentMessages() {
+        repeat(7) { post(notification("消息$it",it.toLong())) }
+        val first=entries().getValue(0)
+        assertEquals(3,entries().size)
+        val load=host.javaClass.getDeclaredMethod("load").apply { isAccessible=true }
+        provider.lines=5;load.invoke(host);drain()
+        assertEquals(5,entries().size)
+        assertSame(first,entries().getValue(0))
+        provider.lines=0;load.invoke(host);drain()
+        repeat(35) { post(notification("无限$it",100L+it)) }
+        assertEquals(42,entries().size)
+        val screen=context.getSystemService(WindowManager::class.java).currentWindowMetrics.bounds.height()
+        entries().values.forEach {
+            val p=view(it).layoutParams as WindowManager.LayoutParams
+            assertTrue(p.y>=0&&p.y+p.height<=screen)
+        }
+        provider.lines=3;load.invoke(host);drain()
+        assertEquals(42,entries().size)
+        assertSame(first,entries().getValue(0))
     }
 
     @Test fun anOldListenerCancellationDoesNotRemoveANewerVersionWithTheSameKey() {

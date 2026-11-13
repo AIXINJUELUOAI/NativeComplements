@@ -50,6 +50,7 @@ public final class SunWindowModule extends XposedModule {
         if (!eligible || attempted) return;
         attempted = true;
         installUndimSuggestion(p.getClassLoader());
+        dev.local.sunwindowdemo.features.edgetouch.EdgeInputFilter.install(this,p.getClassLoader(),this::note);
         dev.local.sunwindowdemo.features.motion.MotionAccess.install(this,p.getClassLoader(),this::note);
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         try {
@@ -212,7 +213,9 @@ public final class SunWindowModule extends XposedModule {
             // manifests and the system-wide developer setting untouched.
             List<XposedInterface.HookHandle> resizeHooks=new ArrayList<>();
             try{
-                java.lang.reflect.Method taskResize=a.method(a.task,"isResizeable",boolean.class);
+                java.lang.reflect.Method taskResize;
+                try{taskResize=a.method(a.task,"isResizeable",boolean.class);}
+                catch(NoSuchMethodException newer){taskResize=a.method(a.task,"isResizeable");}
                 java.lang.reflect.Method activityResize=a.method(a.activity,"isResizeable");
                 if(taskResize.getReturnType()!=boolean.class||activityResize.getReturnType()!=boolean.class)
                     throw new NoSuchMethodException("scoped resize signatures");
@@ -276,8 +279,16 @@ public final class SunWindowModule extends XposedModule {
                 android.app.PendingIntent.class.getDeclaredMethod("getTarget");
                 engine.launchRoutingReady();note("WINDOW_LAUNCH_IDENTITY_READY");
             }catch(Exception error){note("WINDOW_LAUNCH_IDENTITY_UNAVAILABLE "+FrameworkAccess.reason(error));}
-            handles.add(hook(a.method(starter,"handleStartResult",a.activity,android.app.ActivityOptions.class,
-                int.class,boolean.class,Class.forName("android.window.RemoteTransition"),transition,int.class))
+            Class<?>[] resultParameters={a.activity,android.app.ActivityOptions.class,int.class,boolean.class,
+                Class.forName("android.window.RemoteTransition"),transition,int.class};
+            java.lang.reflect.Method startResult;
+            try{startResult=a.method(starter,"handleStartResult",resultParameters);}
+            catch(NoSuchMethodException newer){
+                resultParameters=java.util.Arrays.copyOf(resultParameters,8);
+                resultParameters[7]=Class.forName("com.android.server.wm.ActivityCallerState$CallerInfo",false,p.getClassLoader());
+                startResult=a.method(starter,"handleStartResult",resultParameters);
+            }
+            handles.add(hook(startResult)
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object ticket=null;
                     int code=(Integer)chain.getArg(2);

@@ -145,7 +145,9 @@ public final class BackBridge extends XposedModule {
     @android.annotation.SuppressLint("BlockedPrivateApi")
     private void installEdgeTouchAdmission(ClassLoader cl){
         try{
-            Class<?> adapter=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler$$ExternalSyntheticLambda20",false,cl);
+            Class<?> displayHandler=Class.forName("com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl",false,cl);
+            Class<?> adapter=field(displayHandler,"onInputEvent").getType();
+            if(adapter.isInterface())adapter=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler$$ExternalSyntheticLambda20",false,cl);
             Class<?> handler=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler",false,cl);
             Field owner=field(adapter,"f$0"),displays=field(handler,"mDisplayBackGestureHandlers");
             Method invoke=adapter.getDeclaredMethod("invoke",Object.class);
@@ -158,7 +160,6 @@ public final class BackBridge extends XposedModule {
                 ||Modifier.isStatic(cancel.getModifiers())||instance.getType()!=unitClass||!Modifier.isStatic(instance.getModifiers()))
                 throw new NoSuchMethodException("edge admission signature mismatch");
             Object unit=instance.get(null);if(unit==null)throw new IllegalStateException("missing Unit.INSTANCE");
-            Class<?> displayHandler=Class.forName("com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl",false,cl);
             Class<?> compatType=Class.forName("com.android.systemui.shared.system.InputMonitorCompat",false,cl);
             Class<?> monitorType=Class.forName("android.view.InputMonitor");
             Field compat=field(displayHandler,"inputMonitorCompat"),monitor=field(compatType,"mInputMonitor");

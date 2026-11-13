@@ -364,6 +364,11 @@ final class WindowEngine {
             context.registerReceiver(new BroadcastReceiver(){
                 @Override public void onReceive(Context c,Intent i){
                     if(Intent.ACTION_SCREEN_OFF.equals(i.getAction()))cancelRecoveryOpen(null);
+                    if(screenBlocked())synchronized(lock){
+                        // A sleeping display may stop delivering vsync callbacks entirely.
+                        for(Session s:new java.util.ArrayList<>(coverTasks.values()))if(s.cover!=null)try{s.cover.step(false,false);}
+                        catch(Exception error){log.accept("COVER_SUSPEND_FAILED "+FrameworkAccess.reason(error));endCover(s);}
+                    }
                     for(Session s:sessions)if(visible(s)&&!s.restoring){
                         try{synchronized(lock){updateScreenState(s);}}catch(Exception e){failure(s,e);}
                     }
@@ -1499,6 +1504,7 @@ final class WindowEngine {
             long previousDraw=-1,maxGap,maxWork;int callbacks,nativeWaits;
             public void doFrame(long time){
                 if(!visible(s)||s.restoring||s.animationRev!=revision)return;
+                long callbackStart=SystemClock.elapsedRealtimeNanos();
                 try{
                     synchronized(lock){
                         if(s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
@@ -1539,6 +1545,10 @@ final class WindowEngine {
                         }
                     }
                 }catch(Throwable e){failure(s,e);}
+                finally{
+                    long total=SystemClock.elapsedRealtimeNanos()-callbackStart;
+                    if(total>8_333_333L)log.accept("ANIMATION_SLOW frame="+s.frame+" full="+full+" totalMs="+(total/1_000_000f));
+                }
             }
         });
     }
@@ -1858,34 +1868,45 @@ final class WindowEngine {
         }}catch(Throwable error){log.accept("COVER_DRAW_CHECK_FAILED "+FrameworkAccess.reason(error));}
     }
     private void pollCover(Session s,TaskCover cover){
-        handler.postDelayed(()->{synchronized(lock){
-            if(s.cover!=cover)return;
-            try{
-                cover.ownerAlpha(coverReleaseAlpha(s));
-                boolean attached=a.bool(s.task,"isAttached");
-                if(!attached||s.parked&&!cover.exiting()||s.restoring&&!s.restoreForeground){endCover(s);return;}
-                Object main=a.call(s.task,"getTopVisibleAppMainWindow");
-                // A hot/onNewIntent launch can reuse an already drawn window without
-                // another finishDrawing callback. Native draw state and current config
-                // still have to match; a starting snapshot never counts as app content.
-                if(main!=null&&a.bool(main,"isDrawn")&&coverConfigurationMatches(s,main))s.coverDrawn=true;
-                boolean ready=s.coverDrawn&&main!=null&&a.bool(main,"isDrawn")&&a.bool(main,"isVisible")
-                    &&coverConfigurationMatches(s,main)&&!a.presentationLeashed(s.task);
-                if(s.coverFullscreen){
-                    Object display=a.call(s.task,"getDisplayContent");if(display!=null)cover.target(new RectF((Rect)a.call(display,"getBounds")));
-                }else ready&=!s.entering&&!s.transitioning&&!s.rotation.active();
-                boolean visible=context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
-                if(!cover.step(ready,visible)){
-                    log.accept("COVER_END task="+s.taskId+" state="+cover.state());
-                    if(cover.exiting())s.barAlpha=0;s.cover=null;coverTasks.remove(s.task);
-                    if(visible(s)&&!s.restoring){renderFrame(s);completeEntryInput(s);}return;
+        frames.postFrameCallback(new Choreographer.FrameCallback(){
+            long previous=-1,maxGap,maxWork;int callbacks;
+            public void doFrame(long frameTime){
+                long started=SystemClock.elapsedRealtimeNanos();
+                synchronized(lock){
+                    if(s.cover!=cover)return;
+                    try{
+                        cover.ownerAlpha(coverReleaseAlpha(s));
+                        boolean attached=a.bool(s.task,"isAttached");
+                        if(!attached||s.parked&&!cover.exiting()||s.restoring&&!s.restoreForeground){endCover(s);return;}
+                        Object main=a.call(s.task,"getTopVisibleAppMainWindow");
+                        // A hot/onNewIntent launch can reuse an already drawn window without
+                        // another finishDrawing callback. Native draw state and current config
+                        // still have to match; a starting snapshot never counts as app content.
+                        boolean drawn=main!=null&&a.bool(main,"isDrawn")&&coverConfigurationMatches(s,main);
+                        if(drawn)s.coverDrawn=true;
+                        boolean ready=s.coverDrawn&&drawn&&a.bool(main,"isVisible")&&!a.presentationLeashed(s.task);
+                        if(s.coverFullscreen){
+                            Object display=a.call(s.task,"getDisplayContent");if(display!=null)cover.target(new RectF((Rect)a.call(display,"getBounds")));
+                        }else ready&=!s.entering&&!s.transitioning&&!s.rotation.active();
+                        boolean visible=context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
+                        long frameClock=SystemClock.elapsedRealtime()-Math.max(0,System.nanoTime()-frameTime)/1_000_000L;
+                        boolean continuing=cover.step(ready,visible,frameClock);
+                        callbacks++;maxWork=Math.max(maxWork,SystemClock.elapsedRealtimeNanos()-started);
+                        if(previous>=0)maxGap=Math.max(maxGap,frameTime-previous);previous=frameTime;
+                        if(!continuing){
+                            log.accept("COVER_END task="+s.taskId+" callbacks="+callbacks+" maxGapMs="+(maxGap/1_000_000f)
+                                +" maxWorkMs="+(maxWork/1_000_000f)+" state="+cover.state());
+                            if(cover.exiting())s.barAlpha=0;s.cover=null;coverTasks.remove(s.task);
+                            if(visible(s)&&!s.restoring){renderFrame(s);completeEntryInput(s);}return;
+                        }
+                        frames.postFrameCallback(this);
+                    }catch(Throwable error){
+                        log.accept("COVER_RELEASED task="+s.taskId+" "+FrameworkAccess.reason(error)+" state="+cover.state());
+                        s.opacity=0;endCover(s);handler.post(()->{if(sessions.contains(s)&&!s.restoring)recover("遮罩目标未就绪");});
+                    }
                 }
-                pollCover(s,cover);
-            }catch(Throwable error){
-                log.accept("COVER_RELEASED task="+s.taskId+" "+FrameworkAccess.reason(error)+" state="+cover.state());
-                s.opacity=0;endCover(s);handler.post(()->{if(sessions.contains(s)&&!s.restoring)recover("遮罩目标未就绪");});
             }
-        }},16);
+        });
     }
     private float coverReleaseAlpha(Session s){
         if(s.cover!=null&&s.cover.exiting())return 0;

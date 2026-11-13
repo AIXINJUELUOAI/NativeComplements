@@ -92,6 +92,7 @@ public final class IconLayerModule extends XposedModule {
         Class<?> item = Class.forName("com.android.launcher3.model.data.ItemInfo", false, loader);
         Field loadResult = view.getDeclaredField("mIconLoadResult"); loadResult.setAccessible(true);
         Field info = loadResult.getType().getDeclaredField("itemInfo"); info.setAccessible(true);
+        Field themed = loadResult.getType().getDeclaredField("isThemed"); themed.setAccessible(true);
         Method component = item.getDeclaredMethod("getTargetComponent"); component.setAccessible(true);
         Field user = item.getDeclaredField("user"); user.setAccessible(true);
         Field clip = view.getDeclaredField("mClipIconView"); clip.setAccessible(true);
@@ -102,9 +103,10 @@ public final class IconLayerModule extends XposedModule {
             AdaptiveIconDrawable test = null;
             try {
                 Object result = loadResult.get(chain.getThisObject());
+                boolean nativeThemed=result!=null&&themed.getBoolean(result);
                 Object itemInfo = result == null ? null : info.get(result);
                 ComponentName target = itemInfo == null ? null : (ComponentName) component.invoke(itemInfo);
-                if (target != null && android.os.Process.myUserHandle().equals(user.get(itemInfo)))
+                if (!nativeThemed && target != null && android.os.Process.myUserHandle().equals(user.get(itemInfo)))
                     test = replacement(target.getPackageName(), "FloatingIconView", (Drawable) chain.getArg(0)) instanceof AdaptiveIconDrawable icon ? icon : null;
             } catch (Exception failure) { note("ANIMATION_IDENTIFY " + failure.getClass().getSimpleName()); }
             Object result;
@@ -178,7 +180,9 @@ public final class IconLayerModule extends XposedModule {
             if (previousDemo != 0 || current.demo() != 0) changed.add(IconLayerStore.TARGET);
             if (refreshTargets(changed, current.generation())) report(config.getBoolean("enabled") ? "桌面已连接；三路图标已加载" : "桌面已连接；图标处理已关闭");
         } catch (Exception failure) {
-            lastError = failure.getClass().getSimpleName(); note("CONFIG_FAILED " + lastError); report("图标设置读取失败");
+            lastError = failure.toString(); note("CONFIG_FAILED " + lastError); report("图标设置读取失败");
+            android.util.Log.w("NativeComplements","ICON_CONFIG_FAILED",failure);
+            worker.postDelayed(()->{if(request==epoch.get())queueReload();},3000);
         }
     }
 

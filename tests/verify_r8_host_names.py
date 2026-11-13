@@ -21,6 +21,8 @@ RUNTIME_METHODS = {
     "BackBridge": {"connect"},
     "Config": {"longBackWindow"},
     "TaskCover": {"beforeReveal", "canRetarget", "reusesPresentation"},
+    "features/edgetouch/EdgeInputFilter": {"install", "sync"},
+    "features/edgetouch/EdgeInputPolicy": {"accepted", "regions"},
     "features/iconlayers/IconOverrides": {"prune"},
     "features/navbar/NavbarModule": {"onPackageLoaded"},
 }

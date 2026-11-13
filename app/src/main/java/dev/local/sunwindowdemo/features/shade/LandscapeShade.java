@@ -45,7 +45,15 @@ public final class LandscapeShade {
         logger = log;
         try {
             Class<?> controller = Class.forName("com.android.systemui.statusbar.policy.SplitShadeStateControllerImpl", false, loader);
-            Method shouldUse = controller.getDeclaredMethod("shouldUseSplitNotificationShade", Resources.class);
+            Method shouldUse;
+            try { shouldUse=controller.getDeclaredMethod("shouldUseSplitNotificationShade",Resources.class); }
+            catch (NoSuchMethodException sceneRepository) {
+                main=new Handler(Looper.getMainLooper());
+                ComposeShadeLayout.install(module,loader,hooks,value->ready&&forceSplit(enabled,value.getConfiguration()));
+                ready=true;
+                note("SHADE_READY hydrated repository");
+                return;
+            }
             Class<?> panel = Class.forName("com.android.systemui.shade.NotificationPanelViewController", false, loader);
             updateResources = panel.getDeclaredMethod("updateResources");
             Field owner = panel.getDeclaredField("mSplitShadeStateController");

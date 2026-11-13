@@ -17,7 +17,6 @@ import java.util.concurrent.Executors
 /** Notification display is independent of small-window enablement and has no input monitor. */
 class BarrageHost(private val context: Context): AutoCloseable {
     companion object {
-        private const val MAX_LINES = 3
         private const val MAX_PENDING = 32
         private const val RECENT_LIMIT = 128
         private val summaryPrefix = Regex("^[（(\\[【][0-9一二三四五六七八九十百千零〇两]+\\s*条(?:新)?消息[）)\\]】]\\s*")
@@ -92,7 +91,7 @@ class BarrageHost(private val context: Context): AutoCloseable {
             val next=runCatching {context.contentResolver.call(Uri.parse("content://${BarrageStore.AUTHORITY}"),"read",null,null)}.getOrNull()
             main.post {
                 if(closed)return@post
-                config=next ?: Bundle();if(!eligible())hide()
+                config=next ?: Bundle();if(!eligible())hide() else drain()
                 if(next==null)main.postDelayed({load()},3000)
             }
         }
@@ -133,8 +132,9 @@ class BarrageHost(private val context: Context): AutoCloseable {
     }
 
     private fun drain() {
-        while (eligible() && pending.isNotEmpty() && playing.size < MAX_LINES) {
-            val lane = (0 until MAX_LINES).first { it !in playing }
+        val limit = BarrageStore.lineLimit(config.getInt("lines",3))
+        while (eligible() && pending.isNotEmpty() && (limit == 0 || playing.size < limit)) {
+            val lane = generateSequence(0) { it + 1 }.first { it !in playing }
             show(pending.removeFirst(), lane)
         }
     }
@@ -166,7 +166,9 @@ class BarrageHost(private val context: Context): AutoCloseable {
             val p=WindowManager.LayoutParams(width,lane,SystemUiHost.OVERLAY_TYPE,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,PixelFormat.TRANSLUCENT)
             p.gravity=Gravity.TOP or Gravity.LEFT;p.x=safe.left
-            p.y=safe.top+(12*density).toInt()+laneIndex*(lane+(4*density).toInt())
+            val spacing = lane+(4*density).toInt()
+            val rows = ((metrics.bounds.height()-safe.top-safe.bottom-(12*density).toInt())/spacing).coerceAtLeast(1)
+            p.y=safe.top+(12*density).toInt()+(laneIndex%rows)*spacing
             p.setFitInsetsTypes(0);p.title="NativeComplements-barrage-$laneIndex";p.windowAnimations=0;SystemUiHost.trust(p)
             added = lyrics
             wm.addView(lyrics,p)

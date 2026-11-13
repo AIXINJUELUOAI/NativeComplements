@@ -165,7 +165,7 @@ public class SurfaceFrameTest {
         set(cover,"a",access);set(cover,"task",task);set(cover,"parent",parent);set(cover,"iconDrawn",true);
         set(cover,"background",ReflectionHelpers.callConstructor(SurfaceControl.class));
         set(cover,"icon",ReflectionHelpers.callConstructor(SurfaceControl.class));
-        set(cover,"from",new RectF(200,300,830,1420));set(cover,"to",new RectF(200,300,830,1420));
+        set(cover,"from",new RectF(200,300,830,1420));set(cover,"to",new RectF(300,300,930,1420));
         set(cover,"decorationBounds",new RectF());set(cover,"color",new float[]{.94f,.94f,.94f});
         set(cover,"iconSize",100);set(cover,"splashPx",162f);
         set(cover,"duration",320L);set(cover,"fadeDuration",150L);
@@ -177,8 +177,16 @@ public class SurfaceFrameTest {
         assertFalse(cover.reusesPresentation(pose));
         assertTrue(cover.canRetarget());
         assertTrue(cover.step(false,true));assertTrue(cover.reusesPresentation(pose));
+        long clock=android.os.SystemClock.elapsedRealtime();
+        cover.step(false,true,clock+8);
+        float first=((RectF)ReflectionHelpers.getField(cover,"decorationBounds")).left;
+        cover.step(false,true,clock+16);
+        assertTrue(((RectF)ReflectionHelpers.getField(cover,"decorationBounds")).left>first);
         assertEquals(2.5f,cover.preparedDensity(),0);
         assertFalse(cover.reusesPresentation(new Geometry.Placement(1000,1600,.7f,200,300)));
+        cover.step(false,false);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(6));
+        assertTrue(cover.step(false,true));assertTrue(mask.holding());
         int[] reveals={0};
         cover.beforeReveal(()->{
             assertTrue(mask.holding());assertFalse(cover.reusesPresentation(pose));reveals[0]++;

@@ -65,7 +65,18 @@ final class ShareWindow {
             Class<?>[] parameters=new Class<?>[names.length];
             for(int i=0;i<names.length;i++)parameters[i]=names[i]==null?(i==12?boolean.class:int.class):Class.forName(names[i],false,loader);
             Class<?> starter=Class.forName("com.android.server.wm.ActivityStarter",false,loader);
-            Method method=a.method(starter,"startActivityUnchecked",parameters);
+            Method method;
+            int taskArgument=6;
+            try{method=a.method(starter,"startActivityUnchecked",parameters);}
+            catch(NoSuchMethodException newer){
+                Class<?>[] next=new Class<?>[16];
+                System.arraycopy(parameters,0,next,0,6);
+                next[6]=Class.forName("com.android.server.wm.TaskDisplayArea",false,loader);
+                System.arraycopy(parameters,6,next,7,8);
+                next[15]=Class.forName("com.android.server.wm.ActivityCallerState$CallerInfo",false,loader);
+                method=a.method(starter,"startActivityUnchecked",next);parameters=next;taskArgument=7;
+            }
+            final int taskIndex=taskArgument,flagsIndex=taskArgument+4,argumentCount=parameters.length;
             if(method.getReturnType()!=int.class)throw new NoSuchMethodException("share start result");
             a.field(starter,"mLastStartActivityRecord");
             a.method(a.activity,"isResolverOrDelegateActivity");
@@ -98,16 +109,16 @@ final class ShareWindow {
                 catch(Exception error){engine.launchForeground.remove();log.accept("WINDOW_FOREGROUND_SNAPSHOT_FAILED "+FrameworkAccess.reason(error));}
                 try{
                 WindowEngine.ShareLaunch selected=null;
-                if(chain.getArg(6)==null&&chain.getArg(7)==null){
+                if(chain.getArg(taskIndex)==null&&chain.getArg(taskIndex+1)==null){
                     try{
-                        selected=engine.prepareInstaller(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(10));
-                        if(selected==null)selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(10));
+                        selected=engine.prepareInstaller(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(flagsIndex));
+                        if(selected==null)selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(flagsIndex));
                     }
                     catch(Exception error){log.accept("SHARE_WINDOW_NATIVE "+FrameworkAccess.reason(error));}
                 }
                 if(selected==null)return chain.proceed();
                 WindowEngine.ShareLaunch previous=engine.shareLaunch.get();engine.shareLaunch.set(selected);
-                Object[] args=new Object[parameters.length];for(int i=0;i<args.length;i++)args[i]=chain.getArg(i);args[5]=selected.options();
+                Object[] args=new Object[argumentCount];for(int i=0;i<args.length;i++)args[i]=chain.getArg(i);args[5]=selected.options();
                 try{return chain.proceed(args);}
                 finally{
                     engine.shareFinished(selected,chain.getThisObject());

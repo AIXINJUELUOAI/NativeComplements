@@ -142,7 +142,7 @@ TaskCover 正常绘制时在同一 SurfaceControl.Transaction 中设置背景与
 
 ## 待办，小窗运动流畅度，2026-11-13
 
-状态为已记录，待用户汇总后续任务并安排实施。
+已在 test4 实施帧调度修复与补充统计，改动和验证记录见文末。
 
 用户反馈低帧感主要发生在小窗运动中途。源码确认真实任务使用 Choreographer，遮罩 pollCover 使用固定 16ms 延迟循环，存在帧驱动节奏差异。现有真实任务呈现复用仅覆盖完全不透明且逻辑画布尺寸稳定的遮罩阶段，实际命中比例待补充采样。
 
@@ -155,7 +155,7 @@ TaskCover 正常绘制时在同一 SurfaceControl.Transaction 中设置背景与
 
 ## 待办，莫奈图标返回桌面时闪切，2026-11-13
 
-用户反馈开启莫奈图标后，返回桌面的归位动画先显示默认图标，结束时瞬间切换为莫奈图标。列入本轮待办，待汇总任务后实施和真机复测。
+用户反馈开启莫奈图标后，返回桌面的归位动画先显示默认图标，结束时瞬间切换为莫奈图标。已在 test4 实施主题图层保留，实际视觉待真机复测。
 
 已核对模块 IconLayerModule.installAnimationProbe 与归档目标 Pixel 桌面的实际实现。桌面 FloatingIconView.IconLoadResult 保存 isThemed，加载器依据桌面图标的 themed 状态调用 IconLoader.getFullDrawable，后者经 themeController.createThemedAdaptiveIcon 生成主题化动画图标。模块当前在 FloatingIconView.setIcon 前仍调用通用 IconAssets.desktop 替换，对于自定义彩色图标存在把已主题化图标重新覆盖成彩色版本的路径，原生 setIcon 随后直接使用替换图标的前景和背景。这条样式覆盖路径与反馈现象吻合，实际视觉问题待修复后验证。
 
@@ -197,3 +197,39 @@ TaskCover 正常绘制时在同一 SurfaceControl.Transaction 中设置背景与
 前三项任务继续保留待实施状态，本次安装包包含弹幕展示修复。
 
 交付文件为 deliverables/NativeComplements-0.9.21-test3.apk，SHA-256 为 6b70cda388777acd3e7f8debfd5193dc9e3394131427ded04aa09f6985e12585。发布构建及最终 DEX 的 R8 反射名称、恢复方法、签名与三个固定系统作用域检查通过。
+
+## 0.9.21-test4 实施记录，2026-11-13
+
+版本代码 109。用户要求合并弹幕三档、小窗运动流畅度、莫奈归位闪切、Pixel QPR2 兼容与 HyperOS 边缘抑制研究。
+
+### 弹幕条数
+
+设置页提供三条、五条、无限，旧安装默认三条，配置立即同步。增加档位会开始展示排队消息，调低档位保留正在滚动的消息。无限档放开并发数量，可见轨道用满后循环复用，密集消息可能重叠。有限档沿用最多 32 条队列及原通知保留策略。
+
+### 小窗运动
+
+可见遮罩改用现有 SF Choreographer，传入按同一垂直同步时间换算的单调时钟，移除独立的固定 16ms 递归。遮罩背景、图标与装饰在同次 paint 事务中更新，窗口原有帧驱动继续使用同一 Choreographer。原生窗口绘制和配置匹配合并为每帧一次。完全不透明阶段继续复用真实呈现，揭开前仍强制刷新。增加遮罩帧间隔、工作耗时、呈现复用计数，以及包含最终原生收尾的完整动画慢回调记录。实际设备帧率与性能收益待相同场景复测。
+
+### 莫奈归位动画
+
+FloatingIconView 使用原生 IconLoadResult.isThemed 判定，主题动画直接保留桌面已经生成的图层。彩色图标的分层适配继续走既有替换路径。当前与 QPR2 桌面的主题字段和 setIcon 签名已通过实际 DEX 核对，实际返回动画待真机复测。
+
+### Pixel QPR2
+
+接入 handleStartResult 的 CallerInfo 参数、无参 Task.isResizeable，以及 startActivityUnchecked 的 16 参数调用与索引映射，新增参数原样转交。手势回调从 DisplayBackGestureHandlerImpl.onInputEvent 的具体字段类型识别，旧系统的 Function1 字段保留经过验证的 Lambda20 入口。通知点击验证两套 runner/sender 字段布局。信号读取 Pair.second，兼容已移除 component2 的构建。横屏双栏增加 Hydrated 仓库的原生资源读取作用域及配置回调，沿用仓库自身的 MutableState 更新和原生 ShadeMode 计算。
+
+新增 tests/verify_test4_target.py，遍历 DEX 041 的全部逻辑头，按 SystemUI 与 Launcher 宿主分别解析，核对当前系统和反馈 QPR2 的接口、字段类型与启动参数索引。目标摘要和选定成员保存在 tests/target/test4-members.json。旧配置 Provider 解析失败的具体根因仍待反馈设备确认，图标与状态栏偏移加入读取重试和完整异常日志；现有 Motion 重试保持运行。
+
+### 边缘防误触
+
+依据 verification/hyperos-edge-suppression/README.md 的输入分发层方案实施。SystemUI 按屏幕旋转生成左右区域、横屏上下边与握持侧角落，默认角落范围为 24dp，用户可调到 0。保留系统安全区、键盘/面板暂停、熄屏处理和小窗控件排除。区域通过 SystemUI UID 校验的广播和三秒租约发送给 system_server。
+
+输入层沿用 InputManagerService.filterInputEvent 边界。每根手指仅在 DOWN 决定是否接纳，移动出入区域保持原决定；多指混合事件按 pointer id 拆分。原有无障碍过滤器继续接收被接纳的子集；没有原生过滤器时使用原生 FILTERED 标志异步投递拆分后的事件，并消费本次原事件。关闭或租约失效后完成已抑制手指的收尾，宿主退出或输入后端失败可释放区域并回退窗口方案。驱动私有 mode 15 与握持传感器规则仍属于原研究的硬件边界。
+
+过滤边界返回值和变换后事件的投递语义对照 AOSP InputDispatcher 的 notifyMotion 与 setInputFilterEnabled，并核对两套系统的 Java 目标定义。[AOSP InputDispatcher](https://android.googlesource.com/platform/frameworks/native/+/refs/heads/main/services/inputflinger/dispatcher/InputDispatcher.cpp)
+
+### test4 验证结果
+
+233 项单元与页面测试全部通过，包含三档持久化与即时切换、无限档并发、通知版本隔离、多指接纳与拆分、旋转角落几何、无障碍过滤器保留、租约超时和后端故障恢复，以及遮罩 8ms 步进和熄屏六秒后的恢复。已检查弹幕设置页生成的界面预览。原始运行基线、原有归档目标、导航栏目标和 test4 两套宿主目标检查通过。反馈设备的 QPR2 Provider 问题、莫奈动画视觉、小窗实际帧率与新输入路径的设备效果仍待覆盖安装后复测。
+
+交付 deliverables/NativeComplements-0.9.21-test4.apk，versionCode 109。发布构建、R8 最终 DEX 的反射名称及旧优化/新输入后端成员、原签名、三个固定系统作用域与 APK 完整性检查通过。SHA-256 为 d219cf2b04329dffe58afe5da98029096a8569075bf0a20abbe396ff379951b0。覆盖安装后需用户手动重启加载新版系统 Hook。

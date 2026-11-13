@@ -1,0 +1,824 @@
+{
+  "current": {
+    "sha256": {
+      "verification\\navbar-system\\framework.jar": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f",
+      "verification\\navbar-system\\services.jar": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9",
+      "verification\\navbar-system\\NexusLauncher.apk": "3d7c14c02a7a42c9b88b0d5ced4662330ce6e6989563dab5abe9a8158cd70b56",
+      "verification\\split-shade-device\\SystemUI.apk": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
+    },
+    "classes": {
+      "Landroid/view/InputEvent;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1025,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/InputEvent;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1025
+          }
+        ]
+      },
+      "Landroid/view/MotionEvent;": {
+        "superclass": "Landroid/view/InputEvent;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/MotionEvent;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Landroid/view/MotionEvent;",
+            "name": "split",
+            "descriptor": "(I)Landroid/view/MotionEvent;",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/server/input/InputManagerService;": {
+        "superclass": "Landroid/hardware/input/IInputManager$Stub;",
+        "access_flags": 1,
+        "fields": [
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "mInputFilter",
+            "type": "Landroid/view/IInputFilter;",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "mInputFilterLock",
+            "type": "Ljava/lang/Object;",
+            "access_flags": 17
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "mNative",
+            "type": "Lcom/android/server/input/NativeInputManagerService;",
+            "access_flags": 17
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "filterInputEvent",
+            "descriptor": "(Landroid/view/InputEvent;I)Z",
+            "access_flags": 17
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "injectInputEvent",
+            "descriptor": "(Landroid/view/InputEvent;I)Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "setInputFilter",
+            "descriptor": "(Landroid/view/IInputFilter;)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "start",
+            "descriptor": "()V",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Lcom/android/server/input/NativeInputManagerService;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1537,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/input/NativeInputManagerService;",
+            "name": "injectInputEvent",
+            "descriptor": "(Landroid/view/InputEvent;ZIIII)I",
+            "access_flags": 1025
+          },
+          {
+            "owner": "Lcom/android/server/input/NativeInputManagerService;",
+            "name": "setInputFilterEnabled",
+            "descriptor": "(Z)V",
+            "access_flags": 1025
+          },
+          {
+            "owner": "Lcom/android/server/input/NativeInputManagerService;",
+            "name": "start",
+            "descriptor": "()V",
+            "access_flags": 1025
+          }
+        ]
+      },
+      "Lcom/android/server/wm/ActivityStarter;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/ActivityStarter;",
+            "name": "handleStartResult",
+            "descriptor": "(Lcom/android/server/wm/ActivityRecord;Landroid/app/ActivityOptions;IZLandroid/window/RemoteTransition;Lcom/android/server/wm/Transition;I)Lcom/android/server/wm/Task;",
+            "access_flags": 17
+          },
+          {
+            "owner": "Lcom/android/server/wm/ActivityStarter;",
+            "name": "startActivityUnchecked",
+            "descriptor": "(Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/ActivityRecord;Landroid/service/voice/IVoiceInteractionSession;Lcom/android/internal/app/IVoiceInteractor;ILandroid/app/ActivityOptions;Lcom/android/server/wm/Task;Lcom/android/server/wm/TaskFragment;Lcom/android/server/wm/BackgroundActivityStartController$BalVerdict;Lcom/android/server/uri/NeededUriGrants;ILcom/android/server/wm/Transition;ZI)I",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/server/wm/Task;": {
+        "superclass": "Lcom/android/server/wm/TaskFragment;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "isResizeable",
+            "descriptor": "()Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "isResizeable",
+            "descriptor": "(Z)Z",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Lcom/android/launcher3/views/FloatingIconView$IconLoadResult;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/launcher3/views/FloatingIconView$IconLoadResult;",
+            "name": "isThemed",
+            "type": "Z",
+            "access_flags": 1
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/launcher3/views/FloatingIconView;": {
+        "superclass": "Landroid/widget/FrameLayout;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/launcher3/views/FloatingIconView;",
+            "name": "setIcon",
+            "descriptor": "(Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;Ljava/util/function/Supplier;IZ)V",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lkotlin/Pair;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lkotlin/Pair;",
+            "name": "second",
+            "type": "Ljava/lang/Object;",
+            "access_flags": 18
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/navigationbar/gestural/DisplayBackGestureHandlerImpl;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/DisplayBackGestureHandlerImpl;",
+            "name": "onInputEvent",
+            "type": "Lkotlin/jvm/functions/Function1;",
+            "access_flags": 1
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
+            "name": "invoke",
+            "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "f$1",
+            "type": "Lcom/android/systemui/navigationbar/gestural/BackGestureTfClassifierProvider;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "f$2",
+            "type": "Ljava/util/Map;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "f$3",
+            "type": "F",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "run",
+            "descriptor": "()V",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$special$$inlined$map$1$2;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$special$$inlined$map$1$2;",
+            "name": "emit",
+            "descriptor": "(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository;",
+            "name": "legacyUseSplitShade",
+            "type": "Lkotlinx/coroutines/flow/Flow;",
+            "access_flags": 17
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$1",
+            "type": "Lcom/android/systemui/statusbar/notification/row/ExpandableNotificationRow;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$2",
+            "type": "I",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$3",
+            "type": "Landroid/app/PendingIntent;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$4",
+            "type": "Landroid/content/Intent;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$5",
+            "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "startPendingIntent",
+            "descriptor": "(Landroid/view/RemoteAnimationAdapter;)I",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+            "access_flags": 4097
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "f$1",
+            "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "f$2",
+            "type": "Lcom/android/systemui/statusbar/notification/row/ExpandableNotificationRow;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "f$3",
+            "type": "Landroid/app/PendingIntent;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "f$4",
+            "type": "Z",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "f$5",
+            "type": "Z",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "run",
+            "descriptor": "()V",
+            "access_flags": 17
+          }
+        ]
+      }
+    }
+  },
+  "qpr2": {
+    "sha256": {
+      "verification\\pixel-qpr2-20261113\\framework.jar": "466ba9aa9934aa5bc113f9ee738e3fd66cf92b0bb3d02a144d0669b59381015f",
+      "verification\\pixel-qpr2-20261113\\services.jar": "382ed5d6b0e9ca464878ac6c87b655ab7f6009fd8463949aa43c23b738dbb7db",
+      "verification\\pixel-qpr2-20261113\\apk\\NexusLauncherRelease.apk": "109196f424d10102896b2b6a96ac284ec42012db12fdf923632d4a9a7c58159c",
+      "verification\\pixel-qpr2-20261113\\apk\\SystemUIGoogle.apk": "458b481b241552d67d33963f3cb449a9e5e53d4cfcd28e8bb1d919b814fd982f"
+    },
+    "classes": {
+      "Landroid/view/InputEvent;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1025,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/InputEvent;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1025
+          }
+        ]
+      },
+      "Landroid/view/MotionEvent;": {
+        "superclass": "Landroid/view/InputEvent;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/MotionEvent;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Landroid/view/MotionEvent;",
+            "name": "split",
+            "descriptor": "(I)Landroid/view/MotionEvent;",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/server/input/InputManagerService;": {
+        "superclass": "Landroid/hardware/input/IInputManager$Stub;",
+        "access_flags": 1,
+        "fields": [
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "mInputFilter",
+            "type": "Landroid/view/IInputFilter;",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "mInputFilterLock",
+            "type": "Ljava/lang/Object;",
+            "access_flags": 17
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "mNative",
+            "type": "Lcom/android/server/input/NativeInputManagerService;",
+            "access_flags": 17
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "filterInputEvent",
+            "descriptor": "(Landroid/view/InputEvent;I)Z",
+            "access_flags": 17
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "injectInputEvent",
+            "descriptor": "(Landroid/view/InputEvent;I)Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "setInputFilter",
+            "descriptor": "(Landroid/view/IInputFilter;)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/input/InputManagerService;",
+            "name": "start",
+            "descriptor": "()V",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Lcom/android/server/input/NativeInputManagerService;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1537,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/input/NativeInputManagerService;",
+            "name": "injectInputEvent",
+            "descriptor": "(Landroid/view/InputEvent;ZIIII)I",
+            "access_flags": 1025
+          },
+          {
+            "owner": "Lcom/android/server/input/NativeInputManagerService;",
+            "name": "setInputFilterEnabled",
+            "descriptor": "(Z)V",
+            "access_flags": 1025
+          },
+          {
+            "owner": "Lcom/android/server/input/NativeInputManagerService;",
+            "name": "start",
+            "descriptor": "()V",
+            "access_flags": 1025
+          }
+        ]
+      },
+      "Lcom/android/server/wm/ActivityStarter;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/ActivityStarter;",
+            "name": "handleStartResult",
+            "descriptor": "(Lcom/android/server/wm/ActivityRecord;Landroid/app/ActivityOptions;IZLandroid/window/RemoteTransition;Lcom/android/server/wm/Transition;ILcom/android/server/wm/ActivityCallerState$CallerInfo;)Lcom/android/server/wm/Task;",
+            "access_flags": 17
+          },
+          {
+            "owner": "Lcom/android/server/wm/ActivityStarter;",
+            "name": "startActivityUnchecked",
+            "descriptor": "(Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/ActivityRecord;Landroid/service/voice/IVoiceInteractionSession;Lcom/android/internal/app/IVoiceInteractor;ILandroid/app/ActivityOptions;Lcom/android/server/wm/TaskDisplayArea;Lcom/android/server/wm/Task;Lcom/android/server/wm/TaskFragment;Lcom/android/server/wm/BackgroundActivityStartController$BalVerdict;Lcom/android/server/uri/NeededUriGrants;ILcom/android/server/wm/Transition;ZILcom/android/server/wm/ActivityCallerState$CallerInfo;)I",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/server/wm/Task;": {
+        "superclass": "Lcom/android/server/wm/TaskFragment;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "isResizeable",
+            "descriptor": "()Z",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Lcom/android/launcher3/views/FloatingIconView$IconLoadResult;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/launcher3/views/FloatingIconView$IconLoadResult;",
+            "name": "isThemed",
+            "type": "Z",
+            "access_flags": 1
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/launcher3/views/FloatingIconView;": {
+        "superclass": "Landroid/widget/FrameLayout;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/launcher3/views/FloatingIconView;",
+            "name": "setIcon",
+            "descriptor": "(Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;Ljava/util/function/Supplier;IZ)V",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lkotlin/Pair;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lkotlin/Pair;",
+            "name": "second",
+            "type": "Ljava/lang/Object;",
+            "access_flags": 17
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/navigationbar/gestural/DisplayBackGestureHandlerImpl;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/DisplayBackGestureHandlerImpl;",
+            "name": "onInputEvent",
+            "type": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "access_flags": 1
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
+            "name": "invoke",
+            "descriptor": "(Ljava/lang/Object;)Ljava/lang/Object;",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$onActivated$2$1$1;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$onActivated$2$1$1;",
+            "name": "emit",
+            "descriptor": "(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository;": {
+        "superclass": "Lcom/android/systemui/lifecycle/HydratedActivatable;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository;",
+            "name": "legacyUseSplitShade$delegate",
+            "type": "Landroidx/compose/runtime/MutableState;",
+            "access_flags": 17
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$1",
+            "type": "Ljava/lang/String;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "f$2",
+            "type": "Lcom/android/internal/statusbar/NotificationVisibility;",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda10;",
+            "name": "run",
+            "descriptor": "()V",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "f$1",
+            "type": "Lcom/android/systemui/statusbar/notification/row/ExpandableNotificationRow;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "f$2",
+            "type": "I",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "f$3",
+            "type": "Landroid/app/PendingIntent;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "f$4",
+            "type": "Landroid/content/Intent;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "f$5",
+            "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda12;",
+            "name": "startPendingIntent",
+            "descriptor": "(Landroid/view/RemoteAnimationAdapter;)I",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$1",
+            "type": "Lcom/android/systemui/statusbar/notification/collection/NotificationEntry;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$2",
+            "type": "Lcom/android/systemui/statusbar/notification/row/ExpandableNotificationRow;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$3",
+            "type": "Landroid/app/PendingIntent;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$4",
+            "type": "Z",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "f$5",
+            "type": "Z",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda6;",
+            "name": "run",
+            "descriptor": "()V",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda7;",
+            "name": "run",
+            "descriptor": "()V",
+            "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 4113,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
+            "name": "f$0",
+            "type": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "access_flags": 4097
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
+            "name": "f$1",
+            "type": "Z",
+            "access_flags": 4097
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
+            "name": "run",
+            "descriptor": "()V",
+            "access_flags": 17
+          }
+        ]
+      }
+    }
+  }
+}

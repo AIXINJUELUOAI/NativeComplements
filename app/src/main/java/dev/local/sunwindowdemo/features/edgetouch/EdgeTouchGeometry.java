@@ -7,6 +7,33 @@ public final class EdgeTouchGeometry {
     private EdgeTouchGeometry() {}
     private static int clamp(int v, int min, int max) { return Math.max(min, Math.min(max, v)); }
 
+    /** HyperOS normal geometry adds horizontal edges and the rotation's two grip corners. */
+    public static int[] buildSuppression(int width,int height,int topInset,int bottomInset,float density,
+            boolean left,boolean right,int leftDp,int rightDp,int heightPercent,int positionPercent,
+            int[] protectedRects,int rotation,int cornerDp){
+        int[] strips=build(width,height,topInset,bottomInset,density,left,right,leftDp,rightDp,heightPercent,positionPercent,protectedRects);
+        if(strips.length==0)return strips;
+        ArrayList<Integer> result=new ArrayList<>();for(int value:strips)result.add(value);
+        int top=clamp(topInset,0,height-1),bottom=clamp(height-Math.max(0,bottomInset),top+1,height);
+        if(rotation==1||rotation==3){
+            int edge=clamp(Math.round(Math.min(leftDp,rightDp)*density),1,Math.max(1,(bottom-top)/5));
+            append(result,0,width,top,Math.min(bottom,top+edge),protectedRects);
+            append(result,0,width,Math.max(top,bottom-edge),bottom,protectedRects);
+        }
+        int corner=clamp(Math.round(clamp(cornerDp,0,64)*density),0,Math.min(width,bottom-top)/4);
+        boolean topCorners=rotation==1||rotation==2||rotation==3;
+        boolean bottomCorners=rotation==0||rotation==1||rotation==3;
+        if(left&&(rotation==0||rotation==1||rotation==2)){
+            if(topCorners)append(result,0,corner,top,top+corner,protectedRects);
+            if(bottomCorners)append(result,0,corner,bottom-corner,bottom,protectedRects);
+        }
+        if(right&&(rotation==0||rotation==2||rotation==3)){
+            if(topCorners)append(result,width-corner,width,top,top+corner,protectedRects);
+            if(bottomCorners)append(result,width-corner,width,bottom-corner,bottom,protectedRects);
+        }
+        return result.stream().mapToInt(Integer::intValue).toArray();
+    }
+
     public static int[] build(int width, int height, int topInset, int bottomInset, float density,
             boolean left, boolean right, int leftWidthDp, int rightWidthDp,
             int heightPercent, int positionPercent, int[] protectedRects) {
@@ -27,6 +54,7 @@ public final class EdgeTouchGeometry {
     }
 
     private static void append(ArrayList<Integer> output, int left, int right, int top, int bottom, int[] protectedRects) {
+        if(left>=right||top>=bottom)return;
         ArrayList<int[]> segments = new ArrayList<>();
         segments.add(new int[]{top, bottom});
         for (int i = 0; i < protectedRects.length; i += 4) {

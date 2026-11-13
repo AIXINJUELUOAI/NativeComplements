@@ -64,7 +64,7 @@ public final class SignalDisplay {
             Field id=field(binder,"$r8$classId"),drawable=field(binder,"$mobileDrawable"),viewModel=field(binder,"$viewModel");
             Method sub=viewModel.getType().getMethod("getSubscriptionId");
             Class<?> pair=Class.forName("kotlin.Pair",false,loader);
-            Method second=pair.getMethod("component2");
+            Field second=field(pair,"second");
             Field changing=field(cellular,"carrierNetworkChange");
             // Resolve every required target before hooks; unsupported ROMs remain native.
             List<Callback> callbacks=new ArrayList<>();
@@ -85,7 +85,7 @@ public final class SignalDisplay {
                     try{
                     Object value=chain.getArg(0),d=drawable.get(chain.getThisObject());
                     if(id.getInt(chain.getThisObject())==0&&pair.isInstance(value)&&signalDrawable.isInstance(d)){
-                        Object model=second.invoke(value);
+                        Object model=second.get(value);
                         if(cellular.isInstance(model)&&!changing.getBoolean(model)){
                             int subscription=(Integer)sub.invoke(viewModel.get(chain.getThisObject()));
                             if(SubscriptionManager.isValidSubscriptionId(subscription))BINDING.set(new Binding((Drawable)d,subscription));
