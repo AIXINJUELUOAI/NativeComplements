@@ -91,6 +91,19 @@
           }
         ]
       },
+      "Lcom/android/internal/policy/ScreenDecorationsUtils;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/internal/policy/ScreenDecorationsUtils;",
+            "name": "getWindowCornerRadius",
+            "descriptor": "(Landroid/content/Context;)F",
+            "access_flags": 9
+          }
+        ]
+      },
       "Lcom/android/server/input/InputManagerService;": {
         "superclass": "Landroid/hardware/input/IInputManager$Stub;",
         "access_flags": 1,
@@ -182,6 +195,19 @@
             "name": "startActivityUnchecked",
             "descriptor": "(Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/ActivityRecord;Landroid/service/voice/IVoiceInteractionSession;Lcom/android/internal/app/IVoiceInteractor;ILandroid/app/ActivityOptions;Lcom/android/server/wm/Task;Lcom/android/server/wm/TaskFragment;Lcom/android/server/wm/BackgroundActivityStartController$BalVerdict;Lcom/android/server/uri/NeededUriGrants;ILcom/android/server/wm/Transition;ZI)I",
             "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/server/wm/DisplayContent;": {
+        "superclass": "Lcom/android/server/wm/RootDisplayArea;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/DisplayContent;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1
           }
         ]
       },
@@ -586,6 +612,19 @@
           }
         ]
       },
+      "Lcom/android/internal/policy/ScreenDecorationsUtils;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/internal/policy/ScreenDecorationsUtils;",
+            "name": "getWindowCornerRadius",
+            "descriptor": "(Landroid/content/Context;)F",
+            "access_flags": 9
+          }
+        ]
+      },
       "Lcom/android/server/input/InputManagerService;": {
         "superclass": "Landroid/hardware/input/IInputManager$Stub;",
         "access_flags": 1,
@@ -677,6 +716,19 @@
             "name": "startActivityUnchecked",
             "descriptor": "(Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/ActivityRecord;Landroid/service/voice/IVoiceInteractionSession;Lcom/android/internal/app/IVoiceInteractor;ILandroid/app/ActivityOptions;Lcom/android/server/wm/TaskDisplayArea;Lcom/android/server/wm/Task;Lcom/android/server/wm/TaskFragment;Lcom/android/server/wm/BackgroundActivityStartController$BalVerdict;Lcom/android/server/uri/NeededUriGrants;ILcom/android/server/wm/Transition;ZILcom/android/server/wm/ActivityCallerState$CallerInfo;)I",
             "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/server/wm/DisplayContent;": {
+        "superclass": "Lcom/android/server/wm/RootDisplayArea;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/DisplayContent;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1
           }
         ]
       },

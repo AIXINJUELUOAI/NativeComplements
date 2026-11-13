@@ -26,6 +26,7 @@ TARGETS = {
     "Landroid/view/MotionEvent;",
     BAR+";", BAR+"$BarBackgroundDrawable;", "Lcom/android/launcher3/taskbar/TaskbarTransitions;",
     INSETS+";", INSETS+"$InternalInsetsInfo;", INSETS+"$OnComputeInternalInsetsListener;",
+    "Lcom/android/internal/policy/ScreenDecorationsUtils;", WM+"DisplayContent;",
 }
 
 
@@ -117,6 +118,8 @@ def verify(classes, qpr2):
     method(INSETS+"$InternalInsetsInfo;", "setTouchableInsets", "(I)V")
     field(INSETS+"$InternalInsetsInfo;", "touchableRegion", "Landroid/graphics/Region;")
     field(INSETS+"$InternalInsetsInfo;", "TOUCHABLE_INSETS_REGION", "I")
+    method("Lcom/android/internal/policy/ScreenDecorationsUtils;", "getWindowCornerRadius", "(Landroid/content/Context;)F")
+    method(WM+"DisplayContent;", "getDisplayId", "()I")
 
 
 if __name__ == "__main__":
@@ -143,7 +146,7 @@ if __name__ == "__main__":
             method_names={"handleStartResult","startActivityUnchecked","isResizeable","invoke","run","startPendingIntent",
                           "emit","setIcon","start","filterInputEvent","setInputFilter","setInputFilterEnabled",
                           "injectInputEvent","getDisplayId","split","draw","addOnComputeInternalInsetsListener",
-                          "onComputeInternalInsets","setTouchableInsets"}
+                          "onComputeInternalInsets","setTouchableInsets","getWindowCornerRadius"}
             field_names={"onInputEvent","f$0","f$1","f$2","f$3","f$4","f$5","second","legacyUseSplitShade",
                          "legacyUseSplitShade$delegate","isThemed","mNative","mInputFilterLock","mInputFilter",
                          "mBarBackground","touchableRegion","TOUCHABLE_INSETS_REGION"}

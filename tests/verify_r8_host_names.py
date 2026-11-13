@@ -6,6 +6,7 @@ import verify_signal_target as dex
 
 PREFIX = "Ldev/local/sunwindowdemo/"
 REQUIRED = {
+    (PREFIX + "TaskCover;", "refreshScreenCorners"): {"com.android.internal.policy.ScreenDecorationsUtils"},
     (PREFIX + "WindowControls;", "buildControlsRoot"): {
         "android.view.ViewTreeObserver$OnComputeInternalInsetsListener", "android.view.ViewTreeObserver$InternalInsetsInfo"},
     (PREFIX + "features/navbar/NavbarTaskbarHost;", "installTransitions"): {

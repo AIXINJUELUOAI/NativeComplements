@@ -17,6 +17,29 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35,shadows={SurfaceFrameTest.TransactionShadow.class,SurfaceFrameTest.SurfaceShadow.class})
 public class SurfaceFrameTest {
+    @Test public void fullscreenCoverUsesDisplayRadiusInBothOrientations(){
+        Rect portrait=new Rect(0,0,1200,2670);
+        assertEquals(96,TaskCover.cornerRadius(new RectF(portrait),portrait,96,0),0);
+        Rect landscape=new Rect(0,0,2670,1200);
+        assertEquals(96,TaskCover.cornerRadius(new RectF(landscape),landscape,96,0),0);
+        Rect offset=new Rect(50,80,1250,2750);
+        assertEquals(80,TaskCover.cornerRadius(new RectF(offset),offset,80,0),0);
+        assertEquals(96,TaskCover.cornerRadius(new RectF(.5f,0,1200,2670),portrait,96,0),0);
+    }
+    @Test public void smallPreviewAndMissingScreenCornersKeepValidWindowGeometry()throws Exception{
+        Rect screen=new Rect(0,0,1200,2670);
+        RectF small=new RectF(200,400,900,1800);
+        assertEquals(48,TaskCover.cornerRadius(small,screen,96,48),0);
+        assertEquals(36,TaskCover.cornerRadius(small,null,0,36),0);
+        assertEquals(0,TaskCover.cornerRadius(new RectF(screen),screen,0,48),0);
+        assertEquals(350,TaskCover.cornerRadius(small,screen,96,500),0);
+        assertEquals(0,TaskCover.cornerRadius(small,screen,96,Float.NaN),0);
+        TaskCover cover=allocate(TaskCover.class);
+        set(cover,"from",new RectF(screen));set(cover,"to",new RectF(small));
+        set(cover,"radiusFrom",96f);set(cover,"radiusTo",48f);
+        cover.exit();
+        assertEquals(48,ReflectionHelpers.<Float>getField(cover,"radiusFrom"),0);
+    }
     private static Object requiredLock;
     private static TransactionShadow lastApplied;
     private static void set(Object owner,String name,Object value)throws Exception{
@@ -165,7 +188,8 @@ public class SurfaceFrameTest {
         set(cover,"a",access);set(cover,"task",task);set(cover,"parent",parent);set(cover,"iconDrawn",true);
         set(cover,"background",ReflectionHelpers.callConstructor(SurfaceControl.class));
         set(cover,"icon",ReflectionHelpers.callConstructor(SurfaceControl.class));
-        set(cover,"from",new RectF(200,300,830,1420));set(cover,"to",new RectF(300,300,930,1420));
+        set(cover,"from",new RectF(0,0,1200,2670));set(cover,"to",new RectF(300,300,930,1420));
+        set(cover,"radiusFrom",96f);set(cover,"radiusTo",48f);
         set(cover,"decorationBounds",new RectF());set(cover,"color",new float[]{.94f,.94f,.94f});
         set(cover,"iconSize",100);set(cover,"splashPx",162f);
         set(cover,"duration",320L);set(cover,"fadeDuration",150L);
@@ -177,6 +201,8 @@ public class SurfaceFrameTest {
         assertFalse(cover.reusesPresentation(pose));
         assertTrue(cover.canRetarget());
         assertTrue(cover.step(false,true));assertTrue(cover.reusesPresentation(pose));
+        SurfaceControl background=ReflectionHelpers.getField(cover,"background");
+        assertEquals(96,lastApplied.radii.get(background),0);
         long clock=android.os.SystemClock.elapsedRealtime();
         cover.step(false,true,clock+8);
         float first=((RectF)ReflectionHelpers.getField(cover,"decorationBounds")).left;
@@ -193,6 +219,7 @@ public class SurfaceFrameTest {
         });
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(321));
         assertTrue(cover.step(false,true));assertEquals(0,reveals[0]);
+        assertEquals(48,lastApplied.radii.get(background),0);
         assertTrue(cover.step(true,true));assertEquals(1,reveals[0]);
         assertFalse(mask.holding());assertFalse(cover.canRetarget());assertFalse(cover.reusesPresentation(pose));
         cover.step(true,true);assertEquals(1,reveals[0]);
@@ -213,6 +240,7 @@ public class SurfaceFrameTest {
         final Map<SurfaceControl,Integer> layers=new IdentityHashMap<>();
         final Map<SurfaceControl,SurfaceControl> relativeTo=new IdentityHashMap<>();
         final Map<SurfaceControl,float[]> colors=new IdentityHashMap<>();
+        final Map<SurfaceControl,Float> radii=new IdentityHashMap<>();
         final Map<SurfaceControl,Rect> crops=new IdentityHashMap<>();
         final Set<SurfaceControl> shown=Collections.newSetFromMap(new IdentityHashMap<>());
         final Set<SurfaceControl> removed=Collections.newSetFromMap(new IdentityHashMap<>());
@@ -224,7 +252,7 @@ public class SurfaceFrameTest {
         @Implementation protected SurfaceControl.Transaction setPosition(SurfaceControl s,float x,float y){return real;}
         @Implementation protected SurfaceControl.Transaction setScale(SurfaceControl s,float x,float y){return real;}
         @Implementation protected SurfaceControl.Transaction setWindowCrop(SurfaceControl s,int w,int h){crops.put(s,new Rect(0,0,w,h));return real;}
-        @Implementation protected SurfaceControl.Transaction setCornerRadius(SurfaceControl s,float radius){return real;}
+        @Implementation protected SurfaceControl.Transaction setCornerRadius(SurfaceControl s,float radius){radii.put(s,radius);return real;}
         @Implementation protected SurfaceControl.Transaction setColor(SurfaceControl s,float[] color){colors.put(s,color.clone());return real;}
         @Implementation protected SurfaceControl.Transaction setAlpha(SurfaceControl s,float value){alpha.put(s,value);return real;}
         @Implementation protected SurfaceControl.Transaction show(SurfaceControl s){shown.add(s);return real;}

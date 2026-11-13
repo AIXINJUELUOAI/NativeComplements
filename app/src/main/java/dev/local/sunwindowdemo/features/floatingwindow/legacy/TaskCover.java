@@ -7,6 +7,8 @@ import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.hardware.display.DisplayManager;
+import android.view.Display;
 
 /** A temporary sibling surface. App buffers and lifecycle continue underneath it. */
 final class TaskCover {
@@ -18,8 +20,10 @@ final class TaskCover {
     private final Object task,parent;
     private SurfaceControl background,icon;
     private final RectF from,to;
-    private final float radiusFrom;
+    private float radiusFrom;
     private float radiusTo;
+    private Rect screenBounds;
+    private float screenRadius;
     private final int iconSize;
     private final float splashPx;
     private final float[] color;
@@ -46,7 +50,10 @@ final class TaskCover {
             RectF from,RectF to,float radiusFrom,float radiusTo,float ownerAlpha,boolean fadeIn)throws Exception{
         this.a=a;this.task=task;this.parent=parent;this.from=new RectF(from);this.to=new RectF(to);
         iconContext=context;this.pkg=pkg;
-        this.radiusFrom=radiusFrom;this.radiusTo=radiusTo;this.ownerAlpha=ownerAlpha;this.fadeIn=fadeIn;
+        refreshScreenCorners();
+        this.radiusFrom=cornerRadius(from,screenBounds,screenRadius,radiusFrom);
+        this.radiusTo=cornerRadius(to,screenBounds,screenRadius,radiusTo);
+        this.ownerAlpha=ownerAlpha;this.fadeIn=fadeIn;
         float density=context.getResources().getDisplayMetrics().density;
         float shade=(context.getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES?.09f:.94f;
         color=new float[]{shade,shade,shade};
@@ -132,14 +139,44 @@ final class TaskCover {
     private float decorationProgress(){
         return decorationAt<0?0:duration==0?1:Math.min(1,((frameClock<0?SystemClock.elapsedRealtime():frameClock)-decorationAt)/(float)duration);
     }
-    void target(RectF bounds){if(!exiting)to.set(bounds);}
-    void resumeTo(RectF bounds,float radius){to.set(bounds);radiusTo=radius;began=SystemClock.elapsedRealtime();}
+    private void refreshScreenCorners(){
+        try{
+            Object display=a.call(task,"getDisplayContent");
+            Rect bounds=new Rect((Rect)a.call(display,"getBounds"));
+            Display physical=iconContext.getSystemService(DisplayManager.class).getDisplay(a.integer(display,"getDisplayId"));
+            if(physical==null)return;
+            Context displayContext=iconContext.createDisplayContext(physical);
+            Class<?> decorations=Class.forName("com.android.internal.policy.ScreenDecorationsUtils");
+            float radius=(Float)decorations.getMethod("getWindowCornerRadius",Context.class).invoke(null,displayContext);
+            screenBounds=bounds;
+            screenRadius=Float.isFinite(radius)&&radius>0?radius:0;
+        }catch(Exception|LinkageError error){
+            android.util.Log.w("NativeComplements","COVER_SCREEN_CORNERS_UNAVAILABLE",error);
+        }
+    }
+    /** Fullscreen uses the platform's window radius, which covers all physical display corners. */
+    static float cornerRadius(RectF pose,Rect screen,float screenRadius,float windowRadius){
+        boolean fullscreen=screen!=null&&Math.abs(pose.left-screen.left)<=1&&Math.abs(pose.top-screen.top)<=1
+            &&Math.abs(pose.right-screen.right)<=1&&Math.abs(pose.bottom-screen.bottom)<=1;
+        float radius=fullscreen?screenRadius:windowRadius;
+        return Float.isFinite(radius)?Math.max(0,Math.min(Math.min(pose.width(),pose.height())/2,radius)):0;
+    }
+    void target(RectF bounds){
+        if(exiting||to.equals(bounds))return;
+        refreshScreenCorners();to.set(bounds);
+        radiusTo=cornerRadius(to,screenBounds,screenRadius,radiusTo);
+    }
+    void resumeTo(RectF bounds,float radius){
+        refreshScreenCorners();to.set(bounds);radiusTo=cornerRadius(to,screenBounds,screenRadius,radius);
+        began=SystemClock.elapsedRealtime();
+    }
     void delayEntry(long delay){notBefore=SystemClock.elapsedRealtime()+Math.max(0,delay);}
     boolean exiting(){return exiting;}
     long exit(){
         if(exiting)return 0;
         exiting=true;ownerAlpha=0;began=SystemClock.elapsedRealtime();
-        from.set(to);float dx=from.width()*.025f,dy=from.height()*.025f;to.inset(dx,dy);
+        from.set(to);radiusFrom=radiusTo;
+        float dx=from.width()*.025f,dy=from.height()*.025f;to.inset(dx,dy);
         return fadeDuration;
     }
     boolean step(boolean ready,boolean visible)throws Exception{

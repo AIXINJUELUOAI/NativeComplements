@@ -31,3 +31,5 @@
 
 - 小窗触控区域合并到单个受信任窗口，通过 InternalInsetsInfo 的可触区域并集保留内容穿透、过渡阻断、入场手势、键盘安全区与系统优先级；隐藏接口预检失败时回退原六窗口。横屏导航背景同时处理 Launcher 的 TaskbarBackgroundRenderer 和 TaskbarTransitions 专属 BarBackgroundDrawable，保持原生动画状态更新与到期恢复。
 - 图标批量设置仅从图标适配页顶部菜单进入，先选择应用，再独立选择桌面、莫奈、通知模式，每路默认保持现有。素材与生成缓存各应用独立保留，一次提交整个批次并刷新。
+
+- TaskCover 的全屏端点使用所属显示器的 ScreenDecorationsUtils.getWindowCornerRadius，按系统统一窗口半径规则处理分辨率缩放并与小窗圆角插值；新建、恢复衔接及目标边界变化时更新，逐帧复用。
