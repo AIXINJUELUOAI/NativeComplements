@@ -164,3 +164,22 @@ TaskCover 正常绘制时在同一 SurfaceControl.Transaction 中设置背景与
 - 验证开启与关闭主题图标、打开与返回、预测性返回取消、缓存刷新和动态颜色切换。
 
 静态证据位于 verification/icon-monet-return，包含目标桌面的 FloatingIconView 加载回调与 IconLoader 实现。
+
+## 待办，Pixel Android 17 QPR2 兼容性，2026-11-13
+
+本轮共三项实施任务，分别为小窗运动流畅度、莫奈图标归位闪切与 Pixel QPR2 适配。用户随后撤回了时间字号的疑问，时间尺寸检查取消。
+
+已分析 Pixel 10 Pro / CP4A.261105.040.A1 / SDK 37.2 的 system-dump-20261113-1722.zip，以及 LSPosed_20261113_164749.zip、native-complements-diagnostics.zip。原始材料、按宿主解析的 DEX 定义、反编译结果、离线核对脚本和分析结论保存于 verification/pixel-qpr2-20261113。
+
+日志版本为 0.9.19-signal-test1 / 96。已将 NoSuchMethodException 与材料中的实际定义对应。
+
+- handleStartResult 从 7 参数变为 8 参数，新增 CallerInfo。当前预检在此失败并卸载已登记的小窗 Hook，是小窗核心停用的直接路径。
+- startActivityUnchecked 新增 TaskDisplayArea 与 CallerInfo，14 参数变为 16 参数。关联跳转需要明确的新旧签名及参数索引映射。
+- Task.isResizeable(boolean) 改为无参，此处是可选的受控可调整性适配失败。
+- 手势 Lambda20 已成为 Runnable，实际输入字段指向 Lambda24 的 invoke。通知点击对应的 runner/sender 也由旧 Lambda7/10 变为 Lambda6/12。适配时以目标字段类型及调用结构验证入口。
+- 双栏旧 getter、面板资源更新与 Compose emitter 路径发生变化。目标 SceneContainerFlag 的 legacy 断言直接抛出异常，需要适配实际新面板路径。
+- SystemUI Kotlin.Pair.component2 被编译移除，保留 second 字段，信号显示预检需要兼容该差异。
+
+图标、通知图标、状态栏偏移的入口在原日志中已有加载成功记录。另有配置读取失败及 Motion Unknown authority，需要在安装状态下核对 Provider 注册和完整异常栈。用户确认材料导出前已经卸载模块，卸载后的包查询不作为此前接口故障或 Provider 故障的根因。
+
+离线检查确认 Launcher 自身的 IconProvider 三参数方法及导航栏 38 项预检方法仍存在。SystemUI 与 Launcher 内置的同名 IconProvider 不同，已按宿主区分。现有文件使用 DEX 041 容器，核对时已遍历全部逻辑 DEX。上述结论属于离线分析，实施后还需反馈设备复测。电话服务内部接口还需相应 Telecom 材料或完整运行证据补充。
