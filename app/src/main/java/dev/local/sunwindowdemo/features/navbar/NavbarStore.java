@@ -26,11 +26,6 @@ public final class NavbarStore {
         return result;
     }
 
-    public static void setTemplatesEnabled(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean("templates_enabled", enabled).apply();
-        changed(context);
-    }
-
     public static void setLandscapeClear(Context context, boolean enabled) {
         preferences(context).edit().putBoolean("landscape_clear", enabled).apply();
         changed(context);

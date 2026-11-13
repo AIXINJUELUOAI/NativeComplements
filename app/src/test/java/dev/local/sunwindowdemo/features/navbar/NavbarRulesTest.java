@@ -39,11 +39,11 @@ public class NavbarRulesTest {
         assertEquals(0, rules.resolve("sample", "sample.Details", 11).mode());
         assertEquals(1, rules.resolve("sample", "sample.Other", 11).mode());
     }
-    @Test public void disabledFeatureTemplateSwitchAndVersionThreshold() {
+    @Test public void templatesFollowMasterSwitchIncludingOldDisabledTemplatePreference() {
         Bundle snapshot = settings();
         assertEquals(1, new NavbarRules(snapshot).resolve("sample", "sample.Other", 10).mode());
         snapshot.putBoolean("templates_enabled", false);
-        assertEquals(1, new NavbarRules(snapshot).resolve("sample", "sample.Other", 11).mode());
+        assertEquals(2, new NavbarRules(snapshot).resolve("sample", "sample.Other", 11).mode());
         snapshot.putBoolean("enabled", false);
         assertEquals(0, new NavbarRules(snapshot).resolve("sample", "sample.Other", 11).mode());
     }
@@ -61,6 +61,15 @@ public class NavbarRulesTest {
         assertEquals(1, rules.resolve("com.taobao.taobao", "com.taobao.tao.welcome.Welcome", Long.MAX_VALUE).mode());
         assertEquals(2, rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", Long.MAX_VALUE).mode());
         assertEquals(1, rules.resolve("com.sankuai.meituan", "com.meituan.android.pt.homepage.activity.MainActivity", Long.MAX_VALUE).mode());
+        var jd = new org.json.JSONObject(snapshot.getString("templates")).getJSONObject("packages")
+                .getJSONObject("com.jingdong.app.mall").getJSONObject("rules");
+        for (var keys = jd.keys(); keys.hasNext();) {
+            String activity = keys.next().replace("*", "Other");
+            assertEquals(0, rules.resolve("com.jingdong.app.mall", activity, Long.MAX_VALUE).mode());
+        }
+        assertEquals(0, rules.resolve("com.jingdong.app.mall", "new.UnknownActivity", Long.MAX_VALUE).mode());
+        snapshot.putInt("com.jingdong.app.mall/*", 1);
+        assertEquals(1, new NavbarRules(snapshot).resolve("com.jingdong.app.mall", "new.UnknownActivity", Long.MAX_VALUE).mode());
         snapshot.putInt("com.taobao.taobao/com.taobao.android.detail2.core.framework.NewDetailActivity", 0);
         assertEquals(0, new NavbarRules(snapshot).resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", Long.MAX_VALUE).mode());
     }

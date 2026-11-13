@@ -30,9 +30,9 @@ public final class NavbarRules {
         String packageKey = packageName + "/*";
         if (settings.containsKey(packageKey)) return new Choice(valid(settings.getInt(packageKey)), null, "用户规则");
         JSONObject app = packages.optJSONObject(packageName);
-        if (settings.getBoolean("templates_enabled", true) && app != null && !app.optBoolean("enabled"))
+        if (app != null && !app.optBoolean("enabled"))
             return new Choice(0, null, "模板关闭适配");
-        if (settings.getBoolean("templates_enabled", true) && app != null && app.optBoolean("enabled")
+        if (app != null && app.optBoolean("enabled")
                 && version > app.optLong("disableVersionCode", -1)) {
             JSONObject rules = app.optJSONObject("rules");
             if (rules != null) {

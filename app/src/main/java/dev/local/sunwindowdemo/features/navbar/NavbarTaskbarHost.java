@@ -5,6 +5,7 @@ import android.content.*;
 import android.graphics.*;
 import android.os.*;
 import android.view.View;
+import android.graphics.drawable.Drawable;
 import io.github.libxposed.api.*;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -15,6 +16,7 @@ final class NavbarTaskbarHost {
     private static final Set<View> layers = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<Object, java.lang.ref.WeakReference<View>> backgrounds = new WeakHashMap<>();
     private static final Map<Object, Boolean> handles = new WeakHashMap<>();
+    private static final Map<Object, java.lang.ref.WeakReference<View>> transitionBackgrounds = new WeakHashMap<>();
     private static boolean active, connected, settingHandle;
     private static int color, mode, navHeight;
     private static final Paint band = new Paint();
@@ -77,6 +79,42 @@ final class NavbarTaskbarHost {
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             android.util.Log.e("NativeNavbar", "Taskbar preflight failed", error);
         }
+        installTransitions(module, loader);
+    }
+
+    private static void installTransitions(XposedModule module, ClassLoader loader) {
+        try {
+            Class<?> taskbar = Class.forName("com.android.launcher3.taskbar.TaskbarTransitions", false, loader);
+            Class<?> transitions = Class.forName("com.android.systemui.shared.statusbar.phone.BarTransitions", false, loader);
+            Class<?> background = Class.forName(transitions.getName() + "$BarBackgroundDrawable", false, loader);
+            module.hook(transitions.getDeclaredConstructor(View.class, int.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Object result = chain.proceed();
+                if (taskbar.isInstance(chain.getThisObject())) {
+                    View view = (View) chain.getArg(0);
+                    transitionBackgrounds.put(NavbarReflect.field(chain.getThisObject(), "mBarBackground"),
+                            new java.lang.ref.WeakReference<>(view));
+                }
+                return result;
+            });
+            module.hook(background.getDeclaredMethod("draw", Canvas.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                var reference = transitionBackgrounds.get(chain.getThisObject());
+                View owner = reference == null ? null : reference.get();
+                if (!active || mode != NavbarStore.FLOATING || owner == null || owner.getDisplay() == null
+                        || owner.getDisplay().getDisplayId() != 0) return chain.proceed();
+                Canvas canvas = (Canvas) chain.getArg(0);
+                int save = canvas.save();
+                try {
+                    // Keep native mode/animation updates running while suppressing only this background.
+                    canvas.clipRect(0, 0, 0, 0);
+                    return chain.proceed();
+                } finally { canvas.restoreToCount(save); }
+            });
+            android.util.Log.i("NativeNavbar", "TASKBAR_TRANSITIONS_READY");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            android.util.Log.e("NativeNavbar", "Taskbar transitions preflight failed", error);
+        }
     }
 
     static void tint(Paint paint, int mode, int color) {
@@ -116,6 +154,11 @@ final class NavbarTaskbarHost {
         navHeight = nextHeight;
         if (!active && !wasActive) return;
         for (View layer : layers) if (layer.getDisplay() != null && layer.getDisplay().getDisplayId() == 0) layer.invalidate();
+        for (var entry : transitionBackgrounds.entrySet()) {
+            View owner = entry.getValue().get();
+            if (owner != null && owner.getDisplay() != null && owner.getDisplay().getDisplayId() == 0)
+                ((Drawable) entry.getKey()).invalidateSelf();
+        }
         settingHandle = true;
         try {
             for (var entry : handles.entrySet()) {

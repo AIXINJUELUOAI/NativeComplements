@@ -13,6 +13,8 @@ EDGE = "Lcom/android/systemui/navigationbar/gestural/"
 CLICK = "Lcom/android/systemui/statusbar/phone/StatusBarNotificationActivityStarter$$ExternalSyntheticLambda"
 SHADE = "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository"
 ICON = "Lcom/android/launcher3/views/FloatingIconView"
+BAR = "Lcom/android/systemui/shared/statusbar/phone/BarTransitions"
+INSETS = "Landroid/view/ViewTreeObserver"
 TARGETS = {
     WM+"ActivityStarter;", WM+"Task;", EDGE+"DisplayBackGestureHandlerImpl;",
     EDGE+"EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
@@ -22,6 +24,8 @@ TARGETS = {
     ICON+";", ICON+"$IconLoadResult;", "Lcom/android/server/input/InputManagerService;",
     "Lcom/android/server/input/NativeInputManagerService;", "Landroid/view/InputEvent;",
     "Landroid/view/MotionEvent;",
+    BAR+";", BAR+"$BarBackgroundDrawable;", "Lcom/android/launcher3/taskbar/TaskbarTransitions;",
+    INSETS+";", INSETS+"$InternalInsetsInfo;", INSETS+"$OnComputeInternalInsetsListener;",
 }
 
 
@@ -104,6 +108,15 @@ def verify(classes, qpr2):
     method("Lcom/android/server/input/NativeInputManagerService;", "injectInputEvent", "(Landroid/view/InputEvent;ZIIII)I")
     method("Landroid/view/InputEvent;", "getDisplayId", "()I")
     method("Landroid/view/MotionEvent;", "split", "(I)Landroid/view/MotionEvent;")
+    method(BAR+";", "<init>", "(Landroid/view/View;I)V")
+    field(BAR+";", "mBarBackground", BAR+"$BarBackgroundDrawable;")
+    method(BAR+"$BarBackgroundDrawable;", "draw", "(Landroid/graphics/Canvas;)V")
+    assert "Lcom/android/launcher3/taskbar/TaskbarTransitions;" in classes
+    method(INSETS+";", "addOnComputeInternalInsetsListener", "("+INSETS+"$OnComputeInternalInsetsListener;)V")
+    method(INSETS+"$OnComputeInternalInsetsListener;", "onComputeInternalInsets", "("+INSETS+"$InternalInsetsInfo;)V")
+    method(INSETS+"$InternalInsetsInfo;", "setTouchableInsets", "(I)V")
+    field(INSETS+"$InternalInsetsInfo;", "touchableRegion", "Landroid/graphics/Region;")
+    field(INSETS+"$InternalInsetsInfo;", "TOUCHABLE_INSETS_REGION", "I")
 
 
 if __name__ == "__main__":
@@ -123,19 +136,24 @@ if __name__ == "__main__":
                 for owner, value in read_archive(path).items():
                     if owner.startswith("Lcom/android/launcher3/") and "SystemUI" in path.name:
                         continue
+                    if owner.startswith(BAR) and "SystemUI" in path.name:
+                        continue
                     classes[owner] = value
             verify(classes, label == "qpr2")
             method_names={"handleStartResult","startActivityUnchecked","isResizeable","invoke","run","startPendingIntent",
                           "emit","setIcon","start","filterInputEvent","setInputFilter","setInputFilterEnabled",
-                          "injectInputEvent","getDisplayId","split"}
+                          "injectInputEvent","getDisplayId","split","draw","addOnComputeInternalInsetsListener",
+                          "onComputeInternalInsets","setTouchableInsets"}
             field_names={"onInputEvent","f$0","f$1","f$2","f$3","f$4","f$5","second","legacyUseSplitShade",
-                         "legacyUseSplitShade$delegate","isThemed","mNative","mInputFilterLock","mInputFilter"}
-            for value in classes.values():
-                value["methods"]=[m for m in value["methods"] if m["name"] in method_names]
+                         "legacyUseSplitShade$delegate","isThemed","mNative","mInputFilterLock","mInputFilter",
+                         "mBarBackground","touchableRegion","TOUCHABLE_INSETS_REGION"}
+            for owner, value in classes.items():
+                value["methods"]=[m for m in value["methods"] if m["name"] in method_names
+                                  or owner == BAR+";" and m["name"] == "<init>"]
                 value["fields"]=[f for f in value["fields"] if f["name"] in field_names]
             data[label] = {"sha256": hashes, "classes": classes}
         SNAPSHOT.write_text(json.dumps(data, ensure_ascii=True, indent=2)+"\n", encoding="utf-8")
     data = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
     for label, host in data.items():
         verify(host["classes"], label == "qpr2")
-        print("PASS", label, "exact test4 input, launcher and compatibility target signatures")
+        print("PASS", label, "exact input, launcher, taskbar transitions and combined-controls target signatures")

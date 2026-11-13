@@ -39,6 +39,58 @@
           }
         ]
       },
+      "Landroid/view/ViewTreeObserver$InternalInsetsInfo;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver$InternalInsetsInfo;",
+            "name": "TOUCHABLE_INSETS_REGION",
+            "type": "I",
+            "access_flags": 25
+          },
+          {
+            "owner": "Landroid/view/ViewTreeObserver$InternalInsetsInfo;",
+            "name": "touchableRegion",
+            "type": "Landroid/graphics/Region;",
+            "access_flags": 17
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver$InternalInsetsInfo;",
+            "name": "setTouchableInsets",
+            "descriptor": "(I)V",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1537,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;",
+            "name": "onComputeInternalInsets",
+            "descriptor": "(Landroid/view/ViewTreeObserver$InternalInsetsInfo;)V",
+            "access_flags": 1025
+          }
+        ]
+      },
+      "Landroid/view/ViewTreeObserver;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver;",
+            "name": "addOnComputeInternalInsetsListener",
+            "descriptor": "(Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;)V",
+            "access_flags": 1
+          }
+        ]
+      },
       "Lcom/android/server/input/InputManagerService;": {
         "superclass": "Landroid/hardware/input/IInputManager$Stub;",
         "access_flags": 1,
@@ -152,6 +204,32 @@
           }
         ]
       },
+      "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1025,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;",
+            "name": "mBarBackground",
+            "type": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions$BarBackgroundDrawable;",
+            "access_flags": 20
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;",
+            "name": "<init>",
+            "descriptor": "(Landroid/view/View;I)V",
+            "access_flags": 65537
+          }
+        ]
+      },
+      "Lcom/android/launcher3/taskbar/TaskbarTransitions;": {
+        "superclass": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": []
+      },
       "Lcom/android/launcher3/views/FloatingIconView$IconLoadResult;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 17,
@@ -175,6 +253,19 @@
             "name": "setIcon",
             "descriptor": "(Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;Ljava/util/function/Supplier;IZ)V",
             "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/shared/statusbar/phone/BarTransitions$BarBackgroundDrawable;": {
+        "superclass": "Landroid/graphics/drawable/Drawable;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions$BarBackgroundDrawable;",
+            "name": "draw",
+            "descriptor": "(Landroid/graphics/Canvas;)V",
+            "access_flags": 1
           }
         ]
       },
@@ -411,6 +502,19 @@
       "verification\\pixel-qpr2-20261113\\apk\\SystemUIGoogle.apk": "458b481b241552d67d33963f3cb449a9e5e53d4cfcd28e8bb1d919b814fd982f"
     },
     "classes": {
+      "Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1537,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;",
+            "name": "onComputeInternalInsets",
+            "descriptor": "(Landroid/view/ViewTreeObserver$InternalInsetsInfo;)V",
+            "access_flags": 1025
+          }
+        ]
+      },
       "Landroid/view/InputEvent;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 1025,
@@ -440,6 +544,45 @@
             "name": "split",
             "descriptor": "(I)Landroid/view/MotionEvent;",
             "access_flags": 17
+          }
+        ]
+      },
+      "Landroid/view/ViewTreeObserver$InternalInsetsInfo;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver$InternalInsetsInfo;",
+            "name": "TOUCHABLE_INSETS_REGION",
+            "type": "I",
+            "access_flags": 25
+          },
+          {
+            "owner": "Landroid/view/ViewTreeObserver$InternalInsetsInfo;",
+            "name": "touchableRegion",
+            "type": "Landroid/graphics/Region;",
+            "access_flags": 17
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver$InternalInsetsInfo;",
+            "name": "setTouchableInsets",
+            "descriptor": "(I)V",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Landroid/view/ViewTreeObserver;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/ViewTreeObserver;",
+            "name": "addOnComputeInternalInsetsListener",
+            "descriptor": "(Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;)V",
+            "access_flags": 1
           }
         ]
       },
@@ -550,6 +693,32 @@
           }
         ]
       },
+      "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1025,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;",
+            "name": "mBarBackground",
+            "type": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions$BarBackgroundDrawable;",
+            "access_flags": 20
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;",
+            "name": "<init>",
+            "descriptor": "(Landroid/view/View;I)V",
+            "access_flags": 65537
+          }
+        ]
+      },
+      "Lcom/android/launcher3/taskbar/TaskbarTransitions;": {
+        "superclass": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions;",
+        "access_flags": 17,
+        "fields": [],
+        "methods": []
+      },
       "Lcom/android/launcher3/views/FloatingIconView$IconLoadResult;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 17,
@@ -573,6 +742,19 @@
             "name": "setIcon",
             "descriptor": "(Landroid/graphics/drawable/Drawable;Landroid/graphics/drawable/Drawable;Ljava/util/function/Supplier;IZ)V",
             "access_flags": 17
+          }
+        ]
+      },
+      "Lcom/android/systemui/shared/statusbar/phone/BarTransitions$BarBackgroundDrawable;": {
+        "superclass": "Landroid/graphics/drawable/Drawable;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/shared/statusbar/phone/BarTransitions$BarBackgroundDrawable;",
+            "name": "draw",
+            "descriptor": "(Landroid/graphics/Canvas;)V",
+            "access_flags": 1
           }
         ]
       },

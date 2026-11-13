@@ -52,7 +52,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
         return
     }
     var showDefault by remember { mutableStateOf(false) }
-    val templatesEnabled = settings.getBoolean("templates_enabled", true)
     val templates = remember(settings) {
         JSONObject(settings.getString("templates", "{}")).optJSONObject("packages")
     }
@@ -67,9 +66,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 ToggleRow("启用导航栏适配", value = settings.getBoolean("enabled", false)) {
                     NavbarStore.setEnabled(context, it)
                 }
-                ToggleRow("内置应用模板", "小米与 HyperNavBar 社区规则，逐 Activity 自动选择模式", templatesEnabled) {
-                    NavbarStore.setTemplatesEnabled(context, it)
-                }
                 ToggleRow("横屏导航条透明", "移除手势导航条背后的系统阴影", settings.getBoolean("landscape_clear", true)) {
                     NavbarStore.setLandscapeClear(context, it)
                 }
@@ -83,7 +79,7 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
             val activityRules = settings.keySet().count { it.startsWith("${app.packageName}/") && it != "${app.packageName}/*" }
             val source = when {
                 packageMode >= 0 -> "应用默认 · ${modeLabel(packageMode)}"
-                templatesEnabled && templates?.optJSONObject(app.packageName) != null -> "内置模板"
+                templates?.optJSONObject(app.packageName) != null -> "内置模板"
                 else -> "通用 · ${modeLabel(settings.getInt("default_mode", 0))}"
             }
             SettingsGroup {

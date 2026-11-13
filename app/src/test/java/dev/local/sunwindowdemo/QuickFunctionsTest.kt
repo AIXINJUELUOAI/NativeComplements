@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.test.core.app.ApplicationProvider
@@ -223,11 +224,9 @@ class QuickFunctionsTest {
             }
         }
         compose.onNodeWithText("启用弹幕通知").performClick()
-        compose.onNodeWithText("同时显示条数").performClick()
-        compose.onNodeWithText("五条").performClick()
+        compose.onNodeWithContentDescription("同时显示条数").performSemanticsAction(SemanticsActions.SetProgress) { it(1f) }
         compose.runOnIdle { assertEquals(5,BarrageStore.read(context).getInt("lines")) }
-        compose.onNodeWithText("同时显示条数").performClick()
-        compose.onNodeWithText("无限").performClick()
+        compose.onNodeWithContentDescription("同时显示条数").performSemanticsAction(SemanticsActions.SetProgress) { it(2f) }
         compose.runOnIdle { assertEquals(0,BarrageStore.read(context).getInt("lines")) }
         compose.onNodeWithText("逐应用设置").assertIsDisplayed()
         compose.onNodeWithText("示例应用").performScrollTo().performClick()

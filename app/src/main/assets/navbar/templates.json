@@ -1209,7 +1209,7 @@
       }
     },
     "com.jingdong.app.mall": {
-      "enabled": true,
+      "enabled": false,
       "rules": {
         "com.jd.lib.cart.ShoppingCartNewActivity": {
           "mode": 1,

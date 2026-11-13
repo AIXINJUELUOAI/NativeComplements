@@ -9,6 +9,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -28,7 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (String) -> Unit = {}) {
+fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (String) -> Unit = {},
+                    selection: Set<String>? = null, onSelect: (String) -> Unit = {}) {
     val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf(IconLayerStore.read(context)) }
@@ -83,7 +86,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (S
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(bottom = 32.dp + bottomInset)) {
             item {
-                SettingsGroup {
+                if (selection == null) SettingsGroup {
                     ToggleRow("启用图标适配", value = state.getBoolean("enabled")) {
                         IconLayerStore.enabled(context, it); refreshState()
                     }
@@ -113,8 +116,11 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (S
                         IconPolicy.ALGORITHM -> "算法补全"
                         IconPolicy.ORIGINAL -> "彩色图标不处理"
                         else -> if (app.packageName in library) "自动 · 素材库" else "自动 · 应用原图"
-                    }, onClick = { onApp(app.packageName) }, leading = { IconRowAppIcon(app) },
-                        trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) })
+                    }, onClick = { if (selection == null) onApp(app.packageName) else onSelect(app.packageName) },
+                        leading = { IconRowAppIcon(app) }, trailing = {
+                            if (selection == null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            else Checkbox(app.packageName in selection, onCheckedChange = null)
+                        })
                 }
                 Spacer(Modifier.height(2.dp))
             }
@@ -144,6 +150,58 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (S
         AlertDialog(onDismissRequest = { dismiss() }, title = { Text("选择图标源") },
             text = { LazyColumn { items(archive.sources) { source -> TextButton(onClick = { install(archive, source) }) { Text("${source.title} · ${source.completeCount()} 个", Modifier.fillMaxWidth()) } } } },
             confirmButton = {}, dismissButton = { TextButton(onClick = { dismiss() }) { Text("取消") } })
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun IconBatchDialog(packages: Set<String>, onDismiss: () -> Unit, onApplied: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var color by remember { mutableIntStateOf(-1) }
+    var monochrome by remember { mutableIntStateOf(-1) }
+    var notification by remember { mutableIntStateOf(-1) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    val masks = listOf(-1 to "保持现有", IconPolicy.FOLLOW to "跟随前景", IconPolicy.UNCHANGED to "不处理")
+    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() },
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { !busy })) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).navigationBarsPadding().padding(horizontal = 20.dp)) {
+            Text("批量设置 · ${packages.size} 个应用", style = MaterialTheme.typography.headlineSmall)
+            Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+                IconBatchModes("桌面图标", color, listOf(-1 to "保持现有", IconPolicy.AUTO to "自动",
+                    IconPolicy.ALGORITHM to "算法补全", IconPolicy.ORIGINAL to "原图"), !busy) { color = it }
+                IconBatchModes("莫奈图标", monochrome, masks, !busy) { monochrome = it }
+                IconBatchModes("通知图标", notification, masks, !busy) { notification = it }
+            }
+            if (error.isNotBlank()) Hint(error)
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onDismiss, enabled = !busy) { Text("取消") }
+                Button(enabled = !busy && (color != -1 || monochrome != -1 || notification != -1), onClick = {
+                    busy = true
+                    scope.launch {
+                        try {
+                            withContext(Dispatchers.IO) { IconPolicy.batch(context, packages, color, monochrome, notification) }
+                            onApplied()
+                        } catch (e: Exception) { error = e.message ?: "保存失败" }
+                        finally { busy = false }
+                    }
+                }) { Text("应用") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun IconBatchModes(title: String, selected: Int, modes: List<Pair<Int, String>>, enabled: Boolean,
+                           onSelect: (Int) -> Unit) {
+    GroupTitle(title)
+    SettingsGroup {
+        modes.forEach { (mode, label) ->
+            SettingRow(label, onClick = if (enabled) ({ onSelect(mode) }) else null,
+                trailing = { RadioButton(mode == selected, null, enabled = enabled) })
+        }
     }
 }
 

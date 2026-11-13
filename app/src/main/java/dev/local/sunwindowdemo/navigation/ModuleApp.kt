@@ -4,11 +4,13 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -28,6 +30,7 @@ import dev.local.sunwindowdemo.features.barrage.BarrageHistoryScreen
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconDiagnosticsScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconLayerScreen
+import dev.local.sunwindowdemo.features.iconlayers.IconBatchDialog
 import dev.local.sunwindowdemo.features.motion.MotionScreen
 import dev.local.sunwindowdemo.features.motion.MotionStore
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
@@ -57,19 +60,34 @@ fun ModuleApp(
     openNavbarApp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    var iconBatch by rememberSaveable { mutableStateOf(false) }
+    var iconSelection by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var showIconBatch by rememberSaveable { mutableStateOf(false) }
+    val selectingIcons = page == Page.IconLayers && iconBatch
+    val selectedIcons = iconSelection.toSet().intersect(controller.apps.map { it.packageName }.toSet())
+    fun cancelIconBatch() { iconBatch = false; showIconBatch = false; iconSelection = emptyList() }
+    BackHandler(selectingIcons && !showIconBatch) { cancelIconBatch() }
     val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
     val navbarApp = if (page == Page.NavbarApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
     // Standard Activity navigation leaves predictive Back and its animation with Android.
     SettingsPage(
         title = when (page) {
+            Page.IconLayers -> if (selectingIcons) "已选择 ${selectedIcons.size} 个应用" else page.title
             Page.IconApp -> iconApp?.label ?: "图标设置"
             Page.NavbarApp -> navbarApp?.label ?: "导航栏设置"
             else -> page.title
         },
-        onBack = if (page == Page.Home) null else back,
+        onBack = if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
+        expandedTitle = !selectingIcons,
         actions = {
             if (page == Page.Motion) MotionActions()
-            if (page == Page.IconLayers) IconLayerActions()
+            if (selectingIcons) {
+                TextButton(onClick = {
+                    iconSelection = if (selectedIcons.size == controller.apps.size) emptyList()
+                        else controller.apps.map { it.packageName }
+                }, enabled = controller.catalogLoaded) { Text(if (selectedIcons.size == controller.apps.size) "全不选" else "全选") }
+                TextButton(onClick = { showIconBatch = true }, enabled = selectedIcons.isNotEmpty()) { Text("下一步") }
+            } else if (page == Page.IconLayers) IconLayerActions(onBatch = { iconBatch = true })
         },
     ) { bottomInset ->
         when (page) {
@@ -81,7 +99,10 @@ fun ModuleApp(
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
-            Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset, openIconApp)
+            Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset, openIconApp,
+                selection = if (selectingIcons) selectedIcons else null, onSelect = { pkg ->
+                    iconSelection = if (pkg in selectedIcons) iconSelection - pkg else iconSelection + pkg
+                })
             Page.IconApp -> IconAppScreen(iconApp, bottomInset)
             Page.Blocked -> AppPickerScreen(controller, bottomInset = bottomInset)
             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
@@ -124,6 +145,11 @@ fun ModuleApp(
             }
         }
     }
+    if (selectingIcons && showIconBatch) IconBatchDialog(selectedIcons,
+        onDismiss = { showIconBatch = false }, onApplied = {
+            cancelIconBatch()
+            Toast.makeText(context, "批量设置已保存", Toast.LENGTH_SHORT).show()
+        })
 }
 
 @Composable
@@ -141,7 +167,7 @@ private fun MotionActions() {
 }
 
 @Composable
-private fun IconLayerActions() {
+private fun IconLayerActions(onBatch: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -153,6 +179,7 @@ private fun IconLayerActions() {
     Box {
         IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "更多") }
         DropdownMenu(menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text("批量设置") }, onClick = { menu = false; onBatch() })
             DropdownMenuItem(text = { Text("移除图标库") }, onClick = { menu = false; remove = true })
         }
     }

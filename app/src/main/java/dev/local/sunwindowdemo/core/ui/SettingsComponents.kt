@@ -136,16 +136,17 @@ fun SplitSwitchRow(title: String, subtitle: String? = null, value: Boolean, onTo
 }
 
 @Composable
-fun SliderRow(title: String, subtitle: String? = null, value: Int, range: IntRange, unit: String, onCommit: (Int) -> Unit) {
+fun SliderRow(title: String, subtitle: String? = null, value: Int, range: IntRange, unit: String,
+              steps: Int = 0, valueLabel: (Int) -> String = { "$it$unit" }, onCommit: (Int) -> Unit) {
     var pending by remember(value) { mutableFloatStateOf(value.toFloat()) }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surfaceContainerLow)
         .padding(horizontal = 16.dp, vertical = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-            Text("${pending.roundToInt()}$unit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            Text(valueLabel(pending.roundToInt()), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
         }
         Slider(value = pending, onValueChange = { pending = it.roundToInt().toFloat() }, onValueChangeFinished = { onCommit(pending.roundToInt()) },
-            valueRange = range.first.toFloat()..range.last.toFloat(),
+            valueRange = range.first.toFloat()..range.last.toFloat(), steps = steps,
             modifier = Modifier.fillMaxWidth().semantics { contentDescription = title })
         if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

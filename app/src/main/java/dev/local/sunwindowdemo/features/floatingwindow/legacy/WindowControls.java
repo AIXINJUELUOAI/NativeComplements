@@ -11,6 +11,7 @@ import android.widget.ImageView;
 import android.content.res.ColorStateList;
 import android.graphics.drawable.RippleDrawable;
 import java.util.*;
+import java.lang.reflect.*;
 
 /** Trusted app overlays stay below native notification, status bar and IME windows. */
 final class WindowControls {
@@ -18,6 +19,8 @@ final class WindowControls {
     private final WindowManager wm;
     private final List<View> views=new ArrayList<>();
     private final List<WindowManager.LayoutParams> params=new ArrayList<>();
+    private FrameLayout controlsRoot;
+    private boolean separateWindows;
     private String token,frame="";
     private int taskId=-1;
     private float x,y,w,h,scale,normalScale=.75f;
@@ -111,6 +114,7 @@ final class WindowControls {
         else if(!dragging||edgeGesture==2)layout();
     }
     private void build(){
+        if(!separateWindows)buildControlsRoot();
         {
             final String boundToken=token;
             View mini=new ClearView(){
@@ -330,7 +334,55 @@ final class WindowControls {
             p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         }
         SystemUiHost.trust(p);
-        wm.addView(v,p);views.add(v);params.add(p);
+        if(controlsRoot==null)wm.addView(v,p);
+        else{
+            v.setVisibility(View.GONE);
+            controlsRoot.addView(v,new FrameLayout.LayoutParams(1,1,Gravity.TOP|Gravity.LEFT));
+        }
+        views.add(v);params.add(p);
+    }
+    private void buildControlsRoot(){
+        try{
+            Class<?> listener=Class.forName("android.view.ViewTreeObserver$OnComputeInternalInsetsListener");
+            Class<?> info=Class.forName("android.view.ViewTreeObserver$InternalInsetsInfo");
+            Method setTouchable=info.getMethod("setTouchableInsets",int.class);
+            Field regionField=info.getField("touchableRegion");
+            int regionMode=info.getField("TOUCHABLE_INSETS_REGION").getInt(null);
+            FrameLayout root=new ClearView(){
+                @Override public boolean dispatchTouchEvent(MotionEvent event){
+                    if(event.getActionMasked()==MotionEvent.ACTION_OUTSIDE){hideMenu();return true;}
+                    return super.dispatchTouchEvent(event);
+                }
+            };
+            Object callback=Proxy.newProxyInstance(listener.getClassLoader(),new Class<?>[]{listener},(proxy,method,args)->{
+                if(method.getName().equals("onComputeInternalInsets")){
+                    setTouchable.invoke(args[0],regionMode);
+                    fillTouchRegion((Region)regionField.get(args[0]));
+                    return null;
+                }
+                if(method.getName().equals("hashCode"))return System.identityHashCode(proxy);
+                if(method.getName().equals("equals"))return proxy==args[0];
+                return "NativeComplements controls insets";
+            });
+            ViewTreeObserver.class.getMethod("addOnComputeInternalInsetsListener",listener).invoke(root.getViewTreeObserver(),callback);
+            WindowManager.LayoutParams p=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+                |WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,PixelFormat.TRANSLUCENT);
+            p.gravity=Gravity.TOP|Gravity.LEFT;p.setFitInsetsTypes(0);p.setTitle("NativeComplements-controls");
+            p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+            p.windowAnimations=0;SystemUiHost.trust(p);
+            wm.addView(root,p);controlsRoot=root;
+            android.util.Log.i("NativeComplements","CONTROLS_ROOT_READY windows=1");
+        }catch(ReflectiveOperationException|RuntimeException error){
+            separateWindows=true;
+            android.util.Log.w("NativeComplements","Combined controls unavailable; using separate windows",error);
+        }
+    }
+    void fillTouchRegion(Region region){
+        region.setEmpty();
+        if(systemBlocked||transitioning&&!inputPending)return;
+        for(View view:views)if(view.getVisibility()==View.VISIBLE)
+            region.op(view.getLeft(),view.getTop(),view.getRight(),view.getBottom(),Region.Op.UNION);
     }
     private void rect(int index,float x,float y,float w,float h){
         if(index>=views.size())return;WindowManager.LayoutParams p=params.get(index);
@@ -347,7 +399,12 @@ final class WindowControls {
         int nx=Math.round(x),ny=Math.round(y),nw=Math.max(1,Math.round(w)),nh=Math.max(1,Math.round(h));
         View view=views.get(index);view.setVisibility(w>0&&h>0?View.VISIBLE:View.GONE);
         if(p.x!=nx||p.y!=ny||p.width!=nw||p.height!=nh){
-            p.x=nx;p.y=ny;p.width=nw;p.height=nh;wm.updateViewLayout(view,p);
+            p.x=nx;p.y=ny;p.width=nw;p.height=nh;
+            if(controlsRoot==null)wm.updateViewLayout(view,p);
+            else{
+                FrameLayout.LayoutParams child=new FrameLayout.LayoutParams(nw,nh,Gravity.TOP|Gravity.LEFT);
+                child.leftMargin=nx;child.topMargin=ny;view.setLayoutParams(child);
+            }
         }
     }
     private void layout(){
@@ -463,7 +520,10 @@ final class WindowControls {
         if(old.getParent() instanceof android.view.ViewGroup parent)parent.removeView(old);
         changed();
     }
-    private void changed(){if(host instanceof SystemUiHost service)service.controlsChanged();}
+    private void changed(){
+        if(controlsRoot!=null)controlsRoot.requestLayout();
+        if(host instanceof SystemUiHost service)service.controlsChanged();
+    }
     void systemOverlay(boolean blocked){
         if(systemBlocked==blocked)return;systemBlocked=blocked;
         if(blocked){
@@ -533,7 +593,12 @@ final class WindowControls {
         if(dismiss!=null){try{wm.removeViewImmediate(dismiss);}catch(RuntimeException ignored){}dismiss=null;}
         dismissEntered=false;dismissBounds.setEmpty();
     }
-    private void hideViews(){hideMenu();for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}views.clear();params.clear();hideDismiss();}
+    private void hideViews(){
+        hideMenu();
+        if(controlsRoot!=null){try{wm.removeViewImmediate(controlsRoot);}catch(RuntimeException ignored){}controlsRoot=null;}
+        else for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}
+        views.clear();params.clear();hideDismiss();
+    }
     void hide(){cancelEdgeDrag();cancelMiniDrag();clearMotion();hideViews();frame="";token=null;dragging=false;changed();}
     void close(){send("CLOSE",0,0,0);hide();}
     void imeTop(int top){if(imeTop==top)return;imeTop=top;if(!views.isEmpty()&&!transitioning&&!dragging)layout();}

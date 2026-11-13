@@ -47,23 +47,53 @@ public final class IconPolicy {
         if (!IconArchive.validPackage(pkg)) throw new IllegalArgumentException("package");
         try {
             JSONObject all = new JSONObject(IconLayerStore.prefs(c).getString("policies", "{}"));
-            JSONObject json = new JSONObject();
-            json.put("color", range(p.color,3)); json.put("monochrome",range(p.monochrome,2));
-            json.put("notification",range(p.notification,2));
-            json.put("background",asset(p.background)); json.put("foreground",asset(p.foreground));
-            json.put("monoImage",asset(p.monoImage)); json.put("notificationImage",asset(p.notificationImage));
-            json.put("generatedBackground",asset(p.generatedBackground));json.put("generatedForeground",asset(p.generatedForeground));
-            json.put("generatedVersion",p.generatedVersion);
-            all.put(pkg,json);
+            all.put(pkg, json(p));
             var originals = new HashSet<>(IconLayerStore.prefs(c).getStringSet("originals",Set.of()));
             originals.remove(pkg);
-            String published=all.toString();
-            if(!IconLayerStore.prefs(c).edit().putString("policies",published).putStringSet("originals",originals).commit())
-                throw new IllegalStateException("提交图标设置失败");
-            var policies=parse(published);
-            // Be conservative if a malformed/oversized snapshot could not be read in full.
-            if(policies.size()==all.length())IconOverrides.prune(c,policies.values());
-            IconLayerStore.refresh(c);
+            publish(c, all, originals);
         } catch (Exception e) { throw new IllegalStateException("保存图标设置失败",e); }
     }
+    /** -1 preserves a channel. Each selected application retains its own uploaded/generated assets. */
+    public static synchronized void batch(Context c, Set<String> packages, int color, int monochrome, int notification) {
+        if (packages.isEmpty() || packages.size() > 10000 || packages.stream().anyMatch(pkg -> !IconArchive.validPackage(pkg)))
+            throw new IllegalArgumentException("packages");
+        if (color != -1 && color != AUTO && color != ALGORITHM && color != ORIGINAL
+                || !batchMask(monochrome) || !batchMask(notification)) throw new IllegalArgumentException("mode");
+        if (color == -1 && monochrome == -1 && notification == -1) return;
+        try {
+            var prefs = IconLayerStore.prefs(c);
+            JSONObject all = new JSONObject(prefs.getString("policies", "{}"));
+            var originals = new HashSet<>(prefs.getStringSet("originals", Set.of()));
+            for (String pkg : packages) {
+                IconPolicy policy = from(all.optJSONObject(pkg));
+                if (originals.remove(pkg)) policy.color = ORIGINAL;
+                if (color != -1) policy.color = color;
+                if (monochrome != -1) policy.monochrome = monochrome;
+                if (notification != -1) policy.notification = notification;
+                all.put(pkg, json(policy));
+            }
+            publish(c, all, originals);
+        } catch (Exception e) { throw new IllegalStateException("保存批量图标设置失败", e); }
+    }
+    private static boolean batchMask(int mode) { return mode == -1 || mode == FOLLOW || mode == UNCHANGED; }
+    private static JSONObject json(IconPolicy p) throws org.json.JSONException {
+        JSONObject json = new JSONObject();
+        json.put("color", range(p.color,3)); json.put("monochrome",range(p.monochrome,2));
+        json.put("notification",range(p.notification,2));
+        json.put("background",asset(p.background)); json.put("foreground",asset(p.foreground));
+        json.put("monoImage",asset(p.monoImage)); json.put("notificationImage",asset(p.notificationImage));
+        json.put("generatedBackground",asset(p.generatedBackground));json.put("generatedForeground",asset(p.generatedForeground));
+        json.put("generatedVersion",p.generatedVersion);
+        return json;
+    }
+    private static void publish(Context c, JSONObject all, Set<String> originals) {
+        if (all.length() > 10000) throw new IllegalStateException("图标设置数量超出上限");
+        String published = all.toString();
+        if (!IconLayerStore.prefs(c).edit().putString("policies", published).putStringSet("originals", originals).commit())
+            throw new IllegalStateException("提交图标设置失败");
+        var policies = parse(published);
+        if (policies.size() == all.length()) IconOverrides.prune(c, policies.values());
+        IconLayerStore.refresh(c);
+    }
+
 }

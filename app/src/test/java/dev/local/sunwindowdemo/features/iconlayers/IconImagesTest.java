@@ -262,6 +262,40 @@ public class IconImagesTest {
         assertEquals(Color.BLUE,layers.background().getPixel(0,0));
         assertEquals(Color.BLUE,layers.foreground().getPixel(48,48));
     }
+    @Test public void batchChangesOnlySelectedChannelsAndKeepsPerAppAssetsAndLegacyOriginals()throws Exception{
+        IconPolicy first=new IconPolicy();first.color=IconPolicy.MANUAL;first.monochrome=IconPolicy.UPLOAD;
+        first.foreground=upload(IconImages.solid(Color.RED,16));first.monoImage=upload(IconImages.solid(Color.BLUE,16));
+        first.generatedVersion="saved";IconPolicy.save(c,PKG,first);
+        IconPolicy second=new IconPolicy();second.notification=IconPolicy.UPLOAD;
+        second.notificationImage=upload(IconImages.solid(Color.GREEN,16));IconPolicy.save(c,"com.example.second",second);
+        var prefs=IconLayerStore.prefs(c);
+        prefs.edit().putStringSet("originals",Set.of("com.example.legacy","com.example.untouched")).commit();
+        int[] commits={0};
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener listener=(p,key)->{if("policies".equals(key))commits[0]++;};
+        prefs.registerOnSharedPreferenceChangeListener(listener);
+        IconPolicy.batch(c,Set.of(PKG,"com.example.second","com.example.legacy"),-1,-1,IconPolicy.FOLLOW);
+        prefs.unregisterOnSharedPreferenceChangeListener(listener);
+        assertEquals(1,commits[0]);
+        IconPolicy restored=IconPolicy.read(c,PKG);
+        assertEquals(IconPolicy.MANUAL,restored.color);assertEquals(IconPolicy.UPLOAD,restored.monochrome);
+        assertEquals(first.foreground,restored.foreground);assertEquals(first.monoImage,restored.monoImage);
+        assertEquals("saved",restored.generatedVersion);assertEquals(IconPolicy.FOLLOW,restored.notification);
+        assertEquals(second.notificationImage,IconPolicy.read(c,"com.example.second").notificationImage);
+        assertTrue(IconOverrides.image(c,second.notificationImage).isFile());
+        assertEquals(IconPolicy.ORIGINAL,IconPolicy.read(c,"com.example.legacy").color);
+        assertEquals(Set.of("com.example.untouched"),prefs.getStringSet("originals",Set.of()));
+        IconPolicy.batch(c,Set.of(PKG,"com.example.legacy"),IconPolicy.AUTO,IconPolicy.UNCHANGED,-1);
+        assertEquals(IconPolicy.AUTO,IconPolicy.read(c,"com.example.legacy").color);
+        assertEquals(IconPolicy.FOLLOW,IconPolicy.read(c,PKG).notification);
+        assertEquals(second.notificationImage,IconPolicy.read(c,"com.example.second").notificationImage);
+    }
+    @Test public void batchRejectsInvalidSelectionsBeforePublishingAndKeepAllIsANoOp(){
+        var prefs=IconLayerStore.prefs(c);String before=prefs.getString("policies","{}");
+        assertThrows(IllegalArgumentException.class,()->IconPolicy.batch(c,Set.of(PKG,"bad/pkg"),IconPolicy.AUTO,-1,-1));
+        assertThrows(IllegalArgumentException.class,()->IconPolicy.batch(c,Set.of(PKG),IconPolicy.MANUAL,-1,-1));
+        assertEquals(before,prefs.getString("policies","{}"));
+        IconPolicy.batch(c,Set.of(PKG),-1,-1,-1);assertEquals(before,prefs.getString("policies","{}"));
+    }
     private String upload(Bitmap b)throws Exception{
         File file=File.createTempFile("test-user-image-",".png",c.getCacheDir());
         try(OutputStream out=new FileOutputStream(file)){b.compress(Bitmap.CompressFormat.PNG,100,out);}

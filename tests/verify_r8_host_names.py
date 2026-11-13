@@ -6,6 +6,10 @@ import verify_signal_target as dex
 
 PREFIX = "Ldev/local/sunwindowdemo/"
 REQUIRED = {
+    (PREFIX + "WindowControls;", "buildControlsRoot"): {
+        "android.view.ViewTreeObserver$OnComputeInternalInsetsListener", "android.view.ViewTreeObserver$InternalInsetsInfo"},
+    (PREFIX + "features/navbar/NavbarTaskbarHost;", "installTransitions"): {
+        "com.android.launcher3.taskbar.TaskbarTransitions", "com.android.systemui.shared.statusbar.phone.BarTransitions"},
     (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit"},
     (PREFIX + "features/shade/ComposeShadeLayout;", "install"): {"kotlin.coroutines.Continuation"},
     (PREFIX + "features/shade/SignalDisplay;", "install"): {"kotlin.Pair"},
@@ -21,9 +25,12 @@ RUNTIME_METHODS = {
     "BackBridge": {"connect"},
     "Config": {"longBackWindow"},
     "TaskCover": {"beforeReveal", "canRetarget", "reusesPresentation"},
+    "WindowControls": {"buildControlsRoot", "fillTouchRegion"},
     "features/edgetouch/EdgeInputFilter": {"install", "sync"},
     "features/edgetouch/EdgeInputPolicy": {"accepted", "regions"},
     "features/iconlayers/IconOverrides": {"prune"},
+    "features/iconlayers/IconPolicy": {"batch"},
+    "features/navbar/NavbarTaskbarHost": {"installTransitions"},
     "features/navbar/NavbarModule": {"onPackageLoaded"},
 }
 
