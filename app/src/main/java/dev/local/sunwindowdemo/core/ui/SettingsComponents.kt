@@ -161,6 +161,7 @@ fun Hint(text: String) {
 fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
           foreground: Color = MaterialTheme.colorScheme.primary) {
     val vector = when (kind) {
+        "navbar" -> R.drawable.ic_navbar
         "barrage" -> R.drawable.ic_barrage_notes
         "phone" -> R.drawable.ic_call_blocking
         "shake" -> R.drawable.ic_motion

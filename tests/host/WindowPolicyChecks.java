@@ -54,6 +54,33 @@ public final class WindowPolicyChecks {
         require(!WindowPolicy.sameLiveTask(owned,owned,11,10,0,0));
         require(!WindowPolicy.sameLiveTask(owned,owned,10,10,10,0));
         require(!WindowPolicy.sameLiveTask(null,null,10,10,0,0));
+        // A focused floating window covering a fullscreen app: starting that exact app task stays native.
+        Object floating=new Object(),covered=new Object(),other=new Object(),display=new Object();
+        require(WindowPolicy.coveredFullscreen(covered,floating,covered,display,display));
+        require(!WindowPolicy.coveredFullscreen(covered,floating,other,display,display)); // a different task may still open linked
+        require(!WindowPolicy.coveredFullscreen(covered,covered,covered,display,display)); // focused fullscreen keeps the exact-package rule
+        require(!WindowPolicy.coveredFullscreen(null,floating,covered,display,display)); // Home or nothing beneath
+        require(!WindowPolicy.coveredFullscreen(covered,floating,covered,display,new Object()));
+        require(!WindowPolicy.coveredFullscreen(covered,floating,covered,null,null));
+        // Background touch gate behind a normal window: entry (capped at max), then grace, never without a shown normal window.
+        require(WindowPolicy.backgroundTouchGuard(true,true,false,0,0,5000,3000)); // first input update before any frame
+        require(WindowPolicy.backgroundTouchGuard(true,true,true,1000,0,3999,3000));
+        require(!WindowPolicy.backgroundTouchGuard(true,true,true,1000,0,4000,3000)); // stuck entry fails open
+        require(WindowPolicy.backgroundTouchGuard(true,false,false,0,1250,1249,3000)); // grace while overlays reappear
+        require(!WindowPolicy.backgroundTouchGuard(true,false,false,0,1250,1250,3000));
+        require(!WindowPolicy.backgroundTouchGuard(false,true,true,1000,9999,1001,3000)); // mini/closing/parked: native touch
+        // A replacement receives a fresh cap; repeated frames cannot extend the same owner's cap.
+        Object guardA=new Object(),guardB=new Object();
+        require(WindowPolicy.startsTouchGuard(guardA,null,true,false));
+        require(!WindowPolicy.startsTouchGuard(guardA,guardA,true,true));
+        require(WindowPolicy.startsTouchGuard(guardB,guardA,true,true));
+        require(!WindowPolicy.startsTouchGuard(guardB,guardA,false,true));
+        require(WindowPolicy.startsTouchGuard(guardA,guardA,true,false));
+        long guardSince=1000;
+        if(WindowPolicy.startsTouchGuard(guardB,guardA,true,true))guardSince=4001;
+        require(WindowPolicy.backgroundTouchGuard(true,true,true,guardSince,0,4001,3000));
+        require(WindowPolicy.backgroundTouchGuard(true,true,true,guardSince,0,7000,3000));
+        require(!WindowPolicy.backgroundTouchGuard(true,true,true,guardSince,0,7001,3000));
         require(WindowPolicy.sameWindowCaller(10229,10229,10229,"sample.app","sample.app"));
         require(WindowPolicy.sameWindowCaller(10229,-1,10229,"sample.app","sample.app"));
         require(!WindowPolicy.sameWindowCaller(10229,1000,10229,"sample.app","sample.app"));

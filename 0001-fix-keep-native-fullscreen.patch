@@ -1,0 +1,55 @@
+From 4d9632db82290f30c04ac849477abf651d95b637 Mon Sep 17 00:00:00 2001
+From: Kiro Assistant <nativecomplements@kiro.dev>
+Date: Fri, 13 Nov 2026 06:56:44 +0800
+Subject: [PATCH] =?UTF-8?q?fix:=20=E9=98=B2=E6=AD=A2=E5=B7=B2=E6=9C=89?=
+ =?UTF-8?q?=E5=85=A8=E5=B1=8F=E5=89=8D=E5=8F=B0=E5=BA=94=E7=94=A8=E8=A2=AB?=
+ =?UTF-8?q?=E5=BC=BA=E5=88=B6=E8=BD=AC=E4=B8=BA=E5=B0=8F=E7=AA=97?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+问题:
+- 当从小窗启动一个已经在前台全屏运行的应用时,activityStarting() 会将其强制转换为小窗
+- 原因是 launchForeground.get() 在普通场景下为 null,导致 keepNativeForeground() 检查失效
+
+修复:
+- 在 launchForeground 为 null 时,实时获取当前前台应用状态
+- 检查目标任务是否已经是全屏前台应用(mode=1, !owned)
+- 如果是,保留其全屏状态,不转换为小窗
+- 添加日志记录保留全屏的决策
+
+影响范围:
+- WindowEngine.activityStarting() 方法
+- 不影响分享窗口、快捷方式等已设置 launchForeground 的场景
+---
+ .../floatingwindow/legacy/WindowEngine.java        | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
+index 2b8ca42..087c5a3 100644
+--- a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
++++ b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
+@@ -898,8 +898,18 @@ final class WindowEngine {
+             if((Integer)a.field(target,"mUserId")!=s.userId||a.call(target,"getDisplayContent")!=a.call(s.task,"getDisplayContent"))return null;
+             ComponentName component=(ComponentName)a.field(target,"realActivity");
+             if(component==null||!Wire.allowedPackage(component.getPackageName())||Wire.PKG.equals(component.getPackageName()))return null;
+-            if(keepNativeForeground(launchForeground.get(),target,(String)a.field(requestActivity,"packageName"),
+-                (Integer)a.field(target,"mUserId"),a.call(target,"getDisplayContent")))return null;
++            // Check if the target is already a native fullscreen foreground app that should be preserved.
++            // If launchForeground was not set, capture the current state to avoid converting an existing fullscreen app.
++            NativeForeground foreground=launchForeground.get();
++            if(foreground==null){
++                try{foreground=nativeForeground();}
++                catch(Exception error){log.accept("FOREGROUND_SNAPSHOT_FAILED "+FrameworkAccess.reason(error));}
++            }
++            if(keepNativeForeground(foreground,target,(String)a.field(requestActivity,"packageName"),
++                (Integer)a.field(target,"mUserId"),a.call(target,"getDisplayContent"))){
++                log.accept("KEEP_NATIVE_FULLSCREEN taskId="+a.field(target,"mTaskId")+" pkg="+component.getPackageName());
++                return null;
++            }
+             Session next=sessionFor(target);
+             boolean fresh=next==null;
+             if(fresh){
+-- 
+2.43.0
+

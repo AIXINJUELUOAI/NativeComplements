@@ -7,6 +7,21 @@ final class WindowPolicy {
         return before!=null&&before==target&&beforePackage!=null&&beforePackage.equals(targetPackage)
             &&beforeUser==targetUser&&beforeDisplay!=null&&beforeDisplay==targetDisplay&&mode==1&&!owned;
     }
+    /** The start targets the exact fullscreen task that a focused floating window was covering before the start. */
+    static boolean coveredFullscreen(Object fullscreen,Object focused,Object target,Object beforeDisplay,Object targetDisplay){
+        return fullscreen!=null&&fullscreen!=focused&&fullscreen==target
+            &&beforeDisplay!=null&&beforeDisplay==targetDisplay;
+    }
+    /** Background touch gate behind a normal window: during its entry/transition (capped), then a short grace
+     * while SystemUI re-shows the outside-dismiss overlays. Times share one monotonic clock. */
+    static boolean startsTouchGuard(Object owner,Object previous,boolean guarded,boolean reported){
+        return guarded&&(!reported||owner!=previous);
+    }
+    static boolean backgroundTouchGuard(boolean shown,boolean entering,boolean reported,long since,long graceUntil,long now,long max){
+        if(!shown)return false;
+        if(entering)return now-(reported?since:now)<max;
+        return now<graceUntil;
+    }
     static boolean autoMini(boolean enabled,boolean different,boolean sameToken,String previousForm,boolean validMini){
         return enabled&&different&&!sameToken&&"normal".equals(previousForm)&&!validMini;
     }

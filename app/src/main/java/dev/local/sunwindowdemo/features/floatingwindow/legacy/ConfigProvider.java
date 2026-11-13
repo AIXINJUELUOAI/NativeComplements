@@ -22,6 +22,7 @@ public final class ConfigProvider extends ContentProvider {
             changed(getContext());Bundle saved=new Bundle();saved.putBoolean("saved",true);return saved;
         }
         if(!"read".equals(method))throw new IllegalArgumentException("method");
+        new Config(getContext()); // Migrate before exporting, even if the manager has not opened yet.
         Bundle out=new Bundle();
         for(var e:getContext().getSharedPreferences("corner",0).getAll().entrySet()){
             Object v=e.getValue();String k=e.getKey();

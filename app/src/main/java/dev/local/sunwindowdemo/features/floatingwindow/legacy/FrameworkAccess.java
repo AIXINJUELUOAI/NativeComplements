@@ -14,8 +14,19 @@ final class FrameworkAccess {
     final Method requestTransition,finishLayers;
     private Method playingTransition,freezerLeash;
     private Field surfaceFreezer;
-    private final Map<String, Method> methods = new HashMap<>();
-    private final Map<String, Field> fields = new HashMap<>();
+    /* Lookups run on Binder, animation and display threads, often under the WM lock.
+     * Lock-free caches keyed by identity, without building a String per call. */
+    private record MethodKey(Class<?> owner,String name,Class<?>[] args){
+        @Override public boolean equals(Object o){
+            return o instanceof MethodKey k&&k.owner==owner&&k.name.equals(name)&&Arrays.equals(k.args,args);
+        }
+        @Override public int hashCode(){return (owner.hashCode()*31+name.hashCode())*31+Arrays.hashCode(args);}
+    }
+    private record FieldKey(Class<?> owner,String name){}
+    private static final Class<?>[] NO_TYPES=new Class<?>[0];
+    private static final Object[] NO_ARGS=new Object[0];
+    private final Map<MethodKey, Method> methods = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<FieldKey, Field> fields = new java.util.concurrent.ConcurrentHashMap<>();
     FrameworkAccess(ClassLoader loader) throws Exception {
         task = Class.forName("com.android.server.wm.Task", false, loader);
         wc = Class.forName("com.android.server.wm.WindowContainer", false, loader);
@@ -142,32 +153,35 @@ final class FrameworkAccess {
         method(atm,"deferWindowLayout");method(atm,"continueWindowLayout");
         field(atm, "mSupportsMultiWindow"); field(atm, "mSupportsFreeformWindowManagement");
     }
-    synchronized Method method(Class<?> owner, String name, Class<?>... args) throws Exception {
-        String key = owner.getName() + "#" + name + Arrays.toString(args);
+    Method method(Class<?> owner, String name, Class<?>... args) throws Exception {
+        MethodKey key = new MethodKey(owner, name, args.length == 0 ? NO_TYPES : args);
         Method found = methods.get(key);
         if (found != null) return found;
         for (Class<?> type = owner; type != null; type = type.getSuperclass()) {
             try {
                 found = type.getDeclaredMethod(name, args); found.setAccessible(true);
-                methods.put(key, found); return found;
+                // Racing threads resolve the same Method; keep the first.
+                Method raced = methods.putIfAbsent(new MethodKey(owner, name, key.args() == NO_TYPES ? NO_TYPES : args.clone()), found);
+                return raced == null ? found : raced;
             } catch (NoSuchMethodException ignored) { }
         }
-        throw new NoSuchMethodException(key);
+        throw new NoSuchMethodException(owner.getName() + "#" + name + Arrays.toString(args));
     }
-    synchronized Field field(Class<?> owner, String name) throws Exception {
-        String key = owner.getName() + "#" + name;
+    Field field(Class<?> owner, String name) throws Exception {
+        FieldKey key = new FieldKey(owner, name);
         Field found = fields.get(key);
         if (found != null) return found;
         for (Class<?> type = owner; type != null; type = type.getSuperclass()) {
             try {
                 found = type.getDeclaredField(name); found.setAccessible(true);
-                fields.put(key, found); return found;
+                Field raced = fields.putIfAbsent(key, found);
+                return raced == null ? found : raced;
             } catch (NoSuchFieldException ignored) { }
         }
-        throw new NoSuchFieldException(key);
+        throw new NoSuchFieldException(owner.getName() + "#" + name);
     }
     Object field(Object owner, String name) throws Exception { return field(owner.getClass(), name).get(owner); }
-    Object call(Object owner, String name) throws Exception { return method(owner.getClass(), name).invoke(owner); }
+    Object call(Object owner, String name) throws Exception { return method(owner.getClass(), name, NO_TYPES).invoke(owner, NO_ARGS); }
     Object call(Object owner, String name, Class<?>[] types, Object... args) throws Exception {
         return method(owner.getClass(), name, types).invoke(owner, args);
     }
@@ -182,8 +196,9 @@ final class FrameworkAccess {
         if (!(surface instanceof SurfaceControl) || !((SurfaceControl) surface).isValid())
             throw new IllegalStateException("surface unavailable");
         Object transaction = transaction(target);
-        call(transaction, "setScale", new Class<?>[]{SurfaceControl.class, float.class, float.class}, surface, scale, scale);
-        call(transaction, "setPosition", new Class<?>[]{SurfaceControl.class, float.class, float.class}, surface, x, y);
+        SurfaceControl.Transaction tx = (SurfaceControl.Transaction) transaction;
+        tx.setScale((SurfaceControl) surface, scale, scale);
+        tx.setPosition((SurfaceControl) surface, x, y);
     }
     private SurfaceControl.Transaction renderTransaction,frameTransaction;
     boolean inFrame(){return frameTransaction!=null;}
@@ -217,14 +232,14 @@ final class FrameworkAccess {
         SurfaceControl surface=(SurfaceControl)field(target,"mSurfaceControl");
         if(surface==null||!surface.isValid())return;
         // One atomic state at both native handoff endpoints; never repair (0,0) a frame later.
-        call(tx,"setScale",new Class<?>[]{SurfaceControl.class,float.class,float.class},surface,p.scale(),p.scale());
-        call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},surface,p.x()-parent.left,p.y()-parent.top);
-        call(tx,"setCrop",new Class<?>[]{SurfaceControl.class,Rect.class},surface,crop);
+        tx.setScale(surface,p.scale(),p.scale());
+        tx.setPosition(surface,p.x()-parent.left,p.y()-parent.top);
+        tx.setCrop(surface,crop);
         call(tx,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},surface,radius);
         tx.setAlpha(surface,alpha);
     }
     void opacity(Object target,float alpha) throws Exception {
-        call(transaction(target),"setAlpha",new Class<?>[]{SurfaceControl.class,float.class},field(target,"mSurfaceControl"),alpha);
+        ((SurfaceControl.Transaction)transaction(target)).setAlpha((SurfaceControl)field(target,"mSurfaceControl"),alpha);
     }
     void style(Object target,int width,int height,float radius) throws Exception {
         Object surface=field(target,"mSurfaceControl"),transaction=transaction(target);
@@ -233,7 +248,7 @@ final class FrameworkAccess {
     }
     void style(Object target,Rect crop,float radius) throws Exception {
         Object surface=field(target,"mSurfaceControl"),transaction=transaction(target);
-        call(transaction,"setCrop",new Class<?>[]{SurfaceControl.class,Rect.class},surface,crop);
+        ((SurfaceControl.Transaction)transaction).setCrop((SurfaceControl)surface,crop);
         call(transaction,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},surface,radius);
     }
     static String reason(Throwable e) {

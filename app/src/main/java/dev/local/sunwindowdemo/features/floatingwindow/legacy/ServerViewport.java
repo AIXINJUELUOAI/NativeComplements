@@ -77,10 +77,11 @@ final class ServerViewport {
                 final int overrideIndex=lastConfiguration;
                 constructor.setAccessible(true);
                 handles.add(module.hook(constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                    boolean owned=window?engine.ownsClientWindow(chain.getArg(0)):engine.ownsActivityToken((IBinder)chain.getArg(0));
+                    Object owner=window?engine.clientOwner(chain.getArg(0)):null;
+                    boolean owned=window?owner!=null:engine.ownsActivityToken((IBinder)chain.getArg(0));
                     boolean entry=name.equals("LaunchActivityItem")||name.equals("ActivityRelaunchItem");
                     if(!owned&&!entry)return chain.proceed();
-                    int mode=owned?engine.clientMode(chain.getArg(0),!window):1;
+                    int mode=!owned?1:window?engine.clientMode(owner):engine.clientMode(chain.getArg(0),true);
                     Object[] args=new Object[types.length];
                     for(int i=0;i<args.length;i++){
                         args[i]=chain.getArg(i);
@@ -90,7 +91,7 @@ final class ServerViewport {
                             ?policy.configuration((Configuration)args[i],mode):policy.processConfiguration((Configuration)args[i],mode);
                         else if(owned&&types[i]==policy.merged&&args[i]!=null)args[i]=policy.merged(args[i],mode);
                         else if(owned&&types[i].getName().equals("android.view.InsetsState")&&args[i]!=null)
-                            args[i]=engine.clientInsets(chain.getArg(0),args[i]);
+                            args[i]=window?engine.ownerInsets(owner,args[i]):engine.clientInsets(chain.getArg(0),args[i]);
                         if(entry&&(types[i]==Configuration.class||types[i]==policy.merged))
                             engine.trace.transaction((IBinder)chain.getArg(0),name,i,chain.getArg(i),args[i],owned);
                     }
@@ -107,7 +108,7 @@ final class ServerViewport {
         Method schedule=a.method(process,"scheduleClientTransactionItem",Class.forName("android.app.IApplicationThread"),Class.forName("android.app.servertransaction.ClientTransactionItem"));
         handles.add(module.hook(schedule).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
             Object outgoing=chain.getArg(1),source=configActivity.get(chain.getThisObject());
-            if(item.isInstance(outgoing)&&source!=null&&engine.owns(a.call(source,"getTask"))){
+            if(!engine.idle()&&item.isInstance(outgoing)&&source!=null&&engine.owns(a.call(source,"getTask"))){
                 Configuration original=(Configuration)itemConfig.get(outgoing);
                 Configuration mapped=policy.processConfiguration(original,engine.activityClientMode(source));
                 if(mapped!=original)return chain.proceed(new Object[]{chain.getArg(0),newItem.newInstance(mapped,itemDevice.getInt(outgoing))});
@@ -130,12 +131,13 @@ final class ServerViewport {
                 Object value=chain.proceed();
                 if(value instanceof Integer&&(Integer)value<0)return value;
                 Object resultObject=chain.getArg(resultIndex);
-                if(resultObject!=null&&engine.ownsClientWindow(chain.getArg(clientIndex))){
+                Object owner=resultObject==null?null:engine.clientOwner(chain.getArg(clientIndex));
+                if(owner!=null){
                     Object outgoing=resultConfig.get(resultObject);
                     // This out parameter belongs to the Binder response, not WindowState's cache.
-                    a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing,engine.clientMode(chain.getArg(clientIndex),false)));
+                    a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing,engine.clientMode(owner)));
                     Object insets=resultInsets.get(resultObject);
-                    Object mapped=engine.clientInsets(chain.getArg(clientIndex),insets);
+                    Object mapped=engine.ownerInsets(owner,insets);
                     a.call(insets,"set",new Class<?>[]{insets.getClass(),boolean.class},mapped,true);
                 }
                 return value;
@@ -148,8 +150,9 @@ final class ServerViewport {
         Class<?> controls=Class.forName("android.view.InsetsSourceControl$Array");
         Method notify=a.method(proxy,"insetsControlChanged",state,controls);
         handles.add(module.hook(notify).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-            if(!engine.ownsClientWindow(chain.getThisObject()))return chain.proceed();
-            return chain.proceed(new Object[]{engine.clientInsets(chain.getThisObject(),chain.getArg(0)),chain.getArg(1)});
+            Object owner=engine.clientOwner(chain.getThisObject());
+            if(owner==null)return chain.proceed();
+            return chain.proceed(new Object[]{engine.ownerInsets(owner,chain.getArg(0)),chain.getArg(1)});
         }));
         module.log(4,"SunWindowDemo5","VIEWPORT_READY system-side launch/process/activity/resize/relayout logical-display");
     }

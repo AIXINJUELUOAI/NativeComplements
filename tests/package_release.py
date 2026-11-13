@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import zipfile
+from verify_r8_host_names import check as check_r8
 
 ROOT = Path(__file__).resolve().parents[1]
 CERTIFICATE = "28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104"
@@ -20,6 +21,7 @@ def run(*args):
 
 def main():
     gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
+    assert re.search(r"isMinifyEnabled\s*=\s*true", gradle), "Release must enable R8"
     version = re.search(r'versionName = "([^"]+)"', gradle)[1]
     code = int(re.search(r'versionCode = (\d+)', gradle)[1])
     sdk = Path(os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
@@ -31,6 +33,9 @@ def main():
     subprocess.run([str(ROOT / "gradlew.bat"), "--no-daemon", "--console=plain",
                     ":app:assembleRelease"], cwd=ROOT, env=env, check=True)
     apk = ROOT / "app/build/outputs/apk/release/app-release.apk"
+    mapping = ROOT / "app/build/outputs/mapping/release/mapping.txt"
+    assert mapping.exists() and "# compiler: R8" in mapping.read_text(encoding="utf-8"), "R8 mapping missing"
+    check_r8(apk)
     with zipfile.ZipFile(apk) as archive:
         assert archive.testzip() is None, "APK CRC failure"
         assert set(archive.read("META-INF/xposed/scope.list").decode().splitlines()) == SCOPES
@@ -42,6 +47,7 @@ def main():
             "dev.local.sunwindowdemo.features.callblocking.CallBlockingModule",
             "dev.local.sunwindowdemo.features.iconlayers.IconLayerModule",
             "dev.local.sunwindowdemo.features.iconlayers.SystemIconModule",
+            "dev.local.sunwindowdemo.features.navbar.NavbarModule",
         }, "Module entries differ from the integrated window and Telecom backends"
         assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx"))
                        for name in archive.namelist()), "Signing material in APK"

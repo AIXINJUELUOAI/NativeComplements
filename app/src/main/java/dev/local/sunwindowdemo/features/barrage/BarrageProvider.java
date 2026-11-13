@@ -19,8 +19,7 @@ public final class BarrageProvider extends ContentProvider {
         }
         if("addHistory".equals(method)){
             if(uid!=systemUid||extras==null)throw new SecurityException("barrage history writer");
-            BarrageStore.addHistory(getContext(),extras);
-            Bundle saved=new Bundle();saved.putBoolean("saved",true);return saved;
+            Bundle saved=new Bundle();saved.putBoolean("saved",BarrageStore.addHistory(getContext(),extras));return saved;
         }
         if("history".equals(method)){
             Bundle out=new Bundle();

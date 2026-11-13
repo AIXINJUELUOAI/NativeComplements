@@ -89,6 +89,59 @@ public class IconImagesTest {
         assertThrows(IOException.class,()->IconOverrides.importImage(c,Uri.fromFile(corrupt)));
         assertEquals(first,IconPolicy.read(c,PKG).background);
     }
+    @Test public void publicationPrunesOldHashesButKeepsEveryPolicyFieldAndTemporaryFiles()throws Exception{
+        IconPolicy p=new IconPolicy();p.background=upload(IconImages.solid(Color.RED,16));
+        p.foreground=upload(IconImages.solid(Color.GREEN,16));p.monoImage=upload(IconImages.solid(Color.BLUE,16));
+        p.notificationImage=upload(IconImages.solid(Color.WHITE,16));p.generatedBackground=upload(IconImages.solid(Color.BLACK,16));
+        p.generatedForeground=upload(IconImages.solid(Color.YELLOW,16));IconPolicy.save(c,PKG,p);
+        IconPolicy shared=new IconPolicy();shared.background=p.background;IconPolicy.save(c,"com.example.shared",shared);
+        String old=p.background,orphan=upload(IconImages.solid(Color.CYAN,16));
+        File pending=File.createTempFile("image-",".png",IconOverrides.root(c));
+        p.background=upload(IconImages.solid(Color.MAGENTA,16));IconPolicy.save(c,PKG,p);
+        for(String id:List.of(old,p.background,p.foreground,p.monoImage,p.notificationImage,p.generatedBackground,p.generatedForeground))
+            assertTrue("Retain inactive fields and cross-package references",IconOverrides.image(c,id).isFile());
+        assertFalse(IconOverrides.image(c,orphan).exists());assertTrue(pending.isFile());
+        shared.background="";IconPolicy.save(c,"com.example.shared",shared);
+        assertFalse("Delete only after the last reference is removed",IconOverrides.image(c,old).exists());
+    }
+    @Test public void failedPolicyCommitDoesNotPrunePublishedPixels()throws Exception{
+        IconPolicy p=new IconPolicy();p.background=upload(IconImages.solid(Color.BLUE,16));IconPolicy.save(c,PKG,p);
+        String old=p.background;p.background=upload(IconImages.solid(Color.RED,16));
+        var prefs=IconLayerStore.prefs(c);
+        android.content.SharedPreferences failing=(android.content.SharedPreferences)java.lang.reflect.Proxy.newProxyInstance(
+            getClass().getClassLoader(),new Class[]{android.content.SharedPreferences.class},(proxy,method,args)->{
+                if(!method.getName().equals("edit"))return method.invoke(prefs,args);
+                var editor=prefs.edit();
+                return java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(),new Class[]{android.content.SharedPreferences.Editor.class},(ep,em,ea)->{
+                    if(em.getName().equals("commit"))return false;
+                    Object result=em.invoke(editor,ea);return result==editor?ep:result;
+                });
+            });
+        Context broken=new android.content.ContextWrapper(c){
+            @Override public Context createDeviceProtectedStorageContext(){return this;}
+            @Override public android.content.SharedPreferences getSharedPreferences(String name,int mode){return failing;}
+        };
+        assertThrows(IllegalStateException.class,()->IconPolicy.save(broken,PKG,p));
+        assertEquals(old,IconPolicy.read(c,PKG).background);assertTrue(IconOverrides.image(c,old).isFile());
+    }
+    @Test public void concurrentPublicationCannotPruneAnImportBeforeItIsPublished()throws Exception{
+        var worker=java.util.concurrent.Executors.newSingleThreadExecutor();
+        var started=new java.util.concurrent.CountDownLatch(1);
+        try{
+            String id;
+            java.util.concurrent.Future<?> other;
+            synchronized(IconPolicy.class){
+                id=upload(IconImages.solid(Color.CYAN,16));
+                other=worker.submit(()->{started.countDown();IconPolicy.save(c,"com.example.concurrent",new IconPolicy());});
+                assertTrue(started.await(5,java.util.concurrent.TimeUnit.SECONDS));
+                assertThrows(java.util.concurrent.TimeoutException.class,()->other.get(100,java.util.concurrent.TimeUnit.MILLISECONDS));
+                assertTrue(IconOverrides.image(c,id).isFile());
+                IconPolicy p=new IconPolicy();p.background=id;IconPolicy.save(c,PKG,p);
+            }
+            other.get(5,java.util.concurrent.TimeUnit.SECONDS);
+            assertTrue(IconOverrides.image(c,id).isFile());assertEquals(id,IconPolicy.read(c,PKG).background);
+        }finally{worker.shutdownNow();}
+    }
     @Test public void monochromeCopiesStayIndependent(){
         var icon=new ImportedIcon(c.getResources(),IconImages.solid(Color.RED,32),IconImages.solid(Color.BLUE,32),IconImages.solid(Color.WHITE,32));
         var copy=(ImportedIcon)icon.getConstantState().newDrawable();
@@ -182,6 +235,7 @@ public class IconImagesTest {
         var migrated=IconPolicy.read(c,PKG);
         assertTrue(migrated.generatedVersion.startsWith("6:"));
         assertNotEquals(cached.generatedForeground,migrated.generatedForeground);
+        assertFalse("Migration reclaims the superseded generated hash",IconOverrides.image(c,cached.generatedForeground).exists());
         assertEquals("",IconPolicy.read(c,fresh).generatedVersion);
         assertEquals("",IconPolicy.read(c,fresh).generatedForeground);
         File pixels=IconOverrides.image(c,migrated.generatedForeground);assertTrue(pixels.setLastModified(123456000));

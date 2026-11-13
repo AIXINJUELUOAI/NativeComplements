@@ -57,7 +57,12 @@ public final class IconPolicy {
             all.put(pkg,json);
             var originals = new HashSet<>(IconLayerStore.prefs(c).getStringSet("originals",Set.of()));
             originals.remove(pkg);
-            IconLayerStore.prefs(c).edit().putString("policies",all.toString()).putStringSet("originals",originals).apply();
+            String published=all.toString();
+            if(!IconLayerStore.prefs(c).edit().putString("policies",published).putStringSet("originals",originals).commit())
+                throw new IllegalStateException("提交图标设置失败");
+            var policies=parse(published);
+            // Be conservative if a malformed/oversized snapshot could not be read in full.
+            if(policies.size()==all.length())IconOverrides.prune(c,policies.values());
             IconLayerStore.refresh(c);
         } catch (Exception e) { throw new IllegalStateException("保存图标设置失败",e); }
     }

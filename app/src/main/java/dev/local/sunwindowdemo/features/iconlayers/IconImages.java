@@ -1,5 +1,8 @@
 package dev.local.sunwindowdemo.features.iconlayers;
 
+import android.content.Context;
+import android.graphics.drawable.BitmapDrawable;
+
 import android.graphics.*;
 import android.graphics.drawable.Drawable;
 import java.util.Arrays;
@@ -124,6 +127,15 @@ public final class IconImages {
         new Canvas(out).drawBitmap(source,content,new RectF((side-w)/2,(side-h)/2,(side+w)/2,(side+h)/2),new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG));
         return out;
     }
+    static Drawable notificationSize(Context context,Drawable replacement,Drawable original){
+        if(original==null)return replacement;
+        int side=Math.max(original.getIntrinsicWidth(),original.getIntrinsicHeight());
+        if(side<=0||side>512)return replacement;
+        Bitmap pixels=render(replacement,side);
+        pixels.setDensity(context.getResources().getDisplayMetrics().densityDpi);
+        return new BitmapDrawable(context.getResources(),pixels);
+    }
+
     /** Preserve source canvas for adaptive icons; normalize only the notification version. */
     public static Bitmap monochrome(Bitmap source, boolean normalize) {
         int w=source.getWidth(),h=source.getHeight(),n=w*h;int[] pixels=new int[n];source.getPixels(pixels,0,w,0,0,w,h);
@@ -133,6 +145,6 @@ public final class IconImages {
         int visible=0;for(int i=0;i<n;i++){int a=Color.alpha(pixels[i]);if(a>24)visible++;pixels[i]=Color.argb(a,255,255,255);}
         if(visible<n*.002f)return null;
         Bitmap mask=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);mask.setPixels(pixels,0,w,0,0,w,h);
-        return normalize?fit(mask,64,.82f):mask;
+        return normalize?fit(mask,64,.94f):mask;
     }
 }

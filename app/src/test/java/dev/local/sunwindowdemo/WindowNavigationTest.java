@@ -41,6 +41,8 @@ public class WindowNavigationTest {
         WindowNavigation.Launch shortcut=new WindowNavigation.Launch(12,"com.example.chat","com.example.chat",0,new Binder(),0,"com.example.chat");
         shortcut.targetPackage="com.example.chat";
         assertFalse("Explicit shortcuts still open their requested window",shortcut.keepNativeForeground());
+        shortcut.nativeTarget=true;
+        assertTrue("A suggestion that lands in the fullscreen foreground task keeps it native",shortcut.keepNativeForeground());
     }
 
     @Test public void gestureUnfoldsOneStepWhileExplicitNavigationOpensContent(){

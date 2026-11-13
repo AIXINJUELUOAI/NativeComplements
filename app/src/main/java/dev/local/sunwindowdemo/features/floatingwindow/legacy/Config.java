@@ -12,7 +12,21 @@ public final class Config {
     static final int DEFAULT_WINDOW_DIM=20;
     final SharedPreferences prefs;
     static volatile SharedPreferences hostPreferences;
-    public Config(Context c) { prefs = hostPreferences!=null?hostPreferences:c.getSharedPreferences("corner", Context.MODE_PRIVATE); }
+    public Config(Context c) {
+        prefs = hostPreferences!=null?hostPreferences:c.getSharedPreferences("corner", Context.MODE_PRIVATE);
+        if(hostPreferences==null)synchronized(Config.class){
+            if(!prefs.contains("longBackWindow")){
+                // Existing corner settings preserve the previously always-on gesture.
+                boolean existing=!prefs.getAll().isEmpty();
+                if(!existing)try{
+                    var info=c.getPackageManager().getPackageInfo(c.getPackageName(),0);
+                    existing=info.lastUpdateTime>info.firstInstallTime;
+                }catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
+                if(!prefs.edit().putBoolean("longBackWindow",existing).commit())throw new IllegalStateException("gesture migration failed");
+            }
+        }
+    }
+    boolean longBackWindow(){return prefs.getBoolean("longBackWindow",false);}
     boolean enabled(){return prefs.getBoolean("enabled",true);}
     int number(String key, int def, int min, int max) { return Rules.clamp(prefs.getInt(key, def), min, max); }
     static final int HEAT_MIN=36,HEAT_MAX=72;

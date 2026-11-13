@@ -56,15 +56,30 @@ fun IconAppScreen(app: LaunchableApp?, bottomInset: Dp = 0.dp) {
         if (uri != null) scope.launch {
             loading = true
             try {
-                val id = withContext(Dispatchers.IO) { IconOverrides.importImage(context, uri) }
-                when (field) {
+                val selectedField = field
+                val id = withContext(Dispatchers.IO) {
+                    // ponytail: serialize import through publication; split locks only if throughput matters.
+                    synchronized(IconPolicy::class.java) {
+                        val imported = IconOverrides.importImage(context, uri)
+                        val updated = IconPolicy.read(context, app.packageName)
+                        when (selectedField) {
+                            0 -> { updated.background = imported; updated.color = IconPolicy.MANUAL }
+                            1 -> { updated.foreground = imported; updated.color = IconPolicy.MANUAL }
+                            2 -> { updated.monoImage = imported; updated.monochrome = IconPolicy.UPLOAD }
+                            3 -> { updated.notificationImage = imported; updated.notification = IconPolicy.UPLOAD }
+                        }
+                        IconPolicy.save(context, app.packageName, updated)
+                        imported
+                    }
+                }
+                when (selectedField) {
                     0 -> { policy.background = id; policy.color = IconPolicy.MANUAL }
                     1 -> { policy.foreground = id; policy.color = IconPolicy.MANUAL }
                     2 -> { policy.monoImage = id; policy.monochrome = IconPolicy.UPLOAD }
                     3 -> { policy.notificationImage = id; policy.notification = IconPolicy.UPLOAD }
                 }
                 error = ""
-                save()
+                revision++
             } catch (e: Exception) {
                 error = e.message ?: "导入图片失败"
             } finally {

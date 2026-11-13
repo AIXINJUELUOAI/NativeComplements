@@ -38,8 +38,9 @@ final class WindowNavigation {
                 && (expectedPackage==null || expectedPackage.equals(pkg));
         }
 
+        /** The send landed in the exact fullscreen task that was in front (or covered) before it. */
         boolean keepNativeForeground() {
-            return expectedPackage==null && nativeTarget;
+            return nativeTarget;
         }
     }
 }

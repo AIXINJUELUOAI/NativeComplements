@@ -8,7 +8,7 @@ public final class SunWindowModule extends XposedModule {
     private boolean eligible, attempted;
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
         eligible = p.isSystemServer();
-        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=0.4.0-preview1");
+        note("MODULE_LOADED process=" + p.getProcessName() + " systemServer=" + eligible + " version=" + BuildConfig.VERSION_NAME);
     }
     private void installUndimSuggestion(ClassLoader loader){
         try{
@@ -93,7 +93,8 @@ public final class SunWindowModule extends XposedModule {
                 note("TASK_COVER_DRAW_HOOK_READY");
             }catch(Exception e){note("TASK_COVER_DRAW_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
             handles.add(hook(a.method(window,"canReceiveTouchInput")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                if(engine.blockContentTouch(chain.getThisObject()))return false;
+                // Owned-task gate, then the entry gate for tasks behind a normal window.
+                if(engine.blockContentTouch(chain.getThisObject())||engine.blockBackgroundTouch(chain.getThisObject()))return false;
                 return chain.proceed();
             }));
             // Mini tasks must stay nonfocusable for native Home/recents task
@@ -131,7 +132,7 @@ public final class SunWindowModule extends XposedModule {
             // SunOS WindowState.canAffectSystemUiFlags excludes popup windows. The
             // native frame here is logical (0,0), so it must not color the real bars.
             handles.add(hook(a.method(window,"canAffectSystemUiFlags")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                if(engine.owns(a.call(chain.getThisObject(),"getTask")))return false;
+                if(!engine.idle()&&engine.owns(a.call(chain.getThisObject(),"getTask")))return false;
                 return chain.proceed();
             }));
             Class<?> transition=Class.forName("com.android.server.wm.Transition",false,p.getClassLoader());
@@ -216,11 +217,11 @@ public final class SunWindowModule extends XposedModule {
                 if(taskResize.getReturnType()!=boolean.class||activityResize.getReturnType()!=boolean.class)
                     throw new NoSuchMethodException("scoped resize signatures");
                 resizeHooks.add(hook(taskResize).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                    if(engine.allowResize(chain.getThisObject()))return true;
+                    if(engine.mayAllowResize()&&engine.allowResize(chain.getThisObject()))return true;
                     return chain.proceed();
                 }));
                 resizeHooks.add(hook(activityResize).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                    if(engine.allowResize(a.call(chain.getThisObject(),"getTask")))return true;
+                    if(engine.mayAllowResize()&&engine.allowResize(a.call(chain.getThisObject(),"getTask")))return true;
                     return chain.proceed();
                 }));
                 handles.addAll(resizeHooks);note("SCOPED_RESIZE_HOOK_READY hooks="+resizeHooks.size());
@@ -305,7 +306,7 @@ public final class SunWindowModule extends XposedModule {
                         return result;
                     }finally{engine.activityStartResult(ticket,success);}
                 }));
-            note("HOOKS_READY count="+handles.size()+" nativecomplements-0.3.0-preview6; system scopes only");
+            note("HOOKS_READY count="+handles.size()+" version="+BuildConfig.VERSION_NAME+"; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));

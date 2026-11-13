@@ -63,6 +63,8 @@ public final class IconLayerProvider extends ContentProvider {
         }
     }
     void generate(String pkg){
+        // ponytail: one process-wide lock protects generated/imported files until publication.
+        synchronized(IconPolicy.class){
         try{
             if(!IconLayerStore.prefs(getContext()).getBoolean("enabled",false))return;
             IconPolicy p=IconPolicy.read(getContext(),pkg);
@@ -77,17 +79,16 @@ public final class IconLayerProvider extends ContentProvider {
                 :IconImages.separate(IconImages.render(original,256));
             // Apply the requested reduction to both algorithm paths, including native adaptive layers.
             String bg=IconOverrides.store(getContext(),layers.background()),fg=IconOverrides.store(getContext(),IconImages.algorithmForeground(layers.foreground()));
-            synchronized(IconPolicy.class){
-                p=IconPolicy.read(getContext(),pkg);if(p.color!=IconPolicy.ALGORITHM)return;
-                p.generatedBackground=bg;p.generatedForeground=fg;p.generatedVersion=version;IconPolicy.save(getContext(),pkg,p);
-            }
+            p.generatedBackground=bg;p.generatedForeground=fg;p.generatedVersion=version;IconPolicy.save(getContext(),pkg,p);
         }catch(Exception error){android.util.Log.w("NcIconAssets","generation failed: "+pkg,error);}
+        }
     }
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         checkCaller();
         if (!"r".equals(mode)) throw new SecurityException("read only");
         var parts = uri.getPathSegments();
         if(parts.size()==2 && parts.get(0).equals("custom") && parts.get(1).matches("[a-f0-9]{64}\\.png")) {
+            synchronized(IconPolicy.class){
             String id=parts.get(1).substring(0,64);
             boolean referenced=false;
             for(var p:IconPolicy.parse(IconLayerStore.prefs(getContext()).getString("policies","{}")).values())
@@ -95,6 +96,7 @@ public final class IconLayerProvider extends ContentProvider {
                     ||id.equals(p.generatedBackground)||id.equals(p.generatedForeground)){referenced=true;break;}
             if(!referenced)throw new FileNotFoundException("unpublished image");
             return ParcelFileDescriptor.open(IconOverrides.image(getContext(),id),ParcelFileDescriptor.MODE_READ_ONLY);
+            }
         }
         if (parts.size() != 4 || !parts.get(0).equals("layers") || !IconLibrary.validGeneration(parts.get(1))
             || !IconArchive.validPackage(parts.get(2)) || !(parts.get(3).equals("0.png") || parts.get(3).equals("1.png")))

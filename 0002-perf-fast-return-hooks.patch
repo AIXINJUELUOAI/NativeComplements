@@ -1,0 +1,129 @@
+From d8e347eb369caebc9e7c0cb7acd5bfb548d6331a Mon Sep 17 00:00:00 2001
+From: Kiro Assistant <nativecomplements@kiro.dev>
+Date: Fri, 13 Nov 2026 06:59:28 +0800
+Subject: [PATCH] =?UTF-8?q?perf:=20=E7=BB=99=E7=83=AD=E8=B7=AF=E5=BE=84=20?=
+ =?UTF-8?q?Hook=20=E6=B7=BB=E5=8A=A0=E5=BF=AB=E9=80=9F=E8=BF=94=E5=9B=9E?=
+ =?UTF-8?q?=E6=A3=80=E6=9F=A5?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+问题:
+- 没有小窗会话时,Hook 仍然执行反射调用 sessionFor() 或其他操作
+- 性能分析显示每次 Hook 都在 mGlobalLock 下执行反射,即使没有会话
+- 热路径包括: blockContentTouch (输入)、keepVisibleResumed (生命周期)、
+  preserveImmersive (沉浸式)、displayTransitionCollecting (转场) 等
+
+优化:
+- 在所有 Hook 入口第一行检查 sessions.isEmpty()
+- sessions 是 volatile 的不可变 List,读取无锁且成本极低
+- 没有会话时直接返回默认值,避免反射和加锁开销
+
+优化的方法:
+- blockContentTouch() - 每帧输入检查
+- keepVisibleResumed() - Activity 生命周期
+- retainMiniActivity() - Mini 窗口保留
+- preserveImmersive() - 沉浸式状态
+- hideRecent() - 最近任务隐藏
+- owns() / allowResize() - 任务归属检查
+- displayTransitionCollecting() - 显示转场
+- displayConfigurationChanging() - 配置变化
+- continueHiddenTask() / continueHiddenActivity() - 隐藏任务继续
+
+影响:
+- 没有小窗时,所有 Hook 开销降到只读一个 volatile 变量
+- 减少 mGlobalLock 竞争和反射调用
+- 不影响有会话时的逻辑
+---
+ .../floatingwindow/legacy/WindowEngine.java      | 16 +++++++++++-----
+ 1 file changed, 11 insertions(+), 5 deletions(-)
+
+diff --git a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
+index 2b8ca42..bb3ae72 100644
+--- a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
++++ b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
+@@ -1943,13 +1943,14 @@ final class WindowEngine {
+         catch(Exception e){log.accept("RECENTS_REFRESH_FAILED "+FrameworkAccess.reason(e));}
+     }
+     boolean hideRecent(Object task){
+-        if(!hideRecents)return false;
++        if(!hideRecents||sessions.isEmpty())return false;
+         try{
+             if(!owns(task)&&a.integer(task,"getWindowingMode")==1&&a.focused.invoke(root)==task)return false;
+             return matches(task,history.get((Integer)a.field(task,"mTaskId")));
+         }catch(Exception e){return false;}
+     }
+     boolean preserveImmersive(Object policy,Object focused){
++        if(sessions.isEmpty())return false;
+         Session s=active;if(s==null||s.restoring||focused==null)return false;
+         try{
+             Object display=a.field(policy,"mDisplayContent");
+@@ -1981,8 +1982,8 @@ final class WindowEngine {
+             command(new Intent(request).putExtra("op","START").putExtra("morphEntry",true));
+         }catch(Exception e){cancelBackPreparation(request.getStringExtra("token"));completeOpen(request,false);note("GESTURE_FAILED："+FrameworkAccess.reason(e));}
+     }
+-    boolean owns(Object task) { Session s=sessionFor(task);return s!=null&&!s.restoring; }
+-    boolean allowResize(Object task){return task!=null&&(task==resizeCandidate.get()||owns(task));}
++    boolean owns(Object task) { if(sessions.isEmpty())return false;Session s=sessionFor(task);return s!=null&&!s.restoring; }
++    boolean allowResize(Object task){if(sessions.isEmpty())return false;return task!=null&&(task==resizeCandidate.get()||owns(task));}
+     private void focusExpanded(Session s)throws Exception {
+         if(active!=s||s.restoring||s.closing||context.getSystemService(KeyguardManager.class).isKeyguardLocked())return;
+         Object top=a.call(s.task,"topRunningActivity");if(top==null)return;
+@@ -2011,6 +2012,7 @@ final class WindowEngine {
+         }}catch(Exception|LinkageError error){log.accept("NORMAL_FOCUS_REPAIR_UNAVAILABLE "+FrameworkAccess.reason(error));}
+     }
+     boolean keepVisibleResumed(Object fragment,Object resuming){
++        if(sessions.isEmpty())return false;
+         Session s;
+         try{s=sessionFor(a.call(fragment,"getTask"));}catch(Exception e){return false;}
+         if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.screenSuspended&&!continueHidden(s)||lock==null
+@@ -2028,6 +2030,7 @@ final class WindowEngine {
+         }}catch(Exception e){return false;}
+     }
+     boolean retainMiniActivity(Object activity,Object resuming){
++        if(sessions.isEmpty())return false;
+         try{
+             Session s=sessionFor(a.call(activity,"getTask"));
+             if(!visible(s)||!"mini".equals(s.frame))return false;
+@@ -2139,6 +2142,7 @@ final class WindowEngine {
+     }
+     // Both WindowState and ActivityRecord input sinks obey the same task state.
+     boolean blockContentTouch(Object container){
++        if(sessions.isEmpty())return false;
+         try{Session s=sessionFor(a.call(container,"getTask"));
+             return s!=null&&(s.parked||s.restoring||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
+                 ||s.startMask!=null&&s.startMask.holding());
+@@ -2149,7 +2153,7 @@ final class WindowEngine {
+     }
+     // Before native display collection: hide before it can capture/reparent the old geometry.
+     void displayTransitionCollecting(Object transition,Object container){
+-        if(lock==null||handler==null||!a.dc.isInstance(container))return;
++        if(sessions.isEmpty()||lock==null||handler==null||!a.dc.isInstance(container))return;
+         try{synchronized(lock){
+             for(Session s:sessions){
+             if(!visible(s)||s.restoring||s.parked||s.closing||s.fullTransition
+@@ -2164,7 +2168,7 @@ final class WindowEngine {
+     }
+     // Also covers display reconfiguration outside a Shell transition. Signature is optional/preflighted.
+     void displayConfigurationChanging(Object display,Configuration next){
+-        if(lock==null||handler==null||next==null)return;
++        if(sessions.isEmpty()||lock==null||handler==null||next==null)return;
+         try{synchronized(lock){
+             for(Session s:sessions){
+             if(!visible(s)||s.restoring||s.parked||s.closing||s.fullTransition
+@@ -2599,10 +2603,12 @@ final class WindowEngine {
+             &&s.lease!=null&&s.lease.isBinderAlive();
+     }
+     boolean continueHiddenTask(Object fragment){
++        if(sessions.isEmpty())return false;
+         try{synchronized(lock){return !(Boolean)a.field(atm,"mShuttingDown")&&continueHidden(sessionFor(a.call(fragment,"getTask")));}}
+         catch(Exception e){return false;}
+     }
+     boolean continueHiddenActivity(Object record){
++        if(sessions.isEmpty())return false;
+         try{synchronized(lock){Object task=a.call(record,"getTask");Session s=sessionFor(task);
+             return !(Boolean)a.field(atm,"mShuttingDown")&&continueHidden(s)&&a.call(task,"topRunningActivity")==record
+                 &&!(Boolean)a.field(record,"finishing")&&a.bool(record,"attachedToProcess");}}
+-- 
+2.43.0
+

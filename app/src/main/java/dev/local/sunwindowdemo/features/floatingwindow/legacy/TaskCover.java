@@ -35,6 +35,11 @@ final class TaskCover {
     private float decorationDensity,decorationAlpha,exitAlpha=1;
     private long decorationAt=-1;
     private boolean decorationLandscape,decorationEntry,presentationVisible=true;
+    private int preparedWidth,preparedHeight;
+    private float preparedDensity,drawnAlpha;
+    private boolean preparingReveal;
+    @FunctionalInterface interface Reveal { void prepare() throws Exception; }
+    private Reveal beforeReveal;
     TaskCover(FrameworkAccess a,Context context,Object task,Object parent,String pkg,
             RectF from,RectF to,float radiusFrom,float radiusTo,float ownerAlpha,boolean fadeIn)throws Exception{
         this.a=a;this.task=task;this.parent=parent;this.from=new RectF(from);this.to=new RectF(to);
@@ -85,6 +90,21 @@ final class TaskCover {
         return (SurfaceControl)a.call(b,"build");
     }
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
+    void beforeReveal(Reveal callback){beforeReveal=callback;}
+    boolean canRetarget(){return !closed&&!exiting&&fadeAt<0&&mask.holding();}
+    void prepared(Geometry.Placement canvas,float density){
+        preparedWidth=canvas.width();preparedHeight=canvas.height();preparedDensity=density;
+    }
+    boolean reusesPresentation(Geometry.Placement canvas){
+        return !closed&&!preparingReveal&&presentationVisible&&drawnAlpha>=1&&mask.holding()
+            &&preparedWidth==canvas.width()&&preparedHeight==canvas.height();
+    }
+    float preparedDensity(){return preparedDensity;}
+    String state(){
+        return "closed="+closed+" exiting="+exiting+" holding="+mask.holding()+" fading="+(fadeAt>=0)
+            +" alpha="+drawnAlpha+" from="+from+" to="+to
+            +" backgroundValid="+(background!=null&&background.isValid())+" iconValid="+(icon!=null&&icon.isValid());
+    }
     private boolean continuousDim;
     void continuousDim(){continuousDim=true;}
     void entryDecorations(boolean entering){decorationEntry=entering;}
@@ -142,7 +162,12 @@ final class TaskCover {
         if(fadeIn&&visible&&entryAt<0&&now>=notBefore)entryAt=now;
         long elapsed=fadeIn?(entryAt<0?0:now-entryAt):now-began;
         float p=duration==0?1:Math.min(1,elapsed/(float)duration);
-        if(ready&&p==1&&(!decorationEntry||decorationProgress()==1)&&fadeAt<0){mask.release(ownerAlpha);fadeAt=now;}
+        if(ready&&p==1&&(!decorationEntry||decorationProgress()==1)&&fadeAt<0){
+            preparingReveal=true;
+            try{if(beforeReveal!=null)beforeReveal.prepare();}
+            finally{preparingReveal=false;}
+            mask.release(ownerAlpha);fadeAt=now;
+        }
         if(fadeAt>=0&&now-fadeAt>=fadeDuration){close();return false;}
         if(mask.holding())mask.hold();
         float alpha=fadeAt<0?(fadeIn&&fadeDuration>0?Math.min(1,elapsed/(float)fadeDuration):1):1-(now-fadeAt)/(float)fadeDuration;
@@ -174,6 +199,7 @@ final class TaskCover {
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},icon);
             decorate(tx,false);
             tx.apply();
+            drawnAlpha=alpha;
         }
     }
     void close(){

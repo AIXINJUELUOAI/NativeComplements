@@ -40,7 +40,11 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         Context window=overlayContext(display);
         SystemUiHost host=new SystemUiHost(new android.view.ContextThemeWrapper(window,android.R.style.Theme_DeviceDefault_DayNight));
         live=host;
-        try{host.initialize();}catch(Throwable failure){host.cleanup();android.util.Log.e("NativeComplements","HOST_START_FAILED",failure);}
+        try{host.initialize();}catch(Throwable failure){
+            try{host.cleanup();}catch(Throwable cleanupFailure){failure.addSuppressed(cleanupFailure);}
+            finally{if(live==host)live=null;connected=false;}
+            android.util.Log.e("NativeComplements","HOST_START_FAILED",failure);
+        }
     }
     private final BroadcastReceiver settingsReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
         try{if(getSentFromUid()==getPackageManager().getApplicationInfo(Wire.PKG,0).uid){
@@ -57,7 +61,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             main.post(()->{settingsReady=true;reloadSettings();});
         }catch(Exception e){android.util.Log.e("NativeComplements","SETTINGS_READ_FAILED",e);main.postDelayed(()->{if(!cleaned)loadSettings();},3000);}
     });}
-    private final Runnable poll=new Runnable(){public void run(){if(cleaned)return;Wire.send(SystemUiHost.this,"STATUS");main.postDelayed(this,750);}};
+    /* STATUS carries foreground/IME/overlay state used by corner rules, barrage and suggestions,
+     * so it keeps 750ms while interactive. Screen off has nothing to show: stop until SCREEN_ON/USER_PRESENT. */
+    private boolean polling;
+    private final Runnable poll=new Runnable(){public void run(){
+        if(cleaned||!getSystemService(android.os.PowerManager.class).isInteractive()){polling=false;return;}
+        Wire.send(SystemUiHost.this,"STATUS");main.postDelayed(this,750);
+    }};
+    private void resumePoll(){if(cleaned||polling)return;polling=true;main.post(poll);}
     private void reloadSettings(){
         if(cleaned)return;showSwipeHint(0);hideFan();if(!config.enabled()){cancelOpenWait();hidePanel();}removeHot();
         if(panel instanceof FrameLayout outside&&outside.getChildCount()>0)AppList.blur(outside.getChildAt(0),config.menuBlur());
@@ -116,7 +127,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private boolean publishedEnabled;
     private boolean publishedDrop,publishedImmersive;
-    private int activeTask=-1,publishedHidden=-2;
+    private int activeTask=-1,pinnedTask=-1,publishedHidden=-2;
     private final java.util.concurrent.atomic.AtomicBoolean backPending=new java.util.concurrent.atomic.AtomicBoolean();
     private final android.os.Binder dropChannel=new android.os.Binder(){
         @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws android.os.RemoteException {
@@ -138,12 +149,15 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             if(taskId<0||!Wire.allowedPackage(pkg)||Wire.PKG.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg))return false;
             boolean probe=code==android.os.IBinder.FIRST_CALL_TRANSACTION+2;
             if(!probe&&!Wire.validToken(backToken))return false;
-            boolean accepted=!cleaned&&allowed()&&backendReady&&dropAvailable()
+            boolean accepted=!cleaned&&allowed()&&config.longBackWindow()&&backendReady&&dropAvailable()
                 &&!config.blocked().contains(pkg)&&(probe?!backPending.get():backPending.compareAndSet(false,true));
             if(probe){if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;}
             if(accepted)main.postDelayed(()->{
-                try{if(!cleaned&&allowed()&&backendReady&&dropAvailable())
-                    Wire.back(SystemUiHost.this,pkg,taskId,backToken);
+                try{
+                    if(!cleaned&&allowed()&&config.longBackWindow()&&backendReady&&dropAvailable())Wire.back(SystemUiHost.this,pkg,taskId,backToken);
+                    else Wire.cancelBack(backToken);
+                }catch(RuntimeException failure){
+                    Wire.cancelBack(backToken);android.util.Log.w("NativeComplements","BACK_DISPATCH_FAILED",failure);
                 }finally{backPending.set(false);}
             },0);
             if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;
@@ -164,7 +178,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private int hintStage;
     private int hintRevision;
     private void showSwipeHint(int stage){
-        if(stage==0||cleaned||!allowed()||!backendReady||!dropAvailable()){
+        if(stage==0||cleaned||!allowed()||!config.longBackWindow()||!backendReady||!dropAvailable()){
             if(swipeHint!=null)remove(swipeHint);swipeHint=null;hintStage=0;hintRevision++;return;
         }
         if(stage==2&&hintStage!=2){
@@ -222,6 +236,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             updateOverlayPriority();controls.imeTop(suggestionImeTop);miniControls.imeTop(suggestionImeTop);refresh();}
         if(i.hasExtra("immersive"))immersive=i.getBooleanExtra("immersive",false);
         activeTask="active".equals(backendState)?i.getIntExtra("taskId",-1):-1;
+        Intent pinnedFrame="active".equals(backendState)?i.getParcelableExtra("pinnedFrame",Intent.class):null;
+        pinnedTask=pinnedFrame==null?-1:pinnedFrame.getIntExtra("taskId",-1);
         publish(false);
         try{if(!config.enabled()||!getSystemService(android.os.PowerManager.class).isInteractive()||getSystemService(KeyguardManager.class).isKeyguardLocked())hideControls();else {controls.update(i);
             Intent mini=i.getParcelableExtra("pinnedFrame",Intent.class);
@@ -231,7 +247,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private List<AppCatalog.App> all=List.of();
     private String foreground="";
-    private boolean keyboard,cleaned,receiverRegistered;
+    private boolean keyboard,cleaned;
     private int lastSelection=-1;
     private long lastOpen;
     private int touchLogs;
@@ -239,7 +255,11 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void touchLog(String message){lastTouch=message;if(touchLogs++<50)android.util.Log.i("CornerLauncher",message);}
     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener=(p,k)->{main.removeCallbacks(reload);main.post(reload);};
     private final BroadcastReceiver screenReceiver=new BroadcastReceiver(){
-        public void onReceive(Context c,Intent i){cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");}
+        public void onReceive(Context c,Intent i){
+            if(Intent.ACTION_SCREEN_ON.equals(i.getAction())){resumePoll();return;}
+            cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");
+            if(Intent.ACTION_SCREEN_OFF.equals(i.getAction())){main.removeCallbacks(poll);polling=false;}else resumePoll();
+        }
     };
     private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){loadApps();}};
     private int catalogGeneration;
@@ -257,16 +277,16 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
         Wire.send(this,"STATUS");
         config.prefs.registerOnSharedPreferenceChangeListener(prefListener);
-        IntentFilter screen=new IntentFilter(Intent.ACTION_SCREEN_OFF);screen.addAction(Intent.ACTION_USER_PRESENT);
+        IntentFilter screen=new IntentFilter(Intent.ACTION_SCREEN_OFF);screen.addAction(Intent.ACTION_USER_PRESENT);screen.addAction(Intent.ACTION_SCREEN_ON);
         registerReceiver(screenReceiver,screen,Context.RECEIVER_NOT_EXPORTED);
         IntentFilter pkgs=new IntentFilter(Intent.ACTION_PACKAGE_ADDED);pkgs.addAction(Intent.ACTION_PACKAGE_REMOVED);pkgs.addAction(Intent.ACTION_PACKAGE_CHANGED);pkgs.addDataScheme("package");
-        registerReceiver(packageReceiver,pkgs,Context.RECEIVER_NOT_EXPORTED);receiverRegistered=true;
+        registerReceiver(packageReceiver,pkgs,Context.RECEIVER_NOT_EXPORTED);
         registerReceiver(settingsReceiver,settingsFilter(),null,main,Context.RECEIVER_EXPORTED);
         registerReceiver(queryReceiver,new IntentFilter(LauncherGuard.QUERY),null,main,Context.RECEIVER_EXPORTED);
         getApplicationContext().registerComponentCallbacks(this);
         dev.local.sunwindowdemo.features.iconlayers.IconAssets.onReload(iconsReloaded);
         dev.local.sunwindowdemo.features.iconlayers.IconAssets.connect(getApplicationContext());
-        loadApps();loadSettings();main.post(poll);
+        loadApps();loadSettings();resumePoll();
     }
     private void loadApps() {
         int generation=++catalogGeneration;
@@ -351,7 +371,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     void publish(boolean force){
         int[] rects=new int[8];int count=0;
         boolean enabled=allowed()&&panel==null;
-        boolean dropEnabled=enabled&&backendReady&&dropAvailable();
+        boolean dropEnabled=enabled&&config.longBackWindow()&&backendReady&&dropAvailable();
         if(!dropEnabled)showSwipeHint(0);
         if(enabled)for(View v:new View[]{left,right})if(v!=null&&v.isAttachedToWindow()&&v.isLaidOut()){
             int[] location=new int[2];v.getLocationOnScreen(location);
@@ -492,12 +512,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     String notificationForegroundPackage(){
         try{
-            var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(2);
+            // A normal window and a mini window can both sit above the fullscreen app.
+            var tasks=getSystemService(android.app.ActivityManager.class).getRunningTasks(3);
             if(tasks.isEmpty())return null;
-            // Skip the current floating window task to get the real fullscreen foreground app
+            // Skip both floating window tasks to get the real fullscreen foreground app
             for(var task:tasks){
                 if(task.topActivity==null)continue;
-                if(activeTask>0&&task.taskId==activeTask)continue; // Skip floating window
+                if(task.taskId>0&&(task.taskId==activeTask||task.taskId==pinnedTask))continue; // Skip floating windows
                 return task.topActivity.getPackageName();
             }
             return null;
@@ -559,5 +580,5 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     @Override public void onConfigurationChanged(Configuration c){cancelOpenWait();hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(barrage!=null){barrage.close();barrage=null;}if(quick!=null){quick.close();quick=null;}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);unregisterReceiver(settingsReceiver);unregisterReceiver(queryReceiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();try{unregisterReceiver(backendReceiver);}catch(RuntimeException ignored){}Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);if(receiverRegistered){unregisterReceiver(screenReceiver);unregisterReceiver(packageReceiver);receiverRegistered=false;}}
+    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(barrage!=null){barrage.close();barrage=null;}if(quick!=null){quick.close();quick=null;}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
 }

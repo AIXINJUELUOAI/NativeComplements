@@ -48,20 +48,44 @@ final class WindowEngine {
     private record ShareStarted(Session target,Session displaced,Session previous,Session previousPinned) {}
     private record ShareReused(Session target) {}
     final ThreadLocal<ShareLaunch> shareLaunch=new ThreadLocal<>();
-    record NativeForeground(Object task,String pkg,int userId,Object display,int mode,boolean owned) {}
+    /** fullscreen: the topmost visible, unmanaged fullscreen app task captured before this start.
+     * It equals task when that task holds focus, and differs when a focused floating window covers it. */
+    record NativeForeground(Object task,String pkg,int userId,Object display,int mode,boolean owned,Object fullscreen) {}
     final ThreadLocal<NativeForeground> launchForeground=new ThreadLocal<>();
     NativeForeground nativeForeground()throws Exception{
         if(lock==null||root==null)return null;
         synchronized(lock){
             Object task=a.focused.invoke(root);if(task==null)return null;
             Object top=a.call(task,"topRunningActivity");if(top==null)return null;
+            int mode=a.integer(task,"getWindowingMode");boolean owned=owns(task);
+            Object display=a.call(task,"getDisplayContent");
+            // Without any floating session the focused task is the fullscreen foreground; skip the scan.
+            Object fullscreen=mode==1&&!owned?task:sessions.isEmpty()?null:visibleFullscreen(display);
             return new NativeForeground(task,(String)a.field(top,"packageName"),(Integer)a.field(task,"mUserId"),
-                a.call(task,"getDisplayContent"),a.integer(task,"getWindowingMode"),owns(task));
+                display,mode,owned,fullscreen);
         }
     }
+    /** Topmost visible standard fullscreen leaf task on display that no session manages; null when Home or nothing is beneath. */
+    private Object visibleFullscreen(Object display)throws Exception{
+        if(display==null)return null;
+        Object[] found={null};boolean[] done={false};
+        a.call(display,"forAllTasks",new Class<?>[]{Consumer.class},(Consumer<Object>)t->{
+            if(done[0])return;
+            try{
+                if(!a.bool(t,"isLeafTask")||owns(t)||!a.bool(t,"isVisibleRequested")||a.integer(t,"getWindowingMode")!=1)return;
+                done[0]=true;
+                if(a.integer(t,"getActivityType")==1&&a.call(t,"topRunningActivity")!=null)found[0]=t;
+            }catch(Exception e){throw new IllegalStateException(e);}
+        });
+        return found[0];
+    }
     private boolean keepNativeForeground(NativeForeground before,Object task,String pkg,int user,Object display){
-        return before!=null&&WindowPolicy.nativeForeground(before.task,task,before.pkg,pkg,before.userId,user,
-            before.display,display,before.mode,before.owned);
+        if(before==null)return false;
+        if(WindowPolicy.nativeForeground(before.task,task,before.pkg,pkg,before.userId,user,
+            before.display,display,before.mode,before.owned))return true;
+        // A focused floating window may cover the real fullscreen app. Starting that exact
+        // task must bring it forward natively instead of converting it into a window.
+        return WindowPolicy.coveredFullscreen(before.fullscreen,before.task,task,before.display,display);
     }
     private String uiTouch="尚未收到角落触摸";
     private boolean controlUid(int uid){return uid>=0&&(uid==clientUid||uid==uiUid);}
@@ -354,13 +378,19 @@ final class WindowEngine {
         } catch (Throwable e) { log.accept("ATTACH_FAILED " + FrameworkAccess.reason(e)); }
     }
 
+    private volatile String staticCapabilities;
+    private volatile long staticCapabilitiesAt;
     private String capabilities() {
         try {
-            synchronized (lock) {
-                return "multiWindow=" + a.field(atm, "mSupportsMultiWindow")
-                    + "\nfreeform=" + a.field(atm, "mSupportsFreeformWindowManagement")
-                    + "\n恢复记录=" + journal.getBaseFile().exists();
+            String fixed=staticCapabilities;long now=SystemClock.elapsedRealtime();
+            // ATMS support flags change only through settings that normally need a reboot; refresh every 30s
+            // instead of taking the WM lock for each 750ms heartbeat.
+            if(fixed==null||now-staticCapabilitiesAt>30000)synchronized (lock) {
+                fixed="multiWindow=" + a.field(atm, "mSupportsMultiWindow")
+                    + "\nfreeform=" + a.field(atm, "mSupportsFreeformWindowManagement");
+                if(attached){staticCapabilities=fixed;staticCapabilitiesAt=now;}
             }
+            return fixed + "\n恢复记录=" + journal.getBaseFile().exists();
         } catch (Exception e) { return "能力读取失败：" + FrameworkAccess.reason(e); }
     }
 
@@ -371,7 +401,8 @@ final class WindowEngine {
                 boolean next=i.getBooleanExtra("hideRecents",false);
                 if(next!=hideRecents){hideRecents=next;saveHistory();notifyRecents();}
             }
-            if ("STATUS".equals(op)) { pushHistory();report("STATUS"); return; }
+            // Heartbeats republish recents history only when it changed; explicit queries always publish.
+            if ("STATUS".equals(op)) { pushHistory(false);report("STATUS"); return; }
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
             if ("OTP_INPUT".equals(op)) {
                 if(suggestionInput!=null)suggestionInput.start(i);
@@ -457,6 +488,7 @@ final class WindowEngine {
                             if(prepared.cover!=null){
                                 s.entryFade=false;s.cover=prepared.cover;s.coverDrawn=false;s.coverFullscreen=false;
                                 s.cover.entryDecorations(true);
+                                s.cover.beforeReveal(()->renderFrame(s));
                                 s.cover.resumeTo(visualBounds(s.placement),a.config(s.task,false).densityDpi/160f*MotionStyle.radius(s.placement.scale(),s.defaultScale));
                                 coverTasks.put(s.task,s);pollCover(s,s.cover);
                             }else s.startMask=prepared.mask;
@@ -573,7 +605,9 @@ final class WindowEngine {
                     }
                     WindowNavigation.Launch ticket=new WindowNavigation.Launch(generation,pkg,
                         request.getBooleanExtra("notificationLaunch",false)?null:pkg,shortcutUser,ShortcutStarter.sender(shortcutLaunch),SystemClock.elapsedRealtime(),foregroundPackage);
-                    if(request.getBooleanExtra("notificationLaunch",false))ticket.foreground=nativeForeground();
+                    // Every PendingIntent jump (notification or suggestion) compares its bound target with the
+                    // pre-send fullscreen foreground: landing in that exact task keeps it native.
+                    ticket.foreground=nativeForeground();
                     pendingShortcutLaunch.set(ticket);
                     int result=ShortcutStarter.send(shortcutLaunch,context,request.getParcelableExtra("launchFillIn",Intent.class),(pi,intent,code,data,extras)->{
                         synchronized(ticket){
@@ -896,6 +930,8 @@ final class WindowEngine {
                     a.integer(caller,"getUid"),(String)a.field(requestActivity,"launchedFromPackage"),(String)a.field(caller,"packageName")))return null;
             }
             if((Integer)a.field(target,"mUserId")!=s.userId||a.call(target,"getDisplayContent")!=a.call(s.task,"getDisplayContent"))return null;
+            // Only ordinary application tasks become linked windows; Home, Recents, Assistant and Dream stay native.
+            if(a.integer(target,"getActivityType")!=1)return null;
             ComponentName component=(ComponentName)a.field(target,"realActivity");
             if(component==null||!Wire.allowedPackage(component.getPackageName())||Wire.PKG.equals(component.getPackageName()))return null;
             if(keepNativeForeground(launchForeground.get(),target,(String)a.field(requestActivity,"packageName"),
@@ -1781,14 +1817,24 @@ final class WindowEngine {
     private void beginCover(Session s,Geometry.Placement from,Geometry.Placement to,boolean fullscreen){
         if(from==null||to==null)return;
         try{
+            TaskCover previous=s.cover;
+            boolean sameMode=s.coverFullscreen==fullscreen;
             s.coverDrawn=false;s.coverFullscreen=fullscreen;
-            if(s.cover!=null){s.cover.target(visualBounds(to));return;}
+            if(previous!=null&&sameMode&&previous.canRetarget()){
+                previous.target(visualBounds(to));return;
+            }
             float density=a.config(s.task,false).densityDpi/160f;
             float radius=a.integer(s.task,"getWindowingMode")==1?0:density*MotionStyle.radius(from.scale(),s.defaultScale);
             TaskCover cover=new TaskCover(a,context,s.task,s.parent,s.pkg,visualBounds(from),visualBounds(to),radius,fullscreen?0:density*MotionStyle.radius(to.scale(),s.defaultScale),coverReleaseAlpha(s),s.entering&&s.entryFade&&!fullscreen);
+            cover.beforeReveal(()->renderFrame(s));
             cover.entryDecorations(s.entering&&!fullscreen);
             if(s.startMask!=null&&s.startMask.holding()){s.startMask.transfer();s.startMask.continueWith(cover.mask);s.startMask=null;}
-            s.cover=cover;coverTasks.put(s.task,s);pollCover(s,cover);
+            s.cover=cover;coverTasks.put(s.task,s);
+            if(previous!=null){
+                log.accept("COVER_REPLACED task="+s.taskId+" old="+previous.state());
+                previous.ownerAlpha(0);previous.close();previous.mask.continueWith(cover.mask);cover.mask.hide();
+            }
+            pollCover(s,cover);
             log.accept("COVER_BEGIN task="+s.taskId+" from="+visualBounds(from)+" to="+visualBounds(to)+" fullscreen="+fullscreen);
         }catch(Throwable error){log.accept("COVER_SKIPPED "+FrameworkAccess.reason(error));endCover(s);}
     }
@@ -1827,12 +1873,16 @@ final class WindowEngine {
                     &&coverConfigurationMatches(s,main)&&!a.presentationLeashed(s.task);
                 if(s.coverFullscreen){
                     Object display=a.call(s.task,"getDisplayContent");if(display!=null)cover.target(new RectF((Rect)a.call(display,"getBounds")));
-                }else ready&=!s.entering&&!s.rotation.active();
+                }else ready&=!s.entering&&!s.transitioning&&!s.rotation.active();
                 boolean visible=context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
-                if(!cover.step(ready,visible)){if(cover.exiting())s.barAlpha=0;s.cover=null;coverTasks.remove(s.task);if(visible(s)&&!s.restoring){renderFrame(s);completeEntryInput(s);}return;}
+                if(!cover.step(ready,visible)){
+                    log.accept("COVER_END task="+s.taskId+" state="+cover.state());
+                    if(cover.exiting())s.barAlpha=0;s.cover=null;coverTasks.remove(s.task);
+                    if(visible(s)&&!s.restoring){renderFrame(s);completeEntryInput(s);}return;
+                }
                 pollCover(s,cover);
             }catch(Throwable error){
-                log.accept("COVER_RELEASED "+FrameworkAccess.reason(error));
+                log.accept("COVER_RELEASED task="+s.taskId+" "+FrameworkAccess.reason(error)+" state="+cover.state());
                 s.opacity=0;endCover(s);handler.post(()->{if(sessions.contains(s)&&!s.restoring)recover("遮罩目标未就绪");});
             }
         }},16);
@@ -1881,10 +1931,17 @@ final class WindowEngine {
             stream=historyFile.startWrite();stream.write(bytes);historyFile.finishWrite(stream);
         }catch(Exception e){if(stream!=null)historyFile.failWrite(stream);log.accept("HISTORY_SAVE_FAILED "+FrameworkAccess.reason(e));}
     }
-    private void pushHistory(){
+    private int[] pushedHidden;
+    private void pushHistory(){pushHistory(true);}
+    private void pushHistory(boolean force){
         if(context==null)return;
+        int[] hidden=hiddenIds();
+        synchronized(this){
+            if(!force&&java.util.Arrays.equals(hidden,pushedHidden))return;
+            pushedHidden=hidden;
+        }
         Intent state=new Intent(HISTORY).setPackage(LauncherGuard.PACKAGE).putExtra("protocol",Wire.PROTOCOL)
-            .putExtra("hiddenTaskIds",hiddenIds());
+            .putExtra("hiddenTaskIds",hidden);
         // Callers can still own the WM lock. Snapshot now, but acquire AMS only
         // after this window operation unwinds, as the result broadcasts do.
         handler.post(()->{
@@ -1982,6 +2039,10 @@ final class WindowEngine {
         }catch(Exception e){cancelBackPreparation(request.getStringExtra("token"));completeOpen(request,false);note("GESTURE_FAILED："+FrameworkAccess.reason(e));}
     }
     boolean owns(Object task) { Session s=sessionFor(task);return s!=null&&!s.restoring; }
+    /** No floating session: session-scoped hooks keep the native result without any reflection. */
+    boolean idle(){return sessions.isEmpty();}
+    /** Cheap gate before the resize hooks resolve a task: only a preflight candidate or a session can change the result. */
+    boolean mayAllowResize(){return !sessions.isEmpty()||resizeCandidate.get()!=null;}
     boolean allowResize(Object task){return task!=null&&(task==resizeCandidate.get()||owns(task));}
     private void focusExpanded(Session s)throws Exception {
         if(active!=s||s.restoring||s.closing||context.getSystemService(KeyguardManager.class).isKeyguardLocked())return;
@@ -2011,6 +2072,7 @@ final class WindowEngine {
         }}catch(Exception|LinkageError error){log.accept("NORMAL_FOCUS_REPAIR_UNAVAILABLE "+FrameworkAccess.reason(error));}
     }
     boolean keepVisibleResumed(Object fragment,Object resuming){
+        if(sessions.isEmpty())return false;
         Session s;
         try{s=sessionFor(a.call(fragment,"getTask"));}catch(Exception e){return false;}
         if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.screenSuspended&&!continueHidden(s)||lock==null
@@ -2028,6 +2090,7 @@ final class WindowEngine {
         }}catch(Exception e){return false;}
     }
     boolean retainMiniActivity(Object activity,Object resuming){
+        if(sessions.isEmpty())return false;
         try{
             Session s=sessionFor(a.call(activity,"getTask"));
             if(!visible(s)||!"mini".equals(s.frame))return false;
@@ -2064,7 +2127,8 @@ final class WindowEngine {
         }
     }
     boolean ownsActivityToken(IBinder token)throws Exception{
-        if(lock==null)return false;
+        // A provisional share launch owns its request before any session exists.
+        if(lock==null||sessions.isEmpty()&&shareLaunch.get()==null)return false;
         synchronized(lock){Object record=a.method(a.activity,"forTokenLocked",IBinder.class).invoke(null,token);
             ShareLaunch provisional=shareLaunch.get();
             return record!=null&&(owns(a.call(record,"getTask"))||provisional!=null&&!provisional.nativeFullscreen&&provisional.request==record);}
@@ -2075,39 +2139,37 @@ final class WindowEngine {
                 Object record=a.method(a.activity,"forTokenLocked",IBinder.class).invoke(null,(IBinder)client);
                 return record==null?1:WindowPolicy.clientMode((String)a.field(record,"packageName"));
             }
-            if(client instanceof IInterface){
-                IBinder binder=((IInterface)client).asBinder();String[] pkg={null};
-                for(Session s:sessions)if(!s.restoring)a.call(s.task,"forAllWindows",new Class<?>[]{Consumer.class,boolean.class},(Consumer<Object>)window->{
-                    try{if(((IInterface)a.field(window,"mClient")).asBinder().equals(binder))pkg[0]=s.pkg;}
-                    catch(Exception error){throw new IllegalStateException(error);}
-                },false);
-                return WindowPolicy.clientMode(pkg[0]);
-            }
+            if(client instanceof IInterface)return clientMode(clientOwner(client));
             return 1;
         }
     }
     int activityClientMode(Object record)throws Exception{return WindowPolicy.clientMode((String)a.field(record,"packageName"));}
-    boolean ownsClientWindow(Object client)throws Exception{
-        if(sessions.isEmpty()||lock==null||!(client instanceof IInterface))return false;
-        IBinder token=((IInterface)client).asBinder();boolean[] found={false};
-        synchronized(lock){for(Session s:sessions)if(!s.restoring){
+    /** The live session whose task holds this client window, from one traversal that stops matching
+     * once found; null when no session owns it. Hooks that map one outgoing object call this once. */
+    Object clientOwner(Object client)throws Exception{
+        if(sessions.isEmpty()||lock==null||!(client instanceof IInterface))return null;
+        IBinder token=((IInterface)client).asBinder();Session[] found={null};
+        synchronized(lock){for(Session s:sessions){
+            if(s.restoring||found[0]!=null)continue;
             a.call(s.task,"forAllWindows",new Class<?>[]{Consumer.class,boolean.class},(Consumer<Object>)window->{
-                try{if(((IInterface)a.field(window,"mClient")).asBinder().equals(token))found[0]=true;}
+                if(found[0]!=null)return;
+                try{if(((IInterface)a.field(window,"mClient")).asBinder().equals(token))found[0]=s;}
                 catch(Exception e){throw new IllegalStateException(e);}
             },false);
-        }return found[0];}
+        }}
+        return found[0];
     }
+    int clientMode(Object owner){return WindowPolicy.clientMode(owner instanceof Session s?s.pkg:null);}
+    boolean ownsClientWindow(Object client)throws Exception{return clientOwner(client)!=null;}
     Object clientInsets(Object client,Object original)throws Exception{
         if(original==null||!(client instanceof IInterface))return original;
+        return ownerInsets(clientOwner(client),original);
+    }
+    /** Map outgoing InsetsState for an already resolved owner (see clientOwner). */
+    Object ownerInsets(Object owner,Object original)throws Exception{
+        if(original==null||!(owner instanceof Session s))return original;
         synchronized(lock){
-            IBinder binder=((IInterface)client).asBinder();Session[] found={null};
-            for(Session s:sessions)if(!s.restoring){
-                a.call(s.task,"forAllWindows",new Class<?>[]{Consumer.class,boolean.class},(Consumer<Object>)window->{
-                    try{if(((IInterface)a.field(window,"mClient")).asBinder().equals(binder))found[0]=s;}
-                    catch(Exception e){throw new IllegalStateException(e);}
-                },false);
-            }
-            Session s=found[0];if(s==null||s.placement==null)return original;
+            if(s.restoring||s.placement==null)return original;
             Class<?> type=original.getClass();Object copy=type.getDeclaredConstructor(type,boolean.class).newInstance(original,true);
             Geometry.Placement p="normal".equals(s.frame)?normalForIme(s):s.placement;
             // The client is a local fullscreen viewport, not the physical display.
@@ -2139,9 +2201,59 @@ final class WindowEngine {
     }
     // Both WindowState and ActivityRecord input sinks obey the same task state.
     boolean blockContentTouch(Object container){
+        if(sessions.isEmpty())return false;
         try{Session s=sessionFor(a.call(container,"getTask"));
             return s!=null&&(s.parked||s.restoring||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
                 ||s.startMask!=null&&s.startMask.holding());
+        }catch(Exception e){return false;}
+    }
+    /* SystemUI's outside-dismiss overlays arrive asynchronously (frame IPC, addView, first draw)
+     * and are GONE during non-entry transitions. Until they cover the screen again, tasks behind a
+     * normal window would take the touch. Gate those background tasks here, in the same input
+     * update that presents the window, for the entry/transition plus a short grace period. */
+    private static final long TOUCH_GUARD_GRACE_MS=250,TOUCH_GUARD_MAX_MS=3000;
+    private volatile boolean touchGuarded;
+    private volatile Session touchGuardOwner;
+    private volatile long touchGuardSince,touchGuardUntil;
+    private static boolean normalShown(Session s){
+        return s!=null&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.parked&&!s.screenSuspended&&"normal".equals(s.frame);
+    }
+    private static boolean entryGuard(Session s){
+        return normalShown(s)&&(s.entering||s.transitioning||s.cover!=null&&!s.coverFullscreen);
+    }
+    /** Called with every frame sent to SystemUI: start the cap timer, or the grace period once the guard ends. */
+    private void trackTouchGuard(){
+        if(handler==null)return;
+        Session owner=active;
+        boolean guarded=entryGuard(owner);long now=SystemClock.uptimeMillis();
+        if(WindowPolicy.startsTouchGuard(owner,touchGuardOwner,guarded,touchGuarded)){
+            touchGuardSince=now;touchGuardUntil=0;
+            handler.postDelayed(this::refreshTouchGuard,TOUCH_GUARD_MAX_MS+16);
+        }else if(!guarded&&touchGuarded){
+            touchGuardUntil=now+TOUCH_GUARD_GRACE_MS;handler.postDelayed(this::refreshTouchGuard,TOUCH_GUARD_GRACE_MS+16);
+        }
+        touchGuardOwner=normalShown(owner)?owner:null;
+        touchGuarded=guarded;
+    }
+    /** Re-run native input-window population so an expired guard releases the background. */
+    private void refreshTouchGuard(){
+        if(lock==null)return;
+        try{synchronized(lock){a.call(wms,"requestTraversal");}}
+        catch(Exception error){log.accept("TOUCH_GUARD_REFRESH_FAILED "+FrameworkAccess.reason(error));}
+    }
+    /** WindowState.canReceiveTouchInput: false for other tasks on the display while a normal window enters. */
+    boolean blockBackgroundTouch(Object window){
+        Session s=active;
+        if(!normalShown(s))return false;
+        long now=SystemClock.uptimeMillis();
+        // Before the first frame of this guard reports, the guard has just started.
+        boolean reported=touchGuardOwner==s;
+        if(!WindowPolicy.backgroundTouchGuard(true,entryGuard(s),reported&&touchGuarded,touchGuardSince,
+            reported?touchGuardUntil:0,now,TOUCH_GUARD_MAX_MS))return false;
+        try{
+            Object task=a.call(window,"getTask");
+            return task!=null&&task!=s.task&&sessionFor(task)==null
+                &&a.call(task,"getDisplayContent")==a.call(s.task,"getDisplayContent");
         }catch(Exception e){return false;}
     }
     private boolean suppressTransition(Session s){
@@ -2524,6 +2636,11 @@ final class WindowEngine {
                 else s.decoration.hide(s.task);
             }return;
         }
+        if(s.cover!=null&&s.cover.reusesPresentation(s.placement)){
+            s.cover.mask.hold();
+            updateDecoration(s,s.placement,s.cover.preparedDensity(),!s.presented&&!a.inFrame()&&!s.backRequested);
+            return;
+        }
         if("normal".equals(s.frame)&&!s.resizing&&!s.transitioning&&!s.entering&&!s.fullTransition){
             Geometry.Placement adjusted=normalForIme(s);
             if(adjusted!=null&&!adjusted.equals(s.placement)){
@@ -2534,7 +2651,9 @@ final class WindowEngine {
         Geometry.Placement p = s.placement;
         // Transform the task; preserve native child-window layout/input metadata.
         a.transform(s.task, p.scale(), p.x() - parentBounds.left, p.y() - parentBounds.top);
-        float visualRadius=Math.min(a.config(s.task,false).densityDpi/160f*MotionStyle.radius(p.scale(),s.defaultScale)*s.radiusFactor,Math.min(p.width(),p.height())*p.scale()/2f);
+        // One configuration read per frame serves both the corner radius and the decoration.
+        float density=a.config(s.task,false).densityDpi/160f;
+        float visualRadius=Math.min(density*MotionStyle.radius(p.scale(),s.defaultScale)*s.radiusFactor,Math.min(p.width(),p.height())*p.scale()/2f);
         Rect crop=new Rect(0,0,p.width(),p.height());
         Object main=a.call(s.task,"getTopVisibleAppMainWindow");
         if(main!=null){
@@ -2552,12 +2671,14 @@ final class WindowEngine {
             log.accept("VISIBLE_WINDOW_CROP task="+s.taskId+" crop="+crop+" main="+main);
         }
         a.opacity(s.task,presentationAlpha(s));
+        if(s.cover!=null)s.cover.prepared(p,density);
+        updateDecoration(s,p,density,!a.inFrame()&&!s.backRequested);
+    }
+    private void updateDecoration(Session s,Geometry.Placement p,float density,boolean structural)throws Exception{
         if(s.decoration!=null){
             boolean wasPresented=s.presented;
             s.decoration.dimAmount(windowDim);
             float decorationAlpha=s.barAlpha*s.rotation.alpha(SystemClock.elapsedRealtime());
-            float density=a.config(s.task,false).densityDpi/160f;
-            boolean structural=!a.inFrame()&&!s.backRequested;
             boolean drawn=s.cover==null?s.decoration.update(s.task,s.parent,p,density,s.displayW>s.displayH,decorationAlpha,structural)
                 :s.cover.decorate(s.decoration,p,density,s.displayW>s.displayH,decorationAlpha,structural);
             s.presented=wasPresented||drawn;
@@ -3029,7 +3150,7 @@ final class WindowEngine {
     private void frameReport(String event){
         Intent i=new Intent(Wire.RESULT).putExtra("protocol",Wire.PROTOCOL).putExtra("event",event)
             .putExtra("state","active").putExtra("sequence",++frameSequence);
-        fillFrame(i,active);fillVisibleFrames(i);fillOpenWait(i);
+        fillFrame(i,active);fillVisibleFrames(i);fillOpenWait(i);trackTouchGuard();
         if(!Wire.transmit(frameSink,i))frameSink=null;
     }
     private void environment(Intent out){
@@ -3065,7 +3186,7 @@ final class WindowEngine {
         result.putExtra("lastTouch",uiTouch);
         environment(result);
         Bundle transport=new Bundle();transport.putBinder("controlChannel",controlChannel);result.putExtras(transport);
-        fillFrame(result,s);fillVisibleFrames(result);fillOpenWait(result);
+        fillFrame(result,s);fillVisibleFrames(result);fillOpenWait(result);trackTouchGuard();
         result.putExtra("immersive",backgroundImmersive(s));
         if ("recovery".equals(state) && pending != null)
             result.putExtra("recoverPackage", pending.pkg).putExtra("recoverToken", pending.token)

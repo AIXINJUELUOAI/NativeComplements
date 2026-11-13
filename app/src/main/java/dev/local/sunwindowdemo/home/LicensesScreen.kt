@@ -13,6 +13,9 @@ import dev.local.sunwindowdemo.core.ui.*
 private data class Notice(val name: String, val owner: String, val license: String, val usage: String, val url: String?)
 
 private val references = listOf(
+    Notice("HyperNavBar Rules", "Ianzb 与社区贡献者", "MIT",
+        "导航栏应用与 Activity 默认模板，包含社区补充规则的转换数据",
+        "https://github.com/HyperNavBar/HyperNavBarRules"),
     Notice("SunOS android_sun-sdk", "The Nameless-AOSP Project", "Apache-2.0",
         "小窗缩放常数、9:16 画布、手势阈值、操作条尺寸、转场时长与曲线，以及迷你窗菜单图标资源",
         "https://github.com/SunOS-Project/android_sun-sdk"),

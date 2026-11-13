@@ -7,7 +7,6 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.os.*;
 import android.service.notification.StatusBarNotification;
-import android.util.TypedValue;
 import android.view.View;
 import io.github.libxposed.api.*;
 import java.lang.ref.WeakReference;
@@ -45,8 +44,6 @@ public final class SystemIconModule extends XposedModule {
         Class<?> view=Class.forName("com.android.systemui.statusbar.StatusBarIconView",false,loader);
         Class<?> descriptor=Class.forName("com.android.internal.statusbar.StatusBarIcon",false,loader);
         Field notification=field(view,"mNotification"),conversation=field(view,"mShowsConversation"),sourceIcon=field(descriptor,"icon");
-        Constructor<?> scaling=Class.forName("com.android.systemui.statusbar.ScalingDrawableWrapper",false,loader)
-            .getDeclaredConstructor(Drawable.class,float.class);scaling.setAccessible(true);
         Method get=view.getDeclaredMethod("getIcon",descriptor);
         updateNotificationDrawable=view.getDeclaredMethod("updateDrawable",boolean.class);updateNotificationDrawable.setAccessible(true);
         hook(get).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
@@ -59,16 +56,9 @@ public final class SystemIconModule extends XposedModule {
             Context c=((View)object).getContext();Drawable replacement=IconAssets.notification(c,notice.getPackageName());
             track(object);
             if(replacement==null)return chain.proceed();
-            // The native getIcon applies this same resource scale; tint remains owned by StatusBarIconView.
-            int id=c.getResources().getIdentifier("status_bar_icon_scale_factor","dimen",IconLayerStore.SYSTEM_UI);
-            if(id!=0){
-                TypedValue value=new TypedValue();c.getResources().getValue(id,value,true);float scale=value.getFloat();
-                if(scale>0&&scale!=1f){
-                    try{return scaling.newInstance(replacement,scale);}
-                    catch(ReflectiveOperationException ignored){}
-                }
-            }
-            return replacement;
+            // Use the native drawable after its ROM-specific downscale and density adjustment.
+            Drawable original=(Drawable)chain.proceed();
+            return IconImages.notificationSize(c,replacement,original);
         });
         note("NOTIFICATION_READY");
     }

@@ -17,6 +17,7 @@ public final class IconOverrides {
         if(IconPolicy.asset(id).isEmpty())throw new FileNotFoundException("image id");
         return new File(root(c),id+".png");
     }
+    // Callers hold IconPolicy.class from import/store through policy publication.
     public static String importImage(Context c, Uri uri) throws Exception {
         ByteArrayOutputStream bytes=new ByteArrayOutputStream();
         try(InputStream in=c.getContentResolver().openInputStream(uri)){
@@ -28,6 +29,17 @@ public final class IconOverrides {
         Bitmap decoded=BitmapFactory.decodeByteArray(raw,0,raw.length);
         if(decoded==null)throw new IOException("图片解码失败");
         try{return store(c,decoded);}finally{decoded.recycle();}
+    }
+    /** Only after a durable policy commit, under the same lock as imports/generation. */
+    static void prune(Context c,java.util.Collection<IconPolicy> policies){
+        java.util.Set<String> referenced=new java.util.HashSet<>();
+        for(IconPolicy p:policies)java.util.Collections.addAll(referenced,p.background,p.foreground,p.monoImage,
+            p.notificationImage,p.generatedBackground,p.generatedForeground);
+        File[] files=root(c).listFiles();
+        if(files!=null)for(File file:files){
+            String name=file.getName();
+            if(name.matches("[a-f0-9]{64}\\.png")&&!referenced.contains(name.substring(0,64)))file.delete();
+        }
     }
     static String store(Context c,Bitmap bitmap)throws Exception{
         ByteArrayOutputStream bytes=new ByteArrayOutputStream();

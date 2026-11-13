@@ -149,6 +149,22 @@ class NavigationTest {
         compose.runOnIdle { assertFalse(home.onBackPressedDispatcher.hasEnabledCallbacks()) }
     }
 
+    @Test fun navbarHasItsOwnHomeEntryAndNativeSettingsPage() {
+        val (homeScenario, home) = launch(intent())
+        compose.onNodeWithText("导航栏适配").performScrollTo().performClick()
+        val navbarIntent = nextPage(home, Page.Navbar)
+        homeScenario.moveToState(Lifecycle.State.CREATED)
+        val (_, navbar) = launch(navbarIntent)
+        compose.onNodeWithTag("page-title-导航栏适配").assertIsDisplayed()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("启用导航栏适配").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText("启用导航栏适配").assertIsDisplayed()
+        compose.onNodeWithText("系统宿主").assertDoesNotExist()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.runOnIdle { assertTrue(navbar.isFinishing) }
+    }
+
     @Test fun legacySettingsEntryStillOpensWindowAndRecreationKeepsDestination() {
         val (scenario, _) = launch(Intent(ApplicationProvider.getApplicationContext(), SettingsActivity::class.java))
         compose.onNodeWithTag("page-title-小窗设置").assertIsDisplayed()

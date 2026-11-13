@@ -92,6 +92,21 @@ class ManagementUiTest {
         compose.onNodeWithText("启用小窗").assertExists()
     }
 
+    @Test fun gesturePageOffersIndependentLongBackToggle() {
+        var changed: Pair<String, Boolean>? = null
+        compose.setContent {
+            ComplementsTheme(dynamic = false) {
+                Surface {
+                    Column {
+                        GestureScreen(WindowPreferences(), { key, value -> changed = key to value }, { _, _ -> })
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("长侧滑打开小窗").assertExists().performClick()
+        compose.runOnIdle { assertEquals("longBackWindow" to true, changed) }
+    }
+
     @Test fun suggestionPageUsesIconListAndButtonSheet() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup()
         val controller = WindowController(activity.get())

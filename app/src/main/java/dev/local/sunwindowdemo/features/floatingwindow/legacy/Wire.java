@@ -48,11 +48,14 @@ final class Wire {
         catch(RemoteException e){return false;}finally{data.recycle();}
     }
     static String token() { return "sunwindow5:" + UUID.randomUUID(); }
+    // Checked on Binder input/control paths; compile once instead of on every String.matches.
+    private static final java.util.regex.Pattern TOKEN=java.util.regex.Pattern.compile("sunwindow5:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
+    private static final java.util.regex.Pattern PACKAGE=java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+");
     static boolean validToken(String value) {
-        return value != null && value.matches("sunwindow5:[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}");
+        return value != null && TOKEN.matcher(value).matches();
     }
     static boolean allowedPackage(String value) {
-        return value != null && value.matches("[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+");
+        return value != null && PACKAGE.matcher(value).matches();
     }
     static void send(Context context, String op, String pkg, int taskId, String token, boolean landscape) {
         Intent i = new Intent(COMMAND).setPackage("android").putExtra("protocol", PROTOCOL)

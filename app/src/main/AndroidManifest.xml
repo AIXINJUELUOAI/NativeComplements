@@ -31,5 +31,6 @@
         </receiver>
         <provider android:name=".features.suggestions.SuggestionProvider" android:authorities="dev.nativecomplements.module.suggestions" android:exported="true" android:directBootAware="true" />
         <provider android:name=".ConfigProvider" android:authorities="dev.nativecomplements.module.settings" android:exported="true" />
+        <provider android:name=".features.navbar.NavbarProvider" android:authorities="dev.nativecomplements.module.navbar" android:exported="true" android:directBootAware="true" />
     </application>
 </manifest>

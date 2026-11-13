@@ -5,6 +5,7 @@ import android.content.Context
 /** UI adapter over the original preferences. The SystemUI host receives a read-only snapshot. */
 data class WindowPreferences(
     val enabled: Boolean = true,
+    val longBackWindow: Boolean = false,
     val apps: List<String> = emptyList(), val targetLabels: Map<String, String> = emptyMap(), val blocked: Set<String> = emptySet(),
     val heat: Int = 36, val distance: Int = 42, val selectionDistance: Int = 90,
     val radius: Int = 180, val icon: Int = 44, val fanCount: Int = 4,
@@ -21,7 +22,7 @@ class WindowPreferenceStore(private val context: Context) {
     private val config = Config(context)
     val preferences = config.prefs!!
     fun read() = WindowPreferences(
-        enabled = config.enabled(), apps = config.targets().toList(), targetLabels = config.targetLabels().toMap(), blocked = config.blocked().toSet(),
+        enabled = config.enabled(), longBackWindow = config.longBackWindow(), apps = config.targets().toList(), targetLabels = config.targetLabels().toMap(), blocked = config.blocked().toSet(),
         heat = config.heat(), distance = config.distance(), selectionDistance = config.selectionDistance(),
         radius = config.radius(), icon = config.icon(), fanCount = config.fanCount(), hideTopHint = config.hideTopHint(),
         showHeat = config.showHeat(), menuBlur = config.menuBlur(), windowDim = config.windowDim(), landscapeOff = config.landscapeOff(), keyboardOff = config.keyboardOff(),
@@ -29,7 +30,7 @@ class WindowPreferenceStore(private val context: Context) {
         hideRecents = config.hideRecents(), doubleClose = config.doubleClose(), notificationWindow = config.notificationWindow(), landscapeShareWindow = config.landscapeShareWindow(),
     )
     fun boolean(key: String, value: Boolean) {
-        require(key in setOf("enabled", "hideTopHint", "showHeat", "menuBlur", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "autoMinimizeOnOpen", "endOnClose", "keepEdgeAwake"))
+        require(key in setOf("enabled", "longBackWindow", "hideTopHint", "showHeat", "menuBlur", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "autoMinimizeOnOpen", "endOnClose", "keepEdgeAwake"))
         preferences.edit().putBoolean(key, value).apply()
         ConfigProvider.changed(context)
     }

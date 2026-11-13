@@ -27,6 +27,7 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
 @Composable
 fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, number: (String, Int) -> Unit) {
     SettingsGroup {
+        ToggleRow("长侧滑打开小窗", "从屏幕侧边向内长滑，松手后将当前应用转为小窗", value = p.longBackWindow) { boolean("longBackWindow", it) }
         ToggleRow("关闭顶部提示", value = p.hideTopHint) { boolean("hideTopHint", it) }
     }
     GroupTitle("触发与选中")

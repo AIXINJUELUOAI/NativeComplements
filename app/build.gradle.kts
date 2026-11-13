@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 96
-        versionName = "0.9.19-signal-test1"
+        versionCode = 107
+        versionName = "0.9.21-test2"
     }
     signingConfigs {
         create("demoUpdate") {
@@ -24,8 +24,10 @@ android {
     }
     buildTypes {
         getByName("release") {
-            // Preserve reflection targets, hook entry points and runtime bytecode semantics.
-            isMinifyEnabled = false
+            // Experimental R8 build: preserve module semantics, optimize dependencies only.
+            isMinifyEnabled = true
+            isShrinkResources = false
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("demoUpdate")
         }
         getByName("debug") { signingConfig = signingConfigs.getByName("demoUpdate") }

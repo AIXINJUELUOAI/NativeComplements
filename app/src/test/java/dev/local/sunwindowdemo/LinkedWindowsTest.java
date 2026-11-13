@@ -161,7 +161,7 @@ public class LinkedWindowsTest {
         call("completeOpen",new Class<?>[]{android.content.Intent.class,boolean.class},request,true);
         assertEquals(List.of(0),results);
     }
-    public static final class NativeSurfaceTransaction {
+    public static final class NativeSurfaceTransaction extends android.view.SurfaceControl.Transaction {
         boolean shown=true;
         float alpha=1;
         public NativeSurfaceTransaction hide(android.view.SurfaceControl surface){shown=false;return this;}

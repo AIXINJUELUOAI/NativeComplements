@@ -18,7 +18,7 @@ open class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         dev.local.sunwindowdemo.features.diagnostics.Diagnostics.initialize(this, dev.local.sunwindowdemo.features.diagnostics.Diagnostics.APP)
         controller = WindowController(this)
-        setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish, initialAppPackage, ::openIconApp) } }
+        setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish, initialAppPackage, ::openIconApp, ::openNavbarApp) } }
         if (intent.action == "recover") controller.restore()
     }
     override fun onResume() { super.onResume(); if (::controller.isInitialized) controller.resume() }
@@ -32,6 +32,9 @@ open class MainActivity : ComponentActivity() {
     }
     private fun openIconApp(pkg: String) {
         startActivity(Intent(this, SettingsActivity::class.java).putExtra(PAGE_EXTRA, Page.IconApp.name).putExtra(APP_EXTRA, pkg))
+    }
+    private fun openNavbarApp(pkg: String) {
+        startActivity(Intent(this, SettingsActivity::class.java).putExtra(PAGE_EXTRA, Page.NavbarApp.name).putExtra(APP_EXTRA, pkg))
     }
 
     companion object { const val PAGE_EXTRA = "settingsPage"; const val APP_EXTRA = "iconAppPackage" }

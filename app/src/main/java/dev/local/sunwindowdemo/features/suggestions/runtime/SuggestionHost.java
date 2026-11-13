@@ -157,7 +157,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 });
             }catch(Exception e){main.post(()->{if(!closed){
                 RotationDiagnostics.update("settings","读取失败: "+e.getClass().getSimpleName());
-                settings=new Bundle();removeView();restoreRotation();publishRotationSettings();main.postDelayed(retry,3000);
+                settings=new Bundle();awakeUntil=0;releaseAwake();removeView();restoreRotation();publishRotationSettings();main.postDelayed(retry,3000);
             }});}
         });
     }

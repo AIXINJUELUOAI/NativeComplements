@@ -100,4 +100,19 @@ public class WindowBehaviorTest {
         assertFalse(WindowPolicy.nativeForeground(task,task,"target","target",0,0,display,display,1,true));
         assertFalse(WindowPolicy.nativeForeground(null,task,"target","target",0,0,display,display,1,false));
     }
+    @Test public void backgroundStaysUntouchableWhileANormalWindowEnters(){
+        assertTrue("Gate applies before the first frame reports",WindowPolicy.backgroundTouchGuard(true,true,false,0,0,5000,3000));
+        assertFalse("A stuck entry fails open after the cap",WindowPolicy.backgroundTouchGuard(true,true,true,1000,0,4000,3000));
+        assertTrue("Grace covers the overlay redraw",WindowPolicy.backgroundTouchGuard(true,false,false,0,1250,1249,3000));
+        assertFalse(WindowPolicy.backgroundTouchGuard(true,false,false,0,1250,1250,3000));
+        assertFalse("Mini and closing windows keep native background touch",WindowPolicy.backgroundTouchGuard(false,true,true,1000,9999,1001,3000));
+    }
+    @Test public void focusedFloatingWindowDoesNotPullTheCoveredFullscreenTaskIntoAWindow(){
+        Object floating=new Object(),covered=new Object(),display=new Object();
+        assertTrue(WindowPolicy.coveredFullscreen(covered,floating,covered,display,display));
+        assertFalse("Another task still opens as a linked window",WindowPolicy.coveredFullscreen(covered,floating,new Object(),display,display));
+        assertFalse("Focused fullscreen keeps the exact pre-launch rule",WindowPolicy.coveredFullscreen(covered,covered,covered,display,display));
+        assertFalse("Home or nothing beneath",WindowPolicy.coveredFullscreen(null,floating,covered,display,display));
+        assertFalse(WindowPolicy.coveredFullscreen(covered,floating,covered,display,new Object()));
+    }
 }

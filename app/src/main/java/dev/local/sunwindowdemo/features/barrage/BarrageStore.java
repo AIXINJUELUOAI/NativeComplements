@@ -51,7 +51,7 @@ public final class BarrageStore {
         return result;
     }
 
-    public static void addHistory(Context c,Bundle entry){
+    public static boolean addHistory(Context c,Bundle entry){
         String pkg=entry.getString("package","");if(!Rules.validPackage(pkg))throw new IllegalArgumentException("barrage history package");
         long time=entry.getLong("time",0);if(time<=0)time=System.currentTimeMillis();
         String app=trim(entry.getString("app",""),80),source=trim(entry.getString("source",""),80),text=trim(entry.getString("text",""),240);
@@ -62,7 +62,7 @@ public final class BarrageStore {
             for(int i=0;i<old.length()&&next.length()<HISTORY_LIMIT;i++){
                 JSONObject item=old.optJSONObject(i);if(item!=null)next.put(item);
             }
-            prefs(c).edit().putString("history",next.toString()).commit();
+            return prefs(c).edit().putString("history",next.toString()).commit();
         }catch(org.json.JSONException e){throw new IllegalArgumentException(e);}
     }
 

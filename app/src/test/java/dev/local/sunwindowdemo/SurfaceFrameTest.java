@@ -158,6 +158,40 @@ public class SurfaceFrameTest {
         decoration.update(task,parent,new Geometry.Placement(900,1600,.7f,200,300),1,false,1,true);
         assertEquals(.4f,((TransactionShadow)Shadow.extract(task.pending)).alpha.get(dim),.0001f);
     }
+    @Test @LooperMode(LooperMode.Mode.PAUSED)
+    public void coveredPresentationIsReusedOnlyWhileOpaqueAndRefreshedBeforeReveal()throws Exception{
+        FrameworkAccess access=access();Task task=new Task(),parent=new Task();
+        TaskCover cover=allocate(TaskCover.class);
+        set(cover,"a",access);set(cover,"task",task);set(cover,"parent",parent);set(cover,"iconDrawn",true);
+        set(cover,"background",ReflectionHelpers.callConstructor(SurfaceControl.class));
+        set(cover,"icon",ReflectionHelpers.callConstructor(SurfaceControl.class));
+        set(cover,"from",new RectF(200,300,830,1420));set(cover,"to",new RectF(200,300,830,1420));
+        set(cover,"decorationBounds",new RectF());set(cover,"color",new float[]{.94f,.94f,.94f});
+        set(cover,"iconSize",100);set(cover,"splashPx",162f);
+        set(cover,"duration",320L);set(cover,"fadeDuration",150L);
+        set(cover,"began",android.os.SystemClock.elapsedRealtime());set(cover,"fadeAt",-1L);
+        set(cover,"entryAt",-1L);set(cover,"hiddenAt",-1L);set(cover,"ownerAlpha",1f);
+        TaskVisibilityGuard mask=new TaskVisibilityGuard(access,task);set(cover,"mask",mask);
+        Geometry.Placement pose=new Geometry.Placement(900,1600,.7f,200,300);
+        cover.prepared(pose,2.5f);
+        assertFalse(cover.reusesPresentation(pose));
+        assertTrue(cover.canRetarget());
+        assertTrue(cover.step(false,true));assertTrue(cover.reusesPresentation(pose));
+        assertEquals(2.5f,cover.preparedDensity(),0);
+        assertFalse(cover.reusesPresentation(new Geometry.Placement(1000,1600,.7f,200,300)));
+        int[] reveals={0};
+        cover.beforeReveal(()->{
+            assertTrue(mask.holding());assertFalse(cover.reusesPresentation(pose));reveals[0]++;
+        });
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(321));
+        assertTrue(cover.step(false,true));assertEquals(0,reveals[0]);
+        assertTrue(cover.step(true,true));assertEquals(1,reveals[0]);
+        assertFalse(mask.holding());assertFalse(cover.canRetarget());assertFalse(cover.reusesPresentation(pose));
+        cover.step(true,true);assertEquals(1,reveals[0]);
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(151));
+        assertFalse(cover.step(true,true));assertFalse(cover.canRetarget());
+    }
+
     @Implements(SurfaceControl.class)
     public static class SurfaceShadow {
         boolean released;

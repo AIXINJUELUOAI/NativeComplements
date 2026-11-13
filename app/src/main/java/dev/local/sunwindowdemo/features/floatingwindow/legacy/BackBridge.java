@@ -86,7 +86,7 @@ public final class BackBridge extends XposedModule {
                     cancel.recycle();if(committed!=null)main.post(()->waitForNativeBack(committed,0));
                 }
             }));
-            note("BACK_READY hooks=3 version=0.2.0-preview1");
+            note("BACK_READY hooks=3 version="+BuildConfig.VERSION_NAME);
             installScreenshotHooks(cl);
         }catch(Throwable e){for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}note("BACK_DISABLED "+e.getClass().getSimpleName());}
     }
@@ -227,15 +227,29 @@ public final class BackBridge extends XposedModule {
         }catch(Throwable unavailable){for(XposedInterface.HookHandle h:installed)try{h.unhook();}catch(Throwable ignored){}note("SUGGESTIONS_NOTIFICATIONS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
     }
     private synchronized void cancelStroke(Object owner){Stroke s=strokes.remove(owner);if(s!=null)preview(s,0);}
+    private Runnable reconnect;
     private synchronized void connect(Context c){
-        if(context!=null)return;context=c.getApplicationContext();
-        context.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){BackVisual.receive(context,i,getSentFromUid());}},
-            new IntentFilter(BackVisual.STATE),null,main,Context.RECEIVER_EXPORTED);
-        context.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-            if(getSentFromUid()==android.os.Process.myUid())configure(i);
-        }},new IntentFilter(LauncherGuard.STATE),null,main,Context.RECEIVER_EXPORTED);
-        SystemUiHost.start(context);if(SystemUiHost.live!=null)SystemUiHost.live.publish(true);
-        note("BACK_CONNECTED");
+        if(context!=null&&SystemUiHost.live!=null)return;
+        if(reconnect!=null){main.removeCallbacks(reconnect);reconnect=null;}
+        Context app=c.getApplicationContext();
+        try{
+            if(context==null){
+                BroadcastReceiver visual=new BroadcastReceiver(){public void onReceive(Context c,Intent i){BackVisual.receive(app,i,getSentFromUid());}};
+                app.registerReceiver(visual,new IntentFilter(BackVisual.STATE),null,main,Context.RECEIVER_EXPORTED);
+                try{
+                    app.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){
+                        if(getSentFromUid()==android.os.Process.myUid())configure(i);
+                    }},new IntentFilter(LauncherGuard.STATE),null,main,Context.RECEIVER_EXPORTED);
+                }catch(RuntimeException failure){app.unregisterReceiver(visual);throw failure;}
+                context=app;
+            }
+            SystemUiHost.start(app);
+            if(SystemUiHost.live==null)throw new IllegalStateException("host initialization failed");
+            SystemUiHost.live.publish(true);note("BACK_CONNECTED");
+        }catch(RuntimeException failure){
+            note("BACK_CONNECT_RETRY "+failure.getClass().getSimpleName());
+            reconnect=()->connect(app);main.postDelayed(reconnect,3000);
+        }
     }
     private synchronized void configure(Intent i){
         Bundle b=i.getExtras();sink=b==null?null:b.getBinder("dropChannel");lease=b==null?null:b.getBinder("lease");

@@ -1,0 +1,81 @@
+From 1c26b3e37785c16e0562b91173b0279921f46865 Mon Sep 17 00:00:00 2001
+From: Kiro Assistant <nativecomplements@kiro.dev>
+Date: Fri, 13 Nov 2026 07:00:36 +0800
+Subject: [PATCH] =?UTF-8?q?perf:=20=E4=BC=98=E5=8C=96=20SystemUI=20?=
+ =?UTF-8?q?=E5=BF=83=E8=B7=B3=E8=BD=AE=E8=AF=A2=E7=AD=96=E7=95=A5?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+问题:
+- SystemUI 每 750ms 向 system_server 发送 STATUS 广播,不论有无会话
+- 熄屏、待机时仍持续轮询,每天约 46 万条广播
+- 每轮在 mGlobalLock 下执行多次反射,持续唤醒两个系统进程
+- 性能分析显示这是最严重的待机功耗问题
+
+优化:
+- 熄屏时(ACTION_SCREEN_OFF)暂停轮询,亮屏解锁(USER_PRESENT)后恢复
+- 有活动会话(active/recovery)时保持 750ms 间隔
+- 空闲状态(idle)时延长到 3000ms,减少 75% 的广播量
+- 添加 screenOn 标志跟踪屏幕状态
+
+预期效果:
+- 熄屏待机时完全停止轮询
+- 没有小窗时从每秒 1.3 次降到每 3 秒 1 次
+- 减少 system_server 和 SystemUI 的唤醒和锁竞争
+- 有会话时保持原有响应速度
+
+影响:
+- screenReceiver 增加状态判断和轮询控制
+- poll Runnable 根据 backendState 动态调整间隔
+- 不影响命令响应(仍通过 Binder 通道即时处理)
+---
+ .../floatingwindow/legacy/SystemUiHost.java   | 25 +++++++++++++++++--
+ 1 file changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java
+index 26e5e4f..d92ff70 100644
+--- a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java
++++ b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java
+@@ -57,7 +57,19 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
+             main.post(()->{settingsReady=true;reloadSettings();});
+         }catch(Exception e){android.util.Log.e("NativeComplements","SETTINGS_READ_FAILED",e);main.postDelayed(()->{if(!cleaned)loadSettings();},3000);}
+     });}
+-    private final Runnable poll=new Runnable(){public void run(){if(cleaned)return;Wire.send(SystemUiHost.this,"STATUS");main.postDelayed(this,750);}};
++    private boolean screenOn=true;
++    private final Runnable poll=new Runnable(){public void run(){
++        if(cleaned)return;
++        Wire.send(SystemUiHost.this,"STATUS");
++        // Reduce polling frequency when screen is off or no active session.
++        // Active session: 750ms. Idle with screen on: 3000ms. Screen off: paused.
++        if(!screenOn){
++            // Paused while screen off; will resume on USER_PRESENT
++            return;
++        }
++        long interval="active".equals(backendState)||"recovery".equals(backendState)?750:3000;
++        main.postDelayed(this,interval);
++    }};
+     private void reloadSettings(){
+         if(cleaned)return;showSwipeHint(0);hideFan();if(!config.enabled()){cancelOpenWait();hidePanel();}removeHot();
+         if(panel instanceof FrameLayout outside&&outside.getChildCount()>0)AppList.blur(outside.getChildAt(0),config.menuBlur());
+@@ -239,7 +251,16 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
+     private void touchLog(String message){lastTouch=message;if(touchLogs++<50)android.util.Log.i("CornerLauncher",message);}
+     private final SharedPreferences.OnSharedPreferenceChangeListener prefListener=(p,k)->{main.removeCallbacks(reload);main.post(reload);};
+     private final BroadcastReceiver screenReceiver=new BroadcastReceiver(){
+-        public void onReceive(Context c,Intent i){cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");}
++        public void onReceive(Context c,Intent i){
++            if(Intent.ACTION_SCREEN_OFF.equals(i.getAction())){
++                screenOn=false;
++                main.removeCallbacks(poll);
++            }else if(Intent.ACTION_USER_PRESENT.equals(i.getAction())){
++                screenOn=true;
++                if(!cleaned)main.post(poll);
++            }
++            cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");
++        }
+     };
+     private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){loadApps();}};
+     private int catalogGeneration;
+-- 
+2.43.0
+

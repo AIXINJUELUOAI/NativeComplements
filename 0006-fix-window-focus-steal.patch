@@ -1,0 +1,99 @@
+From 261e35b85ffc4c6f68f58084b317d174bd50e01c Mon Sep 17 00:00:00 2001
+From: Kiro Assistant <nativecomplements@kiro.dev>
+Date: Fri, 13 Nov 2026 07:06:02 +0800
+Subject: [PATCH] =?UTF-8?q?fix:=20=E4=BF=AE=E5=A4=8D=E5=B0=8F=E7=AA=97?=
+ =?UTF-8?q?=E6=89=93=E5=BC=80=E6=97=B6=E5=90=8E=E5=8F=B0=E5=BA=94=E7=94=A8?=
+ =?UTF-8?q?=E6=8A=A2=E5=8D=A0=E8=A7=A6=E6=91=B8=E7=84=A6=E7=82=B9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+问题:
+- 小窗打开动画期间(entering=true),后台全屏应用仍可接收触摸事件
+- 用户可以滑动或点击后台内容,导致焦点被抢占
+- 原因 1: blockContentTouch() 未检查 entering 和 transitioning 状态
+- 原因 2: 焦点在动画完成后(completeEntryInput)才设置,期间后台应用保持焦点
+- 原因 3: blockContentTouch() 只屏蔽小窗自己的任务,不屏蔽后台任务
+
+修复 1: blockContentTouch() 增强
+- 小窗任务增加 entering 和 transitioning 检查
+- 新增逻辑: 当任何 normal 小窗正在 entering/transitioning 时,
+  屏蔽所有非小窗任务(后台应用)的触摸输入
+- 防止动画期间触摸事件穿透到后台
+
+修复 2: 立即设置焦点
+- 在 activate() 中设置 entering=true 后立即调用焦点 API
+- moveFocusableActivityToTop + setFocusedApp + updateFocusedWindowLocked
+- 不等待动画结束,确保焦点在第一时间转移到小窗
+- completeEntryInput() 中的焦点设置作为验证保留
+
+影响范围:
+- WindowEngine.blockContentTouch() - 输入屏蔽逻辑
+- WindowEngine.activate() - 窗口激活时立即设置焦点
+- 不影响 mini 窗口和其他模式的焦点逻辑
+
+预期效果:
+- 小窗打开动画期间,后台应用完全无法响应触摸
+- 焦点立即转移到小窗,不会有延迟或闪烁
+- 修复用户反馈的打开小窗瞬间可以触摸后面应用问题
+---
+ .../floatingwindow/legacy/WindowEngine.java   | 36 +++++++++++++++++--
+ 1 file changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
+index 2b8ca42..ffe81ee 100644
+--- a/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
++++ b/app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java
+@@ -1054,6 +1054,20 @@ final class WindowEngine {
+             a.call(next.task,"setAlwaysOnTop",new Class<?>[]{boolean.class},true);
+             a.call(next.task,"setBounds",new Class<?>[]{Rect.class},new Rect(0,0,next.placement.width(),next.placement.height()));
+             if(a.integer(next.task,"getWindowingMode")!=5)throw new IllegalStateException("关联任务未进入 freeform");
++            // Set focus immediately after activating the window to prevent background apps from stealing touch events.
++            // Native focus is set early even during the entry animation; completeEntryInput will verify it later.
++            Object top=a.call(next.task,"topRunningActivity");
++            if(top!=null&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked()){
++                try{
++                    a.call(top,"moveFocusableActivityToTop",new Class<?>[]{String.class},"NativeComplements-activate");
++                    Object display=a.call(next.task,"getDisplayContent");
++                    a.call(display,"setFocusedApp",new Class<?>[]{a.activity},top);
++                    a.call(wms,"updateFocusedWindowLocked",new Class<?>[]{int.class,boolean.class},0,true);
++                    log.accept("ACTIVATE_FOCUS_IMMEDIATE task="+next.taskId);
++                }catch(Exception focusError){
++                    log.accept("ACTIVATE_FOCUS_FAILED "+FrameworkAccess.reason(focusError));
++                }
++            }
+             a.call(wms,"requestTraversal");
+         }finally{a.call(atm,"continueWindowLayout");}
+     }
+@@ -2139,9 +2153,25 @@ final class WindowEngine {
+     }
+     // Both WindowState and ActivityRecord input sinks obey the same task state.
+     boolean blockContentTouch(Object container){
+-        try{Session s=sessionFor(a.call(container,"getTask"));
+-            return s!=null&&(s.parked||s.restoring||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
+-                ||s.startMask!=null&&s.startMask.holding());
++        try{
++            Object task=a.call(container,"getTask");
++            Session s=sessionFor(task);
++            // If this is a floating window, block input during its entry/transition states
++            if(s!=null&&(s.parked||s.restoring||s.screenSuspended||s.rotation.active()||s.closing
++                ||s.entering||s.transitioning||"mini".equals(s.frame)
++                ||s.startMask!=null&&s.startMask.holding())){
++                return true;
++            }
++            // Block background fullscreen apps when any normal floating window is entering or transitioning.
++            // This prevents focus stealing: touches should not reach background content during window open animation.
++            if(s==null&&task!=null&&!sessions.isEmpty()){
++                for(Session active:sessions){
++                    if(visible(active)&&"normal".equals(active.frame)&&(active.entering||active.transitioning)){
++                        return true;
++                    }
++                }
++            }
++            return false;
+         }catch(Exception e){return false;}
+     }
+     private boolean suppressTransition(Session s){
+-- 
+2.43.0
+
