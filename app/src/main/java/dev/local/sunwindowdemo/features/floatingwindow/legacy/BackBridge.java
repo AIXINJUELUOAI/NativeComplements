@@ -221,7 +221,7 @@ public final class BackBridge extends XposedModule {
             installed.add(hook(removed).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();SystemUiHost host=SystemUiHost.live;
                 android.service.notification.StatusBarNotification notification=(android.service.notification.StatusBarNotification)chain.getArg(0);
-                if(host!=null&&notification!=null)host.suggestionNotificationRemoved(notification.getKey());return result;
+                if(host!=null&&notification!=null)host.suggestionNotificationRemoved(notification);return result;
             }));
             note("SUGGESTIONS_NOTIFICATIONS_READY");
         }catch(Throwable unavailable){for(XposedInterface.HookHandle h:installed)try{h.unhook();}catch(Throwable ignored){}note("SUGGESTIONS_NOTIFICATIONS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}

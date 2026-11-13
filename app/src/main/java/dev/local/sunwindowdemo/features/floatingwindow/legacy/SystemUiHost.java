@@ -212,7 +212,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     void suggestionNotification(android.service.notification.NotificationListenerService source,android.service.notification.StatusBarNotification notification){
         main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);});
     }
-    void suggestionNotificationRemoved(String key){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(key);if(barrage!=null)barrage.notificationRemoved(key);});}
+    void suggestionNotificationRemoved(android.service.notification.StatusBarNotification notification){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(notification.getKey());if(barrage!=null)barrage.notificationRemoved(notification);});}
     boolean rotationSuggestion(Runnable click,Runnable restore){
         if(suggestions==null){RotationDiagnostics.update("host","建议宿主未初始化");return false;}
         return suggestions.rotationSuggestion(click,restore);

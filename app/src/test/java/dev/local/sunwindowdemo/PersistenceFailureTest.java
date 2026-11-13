@@ -125,11 +125,11 @@ public class PersistenceFailureTest {
                 StatusBarNotification sbn=new StatusBarNotification("example.sender","example.sender",1,null,12345,0,0,notification,android.os.Process.myUserHandle(),System.currentTimeMillis());
                 Shadows.shadowOf(listener).addActiveNotification(sbn);
                 host.notification(listener,sbn);drain(host);
-                assertEquals(1,writes.get());assertNotNull(ReflectionHelpers.getField(host,"view"));
-                assertEquals(1,listener.getActiveNotifications().length);assertNull(ReflectionHelpers.getField(host,"ignoredRemovalKey"));
+                assertEquals(1,writes.get());assertEquals(1,((java.util.Map<?,?>)ReflectionHelpers.getField(host,"playing")).size());
+                assertEquals(1,listener.getActiveNotifications().length);assertTrue(((java.util.Set<?>)ReflectionHelpers.getField(host,"ignoredRemovals")).isEmpty());
                 saved.set(true);host.notification(listener,sbn);drain(host);
                 assertEquals(2,writes.get());assertEquals(0,listener.getActiveNotifications().length);
-                assertEquals(sbn.getKey(),ReflectionHelpers.getField(host,"ignoredRemovalKey"));
+                assertEquals(1,((java.util.Set<?>)ReflectionHelpers.getField(host,"ignoredRemovals")).size());
             }finally{host.close();}
         }
     }
