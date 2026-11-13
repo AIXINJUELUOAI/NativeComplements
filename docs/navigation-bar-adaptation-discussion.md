@@ -152,3 +152,15 @@ TaskCover 正常绘制时在同一 SurfaceControl.Transaction 中设置背景与
 - 使用相同设备和操作流程复测运动帧间隔与长尾耗时，核对固定 16ms 调度与用户低帧感的关联。
 
 最近性能采样与源码排查保存在 verification/performance-20261113/results.md。
+
+## 待办，莫奈图标返回桌面时闪切，2026-11-13
+
+用户反馈开启莫奈图标后，返回桌面的归位动画先显示默认图标，结束时瞬间切换为莫奈图标。列入本轮待办，待汇总任务后实施和真机复测。
+
+已核对模块 IconLayerModule.installAnimationProbe 与归档目标 Pixel 桌面的实际实现。桌面 FloatingIconView.IconLoadResult 保存 isThemed，加载器依据桌面图标的 themed 状态调用 IconLoader.getFullDrawable，后者经 themeController.createThemedAdaptiveIcon 生成主题化动画图标。模块当前在 FloatingIconView.setIcon 前仍调用通用 IconAssets.desktop 替换，对于自定义彩色图标存在把已主题化图标重新覆盖成彩色版本的路径，原生 setIcon 随后直接使用替换图标的前景和背景。这条样式覆盖路径与反馈现象吻合，实际视觉问题待修复后验证。
+
+- 按每个图标的原生主题状态保留已生成的莫奈动画图层，避免后置彩色替换覆盖；继续使用桌面原生动态颜色与主题控制器。
+- 保留普通彩色图标的既有分层适配，以及用户、快捷方式、徽标等原生判断。
+- 验证开启与关闭主题图标、打开与返回、预测性返回取消、缓存刷新和动态颜色切换。
+
+静态证据位于 verification/icon-monet-return，包含目标桌面的 FloatingIconView 加载回调与 IconLoader 实现。
