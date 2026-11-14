@@ -299,10 +299,11 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(line==null||line.getChildCount()>=columns){line=new LinearLayout(windowContext);row.addView(line);}
         LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(touch,touch);p.setMargins(dp(5),dp(5),dp(5),dp(5));line.addView(button,p);return button;
     }
-    /** App icons keep the same circular container and footprint as the functional buttons. */
+    /** The app icon itself occupies the functional button's visible diameter, without a second circle. */
     private ImageView addAppButton(LinearLayout row,Drawable drawable,String description,Runnable click,Runnable dismiss){
         ImageView button=addButton(row,drawable,description,click,dismiss);
-        int pad=buttonPadding(.75f);button.setPadding(pad,pad,pad,pad);return button;
+        button.setBackground(null);button.setElevation(0);
+        int pad=buttonPadding(1f);button.setPadding(pad,pad,pad,pad);return button;
     }
     boolean rotationSuggestion(Runnable click,Runnable restore){
         if(click==null){rotationClick=null;rotationRestore=null;render();return false;}

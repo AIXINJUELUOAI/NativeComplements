@@ -38,13 +38,22 @@ public class SuggestionButtonSizeTest {
                         int touch=Math.round(Math.max(48,size)*density);
                         assertEquals(touch,button.getLayoutParams().width);
                         assertEquals(touch,button.getLayoutParams().height);
-                        float ratio=name.equals("addButton")?.625f:.75f;
+                        float ratio=name.equals("addButton")?.625f:1f;
                         assertEquals(Math.round(size*ratio*density),touch-button.getPaddingLeft()-button.getPaddingRight(),1);
-                        assertNotNull(button.getBackground());
-                        button.getBackground().setBounds(0,0,touch,touch);
-                        android.graphics.Rect padding=new android.graphics.Rect();
-                        button.getBackground().getPadding(padding);
-                        assertEquals(Math.round(size*density),touch-padding.left-padding.right,1);
+                        if(name.equals("addButton")) {
+                            assertNotNull(button.getBackground());
+                            button.getBackground().setBounds(0,0,touch,touch);
+                            android.graphics.Rect padding=new android.graphics.Rect();
+                            button.getBackground().getPadding(padding);
+                            assertEquals(Math.round(size*density),touch-padding.left-padding.right,1);
+                        } else {
+                            assertNull(button.getBackground());
+                            assertEquals(0f,button.getElevation(),0f);
+                            assertEquals(Math.round(size*density),touch-button.getPaddingLeft()-button.getPaddingRight(),1);
+                        }
+                        assertEquals(ImageView.ScaleType.FIT_CENTER,button.getScaleType());
+                        assertEquals("test",button.getContentDescription());
+                        assertTrue(button.isClickable());
                     }
                 }
             } finally {host.close();}
