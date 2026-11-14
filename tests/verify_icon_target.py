@@ -24,4 +24,21 @@ checks = [
 for cls, kind, name, signature in checks:
     key = "type" if kind == "fields" else "descriptor"
     assert any(m["name"] == name and m[key] == signature for m in inventory["classes"][cls][kind]), (cls, name, signature)
-print(f"PASS: {len(checks)} exact icon Hook target members; live rendering remains unverified")
+# Sizing also handles native (unreplaced) icons; verify the added draw boundary in the actual APK.
+import hashlib
+import zipfile
+import verify_signal_target as dex
+owner = "Lcom/android/systemui/statusbar/StatusBarIconView;"
+dex.TARGETS = [owner]
+archive_path = root / "verification/split-shade-device/SystemUI.apk"
+assert hashlib.sha256(archive_path.read_bytes()).hexdigest() == inventory["artifacts"][0]["sha256"]
+actual = {}
+with zipfile.ZipFile(archive_path) as archive:
+    for name in archive.namelist():
+        if name.startswith("classes") and name.endswith(".dex"):
+            actual.update(dex.Dex(archive.read(name)).classes)
+for name, signature in [("mOriginalStatusBarIconSize", "I"), ("mIconScale", "F"),
+                        ("mBundleEntry", "Lcom/android/systemui/statusbar/notification/collection/BundleEntry;")]:
+    assert any(f["name"] == name and f["type"] == signature for f in actual[owner]["fields"]), name
+assert any(m["name"] == "onDraw" and m["descriptor"] == "(Landroid/graphics/Canvas;)V" for m in actual[owner]["methods"])
+print(f"PASS: {len(checks) + 4} exact icon Hook target members; live rendering remains unverified")

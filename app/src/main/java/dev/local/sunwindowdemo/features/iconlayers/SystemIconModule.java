@@ -43,19 +43,33 @@ public final class SystemIconModule extends XposedModule {
         Class<?> view=Class.forName("com.android.systemui.statusbar.StatusBarIconView",false,loader);
         Class<?> descriptor=Class.forName("com.android.internal.statusbar.StatusBarIcon",false,loader);
         Field notification=field(view,"mNotification"),conversation=field(view,"mShowsConversation");
-        Field referenceSize=field(view,"mOriginalStatusBarIconSize");
+        Field referenceSize=field(view,"mOriginalStatusBarIconSize"),iconScale=field(view,"mIconScale");
+        Field bundleEntry=field(view,"mBundleEntry");
         Method get=view.getDeclaredMethod("getIcon",descriptor);
         updateNotificationDrawable=view.getDeclaredMethod("updateDrawable",boolean.class);updateNotificationDrawable.setAccessible(true);
         hook(get).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
             Object object=chain.getThisObject();
             StatusBarNotification notice=(StatusBarNotification)notification.get(object);
-            if(notice==null||conversation.getBoolean(object)||!notice.getUser().equals(android.os.Process.myUserHandle()))return chain.proceed();
-            Context c=((View)object).getContext();Drawable replacement=IconAssets.notification(c,notice.getPackageName());
-            track(object);
-            if(replacement==null)return chain.proceed();
-            // Native notification scaling expects this reference canvas, irrespective of the
-            // resource/bitmap/URI variant delivered by the application for this notification.
-            return IconImages.notificationSize(c,replacement,referenceSize.getInt(object));
+            if(bundleEntry.get(object)!=null)return chain.proceed();
+            Drawable drawable=null;
+            if(notice!=null&&!conversation.getBoolean(object)&&notice.getUser().equals(android.os.Process.myUserHandle())){
+                drawable=IconAssets.notification(((View)object).getContext(),notice.getPackageName());
+                track(object);
+            }
+            if(drawable==null)drawable=(Drawable)chain.proceed();
+            if(bundleEntry.get(object)!=null)return drawable;
+            // Artwork policy is per app; visual sizing is shared by original and replaced glyphs.
+            return notice==null?StatusIconDrawable.wrapSystem(drawable):StatusIconDrawable.wrap(drawable,referenceSize.getInt(object));
+        });
+        hook(view.getDeclaredMethod("onDraw",android.graphics.Canvas.class)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+            android.widget.ImageView image=(android.widget.ImageView)chain.getThisObject();
+            if(!(image.getDrawable() instanceof StatusIconDrawable)||bundleEntry.get(image)!=null)return chain.proceed();
+            float original=iconScale.getFloat(image);
+            float target=StatusIconSizing.referenceHeight(image);
+            try {
+                iconScale.setFloat(image,StatusIconSizing.scale(target,image.getDrawable().getIntrinsicWidth(),image.getDrawable().getIntrinsicHeight(),image.getWidth(),image.getHeight(),original));
+                return chain.proceed(); // Native appearance animation and overflow dot remain untouched.
+            } finally {iconScale.setFloat(image,original);}
         });
         note("NOTIFICATION_READY");
     }
