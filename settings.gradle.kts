@@ -4,4 +4,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "NativeComplements"
-include(":app")
+include(":app", ":navbar-demo")
