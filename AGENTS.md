@@ -3,7 +3,7 @@
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
 - 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制、图标适配、导航栏适配与通知／控制中心横屏双栏，不创建其他功能的占位页面或接口。
 - 管理页面共用 SettingsPage 标题栏和系统安全区，页面内部不重复创建标题与 Scaffold。开发者工具仅从“关于”连续点击版本号七次后显示，日常页面不展示后端连接及实验信息。
-- 正式功能集中在 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。用户另授权 navbar-demo 独立观察 APK（dev.nativecomplements.navdemo，独立 system 作用域），仅采样/人工标注，不改导航、页面或 Insets；实验前关闭正式导航总开关并由用户重启。Demo仅内存像素，日志metadata本地轮转8MiB左右，可手动导出；构建签名检查用 python tests/package_navbar_demo.py，额外归档接口核验用 python tests/verify_navbar_demo_target.py。
+- 正式功能集中在 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。用户另授权 navbar-demo 独立观察 APK（dev.nativecomplements.navdemo，独立 system 作用域），仅采样/人工标注，不改导航、页面或 Insets；实验前关闭正式导航总开关并由用户重启。Demo v2仅统计导航边界上方12–24dp主导近似颜色占比，70%/50%为实验阈值；常规像素仅内存，待定按钮明确授权应用画面JPEG（不含导航及独立悬浮条）本地保存，最多100张350KiB，窗口/安全变更拒绝，条带匹配不证明全页同帧。日志metadata本地轮转8MiB左右，待定截图附独立样本JSON避免轮转丢关联，可手动ZIP导出/清空，不上传；构建签名检查用 python tests/package_navbar_demo.py，额外归档接口核验用 python tests/verify_navbar_demo_target.py。
 - 第一版行为基线是 Demo8.2。基线原有26个Java文件，当前变更清单记录于 tests/runtime-changes.json，代码位于 features/floatingwindow/legacy，Java 源码包路径保持 dev.local.sunwindowdemo。修改小窗时记录原因，不改基线摘要来隐藏差异。
 - applicationId 自 0.6.0 起为 dev.nativecomplements.module（模块名“类原生补全计划”）；它与三个系统作用域、签名权限和 corner 偏好键是覆盖升级兼容点。使用 SystemUI 宿主与协议16，不依赖无障碍，导航栏取色由 system、SystemUI 与 Pixel 桌面宿主执行，透明绘制由用户授权作用域中的应用侧 Hook 配合。推荐作用域从已核实 ColorOS 配置外层包名生成，安装后须在 LSPosed 确认作用域，推荐不等于授权；本模块不自动修改作用域。Activity 模板由 UID 校验 Provider 同步，普通应用仅能读取自己包的规则。
 - .local/demo.keystore 是现有覆盖升级签名，仅本地保存。不要提交签名、设备数据或本机配置。

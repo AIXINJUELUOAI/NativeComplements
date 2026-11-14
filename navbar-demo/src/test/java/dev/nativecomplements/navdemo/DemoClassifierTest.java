@@ -11,85 +11,87 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 36, manifest = Config.NONE)
 public class DemoClassifierTest {
-    private int[] flat(int width, int height, int color) {
-        int[] pixels = new int[width * height];
+    private int[] flat(int color) {
+        int[] pixels = new int[120 * 24];
         Arrays.fill(pixels, color);
         return pixels;
     }
     private Bundle analyze(int[] pixels) { return DemoClassifier.analyze(pixels, 120, 24, 1); }
+    private int[] split(int backgroundPercent) {
+        int[] pixels = flat(0xff000000);
+        for (int y = 0; y < 24; y++)
+            Arrays.fill(pixels, y * 120, y * 120 + 120 * backgroundPercent / 100, 0xffffffff);
+        return pixels;
+    }
 
-    @Test public void flatAndOpaqueBlackAreValidExtensionEvidence() {
+    @Test public void flatAndOpaqueBlackAreValid() {
         for (int color : new int[]{0xffeeeeee, 0xff000000}) {
-            Bundle result = analyze(flat(120, 24, color));
+            Bundle result = analyze(flat(color));
             assertEquals("EXTEND", result.getString("decision"));
-            assertEquals(1, result.getDouble("stableRatio"), 0);
-            assertEquals(1, result.getDouble("edgeRatio"), 0);
-            assertEquals(1, result.getInt("segments"));
-            assertTrue(result.getString("algorithm").contains("v1"));
+            assertEquals(1, result.getDouble("dominantRatio"), 0);
+            assertEquals(360, result.getInt("analyzedPixels"));
+            assertTrue(result.getString("algorithm").contains("v2"));
+            assertFalse(result.containsKey("edgeRatio"));
         }
     }
-    @Test public void wideLeftAndRightRegionsCanExtendWithoutGlobalColorAgreement() {
-        int[] pixels = flat(120, 24, 0xffeeeeee);
-        for (int y = 0; y < 24; y++) Arrays.fill(pixels, y * 120 + 48, (y + 1) * 120, 0xff333333);
-        Bundle result = analyze(pixels);
+    @Test public void eightyPercentBackgroundAllowsTextAndNarrowContent() {
+        Bundle result = analyze(split(80));
         assertEquals("EXTEND", result.getString("decision"));
-        assertEquals(2, result.getInt("segments"));
+        assertEquals(0.8, result.getDouble("dominantRatio"), 0.0001);
     }
-    @Test public void verticalTextureFailsEvenWithUniformLastThreeRows() {
-        int[] pixels = flat(120, 24, 0xffffffff);
-        for (int y = 0; y < 21; y += 2) Arrays.fill(pixels, y * 120, (y + 1) * 120, 0xff000000);
+    @Test public void decisionThresholdsAreInclusiveAndMiddleIsUnknown() {
+        assertEquals("EXTEND", analyze(split(70)).getString("decision"));
+        assertEquals("UNKNOWN", analyze(split(60)).getString("decision"));
+        assertEquals(0.6, analyze(split(60)).getDouble("dominantRatio"), 0.0001);
+        assertEquals("NATIVE", analyze(split(50)).getString("decision"));
+        assertEquals(0.5, analyze(split(50)).getDouble("dominantRatio"), 0.0001);
+    }
+    @Test public void variedTextureHasNoDominantNeighborhood() {
+        int[] pixels = flat(0xff000000);
+        java.util.Random random = new java.util.Random(721);
+        for (int i = 0; i < pixels.length; i++) pixels[i] = 0xff000000 | random.nextInt(0x1000000);
         Bundle result = analyze(pixels);
         assertEquals("NATIVE", result.getString("decision"));
-        assertEquals("vertical_texture", result.getString("reason"));
+        assertTrue(result.getDouble("dominantRatio") < 0.5);
     }
-    @Test public void onePixelBoundaryLineIsNotIgnoredAsMedianOutlier() {
-        int[] pixels = flat(120, 24, 0xffffffff);
-        Arrays.fill(pixels, 23 * 120, pixels.length, 0xff000000);
-        Bundle result = analyze(pixels);
-        assertEquals("NATIVE", result.getString("decision"));
-        assertEquals("boundary_content", result.getString("reason"));
-        assertEquals(1, result.getDouble("stableRatio"), 0);
-        assertEquals(2.0 / 3, result.getDouble("edgeRatio"), 0.0001);
-    }
-    @Test public void boundaryTextAndNarrowVerticalStripeAreRejected() {
-        int[] text = flat(120, 24, 0xffffffff);
-        text[23 * 120 + 60] = 0xff000000;
-        assertEquals("boundary_content", analyze(text).getString("reason"));
-        int[] stripe = flat(120, 24, 0xffffffff);
-        for (int y = 0; y < 24; y++) stripe[y * 120 + 60] = 0xff000000;
-        Bundle result = analyze(stripe);
-        assertEquals(1, result.getDouble("edgeRatio"), 0);
-        assertEquals("narrow_or_fragmented_regions", result.getString("reason"));
-        assertEquals("NATIVE", result.getString("decision"));
-    }
-    @Test public void normalizedDistanceThresholdHasExplicitInclusiveBoundary() {
-        int[] pixels = flat(120, 24, 0xff808080);
-        Arrays.fill(pixels, 21 * 120, pixels.length, 0xff909090);
+    @Test public void lowerTwelveDpAndBoundaryNeverVetoUpperBand() {
+        int[] pixels = flat(0xffffffff);
+        Arrays.fill(pixels, 12 * 120, pixels.length, 0xff000000);
+        pixels[pixels.length - 1] = 0; // Even lower-band alpha is outside analyzed evidence.
         assertEquals("EXTEND", analyze(pixels).getString("decision"));
-        Arrays.fill(pixels, 21 * 120, pixels.length, 0xff919191);
-        assertEquals("NATIVE", analyze(pixels).getString("decision"));
+        assertEquals(1, analyze(pixels).getDouble("dominantRatio"), 0);
     }
-    @Test public void slowGradientUsesSegmentAnchorNotNeighborDistance() {
-        int[] pixels = new int[256 * 24];
-        for (int y = 0; y < 24; y++) for (int x = 0; x < 256; x++)
-            pixels[y * 256 + x] = 0xff000000 | (x << 16) | (x << 8) | x;
-        Bundle result = DemoClassifier.analyze(pixels, 256, 24, 1);
-        assertEquals("NATIVE", result.getString("decision"));
-        assertTrue(result.getInt("segments") > 8);
-        assertEquals(1, result.getDouble("stableRatio"), 0);
+    @Test public void realNeighborhoodCrossesQuantizationBinBoundary() {
+        int[] pixels = flat(0xff0f0f0f);
+        for (int y = 0; y < 12; y++) Arrays.fill(pixels, y * 120 + 60, (y + 1) * 120, 0xff101010);
+        assertEquals(1, analyze(pixels).getDouble("dominantRatio"), 0);
+        assertEquals("EXTEND", analyze(pixels).getString("decision"));
     }
-    @Test public void densityScalesGeometryAndMinimumRegionWidth() {
-        assertEquals("EXTEND", DemoClassifier.analyze(flat(240, 48, 0xff123456), 240, 48, 2).getString("decision"));
-        assertEquals("EXTEND", DemoClassifier.analyze(flat(120, 25, 0xff123456), 120, 25, 1.01f).getString("decision"));
-        assertEquals("UNKNOWN", DemoClassifier.analyze(flat(120, 24, 0xff123456), 120, 24, 2).getString("decision"));
+    @Test public void channelToleranceIsInclusiveWithoutTransitiveColorMerging() {
+        int[] pixels = flat(0xff808080);
+        for (int y = 0; y < 12; y++) Arrays.fill(pixels, y * 120 + 60, (y + 1) * 120, 0xff989898);
+        assertEquals(1, analyze(pixels).getDouble("dominantRatio"), 0);
+        for (int y = 0; y < 12; y++) Arrays.fill(pixels, y * 120 + 60, (y + 1) * 120, 0xff999999);
+        assertEquals(0.5, analyze(pixels).getDouble("dominantRatio"), 0);
     }
-    @Test public void malformedOrNonOpaqueInputHasNoPositiveDecision() {
+    @Test public void densityAndStrideDetermineAnalyzedPixelCount() {
+        int[] pixels = new int[121 * 25];
+        Arrays.fill(pixels, 0xff123456);
+        Bundle result = DemoClassifier.analyze(pixels, 121, 25, 1.01f);
+        assertEquals("EXTEND", result.getString("decision"));
+        assertEquals(61 * 7, result.getInt("analyzedPixels"));
+    }
+    @Test public void malformedOrNonOpaqueEvidenceIsUnknown() {
         assertEquals("UNKNOWN", DemoClassifier.analyze(null, 120, 24, 1).getString("decision"));
         assertEquals("UNKNOWN", DemoClassifier.analyze(new int[1], 120, 24, 1).getString("decision"));
         assertEquals("UNKNOWN", DemoClassifier.analyze(new int[0], Integer.MAX_VALUE, Integer.MAX_VALUE, 1).getString("decision"));
         assertEquals("UNKNOWN", DemoClassifier.analyze(new int[0], 0, 24, 1).getString("decision"));
-        assertEquals("UNKNOWN", DemoClassifier.analyze(flat(120, 24, 0xffffffff), 120, 24, Float.NaN).getString("decision"));
-        assertEquals("UNKNOWN", DemoClassifier.analyze(flat(120, 24, 0xffffffff), 120, 24, 0).getString("decision"));
-        assertEquals("UNKNOWN", analyze(flat(120, 24, 0x00ffffff)).getString("decision"));
+        assertEquals("UNKNOWN", DemoClassifier.analyze(flat(-1), 120, 24, Float.NaN).getString("decision"));
+        assertEquals("UNKNOWN", DemoClassifier.analyze(flat(-1), 120, 24, 0).getString("decision"));
+        assertEquals("UNKNOWN", DemoClassifier.analyze(flat(-1), 120, 24, 2).getString("decision"));
+        int[] pixels = flat(-1);
+        pixels[121] = 0; // Alpha validation also covers pixels skipped by stride.
+        assertEquals("non_opaque_pixels", analyze(pixels).getString("reason"));
+        assertEquals(0, analyze(pixels).getInt("analyzedPixels"));
     }
 }

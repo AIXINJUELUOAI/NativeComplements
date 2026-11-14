@@ -40,12 +40,14 @@ public final class DemoActivity extends Activity {
         });
         scroll.requestApplyInsets();
         TextView explanation = new TextView(this);
-        explanation.setText("导航算法观察 Demo 0.1.1\n仅采样导航区域上方的应用内容，不修改颜色、布局或 Insets。\n"
+        explanation.setText("导航算法观察 Demo 0.1.2\n仅采样导航区域上方的应用内容，不修改颜色、布局或 Insets。\n"
                 + "先关闭正式模块的导航总开关；在 LSPosed 启用本 Demo，仅勾选系统框架（system），然后手动重启。\n"
                 + "支持普通应用、竖屏、手势导航；无法判断时显示“等待”，按钮暂时禁用。\n"
                 + "请手动授予悬浮窗权限。采样悬浮面板不属于被捕获的应用容器。\n"
                 + "悬浮条只显示“延伸／悬浮”，判断正确点“肯定”，错误点“否定”。按住结果文字拖动。无需锁定，详细数据自动记入日志。\n悬浮表示本次不建议延伸的候选判断，不执行透明或布局修改。停止观察和导出在本页。\n"
-                + "导出包含组件名和观察记录，请自行确认分享对象。停止观察会同时关闭采样配置。");
+                + "拿不准点“待定”，会保存当前应用画面（不含系统导航和悬浮条），请停留到保存提示。截图稍晚于采样，仅核对窗口和底部条带，不保证整页同帧。\n"
+                + "算法v2只统计上方12–24dp近似颜色占比：≥70%延伸，≤50%悬浮，中间待定，均为实验阈值。\n"
+                + "ZIP包含日志和待定截图（最多100张）；可能含聊天/订单等隐私，仅本地保存、不上传。导出前确认分享对象，可清空记录及截图。停止观察会关闭采样配置。");
         body.addView(explanation);
         status = new TextView(this);
         body.addView(status);
@@ -63,9 +65,9 @@ public final class DemoActivity extends Activity {
                 } catch (Exception e) { report("停止失败", e); }
             });
         });
-        button(body, "导出 NDJSON", () -> {
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/x-ndjson")
-                    .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "navbar-observations.ndjson");
+        button(body, "导出 ZIP（日志＋待定截图）", () -> {
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip")
+                    .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "navbar-observations.zip");
             startActivityForResult(intent, EXPORT);
         });
         button(body, "清空记录", () -> new AlertDialog.Builder(this).setTitle("清空观察记录？")
@@ -108,7 +110,7 @@ public final class DemoActivity extends Activity {
         worker.execute(() -> {
             try (OutputStream output = getContentResolver().openOutputStream(target, "w")) {
                 if (output == null) throw new java.io.IOException("无法打开导出文件");
-                DemoStore.export(this, output);
+                DemoStore.exportZip(this, output);
                 runOnUiThread(() -> Toast.makeText(this, "导出完成", Toast.LENGTH_SHORT).show());
             } catch (Exception e) { report("导出失败（文件可能不完整）", e); }
         });

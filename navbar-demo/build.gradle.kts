@@ -2,7 +2,7 @@ plugins { id("com.android.application") }
 android {
     namespace = "dev.nativecomplements.navdemo"
     compileSdkVersion("android-37.0")
-    defaultConfig { applicationId = "dev.nativecomplements.navdemo"; minSdk = 34; targetSdk = 37; versionCode = 2; versionName = "0.1.1" }
+    defaultConfig { applicationId = "dev.nativecomplements.navdemo"; minSdk = 34; targetSdk = 37; versionCode = 3; versionName = "0.1.2" }
     signingConfigs { create("demoUpdate") { storeFile = rootProject.file(".local/demo.keystore"); storePassword = "android"; keyAlias = "demo"; keyPassword = "android" } }
     buildTypes { getByName("release") { isMinifyEnabled = false; signingConfig = signingConfigs.getByName("demoUpdate") } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

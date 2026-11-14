@@ -32,7 +32,9 @@ public final class DemoOverlay extends Service {
     private WindowManager windows;
     private LinearLayout panel;
     private TextView summary;
-    private Button yes, no;
+    private Button yes, no, unsure;
+    private String pendingToken;
+    private long pendingStarted;
     private Bundle latest, pressed;
     private boolean destroyed, annotating, pressing;
     private WindowManager.LayoutParams position;
@@ -90,8 +92,9 @@ public final class DemoOverlay extends Service {
         panel.addView(summary, new LinearLayout.LayoutParams(dp(64), dp(48)));
         yes = button(panel, "肯定", () -> annotate(true));
         no = button(panel, "否定", () -> annotate(false));
+        unsure = button(panel, "待定", () -> annotate(null));
         position = new WindowManager.LayoutParams(
-                dp(216), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                dp(276), WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
         position.gravity = Gravity.TOP | Gravity.LEFT;
@@ -145,7 +148,20 @@ public final class DemoOverlay extends Service {
                 Bundle sample = result == null ? null : result.getBundle("sample");
                 if (sample == null && result != null && !result.isEmpty()) sample = result;
                 Bundle snapshot = sample == null ? null : sample.deepCopy();
-                main.post(() -> { if (!destroyed) { latest = snapshot; render(); } });
+                Bundle shot = getContentResolver().call(DemoActivity.DATA, "screenshot_status", null, null);
+                main.post(() -> {
+                    if (destroyed) return;
+                    latest = snapshot;
+                    if (pendingToken != null && shot != null && pendingToken.equals(shot.getString("token"))
+                            && !"requested".equals(shot.getString("status"))) {
+                        String state = shot.getString("status", "failed");
+                        Toast.makeText(this, "saved".equals(state) ? "待定截图已保存"
+                                : "content_changed".equals(state) ? "截图已保存，画面有变化，已标记"
+                                : "待定已记录，截图失败：" + shot.getString("reason", ""), Toast.LENGTH_LONG).show();
+                        pendingToken = null;
+                    }
+                    render();
+                });
             } catch (Exception e) { fail("读取样本失败", e); }
         });
     }
@@ -159,11 +175,16 @@ public final class DemoOverlay extends Service {
 
     private void render() {
         if (summary == null) return;
+        if (pendingToken != null && SystemClock.elapsedRealtime() - pendingStarted > 12000) {
+            pendingToken = null;
+            Toast.makeText(this, "截图未完成，可重新标注待定", Toast.LENGTH_SHORT).show();
+        }
         if (pressing) return; // Keep the visible verdict and ID together until pointer-up.
         String decision = expected(latest, true);
-        summary.setText(decision == null ? "等待" : decision.equals("EXTEND") ? "延伸" : "悬浮");
-        yes.setEnabled(!annotating && decision != null);
-        no.setEnabled(!annotating && decision != null);
+        summary.setText(decision == null ? (fresh(latest) ? "待定" : "等待") : decision.equals("EXTEND") ? "延伸" : "悬浮");
+        yes.setEnabled(!annotating && pendingToken == null && decision != null);
+        no.setEnabled(!annotating && pendingToken == null && decision != null);
+        unsure.setEnabled(!annotating && pendingToken == null && fresh(latest));
     }
 
     // NATIVE is the original pixel classifier's non-extension verdict, not proof of safe Insets removal.
@@ -174,15 +195,15 @@ public final class DemoOverlay extends Service {
         return agree ? decision : decision.equals("EXTEND") ? "NATIVE" : "EXTEND";
     }
 
-    private void annotate(boolean agree) {
+    private void annotate(Boolean agree) {
         Bundle source = pressed != null ? pressed : latest;
-        String expected = expected(source, agree);
-        if (expected == null || annotating) return;
+        String expected = agree == null && fresh(source) ? "UNKNOWN" : agree == null ? null : expected(source, agree);
+        if (expected == null || annotating || pendingToken != null) return;
         Bundle sample = source.deepCopy();
         annotating = true;
         render();
         worker.execute(() -> {
-            String error = null;
+            String error = null, token = null;
             try {
                 Bundle extras = new Bundle();
                 extras.putBundle("sample", sample);
@@ -190,12 +211,15 @@ public final class DemoOverlay extends Service {
                 Bundle result = getContentResolver().call(DemoActivity.DATA, "annotate", null, extras);
                 if (result == null) error = "未收到保存确认";
                 else if (result.containsKey("error")) error = result.getString("error");
+                else token = result.getString("token");
             } catch (Exception e) { error = e.toString(); }
-            final String failure = error;
+            final String failure = error, requestedToken = token;
             main.post(() -> {
                 if (destroyed) return;
                 annotating = false;
-                Toast.makeText(this, failure == null ? "已记录" : "记录失败，请重试", Toast.LENGTH_SHORT).show();
+                pendingToken = failure == null ? requestedToken : null;
+                pendingStarted = SystemClock.elapsedRealtime();
+                Toast.makeText(this, failure == null ? (pendingToken == null ? "已记录" : "待定已记录，正在截图，请稍候") : "记录失败，请重试", Toast.LENGTH_SHORT).show();
                 if (failure != null) android.util.Log.w("NavbarDemo", "Annotation failed: " + failure);
                 render();
             });

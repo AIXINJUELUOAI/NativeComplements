@@ -4,6 +4,7 @@ import zipfile, hashlib
 import verify_signal_target as dex
 ROOT=Path(__file__).resolve().parents[1]
 checks={
+ 'android.window.ScreenCaptureInternal$CaptureArgs$Builder': [('setSecureContentPolicy','(I)Landroid/window/ScreenCaptureInternal$CaptureArgs$Builder;'),('setProtectedContentPolicy','(I)Landroid/window/ScreenCaptureInternal$CaptureArgs$Builder;')],
  'android.window.ScreenCaptureInternal$ScreenshotHardwareBuffer': [('containsHdrLayers','()Z'),('containsSecureLayers','()Z'),('asBitmap','()Landroid/graphics/Bitmap;'),('getHardwareBuffer','()Landroid/hardware/HardwareBuffer;')],
  'com.android.server.wm.ActivityRecord': [('inTransition','()Z')],
  'com.android.server.wm.WindowState': [('getOwningUid','()I')],

@@ -12,11 +12,11 @@ import java.util.Set;
 public final class DemoProvider extends ContentProvider {
     private static final Uri URI = Uri.parse("content://dev.nativecomplements.navdemo.data");
     private final LinkedHashMap<Long, Bundle> history = new LinkedHashMap<>();
-    private Bundle latest = new Bundle();
+    private Bundle latest = new Bundle(), pending, screenshotState = new Bundle();
     private long leaseUntil, request, generation;
     private static final Set<String> TEXT = Set.of("component", "decision", "reason", "algorithm", "crop", "frame", "bounds", "source", "colorSpace");
     private static final Set<String> LONGS = Set.of("id", "capturedAt", "elapsedMs", "captureMs", "classifyMs", "generation");
-    private static final Set<String> INTS = Set.of("width", "height", "segments", "navHeight", "rotation", "displayId");
+    private static final Set<String> INTS = Set.of("width", "height", "segments", "navHeight", "rotation", "displayId", "analyzedPixels");
     @Override public boolean onCreate() { return true; }
     @Override public synchronized Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
@@ -27,6 +27,8 @@ public final class DemoProvider extends ContentProvider {
             config.putBoolean("enabled", SystemClock.elapsedRealtime() < leaseUntil);
             config.putLong("request", request);
             config.putLong("generation", generation);
+            if (pending != null && SystemClock.elapsedRealtime() - pending.getLong("requestAt") > 10000) cancelPending("timeout");
+            if (pending != null) config.putBundle("pending", pending.deepCopy());
             return config;
         }
         if ("sample".equals(method)) {
@@ -43,15 +45,22 @@ public final class DemoProvider extends ContentProvider {
             getContext().getContentResolver().notifyChange(URI, null);
             return result;
         }
+        if ("screenshot".equals(method)) {
+            if (uid != 1000) throw new SecurityException("system screenshot only");
+            return acceptScreenshot(extras);
+        }
         if (!own) throw new SecurityException("demo owner only");
         switch (method) {
             case "control":
                 boolean enabled = extras != null && extras.getBoolean("enabled", false);
                 boolean wasEnabled = SystemClock.elapsedRealtime() < leaseUntil;
                 leaseUntil = enabled ? SystemClock.elapsedRealtime() + 15000 : 0;
-                if (!enabled || !wasEnabled) { latest = new Bundle(); history.clear(); request++; generation++; }
+                if (!enabled || !wasEnabled) { cancelPending("observation_stopped"); latest = new Bundle(); history.clear(); request++; generation++; }
                 return Bundle.EMPTY;
             case "request": request++; return Bundle.EMPTY;
+            case "screenshot_status":
+                if (pending != null && SystemClock.elapsedRealtime() - pending.getLong("requestAt") > 10000) cancelPending("timeout");
+                return screenshotState.deepCopy();
             case "latest":
                 if (SystemClock.elapsedRealtime() >= leaseUntil) {
                     Bundle stopped = new Bundle(); stopped.putString("reason", "观察已停止"); return stopped;
@@ -68,13 +77,74 @@ public final class DemoProvider extends ContentProvider {
                 Bundle annotation = original.deepCopy();
                 annotation.putString("expected", expected);
                 annotation.putLong("annotatedAt", SystemClock.elapsedRealtime());
-                annotation.putBoolean("matches", expected.equals(original.getString("decision")));
-                return log("annotation", annotation);
+                if (!"UNKNOWN".equals(expected)) {
+                    annotation.putBoolean("matches", expected.equals(original.getString("decision")));
+                    return log("annotation", annotation);
+                }
+                if (pending != null) return error("上一张待定截图尚未完成");
+                if (SystemClock.elapsedRealtime() - original.getLong("capturedAt") > 3000) return error("样本已过期，请重新点击待定");
+                String token = java.util.UUID.randomUUID().toString();
+                annotation.putString("screenshotToken", token);
+                annotation.putString("screenshotStatus", "requested");
+                Bundle logged = log("annotation", annotation);
+                if (logged.containsKey("error")) return logged;
+                pending = new Bundle(); pending.putBundle("sample", original.deepCopy());
+                pending.putString("token", token); pending.putLong("generation", generation);
+                pending.putLong("requestAt", SystemClock.elapsedRealtime());
+                screenshotState = new Bundle(); screenshotState.putString("token", token); screenshotState.putString("status", "requested");
+                request++;
+                return screenshotState.deepCopy();
             case "clear":
-                try { DemoStore.clear(getContext()); history.clear(); latest = new Bundle(); request++; generation++; return Bundle.EMPTY; }
+                try { pending = null; screenshotState = new Bundle(); DemoStore.clear(getContext()); history.clear(); latest = new Bundle(); request++; generation++; return Bundle.EMPTY; }
                 catch (IOException failure) { return error("日志清空失败"); }
             default: throw new IllegalArgumentException("unknown method");
         }
+    }
+    private void cancelPending(String reason) {
+        if (pending == null) return;
+        Bundle result = pending.getBundle("sample").deepCopy();
+        result.putString("screenshotToken", pending.getString("token")); result.putString("status", "failed"); result.putString("screenshotReason", reason);
+        log("screenshot", result);
+        screenshotState = new Bundle(); screenshotState.putString("token", pending.getString("token"));
+        screenshotState.putString("status", "failed"); screenshotState.putString("reason", reason); pending = null;
+    }
+    private Bundle acceptScreenshot(Bundle data) {
+        if (data == null || pending == null || !pending.getString("token").equals(data.getString("token"))
+                || data.getLong("generation", -1) != generation) return error("截图请求已失效");
+        if (SystemClock.elapsedRealtime() >= leaseUntil || SystemClock.elapsedRealtime() - pending.getLong("requestAt") > 10000) {
+            cancelPending("expired"); return error("截图请求超时");
+        }
+        String token = pending.getString("token");
+        Bundle record = pending.getBundle("sample").deepCopy();
+        record.putString("expected", "UNKNOWN");
+        record.putString("screenshotToken", token); record.putLong("requestAt", pending.getLong("requestAt"));
+        record.putLong("screenshotAt", data.getLong("screenshotAt")); record.putLong("screenshotWallTime", data.getLong("screenshotWallTime"));
+        record.putBoolean("bottomStripMatched", data.getBoolean("contentMatched"));
+        record.putString("fullPageIdentity", "unverified");
+        record.putLong("sampleToScreenshotMs", data.getLong("screenshotAt") - record.getLong("capturedAt"));
+        record.putInt("imageWidth", data.getInt("width")); record.putInt("imageHeight", data.getInt("height"));
+        record.putString("screenshotCrop", data.getString("crop", ""));
+        record.putString("matchScope", "window_geometry_and_bottom_strip_only");
+        String status = data.getString("status", "failed"), reason = data.getString("reason", "");
+        byte[] bytes = data.getByteArray("bytes");
+        if (("saved".equals(status) || "content_changed".equals(status)) && bytes != null) {
+            try {
+                android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
+                if (bytes.length > 350 * 1024 || options.outWidth <= 0 || options.outWidth > 600 || options.outHeight <= 0 || options.outHeight > 4000
+                        || !"image/jpeg".equals(options.outMimeType)) throw new IOException("截图格式无效");
+                record.putString("image", "pending/" + token + ".jpg");
+                record.putString("status", status); record.putString("screenshotReason", reason);
+                DemoStore.saveScreenshot(getContext(), token, bytes, record);
+            } catch (IOException failure) { status = "failed"; reason = failure.getMessage(); record.remove("image"); }
+        } else { status = "failed"; if (reason.isEmpty()) reason = "no_image"; }
+        record.putString("status", status); record.putString("screenshotReason", reason);
+        Bundle logged = log("screenshot", record);
+        pending = null; screenshotState = new Bundle(); screenshotState.putString("token", token);
+        screenshotState.putString("status", logged.containsKey("error") ? "failed" : status);
+        screenshotState.putString("reason", logged.containsKey("error") ? "日志写入失败" : reason);
+        getContext().getContentResolver().notifyChange(URI, null);
+        return screenshotState.deepCopy();
     }
     private Bundle log(String type, Bundle data) {
         try { DemoStore.append(getContext(), type, data); return Bundle.EMPTY; }
@@ -89,7 +159,7 @@ public final class DemoProvider extends ContentProvider {
         }
         for (String key : LONGS) if (input.containsKey(key)) output.putLong(key, input.getLong(key));
         for (String key : INTS) if (input.containsKey(key)) output.putInt(key, input.getInt(key));
-        for (String key : new String[]{"stableRatio", "edgeRatio"}) if (input.containsKey(key)) {
+        for (String key : new String[]{"stableRatio", "edgeRatio", "dominantRatio"}) if (input.containsKey(key)) {
             double value = input.getDouble(key); if (Double.isFinite(value)) output.putDouble(key, value);
         }
         output.putFloat("density", input.getFloat("density", 0));

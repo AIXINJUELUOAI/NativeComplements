@@ -18,6 +18,11 @@ import android.os.SystemClock;
 import android.view.SurfaceControl;
 import android.view.WindowInsets;
 import android.view.WindowManager;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.LinkedHashMap;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -28,7 +33,7 @@ final class DemoCapture {
     private static final Uri PROVIDER = Uri.parse("content://dev.nativecomplements.navdemo.data");
     private static final long INTERVAL = 250;
     private final Constructor<?> builder;
-    private final Method crop, build, capture, hardwareBuffer, bitmap, secure, hdr;
+    private final Method crop, build, capture, hardwareBuffer, bitmap, secure, hdr, securePolicy, protectedPolicy;
     private final HandlerThread thread;
     private final Handler worker;
     private final AtomicBoolean queued = new AtomicBoolean();
@@ -38,6 +43,9 @@ final class DemoCapture {
     private volatile long nextSample;
     private long generation;
     private long sequence = SystemClock.elapsedRealtimeNanos();
+    private String lastPending = "";
+    private record Remembered(Snapshot snapshot, long generation, byte[] stripHash) {}
+    private final LinkedHashMap<Long, Remembered> recent = new LinkedHashMap<>();
 
     DemoCapture(ClassLoader loader) throws ReflectiveOperationException {
         Class<?> screen = Class.forName("android.window.ScreenCaptureInternal", false, loader);
@@ -45,6 +53,8 @@ final class DemoCapture {
         Class<?> type = Class.forName(args.getName() + "$Builder", false, loader);
         builder = type.getConstructor(SurfaceControl.class);
         crop = type.getMethod("setSourceCrop", Rect.class);
+        securePolicy = type.getMethod("setSecureContentPolicy", int.class);
+        protectedPolicy = type.getMethod("setProtectedContentPolicy", int.class);
         build = type.getMethod("build");
         capture = screen.getMethod("captureLayers", args);
         Class<?> buffer = capture.getReturnType();
@@ -99,7 +109,17 @@ final class DemoCapture {
             Bundle config = context.getContentResolver().call(PROVIDER, "config", null, null);
             boolean previous = enabled;
             enabled = config != null && config.getBoolean("enabled", false);
-            generation = config == null ? 0 : config.getLong("generation", 0);
+            long nextGeneration = config == null ? 0 : config.getLong("generation", 0);
+            if (generation != nextGeneration || !enabled) recent.clear();
+            generation = nextGeneration;
+            Bundle pending = config == null ? null : config.getBundle("pending");
+            if (enabled && pending != null) {
+                String token = pending.getString("token", "");
+                if (!token.isEmpty() && !token.equals(lastPending)) {
+                    lastPending = token;
+                    capturePending(pending);
+                }
+            }
             // ponytail: WM draw notifications are not every app frame; 1 Hz observation fallback
             // catches in-Activity sheets/video changes without hooking every application's render path.
             if (enabled) request();
@@ -141,6 +161,8 @@ final class DemoCapture {
             if (!before.same(after)) throw new IllegalStateException("window or geometry changed during capture");
             result.putBoolean("valid", true);
             metadata(result, before, started, captureGeneration, capturedAt, captureMs, classifyMs);
+            recent.put(result.getLong("id"), new Remembered(before, captureGeneration, hash(pixels)));
+            if (recent.size() > 256) recent.remove(recent.keySet().iterator().next());
             publish(result);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             publish(unavailable(error.getClass().getSimpleName() + ": " + error.getMessage(), before, started,
@@ -227,11 +249,25 @@ final class DemoCapture {
     }
 
     private int[] pixels(Snapshot snapshot) throws ReflectiveOperationException {
+        Bitmap software = captureBitmap(snapshot, snapshot.local);
+        try {
+            int[] pixels = new int[software.getWidth() * software.getHeight()];
+            software.getPixels(pixels, 0, software.getWidth(), 0, 0, software.getWidth(), software.getHeight());
+            for (int pixel : pixels) if ((pixel >>> 24) != 255) reject("nonopaque capture");
+            return pixels;
+        } finally { software.recycle(); }
+    }
+
+    /** Ownership of returned software bitmap transfers to the caller. Never includes other windows. */
+    private Bitmap captureBitmap(Snapshot snapshot, Rect rectangle) throws ReflectiveOperationException {
         HardwareBuffer buffer = null;
-        Bitmap image = null, software = null;
+        Bitmap image = null;
         try {
             Object args = builder.newInstance(snapshot.surface);
-            crop.invoke(args, snapshot.local);
+            crop.invoke(args, rectangle);
+            // Target API37 THROW_EXCEPTION=2: reject protected layers rather than accepting a redacted black image.
+            securePolicy.invoke(args, 2);
+            protectedPolicy.invoke(args, 2);
             Object result = capture.invoke(null, build.invoke(args));
             if (result == null) reject("capture empty");
             buffer = (HardwareBuffer) hardwareBuffer.invoke(result);
@@ -239,20 +275,102 @@ final class DemoCapture {
                     || (buffer.getUsage() & HardwareBuffer.USAGE_PROTECTED_CONTENT) != 0) reject("secure, protected or HDR buffer");
             if (buffer.getFormat() != HardwareBuffer.RGBA_8888) reject("unsupported capture format");
             image = (Bitmap) bitmap.invoke(result);
-            if (image == null || image.getWidth() != snapshot.local.width() || image.getHeight() != snapshot.local.height()
+            if (image == null || image.getWidth() != rectangle.width() || image.getHeight() != rectangle.height()
                     || image.getColorSpace() == null || !image.getColorSpace().equals(ColorSpace.get(ColorSpace.Named.SRGB)))
                 reject("capture geometry or color space mismatch");
-            software = image.copy(Bitmap.Config.ARGB_8888, false);
+            Bitmap software = image.copy(Bitmap.Config.ARGB_8888, false);
             if (software == null) reject("software copy unavailable");
-            int[] pixels = new int[software.getWidth() * software.getHeight()];
-            software.getPixels(pixels, 0, software.getWidth(), 0, 0, software.getWidth(), software.getHeight());
-            for (int pixel : pixels) if ((pixel >>> 24) != 255) reject("nonopaque capture");
-            return pixels;
+            return software;
         } finally {
-            if (software != null) software.recycle();
             if (image != null) image.recycle();
             if (buffer != null) buffer.close();
         }
+    }
+
+    private void capturePending(Bundle pending) {
+        Bundle output = new Bundle();
+        output.putString("token", pending.getString("token", ""));
+        long requestedGeneration = pending.getLong("generation", -1);
+        output.putLong("generation", requestedGeneration);
+        output.putString("status", "failed");
+        output.putBoolean("contentMatched", false);
+        output.putByteArray("bytes", null);
+        Bitmap image = null, scaled = null;
+        try {
+            long now = SystemClock.elapsedRealtime(), requestAt = pending.getLong("requestAt", -1);
+            if (!enabled || requestedGeneration != generation || requestAt < 0 || now < requestAt
+                    || now - requestAt > 10_000) reject("request expired or generation changed");
+            Bundle sample = pending.getBundle("sample");
+            if (sample == null || sample.getLong("generation", -1) != requestedGeneration) reject("sample epoch missing");
+            Remembered remembered = recent.get(sample.getLong("id", -1));
+            if (remembered == null || remembered.generation != requestedGeneration) reject("sample no longer retained");
+            Snapshot expected = remembered.snapshot;
+            if (!expected.same(snapshot())) reject("sample window or geometry changed");
+            byte[] currentHash = hash(pixels(expected));
+            if (!expected.same(snapshot())) reject("window changed while checking strip");
+            // App content only, ending above navigation even when the app draws edge-to-edge.
+            Rect content = new Rect(expected.frame.left, expected.frame.top, expected.frame.right, expected.screen.bottom);
+            content.offset(expected.padding.left - expected.frame.left, expected.padding.top - expected.frame.top);
+            if (SystemClock.elapsedRealtime() - requestAt > 10_000) reject("request deadline before screenshot");
+            image = captureBitmap(expected, content);
+            long screenshotAt = SystemClock.elapsedRealtime(), wallTime = System.currentTimeMillis();
+            if (!expected.same(snapshot())) reject("window changed during screenshot");
+            byte[] afterHash = hash(pixels(expected));
+            if (!expected.same(snapshot())) reject("window changed after screenshot");
+            boolean matched = MessageDigest.isEqual(remembered.stripHash, currentHash)
+                    && MessageDigest.isEqual(currentHash, afterHash);
+            output.putLong("screenshotAt", screenshotAt);
+            output.putLong("screenshotWallTime", wallTime);
+            output.putInt("sourceWidth", image.getWidth());
+            output.putInt("sourceHeight", image.getHeight());
+            if (image.getWidth() > 600) {
+                int height = Math.max(1, (int) ((long) image.getHeight() * 600 / image.getWidth()));
+                scaled = Bitmap.createScaledBitmap(image, 600, height, true);
+            } else scaled = image;
+            byte[] bytes = null;
+            for (int quality : new int[]{85, 70, 55, 40, 25}) {
+                ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                if (!scaled.compress(Bitmap.CompressFormat.JPEG, quality, stream)) reject("JPEG compression failed");
+                if (stream.size() <= 350 * 1024) { bytes = stream.toByteArray(); break; }
+            }
+            if (bytes == null) reject("JPEG exceeds 350 KiB Binder limit");
+            if (!expected.same(snapshot())) reject("window changed before screenshot delivery");
+            output.putInt("width", scaled.getWidth());
+            output.putInt("height", scaled.getHeight());
+            output.putString("crop", "surface=" + content);
+            output.putString("matchScope", "strip_match_only");
+            output.putBoolean("contentMatched", matched);
+            output.putString("status", matched ? "saved" : "content_changed");
+            output.putString("reason", "strip_match_only; full-page content identity is not guaranteed; app layer excludes overlay");
+            output.putByteArray("bytes", bytes);
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            output.putString("reason", error.getClass().getSimpleName() + ": " + error.getMessage());
+        } finally {
+            if (scaled != null && scaled != image) scaled.recycle();
+            if (image != null) image.recycle();
+        }
+        if (!output.containsKey("screenshotAt")) output.putLong("screenshotAt", SystemClock.elapsedRealtime());
+        if (!output.containsKey("screenshotWallTime")) output.putLong("screenshotWallTime", System.currentTimeMillis());
+        long identity = Binder.clearCallingIdentity();
+        try { context.getContentResolver().call(PROVIDER, "screenshot", null, output); }
+        catch (RuntimeException error) {
+            enabled = false;
+            worker.removeCallbacks(sample);
+            queued.set(false);
+        } finally { Binder.restoreCallingIdentity(identity); }
+    }
+
+    private static byte[] hash(int[] pixels) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            ByteBuffer row = ByteBuffer.allocate(4096);
+            for (int pixel : pixels) {
+                if (row.remaining() < 4) { digest.update(row.array(), 0, row.position()); row.clear(); }
+                row.putInt(pixel);
+            }
+            digest.update(row.array(), 0, row.position());
+            return digest.digest();
+        } catch (NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
 
     private Bundle unavailable(String reason, Snapshot snapshot, long started, long captureGeneration,
