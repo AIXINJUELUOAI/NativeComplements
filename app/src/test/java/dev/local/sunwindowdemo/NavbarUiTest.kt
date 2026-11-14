@@ -87,7 +87,7 @@ class NavbarUiTest {
         compose.onAllNodesWithText("保留系统原有").onLast().performClick()
         compose.runOnIdle { assertEquals(NavbarStore.ORIGINAL, preferences.getInt("$pkg/$alias", -1)) }
         compose.onNodeWithText("DetailActivity").performScrollTo().performClick()
-        compose.onNodeWithText("跟随应用与模板").performClick()
+        compose.onNodeWithText("跟随应用与适配名单").performClick()
         compose.runOnIdle {
             assertFalse(preferences.contains("$pkg/$detailActivity"))
             detail.value = false

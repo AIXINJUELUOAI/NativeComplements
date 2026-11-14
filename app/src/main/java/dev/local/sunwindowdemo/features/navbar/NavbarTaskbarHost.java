@@ -60,7 +60,7 @@ final class NavbarTaskbarHost {
                     Object result = chain.proceed();
                     if (mode == NavbarStore.COLOR) {
                         band.setColor(color);
-                        drawBand((Canvas) chain.getArg(0), band, navHeight, previousAlpha);
+                        drawBand((Canvas) chain.getArg(0), band, navHeight);
                     }
                     return result;
                 } finally {
@@ -132,9 +132,11 @@ final class NavbarTaskbarHost {
         target.setAlpha(alpha);
     }
 
-    static void drawBand(Canvas canvas, Paint paint, int height, int nativeAlpha) {
-        if (height <= 0 || nativeAlpha <= 0) return;
-        paint.setAlpha(nativeAlpha);
+    static void drawBand(Canvas canvas, Paint paint, int height) {
+        // Taskbar stash/background alpha is not window alpha: phone mode normally sets it to zero.
+        // The band follows its owner's Canvas/View/Surface animation, not renderer background policy.
+        if (height <= 0) return;
+        paint.setAlpha(255);
         canvas.drawRect(0, Math.max(0, canvas.getHeight() - height), canvas.getWidth(), canvas.getHeight(), paint);
     }
 

@@ -22,27 +22,29 @@ public class NavbarTaskbarTest {
     }
     @Test public void bandCoversOnlyActualBottomNavigationHeight() {
         RecordingCanvas canvas = new RecordingCanvas();
-        NavbarTaskbarHost.drawBand(canvas, new Paint(), 20, 255);
+        NavbarTaskbarHost.drawBand(canvas, new Paint(), 20);
         assertEquals(new RectF(0, 180, 100, 200), canvas.rectangle);
     }
     @Test public void absentBandDoesNotPaintAndLargeBandIsClamped() {
         RecordingCanvas canvas = new RecordingCanvas();
-        NavbarTaskbarHost.drawBand(canvas, new Paint(), 0, 255);
+        NavbarTaskbarHost.drawBand(canvas, new Paint(), 0);
         assertNull(canvas.rectangle);
-        NavbarTaskbarHost.drawBand(canvas, new Paint(), 300, 255);
+        NavbarTaskbarHost.drawBand(canvas, new Paint(), 300);
         assertEquals(new RectF(0, 0, 100, 200), canvas.rectangle);
     }
-    @Test public void bandFollowsNativeAlphaAndDoesNotReviveHiddenBackground() {
-        Paint paint = new Paint();
-        for (int alpha : new int[]{0, 64, 255}) {
+    @Test public void colorBandRemainsVisibleWhenPhoneTaskbarBackgroundIsStashed() {
+        for (int nativeAlpha : new int[]{0, 64, 255}) {
+            Paint nativeBackground = new Paint();
+            nativeBackground.setAlpha(nativeAlpha);
+            NavbarTaskbarHost.tint(nativeBackground, NavbarStore.COLOR, Color.WHITE);
+            assertEquals(nativeAlpha, nativeBackground.getAlpha());
+            Paint band = new Paint();
+            band.setColor(Color.WHITE);
+            band.setAlpha(nativeAlpha); // A reused paint must not carry stash/background alpha into the band.
             RecordingCanvas canvas = new RecordingCanvas();
-            paint.setColor(Color.WHITE);
-            NavbarTaskbarHost.drawBand(canvas, paint, 20, alpha);
-            if (alpha == 0) assertNull(canvas.rectangle);
-            else {
-                assertEquals(new RectF(0, 180, 100, 200), canvas.rectangle);
-                assertEquals(alpha, canvas.alpha);
-            }
+            NavbarTaskbarHost.drawBand(canvas, band, 20);
+            assertEquals(new RectF(0, 180, 100, 200), canvas.rectangle);
+            assertEquals(255, canvas.alpha);
         }
     }
     @Test public void colorTintPreservesNativeAlphaAndNativePaintCanBeRestored() {

@@ -43,6 +43,7 @@ final class NavbarSystem {
     private final java.util.concurrent.ExecutorService statusWriter = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long lastFailure;
     private volatile String lastRuntime = "";
+    private String runtimePage = "";
     private volatile long statusPausedUntil;
     private volatile String pendingRuntime = "";
     private final java.util.concurrent.atomic.AtomicBoolean statusPending = new java.util.concurrent.atomic.AtomicBoolean();
@@ -345,6 +346,7 @@ final class NavbarSystem {
     private void tick() {
         boolean adapting = false;
         waitingFirstFrame = false;
+        runtimePage = "";
         try {
             int navigationMode = navigationMode(context);
             gestures = navigationMode == 2;
@@ -379,6 +381,7 @@ final class NavbarSystem {
             Rect frame = snapshot.frame(), bounds = snapshot.bounds();
             SurfaceControl surface = snapshot.surface();
             NavbarRules.Choice selected = choice(window, true);
+            runtimePage = snapshot.component() + " · 模式=" + selected.mode() + " · " + selected.source();
             boolean landscape = frame.width() > frame.height();
             if (window != previousWindow) {
                 previousWindow = window;
@@ -492,6 +495,7 @@ final class NavbarSystem {
      * the latest text is sent after the pause or the next successful settings read.
      */
     private void runtime(String message) {
+        if (!runtimePage.isEmpty()) message += " · " + runtimePage;
         if (message.equals(lastRuntime)) return;
         if (SystemClock.uptimeMillis() < statusPausedUntil || settings != null && !settings.reachable()) return;
         pendingRuntime = message;

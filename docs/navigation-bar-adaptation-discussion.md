@@ -494,3 +494,9 @@ main 从 81c32c9 开始，开工时工作区干净，版本代码 113。用户�
 - 沿用同页面1500ms短失败保色、窗口切换短等待、UID校验宿主传输与用户优先级；未声称具备ColorOS私有SF实时通知/Decor子层全套绘制。compat缩放/surfaceInsets、原生app快照底边、广告首帧时机与黑闪根治仍需真机逐项验收。
 
 已执行导航条50项及全库291项单元测试（0失败），44个API37接口与名单校验、运行时基线检查通过；发布构建通过。不等于手机视觉验证，无自动安装/重启/LSPosed变更。
+
+## 0.9.25：纠正0.9.24补色可见性回归
+
+用户截图淘宝、闲鱼、美团底部均为黑导航区。代码复核发现0.9.24把renderer paint alpha当整个窗口动画alpha，错误令模块band跟随；已有Pixel/Nexus Launcher归档TaskbarActivityContext在phone或transient stashed下本就设背景alpha0，TaskbarDragLayer仍draw。故该绑定会在正常手机模式抑制补色，前次测试反而固化了错误契约。修复仅解耦band与taskbar背景alpha：原生paint继续保持原值避免点亮阴影，独立band按适配颜色绘制，仍受owner Canvas/View/Surface及active/模式/到期控制；不另造动画。测试改为原生alpha0/64/255时paint不变而有效band仍绘制。
+
+第二条条件性回归：旧模板给普通首页COLOR，移除后若用户保存default_mode=0且无覆盖会落回ORIGINAL；不是57名单误命中淘宝/闲鱼，也不能据截图断言用户保存值。继续保留用户选择，不擅自重写。既有开发者runtime增加当前component、解析mode/source，方便区别跳过取色/采样失败/已经补色。截图仅证明症状，不能保证本次补色修复单独解决全部黑底；需要用户后续复验，仍未操作手机。
