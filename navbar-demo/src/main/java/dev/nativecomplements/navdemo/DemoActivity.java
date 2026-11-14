@@ -40,11 +40,11 @@ public final class DemoActivity extends Activity {
         });
         scroll.requestApplyInsets();
         TextView explanation = new TextView(this);
-        explanation.setText("导航算法观察 Demo 0.1.0\n仅采样导航区域上方的应用内容，不修改颜色、布局或 Insets。\n"
+        explanation.setText("导航算法观察 Demo 0.1.1\n仅采样导航区域上方的应用内容，不修改颜色、布局或 Insets。\n"
                 + "先关闭正式模块的导航总开关；在 LSPosed 启用本 Demo，仅勾选系统框架（system），然后手动重启。\n"
-                + "首版支持普通应用、竖屏、手势导航；键盘、安全窗口、横屏、小窗和转场期间显示不可用。\n"
+                + "支持普通应用、竖屏、手势导航；无法判断时显示“等待”，按钮暂时禁用。\n"
                 + "请手动授予悬浮窗权限。采样悬浮面板不属于被捕获的应用容器。\n"
-                + "切到目标页面后等待新样本，先锁定样本 ID，再选择适合延伸／不适合／不确定；切页前请解锁，避免标错页面。\n"
+                + "悬浮条只显示“延伸／悬浮”，判断正确点“肯定”，错误点“否定”。按住结果文字拖动。无需锁定，详细数据自动记入日志。\n悬浮表示本次不建议延伸的候选判断，不执行透明或布局修改。停止观察和导出在本页。\n"
                 + "导出包含组件名和观察记录，请自行确认分享对象。停止观察会同时关闭采样配置。");
         body.addView(explanation);
         status = new TextView(this);
