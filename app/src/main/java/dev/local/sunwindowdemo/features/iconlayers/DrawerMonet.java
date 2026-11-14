@@ -38,6 +38,8 @@ final class DrawerMonet {
     private HostSnapshot settings;
     private Class<?> recycler, searchRecycler, appInfo;
     private Method standard;
+    private final java.util.concurrent.atomic.AtomicInteger rendered = new java.util.concurrent.atomic.AtomicInteger();
+    private final java.util.concurrent.atomic.AtomicInteger materials = new java.util.concurrent.atomic.AtomicInteger();
 
     void install(XposedModule module, ClassLoader loader) throws ReflectiveOperationException {
         Class<?> bubble = Class.forName("com.android.launcher3.BubbleTextView", false, loader);
@@ -84,7 +86,10 @@ final class DrawerMonet {
                 if (Boolean.TRUE.equals(lowRes.invoke(original))) return chain.proceed();
                 MaterialKey key = new MaterialKey(original, boundItem.get());
                 Object nativeTheme = themedBitmap.get(original);
-                if (nativeTheme != null && nativeTheme != unsupported) return chain.proceed(args);
+                if (nativeTheme != null && nativeTheme != unsupported) {
+                    if (rendered.incrementAndGet() <= 3) android.util.Log.i("NcDrawerMonet", "native themed drawer render");
+                    return chain.proceed(args);
+                }
                 if (worker == null) return chain.proceed(args);
                 Object copy;
                 synchronized (copies) {
@@ -134,6 +139,7 @@ final class DrawerMonet {
             android.util.Log.w("NcDrawerMonet", "native monochrome material unavailable", failure);
         }
         synchronized (copies) { if (generation != token || !copies.containsKey(key)) return; copies.put(key, copy); }
+        if (materials.incrementAndGet() <= 6) android.util.Log.i("NcDrawerMonet", "monochrome material ready=" + (copy != null));
         if (copy != null) main.post(() -> rebind(key.bitmap()));
     }
 
@@ -167,8 +173,14 @@ final class DrawerMonet {
         return false;
     }
 
+    static Context attachedContext(Context app) {
+        Context application = app.getApplicationContext();
+        // Application.attach runs before LoadedApk publishes its Application context.
+        return application != null ? application : app;
+    }
+
     void connect(Context app) {
-        context = app.getApplicationContext();
+        context = attachedContext(app);
         HandlerThread thread = new HandlerThread("NcDrawerMonet"); thread.start();
         worker = new Handler(thread.getLooper());
         settings = HostSnapshot.open(context, "drawer_monet");

@@ -83,6 +83,16 @@ public class DrawerMonetTest {
         assertThrows(NoSuchMethodException.class, () -> DrawerMonet.itemNewIcon(Object.class));
     }
 
+    @Test public void attachBeforeApplicationPublicationUsesAttachedContext() {
+        Context early = new android.content.ContextWrapper(context) {
+            @Override public Context getApplicationContext() { return null; }
+        };
+        assertSame(early, DrawerMonet.attachedContext(early));
+        assertNotNull(dev.local.sunwindowdemo.core.HostSnapshot.open(
+                DrawerMonet.attachedContext(early), "drawer_monet"));
+        assertSame(context, DrawerMonet.attachedContext(context));
+    }
+
     public static class Grid extends android.widget.FrameLayout {
         public Grid(Context c) { super(c); }
     }

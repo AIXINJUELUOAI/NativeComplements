@@ -151,7 +151,10 @@ public final class IconLayerModule extends XposedModule {
         if (context != null) return;
         context = app;
         if (drawerMonet != null) try { drawerMonet.connect(app); }
-        catch (RuntimeException failure) { note("DRAWER_MONET_CONNECT_FAILED " + failure.getClass().getSimpleName()); }
+        catch (RuntimeException failure) {
+            note("DRAWER_MONET_CONNECT_FAILED " + failure);
+            android.util.Log.w("NcDrawerMonet", "drawer configuration connection failed", failure);
+        }
         HandlerThread thread = new HandlerThread("NcIconLayers"); thread.start();
         worker = new Handler(thread.getLooper());
         receiver = new BroadcastReceiver() {
