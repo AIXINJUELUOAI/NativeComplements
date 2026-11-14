@@ -27,6 +27,15 @@ import org.json.JSONObject
 private val modes = listOf("保留系统原有", "取色", "悬浮")
 private fun modeLabel(mode: Int) = modes.getOrElse(mode) { modes[0] }
 
+internal fun navbarSearchMatches(query: String, label: String, packageName: String, activity: String = ""): Boolean {
+    val term = query.trim()
+    val fullActivity = if (activity.startsWith('.')) packageName + activity else activity
+    return term.isEmpty() || listOf(label, packageName, fullActivity, "$packageName/$fullActivity",
+        "$packageName/${fullActivity.removePrefix(packageName)}").any { it.contains(term, ignoreCase = true) }
+}
+
+private data class NavbarActivity(val packageName: String, val label: String, val name: String, val version: Long)
+
 @Composable
 private fun rememberNavbarSettings(): Bundle? {
     val context = LocalContext.current
@@ -59,6 +68,26 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
         apps.filter { it.packageName != context.packageName && it.packageName != "com.android.systemui"
                 && it.packageName != "com.google.android.apps.nexuslauncher" }
     }
+    var query by rememberSaveable { mutableStateOf("") }
+    var selected by remember { mutableStateOf<NavbarActivity?>(null) }
+    val activityIndex by produceState<List<NavbarActivity>?>(null, installed) {
+        value = null
+        value = withContext(Dispatchers.IO) {
+            installed.flatMap { app ->
+                val info = try { context.packageManager.getPackageInfo(app.packageName, PackageManager.GET_ACTIVITIES) }
+                    catch (_: PackageManager.NameNotFoundException) { null }
+                    catch (_: SecurityException) { null }
+                info?.activities.orEmpty().map { NavbarActivity(app.packageName, app.label, it.name, info?.longVersionCode ?: 0) }
+            }.distinctBy { "${it.packageName}/${it.name}" }
+        }
+    }
+    val matchingApps = remember(installed, query) { installed.filter { navbarSearchMatches(query, it.label, it.packageName) } }
+    val matchingActivities = remember(activityIndex, query) {
+        if (query.isBlank()) emptyList() else activityIndex.orEmpty().filter {
+            navbarSearchMatches(query, it.label, it.packageName, it.name)
+        }
+    }
+    val rules = remember(settings) { NavbarRules(Bundle(settings).apply { putBoolean("enabled", true) }) }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp + bottomInset)) {
         item {
@@ -71,10 +100,13 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 }
                 SettingRow("通用默认模式", modeLabel(settings.getInt("default_mode", NavbarStore.COLOR)), onClick = { showDefault = true })
             }
-            Hint("竖屏按应用或 Activity 选择模式，横屏可保持导航条透明。首次加载或升级后，保留系统框架、SystemUI 和 Pixel 桌面三个作用域并手动重启。普通应用直接选择模式即可生效。")
+            Hint("竖屏按应用或 Activity 选择模式，横屏可保持导航条透明。推荐作用域不等于已授权：请在 LSPosed 中确认系统框架、SystemUI、Pixel 桌面及需要适配的推荐应用作用域，变更后手动重启生效；规则由本页总开关统一控制。")
             GroupTitle("逐应用设置")
+            OutlinedTextField(query, { query = it }, label = { Text("搜索应用、包名或 Activity") },
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
+                singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
         }
-        items(installed, key = { it.packageName }) { app ->
+        items(matchingApps, key = { "app:${it.packageName}" }) { app ->
             val packageMode = settings.getInt("${app.packageName}/*", -1)
             val activityRules = settings.keySet().count { it.startsWith("${app.packageName}/") && it != "${app.packageName}/*" }
             val source = when {
@@ -89,10 +121,23 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
             }
             Spacer(Modifier.height(2.dp))
         }
-        item {
-            if (!loaded) LinearProgressIndicator(Modifier.fillMaxWidth())
-            else if (installed.isEmpty()) Hint("暂无可显示的应用")
+        items(matchingActivities, key = { "activity:${it.packageName}/${it.name}" }) { activity ->
+            val resolved = rules.resolve(activity.packageName, activity.name, activity.version)
+            SettingsGroup {
+                SettingRow(activity.name.substringAfterLast('.'),
+                    "${activity.label} · ${activity.packageName}/${activity.name}\n${resolved.source()} · ${modeLabel(resolved.mode())}",
+                    onClick = { selected = activity },
+                    trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) })
+            }
+            Spacer(Modifier.height(2.dp))
         }
+        item {
+            if (!loaded || (query.isNotBlank() && activityIndex == null)) LinearProgressIndicator(Modifier.fillMaxWidth())
+            else if (matchingApps.isEmpty() && matchingActivities.isEmpty()) Hint(if (query.isBlank()) "暂无可显示的应用" else "未找到匹配的应用或 Activity")
+        }
+    }
+    selected?.let { activity ->
+        NavbarActivitySheet(activity.packageName, activity.name, settings) { selected = null }
     }
     if (showDefault) ModalBottomSheet(onDismissRequest = { showDefault = false }) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
@@ -126,6 +171,7 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
         val info = withContext(Dispatchers.IO) {
             try { context.packageManager.getPackageInfo(app.packageName, PackageManager.GET_ACTIVITIES) }
             catch (_: PackageManager.NameNotFoundException) { null }
+            catch (_: SecurityException) { null }
         }
         version = info?.longVersionCode ?: 0
         activities = info?.activities.orEmpty().map { it.name }.distinct().sorted()
@@ -133,9 +179,13 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
     }
     val prefix = "${app.packageName}/"
     val rules = remember(settings) { NavbarRules(Bundle(settings).apply { putBoolean("enabled", true) }) }
+    var query by rememberSaveable(app.packageName) { mutableStateOf("") }
     val allActivities = remember(activities, settings, prefix) {
         (activities.orEmpty() + settings.keySet().filter { it.startsWith(prefix) && it != "$prefix*" }
             .map { it.removePrefix(prefix) }).distinct().sorted()
+    }
+    val matchingActivities = remember(allActivities, query, app.packageName) {
+        allActivities.filter { navbarSearchMatches(query, app.label, app.packageName, it) }
     }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp + bottomInset)) {
@@ -148,8 +198,11 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
                 else NavbarStore.setMode(context, app.packageName, "*", mode)
             }
             GroupTitle("Activity 独立规则")
+            OutlinedTextField(query, { query = it }, label = { Text("筛选 Activity") },
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
+                singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
         }
-        items(allActivities, key = { it }) { activity ->
+        items(matchingActivities, key = { it }) { activity ->
             val resolved = rules.resolve(app.packageName, activity, version)
             SettingsGroup {
                 SettingRow(activity.substringAfterLast('.'), "$activity\n${resolved.source()} · ${modeLabel(resolved.mode())}",
@@ -160,20 +213,27 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
         }
         item {
             if (activities == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-            else if (allActivities.isEmpty()) Hint("未找到可配置的 Activity")
+            else if (matchingActivities.isEmpty()) Hint(if (query.isBlank()) "未找到可配置的 Activity" else "未找到匹配的 Activity")
             error?.let { Hint(it) }
         }
     }
     selected?.let { activity ->
-        ModalBottomSheet(onDismissRequest = { selected = null }) {
-            Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-                Text(activity.substringAfterLast('.'), style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(bottom = 14.dp))
-                NavbarModeRows(settings.getInt(prefix + activity, -1), "跟随应用与适配名单") { mode ->
-                    if (mode == -1) NavbarStore.clearMode(context, app.packageName, activity)
-                    else NavbarStore.setMode(context, app.packageName, activity, mode)
-                    selected = null
-                }
+        NavbarActivitySheet(app.packageName, activity, settings) { selected = null }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NavbarActivitySheet(packageName: String, activity: String, settings: Bundle, dismiss: () -> Unit) {
+    val context = LocalContext.current
+    ModalBottomSheet(onDismissRequest = dismiss) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text(activity.substringAfterLast('.'), style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(bottom = 14.dp))
+            NavbarModeRows(settings.getInt("$packageName/$activity", -1), "跟随应用与适配名单") { mode ->
+                if (mode == -1) NavbarStore.clearMode(context, packageName, activity)
+                else NavbarStore.setMode(context, packageName, activity, mode)
+                dismiss()
             }
         }
     }

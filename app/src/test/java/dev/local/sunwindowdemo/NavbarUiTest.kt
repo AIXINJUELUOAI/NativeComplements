@@ -93,7 +93,7 @@ class NavbarUiTest {
             detail.value = false
         }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("应用默认 · 取色 · 1 条独立规则").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("搜索应用").assertDoesNotExist()
+        compose.onNodeWithText("搜索应用、包名或 Activity").assertExists()
         compose.onNodeWithText("内置应用模板").assertDoesNotExist()
         compose.onNodeWithText("搜索 Activity").assertDoesNotExist()
     }

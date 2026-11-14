@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 120
-        versionName = "0.9.30"
+        versionCode = 121
+        versionName = "0.9.31"
     }
     signingConfigs {
         create("demoUpdate") {

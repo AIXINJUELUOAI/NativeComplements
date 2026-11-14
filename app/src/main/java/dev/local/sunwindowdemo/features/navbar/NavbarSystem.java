@@ -106,7 +106,6 @@ final class NavbarSystem {
         try {
             NavbarSystem backend = new NavbarSystem(loader);
             Class<?> window = Class.forName("com.android.server.wm.WindowState", false, loader);
-            Method state = window.getDeclaredMethod("getInsetsState", boolean.class);
             Class<?> manager = Class.forName("com.android.server.wm.WindowManagerService", false, loader);
             Method ready = manager.getDeclaredMethod("systemReady");
             Method focus = manager.getDeclaredMethod("updateFocusedWindowLocked", int.class, boolean.class);
@@ -132,11 +131,7 @@ final class NavbarSystem {
                 }
                 return chain.proceed();
             });
-            module.hook(state).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                Object original = chain.proceed();
-                try { return backend.insets(chain.getThisObject(), original); }
-                catch (ReflectiveOperationException | RuntimeException error) { return original; }
-            });
+            // Preserve raw navigation sources for app Decor/IME visibility. Consumption is app-side only.
             module.hook(ready)
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                         Object result = chain.proceed();
@@ -190,7 +185,13 @@ final class NavbarSystem {
                         Object display = NavbarReflect.call(target, "getDisplayContent");
                         Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
                         NavbarRules.Choice candidate = choice(target, false);
-                        if (candidate.mode() == NavbarStore.FLOATING && candidate.policyFlags() != 0
+                        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(target, "mAttrs");
+                        Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
+                        if (candidate.mode() == NavbarStore.FLOATING
+                                && attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+                                && attrs.width == WindowManager.LayoutParams.MATCH_PARENT && attrs.height == WindowManager.LayoutParams.MATCH_PARENT
+                                && (Integer) NavbarReflect.call(target, "getDisplayId") == 0
+                                && bounds.height() >= bounds.width()
                                 && eligible(target, display, raw)) selected = candidate;
                     }
                 } catch (ReflectiveOperationException | RuntimeException failure) {
@@ -210,7 +211,7 @@ final class NavbarSystem {
     static WindowManager.LayoutParams transparentLayout(WindowManager.LayoutParams original, NavbarRules.Choice selected) throws ReflectiveOperationException {
         WindowManager.LayoutParams adjusted = new WindowManager.LayoutParams();
         adjusted.copyFrom(original);
-        if ((selected.policyFlags() & 4) != 0) {
+        if (selected.policyFlags() == 0 || (selected.policyFlags() & 4) != 0) {
             adjusted.flags |= WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION;
             adjusted.systemUiVisibility |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
         }
@@ -423,17 +424,6 @@ final class NavbarSystem {
         boolean canRetain(Object current, int nextMode, int nextHeight, long now) {
             return matches(current, nextMode, nextHeight) && now >= sampledAt && now - sampledAt <= 1500;
         }
-    }
-
-    private Object insets(Object window, Object original) throws ReflectiveOperationException {
-        if (!enabled || suspended || !gestures || context == null) return original;
-        Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
-        if (frame.width() > frame.height()) return original;
-        if (!choice(window, false).consumesNavigationInsets()) return original;
-        Object display = NavbarReflect.call(window, "getDisplayContent");
-        Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
-        if (!eligible(window, display, raw)) return original;
-        return stateTools.strip(original);
     }
 
     /** Convert the content/navigation boundary to window-local coordinates exactly once. */

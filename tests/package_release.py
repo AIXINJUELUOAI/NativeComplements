@@ -7,10 +7,10 @@ import shutil
 import subprocess
 import zipfile
 from verify_r8_host_names import check as check_r8
+from import_navbar_templates import XML, SCOPE, SYSTEM_SCOPES, recommended_scopes, check_scopes
 
 ROOT = Path(__file__).resolve().parents[1]
 CERTIFICATE = "28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104"
-SCOPES = {"system", "com.android.systemui", "com.google.android.apps.nexuslauncher"}
 
 
 def run(*args):
@@ -20,6 +20,8 @@ def run(*args):
 
 
 def main():
+    scopes = recommended_scopes(XML.read_bytes())
+    check_scopes(SCOPE.read_text(encoding="utf-8"), scopes)
     gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
     assert re.search(r"isMinifyEnabled\s*=\s*true", gradle), "Release must enable R8"
     version = re.search(r'versionName = "([^"]+)"', gradle)[1]
@@ -38,8 +40,8 @@ def main():
     check_r8(apk)
     with zipfile.ZipFile(apk) as archive:
         assert archive.testzip() is None, "APK CRC failure"
-        assert set(archive.read("META-INF/xposed/scope.list").decode().splitlines()) == SCOPES
-        assert "staticScope=true" in archive.read("META-INF/xposed/module.prop").decode()
+        check_scopes(archive.read("META-INF/xposed/scope.list").decode("utf-8"), scopes)
+        assert "staticScope=false" in archive.read("META-INF/xposed/module.prop").decode(), "Users must be able to add applications outside recommendations"
         assert set(archive.read("META-INF/xposed/java_init.list").decode().splitlines()) == {
             "dev.local.sunwindowdemo.SunWindowModule",
             "dev.local.sunwindowdemo.LauncherGuard",
@@ -69,7 +71,8 @@ def main():
     print(badging)
     print(f"APK={target}")
     print(f"SHA256={digest}")
-    print("Original signing certificate and three fixed system scopes verified")
+    print(f"Original signing certificate, {len(SYSTEM_SCOPES)} required system scopes and "
+          f"{len(scopes) - len(SYSTEM_SCOPES)} source-recommended application scopes verified")
 
 
 if __name__ == "__main__":

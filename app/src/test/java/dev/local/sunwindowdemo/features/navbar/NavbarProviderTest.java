@@ -12,6 +12,19 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 36, manifest = Config.NONE)
 public class NavbarProviderTest {
+    @org.junit.After public void resetCallingUidAndPreferences() {
+        ShadowBinder.setCallingUid(android.os.Process.myUid());
+        NavbarStore.preferences(RuntimeEnvironment.getApplication()).edit().clear().commit();
+    }
+    private void caller(String packageName, int uid) {
+        var info = new android.content.pm.PackageInfo();
+        info.packageName = packageName;
+        info.applicationInfo = new android.content.pm.ApplicationInfo();
+        info.applicationInfo.packageName = packageName;
+        info.applicationInfo.uid = uid;
+        org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication().getPackageManager()).installPackage(info);
+        ShadowBinder.setCallingUid(uid);
+    }
     private NavbarProvider provider() {
         NavbarProvider provider = new NavbarProvider();
         ProviderInfo info = new ProviderInfo();
@@ -38,6 +51,85 @@ public class NavbarProviderTest {
             assertEquals(0, snapshot.getInt("com.tencent.mm/com.tencent.mm.framework.app.UIPageFragmentActivity"));
             assertEquals(before, preferences.getAll());
         } finally { preferences.edit().clear().commit(); }
+    }
+    @Test public void ownReadIsRulesCompatibleAndDoesNotExposeOtherPackages() throws Exception {
+        var context = RuntimeEnvironment.getApplication();
+        var preferences = NavbarStore.preferences(context);
+        preferences.edit().putBoolean("enabled", true).putInt("default_mode", 0)
+                .putInt("com.tencent.mm/*", 2)
+                .putInt("com.tencent.mm/com.tencent.mm.framework.app.UIPageFragmentActivity", 1)
+                .putInt("com.tencent.mobileqq/secret.Activity", 2)
+                .putInt("com.tencent.mm.other/prefixCollision", 2)
+                .putBoolean("landscape_clear", false).commit();
+        var before = new java.util.HashMap<>(preferences.getAll());
+        caller("com.tencent.mm", 12345);
+        var extras = new android.os.Bundle();
+        extras.putBoolean("enabled", false);
+        var snapshot = provider().call("read", "com.tencent.mm", extras);
+        assertTrue(snapshot.getBoolean("enabled"));
+        assertEquals(0, snapshot.getInt("default_mode"));
+        assertEquals(2, snapshot.getInt("com.tencent.mm/*"));
+        assertEquals(2, snapshot.getInt("*")); // Legacy package override remains effective.
+        assertEquals(1, snapshot.getInt("com.tencent.mm.framework.app.UIPageFragmentActivity"));
+        assertFalse(snapshot.containsKey("com.tencent.mobileqq/secret.Activity"));
+        assertFalse(snapshot.containsKey("secret.Activity"));
+        assertFalse(snapshot.containsKey("com.tencent.mm.other/prefixCollision"));
+        assertFalse(snapshot.containsKey("landscape_clear"));
+        var packages = new org.json.JSONObject(snapshot.getString("templates")).getJSONObject("packages");
+        assertEquals(1, packages.length());
+        assertTrue(packages.getJSONObject("com.tencent.mm").has("translucent_rules"));
+        assertFalse(packages.has("com.tencent.mobileqq"));
+        var rules = new NavbarRules(snapshot);
+        assertEquals(1, rules.resolve("com.tencent.mm", "com.tencent.mm.framework.app.UIPageFragmentActivity", 1).mode());
+        assertEquals(2, rules.resolve("com.tencent.mm", "other.Activity", 1).mode());
+        assertEquals(before, preferences.getAll());
+    }
+    @Test public void ownReadIncludesBuiltinEligibilityAndTransparencyWithoutUserOverrides() throws Exception {
+        NavbarStore.preferences(RuntimeEnvironment.getApplication()).edit().putBoolean("enabled", true).commit();
+        caller("com.tencent.mm", 12345);
+        var snapshot = provider().call("read", "com.tencent.mm", null);
+        assertEquals(0, new NavbarRules(snapshot).resolve("com.tencent.mm",
+                "com.tencent.mm.framework.app.UIPageFragmentActivity", 1).mode());
+        var app = new org.json.JSONObject(snapshot.getString("templates")).getJSONObject("packages")
+                .getJSONObject("com.tencent.mm");
+        assertEquals(4, app.getJSONObject("translucent_rules")
+                .getJSONObject("com.tencent.mm.ui.chatting.SendImgProxyUI").getInt("policy_flag"));
+    }
+    @Test public void unknownOwnPackageGetsDefaultAndEmptyTemplates() throws Exception {
+        caller("sample.unknown", 12345);
+        var snapshot = provider().call("read", "sample.unknown", null);
+        assertFalse(snapshot.getBoolean("enabled"));
+        assertEquals(NavbarStore.COLOR, snapshot.getInt("default_mode"));
+        assertEquals(NavbarStore.COLOR, snapshot.getInt("*"));
+        assertEquals(0, new org.json.JSONObject(snapshot.getString("templates")).getJSONObject("packages").length());
+    }
+    @Test(expected = SecurityException.class) public void ownUidCannotRequestAnotherPackage() {
+        caller("sample.own", 12345);
+        provider().call("read", "com.tencent.mm", null);
+    }
+    @Test(expected = SecurityException.class) public void unknownUidCannotReadPackage() {
+        ShadowBinder.setCallingUid(99999);
+        provider().call("read", "com.tencent.mm", null);
+    }
+    @Test(expected = SecurityException.class) public void ordinaryUidCannotWriteStatus() {
+        caller("sample.own", 12345);
+        provider().call("status", null, new android.os.Bundle());
+    }
+    @Test(expected = IllegalArgumentException.class) public void nullPackageCannotRead() {
+        provider().call("read", null, null);
+    }
+    @Test(expected = IllegalArgumentException.class) public void noConfigurationWriteMethodExists() {
+        caller("sample.own", 12345);
+        provider().call("write", "sample.own", new android.os.Bundle());
+    }
+    @Test(expected = UnsupportedOperationException.class) public void insertRemainsUnsupported() {
+        provider().insert(android.net.Uri.parse("content://" + NavbarStore.AUTHORITY), new android.content.ContentValues());
+    }
+    @Test(expected = UnsupportedOperationException.class) public void updateRemainsUnsupported() {
+        provider().update(android.net.Uri.parse("content://" + NavbarStore.AUTHORITY), new android.content.ContentValues(), null, null);
+    }
+    @Test(expected = UnsupportedOperationException.class) public void deleteRemainsUnsupported() {
+        provider().delete(android.net.Uri.parse("content://" + NavbarStore.AUTHORITY), null, null);
     }
     @Test public void systemUidCanReadTemplateSnapshot() {
         ShadowBinder.setCallingUid(1000);

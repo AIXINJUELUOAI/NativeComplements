@@ -28,7 +28,7 @@ public final class NavbarProvider extends ContentProvider {
             return NavbarStore.systemSnapshot(getContext());
         }
         if (!"read".equals(method) || packageName == null) throw new IllegalArgumentException("read package");
-        String[] packages = getContext().getPackageManager().getPackagesForUid(Binder.getCallingUid());
+        String[] packages = getContext().getPackageManager().getPackagesForUid(uid);
         if (packages == null || !Arrays.asList(packages).contains(packageName)) throw new SecurityException("navbar reader");
         return NavbarStore.read(getContext(), packageName);
     }

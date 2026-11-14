@@ -62,13 +62,27 @@ public final class NavbarStore {
     }
 
     public static Bundle read(Context context, String packageName) {
+        Bundle snapshot = systemSnapshot(context);
         Bundle result = new Bundle();
-        result.putBoolean("enabled", preferences(context).getBoolean("enabled", false));
-        result.putInt("*", preferences(context).getInt("default_mode", COLOR));
+        result.putInt("*", snapshot.getInt("default_mode", COLOR));
         String prefix = packageName + "/";
-        preferences(context).getAll().forEach((key, value) -> {
-            if (key.startsWith(prefix) && value instanceof Integer) result.putInt(key.substring(prefix.length()), (Integer) value);
-        });
+        for (String key : snapshot.keySet()) {
+            Object value = snapshot.get(key);
+            if (key.startsWith(prefix) && value instanceof Integer) {
+                result.putInt(key.substring(prefix.length()), (Integer) value);
+                result.putInt(key, (Integer) value);
+            }
+        }
+        result.putBoolean("enabled", snapshot.getBoolean("enabled", false));
+        result.putInt("default_mode", snapshot.getInt("default_mode", COLOR));
+        org.json.JSONObject packages = new org.json.JSONObject();
+        try {
+            org.json.JSONObject all = new org.json.JSONObject(snapshot.getString("templates", "{}"))
+                    .optJSONObject("packages");
+            if (all != null && all.optJSONObject(packageName) != null)
+                packages.put(packageName, all.getJSONObject(packageName));
+            result.putString("templates", new org.json.JSONObject().put("packages", packages).toString());
+        } catch (org.json.JSONException invalid) { result.putString("templates", "{\"packages\":{}}"); }
         return result;
     }
 }

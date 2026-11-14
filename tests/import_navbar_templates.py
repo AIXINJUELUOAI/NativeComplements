@@ -1,4 +1,4 @@
-"""Import separate ColorOS transparency metadata; --check never writes files."""
+"""Import ColorOS transparency metadata and recommended scopes; --check never writes files."""
 import argparse
 from collections import Counter
 import copy
@@ -11,6 +11,30 @@ ROOT = Path(__file__).resolve().parents[1]
 XML = ROOT / "verification/coloros-navbar/PJZ110-17.0.0.103/artifacts/sys_navbar_color_white_list.xml"
 ASSET = ROOT / "app/src/main/assets/navbar/templates.json"
 XML_SHA256 = "570af80e43cb0c4821fa816d9e06a241affc4095c6daf6edd20c2bc2c1d02210"
+SCOPE = ROOT / "app/src/main/resources/META-INF/xposed/scope.list"
+SYSTEM_SCOPES = ("system", "com.google.android.apps.nexuslauncher", "com.android.systemui")
+
+
+def recommended_scopes(raw):
+    """Recommendations only, not runtime authorization; use outer packages, never Activity prefixes."""
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != XML_SHA256:
+        raise ValueError(f"unexpected source XML SHA-256: {digest}")
+    packages = {app.attrib["package_name"] for app in ET.fromstring(raw).findall("r")
+                if app.get("status") == "1"}
+    if len(packages) != 63:
+        raise ValueError(f"unexpected active source package count: {len(packages)}")
+    return [*SYSTEM_SCOPES, *sorted(packages - set(SYSTEM_SCOPES))]
+
+
+def check_scopes(text, expected):
+    actual = text.splitlines()
+    if not set(SYSTEM_SCOPES) <= set(actual):
+        raise ValueError("required system scopes missing")
+    if len(actual) != len(set(actual)) or set(actual) != set(expected):
+        raise ValueError("recommended scopes differ from source XML")
+
+
 DESCRIPTION = ("依据已核实的 ColorOS 资格机制建立本模块适配名单；资格例外 rules 与透明策略 "
                "translucent_rules 独立保存，policy_flag 保留原始位语义，不等同模式或消费 Insets；"
                "不是完整 ROM 实现移植，不调用厂商私有 API。")
@@ -79,15 +103,27 @@ def main():
     parser.add_argument("--check", action="store_true", help="validate the asset without writing")
     args = parser.parse_args()
     original = ASSET.read_text(encoding="utf-8")
-    result = imported(json.loads(original), XML.read_bytes())
+    raw = XML.read_bytes()
+    result = imported(json.loads(original), raw)
     rendered = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    scopes = recommended_scopes(raw)
+    rendered_scope = "\n".join(scopes) + "\n"
     if args.check:
         if original != rendered:
             parser.exit(1, "FAIL: transparency metadata is stale; run tests/import_navbar_templates.py\n")
-        print("PASS: source hash, eligibility preservation and transparency metadata match")
+        try:
+            check_scopes(SCOPE.read_text(encoding="utf-8"), scopes)
+        except ValueError as error:
+            parser.exit(1, f"FAIL: {error}; run tests/import_navbar_templates.py\n")
+        print("PASS: source hash, eligibility preservation, transparency metadata and recommended scopes match")
     else:
-        ASSET.write_text(rendered, encoding="utf-8")
-        print("Updated navbar templates asset")
+        if original != rendered:
+            ASSET.write_text(rendered, encoding="utf-8")
+            print("Updated navbar templates asset")
+        SCOPE.write_text(rendered_scope, encoding="utf-8")
+        print("Updated recommended scopes")
+    print(f"Recommended scopes: {len(scopes)} total = {len(SYSTEM_SCOPES)} required system + "
+          f"{len(scopes) - len(SYSTEM_SCOPES)} source applications (recommendation, not authorization)")
 
 
 if __name__ == "__main__":

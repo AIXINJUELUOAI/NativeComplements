@@ -36,7 +36,13 @@ checks["android.view.SurfaceControl$Builder"] = [("<init>", "()V"), ("setName", 
 checks["android.view.SurfaceControl$Transaction"] = [("<init>", "()V"), ("apply", "()V"), ("close", "()V")] + [(n, "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;") for n in ("show", "hide")] + [(n, "(Landroid/view/SurfaceControl;" + sig + ")Landroid/view/SurfaceControl$Transaction;") for n, sig in [("setColor", "[F"), ("setAlpha", "F"), ("setPosition", "FF"), ("setWindowCrop", "II"), ("setLayer", "I"), ("reparent", "Landroid/view/SurfaceControl;")]]
 checks["com.android.server.wm.DisplayContent"].append(("getDisplayPolicy", "()Lcom/android/server/wm/DisplayPolicy;"))
 checks["com.android.server.wm.WindowState"].append(("removeImmediately", "()V"))
-checks["android.view.WindowManager$LayoutParams"] = []
+checks["android.view.WindowManager$LayoutParams"] = [("getFitInsetsTypes", "()I"), ("setFitInsetsTypes", "(I)V")]
+checks["android.view.WindowLayout"] = [("computeFrames", "(Landroid/view/WindowManager$LayoutParams;Landroid/view/InsetsState;Landroid/graphics/Rect;Landroid/graphics/Rect;IIIIFLandroid/window/ClientWindowFrames;)V")]
+checks["com.android.server.wm.DisplayPolicy"].append(("layoutWindowLw", "(Lcom/android/server/wm/WindowState;Lcom/android/server/wm/WindowState;Lcom/android/server/wm/DisplayFrames;)V"))
+checks["android.view.Window"] = [("getAttributes", "()Landroid/view/WindowManager$LayoutParams;"), ("getCallback", "()Landroid/view/Window$Callback;")]
+checks["android.view.WindowInsetsController"] = [("getRequestedVisibleTypes", "()I")]
+checks["android.view.WindowInsets$Builder"] = [("setInsets", "(ILandroid/graphics/Insets;)Landroid/view/WindowInsets$Builder;"), ("setInsetsIgnoringVisibility", "(ILandroid/graphics/Insets;)Landroid/view/WindowInsets$Builder;")]
+checks["com.android.internal.policy.DecorView"] = []
 dex.TARGETS = ["L" + name.replace(".", "/") + ";" for name in checks]
 classes = {}
 for relative, expected_hash in [
@@ -52,6 +58,9 @@ for relative, expected_hash in [
             if name.startswith("classes") and name.endswith(".dex"):
                 classes.update(dex.Dex(archive.read(name)).classes)
 
+for method, signature in [("calculateNavigationBarColor", "(I)I"), ("updateColorViews", "(Landroid/view/WindowInsets;Z)Landroid/view/WindowInsets;"), ("onApplyWindowInsets", "(Landroid/view/WindowInsets;)Landroid/view/WindowInsets;"), ("drawLegacyNavigationBarBackground", "(Landroid/graphics/RecordingCanvas;)V") ]:
+    assert any(m["name"] == method and m["descriptor"] == signature for m in classes["Lcom/android/internal/policy/DecorView;"]["methods"]), method
+assert any(f["name"] == "mWindow" and f["type"] == "Lcom/android/internal/policy/PhoneWindow;" for f in classes["Lcom/android/internal/policy/DecorView;"]["fields"])
 count = 0
 for name, methods in checks.items():
     owner = "L" + name.replace(".", "/") + ";"
@@ -75,12 +84,21 @@ for owner, name, descriptor in [
     assert any(field["name"] == name and field["type"] == descriptor for field in classes[owner]["fields"]), (owner, name)
 assert templates["name"] == "类原生补全计划适配名单"
 assert all(source["name"].startswith("ColorOS ") for source in templates["sources"])
-assert len(templates["packages"]) == 30
+assert len(templates["packages"]) == 60
+assert sum(bool(app.get("rules")) for app in templates["packages"].values()) == 30
 rules = [rule for app in templates["packages"].values() for rule in app["rules"].values()]
 assert len(rules) == 57
+translucent = [rule for app in templates["packages"].values()
+               for rule in app.get("translucent_rules", {}).values()]
+assert len(translucent) == 147
+assert all(isinstance(rule["base_only"], bool) and isinstance(rule["policy_flag"], int)
+           and 0 <= rule["policy_flag"] <= 15 for rule in translucent)
+assert all(activity and "*" not in activity for app in templates["packages"].values()
+           for activity in app.get("translucent_rules", {}))
 assert all(app["enabled"] for app in templates["packages"].values())
 assert all(rule["mode"] == 0 and isinstance(rule["base_only"], bool) and "color" not in rule for rule in rules)
 assert sum(not rule["base_only"] for rule in rules) == 2
 assert all("*" not in activity for app in templates["packages"].values() for activity in app["rules"])
 assert all(word not in json.dumps(templates) for word in ("HyperOS", "HyperNavBar"))
-print(f"PASS: {count} exact public API37 methods and 30 applications / 57 exact eligibility exceptions; device behavior awaits verification")
+print(f"PASS: {count} exact public API37 methods; 60 template applications / 30 blacklist applications / "
+      "57 exact eligibility exceptions / 147 transparency policies; device behavior awaits verification")

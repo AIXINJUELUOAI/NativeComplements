@@ -71,9 +71,29 @@ public class NavbarRulesTest {
         assertEquals(0, rules.resolve("com.netease.cloudmusic", music, 1, false).mode());
         assertEquals(0, rules.resolve("com.netease.cloudmusic", music, 1, true).mode());
     }
-    @Test public void ordinaryPagesHaveNoLegacyOverridesOrInventedFloatingMode() throws Exception {
+    @Test public void bundledTransparencyKeepsPolicyBitsAndUserOverrides() throws Exception {
+        Bundle snapshot = bundledSettings();
+        // A literal fixture isolates bit semantics from real Activity naming.
+        snapshot.putString("templates", """
+            {"packages":{"sample":{"enabled":true,"translucent_rules":{
+            "sample.Transparent":{"policy_flag":4,"base_only":true},
+            "sample.Consume":{"policy_flag":6,"base_only":true}}}}}
+            """);
+        NavbarRules rules = new NavbarRules(snapshot);
+        assertEquals(2, rules.resolve("sample", "sample.Transparent", 1, true).mode());
+        assertFalse(rules.resolve("sample", "sample.Transparent", 1, true).consumesNavigationInsets());
+        assertTrue(rules.resolve("sample", "sample.Consume", 1, true).consumesNavigationInsets());
+        assertEquals(1, rules.resolve("sample", "sample.Transparent", 1, false).mode());
+        snapshot.putInt("sample/*", 0);
+        assertEquals(0, new NavbarRules(snapshot).resolve("sample", "sample.Transparent", 1).mode());
+    }
+    @Test public void verifiedTaobaoTransparencyAndUnknownPagesRemainDistinct() throws Exception {
         NavbarRules rules = new NavbarRules(bundledSettings());
-        assertEquals(1, rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", 1).mode());
+        var detail = rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", 1);
+        assertEquals(2, detail.mode());
+        assertEquals(4, detail.policyFlags());
+        assertFalse(detail.consumesNavigationInsets());
+        assertEquals(2, rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", 1, false).mode());
         assertEquals(1, rules.resolve("com.jingdong.app.mall", "com.jingdong.app.mall.MainFrameActivity", 1).mode());
         assertEquals(1, rules.resolve("com.jingdong.app.mall", "new.UnknownActivity", 1).mode());
     }
