@@ -66,6 +66,8 @@ public final class StatusBarOffset {
             } catch (ClassNotFoundException absent) {
                 note("STATUS_BAR_KEYGUARD_ABSENT");
             }
+            try { StatusIconScale.install(module, loader); }
+            catch (ReflectiveOperationException failure) { note("STATUS_ICON_SCALE_UNAVAILABLE " + failure); }
             note("STATUS_BAR_OFFSET_READY");
         } catch (Throwable failure) {
             installed = false;
@@ -105,7 +107,10 @@ public final class StatusBarOffset {
                 .call(Uri.parse("content://" + ShadeStore.AUTHORITY), "read", null, null));
         if (read.report()) note("STATUS_BAR_SETTINGS " + read.summary());
         main.post(() -> {
-            if (read.config() != null) set(read.config().getInt("statusBarOffset", 0));
+            if (read.config() != null) {
+                set(read.config().getInt("statusBarOffset", 0));
+                StatusIconScale.set(read.config().getInt("notificationIconScale",100),read.config().getInt("systemIconScale",100));
+            }
             if (retryLoad != null) main.removeCallbacks(retryLoad);
             if (!read.live()) { retryLoad=()->load(context);main.postDelayed(retryLoad,snapshot.retryDelay(3000)); }
         });

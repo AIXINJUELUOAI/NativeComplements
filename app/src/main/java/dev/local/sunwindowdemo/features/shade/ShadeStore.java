@@ -21,12 +21,26 @@ public final class ShadeStore {
         Bundle result = new Bundle();
         result.putBoolean("enabled", preferences(context).getBoolean("enabled", false));
         result.putInt("statusBarOffset", offset(context));
+        result.putInt("notificationIconScale", iconScale(context, true));
+        result.putInt("systemIconScale", iconScale(context, false));
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         return result;
     }
 
     public static void setSignalDisplay(Context context, boolean enabled) {
         preferences(context).edit().putBoolean("signal_display", enabled).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+    }
+
+    public static int iconScale(Context context, boolean notification) {
+        return Math.max(80, Math.min(120, preferences(context).getInt(
+                notification ? "notification_icon_scale" : "system_icon_scale", 100)));
+    }
+
+    public static void setIconScale(Context context, boolean notification, int percent) {
+        preferences(context).edit().putInt(notification ? "notification_icon_scale" : "system_icon_scale",
+                Math.max(80, Math.min(120, percent))).apply();
         context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }

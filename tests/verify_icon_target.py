@@ -24,4 +24,20 @@ checks = [
 for cls, kind, name, signature in checks:
     key = "type" if kind == "fields" else "descriptor"
     assert any(m["name"] == name and m[key] == signature for m in inventory["classes"][cls][kind]), (cls, name, signature)
-print(f"PASS: {len(checks)} exact icon Hook target members; live rendering remains unverified")
+import hashlib
+import zipfile
+import verify_signal_target as dex
+owner = "Lcom/android/systemui/statusbar/StatusBarIconView;"
+dex.TARGETS = [owner]
+path = root / "verification/split-shade-device/SystemUI.apk"
+assert hashlib.sha256(path.read_bytes()).hexdigest() == inventory["artifacts"][0]["sha256"]
+classes = {}
+with zipfile.ZipFile(path) as archive:
+    for name in archive.namelist():
+        if name.startswith("classes") and name.endswith(".dex"):
+            classes.update(dex.Dex(archive.read(name)).classes)
+for name, signature in [("mIconScale", "F"), ("mSlot", "Ljava/lang/String;"),
+                        ("mBundleEntry", "Lcom/android/systemui/statusbar/notification/collection/BundleEntry;")]:
+    assert any(f["name"] == name and f["type"] == signature for f in classes[owner]["fields"]), name
+assert any(m["name"] == "onDraw" and m["descriptor"] == "(Landroid/graphics/Canvas;)V" for m in classes[owner]["methods"])
+print(f"PASS: {len(checks)+4} exact icon Hook target members; live rendering remains unverified")
