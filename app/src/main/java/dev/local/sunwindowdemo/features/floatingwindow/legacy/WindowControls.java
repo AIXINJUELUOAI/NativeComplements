@@ -106,7 +106,7 @@ final class WindowControls {
         edgeBarCenterX=i.getFloatExtra("edgeBarCenterX",0);edgeBarCenterY=i.getFloatExtra("edgeBarCenterY",edgeCenterY);
         if(!"mini".equals(frame)||edgeHidden||transitioning||systemBlocked)hideMenu();
         normalScale=i.getFloatExtra("normalScale",.75f);appLandscape=i.getBooleanExtra("appLandscape",false);
-        if(!dragging||transitioning){x=nx;y=ny;w=nw;h=nh;scale=i.getFloatExtra("scale",1);}
+        if(!dragging||transitioning&&!inputPending){x=nx;y=ny;w=nw;h=nh;scale=i.getFloatExtra("scale",1);}
         logicalW=i.getIntExtra("logicalW",1200);logicalH=i.getIntExtra("logicalH",2133);
         landscape=display.width()>display.height();
         if(rebuild)build();

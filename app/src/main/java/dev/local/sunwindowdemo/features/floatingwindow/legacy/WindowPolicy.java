@@ -43,6 +43,10 @@ final class WindowPolicy {
             boolean sameRotation,boolean dependentChanges,boolean snapshot){
         return liveMini&&!busy&&changeMode==6&&sameGeometry&&sameRotation&&!dependentChanges&&!snapshot;
     }
+    static boolean ownedLaunch(int targetUid,int ownerUid,int targetUser,int ownerUser,Object requestDisplay,Object targetDisplay){
+        return ownerUid>=10000&&targetUid==ownerUid&&targetUser==ownerUser
+            &&targetDisplay!=null&&(requestDisplay==null||requestDisplay==targetDisplay);
+    }
     static boolean sameWindowCaller(int callingUid,int realCallingUid,int ownerUid,String callingPackage,String ownerPackage){
         return ownerUid>=10000&&callingUid==ownerUid&&(realCallingUid<0||realCallingUid==ownerUid)
             &&ownerPackage!=null&&!ownerPackage.isEmpty()&&ownerPackage.equals(callingPackage);

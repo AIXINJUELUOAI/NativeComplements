@@ -10,7 +10,7 @@ import android.view.SurfaceControl;
 import android.hardware.display.DisplayManager;
 import android.view.Display;
 
-/** A temporary sibling surface. App buffers and lifecycle continue underneath it. */
+/** A temporary sibling subtree. App buffers and lifecycle continue underneath it. */
 final class TaskCover {
     TaskVisibilityGuard mask;
     private final FrameworkAccess a;
@@ -18,7 +18,7 @@ final class TaskCover {
     private final String pkg;
     private boolean iconDrawn;
     private Object task,parent;
-    private SurfaceControl background,icon;
+    private SurfaceControl root,background,icon;
     private final RectF from,to;
     private float radiusFrom;
     private float radiusTo;
@@ -43,7 +43,9 @@ final class TaskCover {
     private int preparedWidth,preparedHeight;
     private int reusedFrames,preparedFrames;
     private float preparedDensity,drawnAlpha;
-    private boolean preparingReveal;
+    private boolean preparingReveal,gestureHold;
+    private long motionAt=-1,gestureAt=-1;
+    private float drawnRadius,exitCoverAlpha=1;
     @FunctionalInterface interface Reveal { void prepare() throws Exception; }
     private Reveal beforeReveal;
     TaskCover(FrameworkAccess a,Context context,Object task,Object parent,String pkg,
@@ -64,8 +66,9 @@ final class TaskCover {
         duration=Math.max(0,Math.round(320*animationScale));fadeDuration=Math.max(0,Math.round(150*animationScale));
         mask=new TaskVisibilityGuard(a,task);
         try{
-            background=build("NativeComplements-cover",0);
-            icon=build("NativeComplements-cover-icon",iconSize);
+            root=build("NativeComplements-cover-root",-1,(SurfaceControl)a.field(parent,"mSurfaceControl"));
+            background=build("NativeComplements-cover",0,root);
+            icon=build("NativeComplements-cover-icon",iconSize,root);
             paint(0,fadeIn?0:1);mask.hide();
         }catch(Throwable error){close();throw error;}
     }
@@ -86,12 +89,13 @@ final class TaskCover {
         }finally{canvasSurface.release();}
         iconDrawn=true;
     }
-    private SurfaceControl build(String name,int size)throws Exception{
+    private SurfaceControl build(String name,int size,SurfaceControl parentSurface)throws Exception{
         Object b=Class.forName("android.view.SurfaceControl$Builder").getDeclaredConstructor().newInstance();
         a.call(b,"setName",new Class<?>[]{String.class},name);
-        a.call(b,"setParent",new Class<?>[]{SurfaceControl.class},a.field(parent,"mSurfaceControl"));
+        a.call(b,"setParent",new Class<?>[]{SurfaceControl.class},parentSurface);
         a.call(b,"setHidden",new Class<?>[]{boolean.class},true);
-        if(size==0)a.call(b,"setColorLayer");
+        if(size<0)a.call(b,"setContainerLayer");
+        else if(size==0)a.call(b,"setColorLayer");
         else{
             a.call(b,"setBufferSize",new Class<?>[]{int.class,int.class},size,size);
             a.call(b,"setFormat",new Class<?>[]{int.class},PixelFormat.TRANSLUCENT);
@@ -108,17 +112,27 @@ final class TaskCover {
         nextMask.hide();
         try{
             SurfaceControl parentSurface=(SurfaceControl)a.field(nextParent,"mSurfaceControl");
+            SurfaceControl anchor=(SurfaceControl)a.field(nextTask,"mSurfaceControl");
+            if(parentSurface==null||!parentSurface.isValid()||anchor==null||!anchor.isValid())
+                throw new IllegalStateException("cover handoff surface detached");
             try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
-                tx.reparent(background,parentSurface).reparent(icon,parentSurface).apply();
+                tx.reparent(root,parentSurface);
+                a.call(tx,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},root,anchor,1);
+                tx.apply();
             }
             mask.release(0);
             mask=nextMask;task=nextTask;parent=nextParent;
-            from.set(bounds);to.set(bounds);radiusFrom=radiusTo=radius;
+            refreshScreenCorners();
+            from.set(bounds);to.set(bounds);radiusFrom=radiusTo=cornerRadius(bounds,screenBounds,screenRadius,radius);
             began=SystemClock.elapsedRealtime();entryAt=fadeAt=hiddenAt=-1;
-            fadeIn=false;notBefore=0;preparedWidth=preparedHeight=0;
+            fadeIn=false;notBefore=0;motionAt=gestureAt=-1;gestureHold=false;preparedWidth=preparedHeight=0;
             decoration=null;decorationAt=-1;exitAlpha=1;
             paint(1,1);
-        }catch(Exception error){nextMask.release(0);throw error;}
+        }catch(Exception error){
+            try{nextMask.release(0);}
+            catch(Exception cleanup){error.addSuppressed(cleanup);android.util.Log.w("NativeComplements","COVER_HANDOFF_MASK_RELEASE_FAILED",cleanup);}
+            throw error;
+        }
     }
     void prepared(Geometry.Placement canvas,float density){
         preparedFrames++;
@@ -134,6 +148,7 @@ final class TaskCover {
     String state(){
         return "closed="+closed+" exiting="+exiting+" holding="+mask.holding()+" fading="+(fadeAt>=0)
             +" alpha="+drawnAlpha+" reusedFrames="+reusedFrames+" preparedFrames="+preparedFrames+" from="+from+" to="+to
+            +" gestureHold="+gestureHold+" rootValid="+(root!=null&&root.isValid())
             +" backgroundValid="+(background!=null&&background.isValid())+" iconValid="+(icon!=null&&icon.isValid());
     }
     private boolean continuousDim;
@@ -181,20 +196,41 @@ final class TaskCover {
         return Float.isFinite(radius)?Math.max(0,Math.min(Math.min(pose.width(),pose.height())/2,radius)):0;
     }
     void target(RectF bounds){
-        if(exiting||to.equals(bounds))return;
+        if(exiting||gestureHold||to.equals(bounds))return;
         refreshScreenCorners();to.set(bounds);
         radiusTo=cornerRadius(to,screenBounds,screenRadius,radiusTo);
     }
-    void resumeTo(RectF bounds,float radius){
-        refreshScreenCorners();to.set(bounds);radiusTo=cornerRadius(to,screenBounds,screenRadius,radius);
-        began=SystemClock.elapsedRealtime();
+    /** False means the caller must keep its normal non-cover gesture fallback. */
+    boolean gesturePose(RectF bounds,float radius)throws Exception{
+        if(!canRetarget()||!validPose(bounds,radius))return false;
+        if(!gestureHold)gestureAt=SystemClock.elapsedRealtime();
+        gestureHold=true;
+        from.set(bounds);to.set(bounds);
+        radiusFrom=radiusTo=cornerRadius(bounds,screenBounds,screenRadius,radius);
+        // Preserve entry-fade opacity; only the SF frame clock advances that fade.
+        paint(1,drawnAlpha);
+        return true;
     }
+    private static boolean validPose(RectF bounds,float radius){
+        return bounds!=null&&Float.isFinite(bounds.left)&&Float.isFinite(bounds.top)
+            &&Float.isFinite(bounds.right)&&Float.isFinite(bounds.bottom)&&bounds.width()>0&&bounds.height()>0
+            &&Float.isFinite(radius)&&radius>=0;
+    }
+    /** Resume from the last displayed pose, without restarting the entry alpha ramp. */
+    void finishGesture(RectF bounds,float radius){
+        if(!canRetarget()||!validPose(bounds,radius))return;
+        from.set(decorationBounds);radiusFrom=drawnRadius;
+        refreshScreenCorners();to.set(bounds);radiusTo=cornerRadius(to,screenBounds,screenRadius,radius);
+        gestureHold=false;gestureAt=-1;began=SystemClock.elapsedRealtime();
+        motionAt=from.equals(to)&&radiusFrom==radiusTo?began-duration:began;
+    }
+    void resumeTo(RectF bounds,float radius){finishGesture(bounds,radius);}
     void delayEntry(long delay){notBefore=SystemClock.elapsedRealtime()+Math.max(0,delay);}
     boolean exiting(){return exiting;}
     long exit(){
         if(exiting)return 0;
-        exiting=true;ownerAlpha=0;began=SystemClock.elapsedRealtime();
-        from.set(to);radiusFrom=radiusTo;
+        exiting=true;gestureHold=false;ownerAlpha=0;exitCoverAlpha=drawnAlpha;began=SystemClock.elapsedRealtime();
+        from.set(decorationBounds);to.set(from);radiusFrom=radiusTo=drawnRadius;
         float dx=from.width()*.025f,dy=from.height()*.025f;to.inset(dx,dy);
         return fadeDuration;
     }
@@ -216,7 +252,8 @@ final class TaskCover {
         }
         if(hiddenAt>=0){
             long paused=now-hiddenAt;
-            began+=paused;if(entryAt>=0)entryAt+=paused;if(fadeAt>=0)fadeAt+=paused;
+            began+=paused;if(motionAt>=0)motionAt+=paused;if(gestureAt>=0)gestureAt+=paused;
+            if(entryAt>=0)entryAt+=paused;if(fadeAt>=0)fadeAt+=paused;
             if(decorationAt>=0)decorationAt+=paused;
             if(notBefore>0)notBefore+=paused;
             hiddenAt=-1;
@@ -224,13 +261,17 @@ final class TaskCover {
         if(exiting){
             float q=fadeDuration==0?1:Math.min(1,(now-began)/(float)fadeDuration);
             if(q>=1){close();return false;}
-            if(mask.holding())mask.hold();paint(1-(float)Math.pow(1-q,3),visible?1-q:0);return true;
+            if(mask.holding())mask.hold();paint(1-(float)Math.pow(1-q,3),exitCoverAlpha*(1-q));return true;
         }
-        if(now-began>=5000)throw new IllegalStateException("cover target frame timeout");
+        if(gestureHold){
+            if(now-gestureAt>=30000)throw new IllegalStateException("cover gesture timeout");
+        }else if(now-began>=5000)throw new IllegalStateException("cover target frame timeout");
         if(fadeIn&&visible&&entryAt<0&&now>=notBefore)entryAt=now;
         long elapsed=fadeIn?(entryAt<0?0:now-entryAt):now-began;
-        float p=duration==0?1:Math.min(1,elapsed/(float)duration);
-        if(ready&&p==1&&(!decorationEntry||decorationProgress()==1)&&fadeAt<0){
+        long motionElapsed=motionAt<0?elapsed:Math.max(0,now-motionAt);
+        float p=duration==0?1:Math.min(1,motionElapsed/(float)duration);
+        if(ready&&!gestureHold&&p==1&&(!fadeIn||elapsed>=fadeDuration)
+            &&(!decorationEntry||decorationProgress()==1)&&fadeAt<0){
             preparingReveal=true;
             try{if(beforeReveal!=null)beforeReveal.prepare();}
             finally{preparingReveal=false;}
@@ -251,33 +292,59 @@ final class TaskCover {
         float size=Math.min(splashPx,Math.min(w,h)*.405f)/iconSize;
         Rect pb=(Rect)a.call(parent,"getBounds");
         SurfaceControl anchor=(SurfaceControl)a.field(task,"mSurfaceControl");
-        if(anchor==null||!anchor.isValid()||background==null||!background.isValid()||icon==null||!icon.isValid())throw new IllegalStateException("cover surface detached");
+        if(anchor==null||!anchor.isValid()||root==null||!root.isValid()||background==null||!background.isValid()||icon==null||!icon.isValid())throw new IllegalStateException("cover surface detached");
         try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
-            a.call(tx,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},background,anchor,1);
-            a.call(tx,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},icon,background,1);
+            a.call(tx,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},root,anchor,1);
+            tx.setLayer(background,0).setLayer(icon,1);
+            tx.setPosition(root,x-pb.left,y-pb.top);
             a.call(tx,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},background,color);
-            a.call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},background,x-pb.left,y-pb.top);
+            a.call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},background,0f,0f);
             a.call(tx,"setWindowCrop",new Class<?>[]{SurfaceControl.class,int.class,int.class},background,Math.round(w),Math.round(h));
-            a.call(tx,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},background,Math.min(Math.min(w,h)/2,radiusFrom+(radiusTo-radiusFrom)*p));
+            float radius=Math.min(Math.min(w,h)/2,radiusFrom+(radiusTo-radiusFrom)*p);
+            a.call(tx,"setCornerRadius",new Class<?>[]{SurfaceControl.class,float.class},background,radius);
             a.call(tx,"setScale",new Class<?>[]{SurfaceControl.class,float.class,float.class},icon,size,size);
-            a.call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},icon,x-pb.left+(w-iconSize*size)/2,y-pb.top+(h-iconSize*size)/2);
+            a.call(tx,"setPosition",new Class<?>[]{SurfaceControl.class,float.class,float.class},icon,(w-iconSize*size)/2,(h-iconSize*size)/2);
             if(mask.holding())mask.inTransaction(tx,null);
-            tx.setAlpha(background,alpha).setAlpha(icon,alpha);
+            tx.setAlpha(root,alpha);
+            a.call(tx,"show",new Class<?>[]{SurfaceControl.class},root);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},background);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},icon);
             decorate(tx,false);
             tx.apply();
-            drawnAlpha=alpha;
+            drawnAlpha=alpha;drawnRadius=radius;
         }
     }
     void close(){
         if(closed)return;closed=true;
-        try{mask.release(ownerAlpha);}catch(Exception ignored){}
+        try{mask.release(ownerAlpha);}catch(Exception error){android.util.Log.w("NativeComplements","COVER_MASK_RELEASE_FAILED",error);}
         try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
-            if(icon!=null&&icon.isValid())a.call(tx,"remove",new Class<?>[]{SurfaceControl.class},icon);
-            if(background!=null&&background.isValid())a.call(tx,"remove",new Class<?>[]{SurfaceControl.class},background);
+            // Removing the container removes its whole background/icon subtree atomically.
+            if(root!=null&&root.isValid())a.call(tx,"remove",new Class<?>[]{SurfaceControl.class},root);
+            else{removeFallback(tx,icon);removeFallback(tx,background);}
             tx.apply();
-        }catch(Exception ignored){}
-        finally{if(icon!=null){icon.release();icon=null;}if(background!=null){background.release();background=null;}}
+        }catch(Exception error){
+            android.util.Log.w("NativeComplements","COVER_ROOT_REMOVE_FAILED",error);
+            // One bounded fallback: hide first, then detach each child even if its sibling is stale.
+            try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
+                removeFallback(tx,icon);removeFallback(tx,background);removeFallback(tx,root);
+                tx.apply();
+            }catch(Exception cleanup){android.util.Log.w("NativeComplements","COVER_REMOVE_FALLBACK_FAILED",cleanup);}
+        }
+        finally{
+            release(icon,"icon");release(background,"background");release(root,"root");
+            icon=background=root=null;
+        }
+    }
+    private void removeFallback(SurfaceControl.Transaction tx,SurfaceControl surface){
+        if(surface==null||!surface.isValid())return;
+        try{a.call(tx,"hide",new Class<?>[]{SurfaceControl.class},surface);}
+        catch(Exception error){android.util.Log.w("NativeComplements","COVER_FALLBACK_HIDE_FAILED",error);}
+        try{a.call(tx,"remove",new Class<?>[]{SurfaceControl.class},surface);}
+        catch(Exception error){android.util.Log.w("NativeComplements","COVER_FALLBACK_REMOVE_FAILED",error);}
+    }
+    private static void release(SurfaceControl surface,String name){
+        if(surface==null)return;
+        try{surface.release();}
+        catch(RuntimeException error){android.util.Log.w("NativeComplements","COVER_SURFACE_RELEASE_FAILED "+name,error);}
     }
 }

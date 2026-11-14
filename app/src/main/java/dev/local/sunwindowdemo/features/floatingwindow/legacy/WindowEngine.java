@@ -211,7 +211,7 @@ final class WindowEngine {
     private boolean normalOccupied(){return active!=null&&!active.restoring&&"normal".equals(active.frame);}
     private boolean entryInputPending(Session s){
         return visible(s)&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.screenSuspended&&!s.rotation.active()
-            &&"normal".equals(s.frame)&&(s.entering||s.cover!=null&&!s.coverFullscreen);
+            &&(s.entering||s.cover!=null&&!s.coverFullscreen);
     }
     private void completeEntryInput(Session s)throws Exception{
         if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.screenSuspended||entryInputPending(s))return;
@@ -289,7 +289,7 @@ final class WindowEngine {
         Object orientationActivity;int orientationRequest;
         boolean orientationBaseline;
         boolean backRequested,backComplete,returning;
-        boolean entering,entryStarted,entryFade;
+        boolean entering,entryStarted,entryFade,coverFollowing;
         Intent entryControl;
         Configuration originalConfig;
         String recoveryReason;
@@ -311,6 +311,7 @@ final class WindowEngine {
     // Task objects and originals stay alive across switches. Only presentation changes.
     private static final int MAX_LINKED_TASKS=8;
     private record SwitchStart(Session from,Session target,boolean created,long generation) {}
+    private record OwnedStart(Session target) {}
     WindowEngine(FrameworkAccess access, Consumer<String> logger) {
         a=access;log=logger;trace=new EntryTrace(a,logger);
     }
@@ -961,6 +962,37 @@ final class WindowEngine {
     }
     /** Runs before handleStartResult requests Shell playback. Convert the related
      * task now; never restore the source to fullscreen to acquire its child. */
+    /** Preserve a managed task at native task selection, before a proxy's fullscreen mode is inherited. */
+    ActivityOptions ownedLaunchOptions(Object request,Object source,Object target,ActivityOptions options)throws Exception{
+        if(request==null||target==null||recovering||lock==null)return null;
+        synchronized(lock){
+            Session owner=sessionFor(target);
+            if(owner==null||owner!=active||owner.restoring||owner.closing||owner.fullTransition||owner.screenSuspended
+                ||owner.parked||!"normal".equals(owner.frame)||screenBlocked()||owner.placement==null
+                ||!a.bool(target,"isAttached")||find(owner.taskId)!=target)return null;
+            Intent intent=(Intent)a.field(request,"intent");
+            if(!ShareWindow.eligibleIntent(intent,false)||(intent.getFlags()&Intent.FLAG_ACTIVITY_CLEAR_TASK)!=0)return null;
+            if(!WindowPolicy.ownedLaunch(a.integer(request,"getUid"),owner.uid,
+                (Integer)a.field(target,"mUserId"),owner.userId,
+                a.call(request,"getDisplayContent"),a.call(target,"getDisplayContent")))return null;
+            if(options!=null){int mode=(Integer)a.call(options,"getLaunchWindowingMode");if(mode!=0&&mode!=1&&mode!=5)return null;}
+            // Ownership is the exact Task object, never a package/recent-task/time-window guess.
+            // This does not admit the proxy or relax sameWindowCaller for unowned tasks.
+            log.accept("OWNED_LAUNCH_KEEP task="+owner.taskId+" sourceOwned="+(source!=null&&sessionFor(a.call(source,"getTask"))!=null));
+            return ShareWindow.launchOptions(options,new Rect(0,0,owner.placement.width(),owner.placement.height()));
+        }
+    }
+    private void preserveOwnedTask(Session s)throws Exception{
+        if(a.integer(s.task,"getWindowingMode")==5)return;
+        a.call(atm,"deferWindowLayout");
+        try{
+            a.call(s.task,"setWindowingMode",new Class<?>[]{int.class},5);
+            a.call(s.task,"setAlwaysOnTop",new Class<?>[]{boolean.class},true);
+            a.call(s.task,"setBounds",new Class<?>[]{Rect.class},new Rect(0,0,s.placement.width(),s.placement.height()));
+            a.call(wms,"requestTraversal");
+            log.accept("OWNED_LAUNCH_RESTORED task="+s.taskId);
+        }finally{a.call(atm,"continueWindowLayout");}
+    }
     Object activityStarting(Object source,Object requestActivity,Object started,int flags,int realCallingUid){
         if(requestActivity==null||started==null||handler==null||lock==null||(flags&Intent.FLAG_ACTIVITY_CLEAR_TASK)!=0)return null;
         Session created=null;
@@ -978,6 +1010,10 @@ final class WindowEngine {
             if(target==null)return null;
             if(target==s.task){
                 if(sourceTask==s.task&&s.launchFlow!=null&&s.launchFlow.continuing(SystemClock.elapsedRealtime()))s.launchFlow.changed(SystemClock.elapsedRealtime());
+                if(WindowPolicy.ownedLaunch(a.integer(requestActivity,"getUid"),s.uid,
+                    (Integer)a.field(target,"mUserId"),s.userId,a.call(requestActivity,"getDisplayContent"),a.call(target,"getDisplayContent"))){
+                    preserveOwnedTask(s);return new OwnedStart(s);
+                }
                 return null;
             }
             if(source!=null){if(sourceTask!=s.task)return null;}
@@ -1020,6 +1056,16 @@ final class WindowEngine {
         }
     }
     void activityStartResult(Object value,boolean success){
+        if(value instanceof OwnedStart owned){
+            Session s=owned.target;
+            if(success)handler.post(()->{try{synchronized(lock){
+                if(s==active&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.parked&&!s.screenSuspended
+                    &&!screenBlocked()&&s.placement!=null&&a.bool(s.task,"isAttached")&&find(s.taskId)==s.task){
+                    preserveOwnedTask(s);refresh(s);frameReport("OWNED_LAUNCH");
+                }
+            }}catch(Exception error){failure(s,error);}});
+            return;
+        }
         if(value instanceof ShareReused reused){
             if(success)handler.post(()->presentShared(reused.target,0));
             return;
@@ -1222,13 +1268,55 @@ final class WindowEngine {
         }catch(Throwable e){recover("关联任务恢复失败："+FrameworkAccess.reason(e));}
     }
 
+    private float coverRadius(Session s,Geometry.Placement p)throws Exception{
+        return a.config(s.task,false).densityDpi/160f*MotionStyle.radius(p.scale(),s.defaultScale);
+    }
+    /** The white handle owns the preview; native content stays masked until the final geometry is drawn. */
+    private boolean entryGesture(Session s,Intent i,String op)throws Exception{
+        if(s.cover==null||!s.cover.canRetarget()||s.placement==null)return false;
+        if(!java.util.Set.of("RESIZE","END_RESIZE","RELEASE","NORMAL","MINI","FULL","CLOSE").contains(op==null?"":op))return false;
+        synchronized(lock){
+            boolean starting=!s.coverFollowing;
+            s.entryControl=null;s.entering=false;s.entryStarted=true;s.opacity=1;s.barAlpha=1;
+            s.animationRev++;s.transitioning=false;s.resizing="RESIZE".equals(op);s.coverFollowing=true;
+            Geometry.Placement p=s.placement;
+            if("RESIZE".equals(op)||"END_RESIZE".equals(op)){
+                float scale=i.getFloatExtra("scale",p.scale());
+                if(!Float.isFinite(scale))throw new IllegalArgumentException("scale");
+                scale=GestureMath.clampScale(scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
+                float cx=p.x()+p.width()*p.scale()/2,cy=p.y()+p.height()*p.scale()/2;
+                s.placement=new Geometry.Placement(p.width(),p.height(),scale,cx-p.width()*scale/2,cy-p.height()*scale/2);
+            }
+            s.cover.gesturePose(visualBounds(s.placement),coverRadius(s,s.placement));
+            renderFrame(s);
+            if(starting){
+                if(s.launchFlow!=null)s.launchFlow.finish();
+                log.accept("ENTRY_GESTURE_BEGIN task="+s.taskId);
+            }
+            if("RESIZE".equals(op)){frameReport("ENTRY_GESTURE");return true;}
+            String target=switch(op){
+                case "FULL"->"full";case "MINI"->"mini";case "CLOSE"->"closed";case "NORMAL"->"normal";
+                default->GestureMath.release(s.placement.scale(),s.defaultScale,s.landscape,s.displayW>s.displayH);
+            };
+            s.resizing=false;
+            if("full".equals(target)||"closed".equals(target)){
+                s.coverFollowing=false;s.cover.finishGesture(visualBounds(s.placement),coverRadius(s,s.placement));
+                openGeneration++;cancelStart(target);trace.stop();
+            }
+            log.accept("ENTRY_GESTURE_COMMIT task="+s.taskId+" target="+target);
+            changeForm(s,target);return true;
+        }
+    }
     private void control(Intent i) throws Exception {
         Session s=controlled(i);
         if(s==null||s.restoring)throw new IllegalStateException("小窗已结束");
         String op=i.getStringExtra("op");
-        if(entryInputPending(s)&&java.util.Set.of("RESIZE","END_RESIZE","RELEASE","NORMAL","MINI","FULL","CLOSE").contains(op==null?"":op)){
-            // Retain the latest sample/commit, not every move during the entry cover.
-            s.entryControl=new Intent(i);return;
+        if(entryInputPending(s)){
+            if(entryGesture(s,i,op))return;
+            if(java.util.Set.of("RESIZE","END_RESIZE","RELEASE","NORMAL","MINI","FULL","CLOSE").contains(op==null?"":op)){
+                // A cover already revealing cannot be revived; retain only the final request.
+                s.entryControl=new Intent(i);return;
+            }
         }
         if("CLOSE".equals(op)||"FULL".equals(op)){
             openGeneration++;cancelStart(op);trace.stop();
@@ -1593,6 +1681,10 @@ final class WindowEngine {
                     synchronized(lock){
                         s.placement=MotionStyle.interpolate(start,end,f);
                         s.radiusFactor=full?1-f:1;s.barAlpha=startBar+(endBar-startBar)*f;
+                        if(s.coverFollowing&&s.cover!=null){
+                            s.cover.gesturePose(visualBounds(s.placement),coverRadius(s,s.placement));
+                            if(t==1){s.cover.finishGesture(visualBounds(s.placement),coverRadius(s,s.placement));s.coverFollowing=false;}
+                        }
                         renderFrame(s);
                     }
                     callbacks++;maxWork=Math.max(maxWork,SystemClock.elapsedRealtimeNanos()-workStart);
@@ -1860,6 +1952,10 @@ final class WindowEngine {
                     if(s.placement==null)s.placement=previous;
                     if(s.edgeHidden)s.placement=Geometry.offscreen(s.miniPlacement,s.edgeSide,0,s.displayW,s.placementMargin);
                 }
+                if(s.coverFollowing){
+                    if(s.cover!=null)s.cover.finishGesture(visualBounds(s.placement),coverRadius(s,s.placement));
+                    s.coverFollowing=false;s.entryControl=null;
+                }
                 s.animationRev++;s.transitioning=false;s.fullTransition=false;s.radiusFactor=1;s.barAlpha="mini".equals(s.frame)?0:1;
                 if(s.entering){s.entryStarted=false;s.presented=false;s.transitioning=true;s.opacity=0;s.barAlpha=0;}
             }
@@ -1984,6 +2080,7 @@ final class WindowEngine {
                             log.accept("COVER_END task="+s.taskId+" callbacks="+callbacks+" maxGapMs="+(maxGap/1_000_000f)
                                 +" maxWorkMs="+(maxWork/1_000_000f)+" state="+cover.state());
                             if(cover.exiting())s.barAlpha=0;s.cover=null;coverTasks.remove(s.task);
+                            s.coverFollowing=false;
                             if(visible(s)&&!s.restoring){renderFrame(s);completeEntryInput(s);}return;
                         }
                         frames.postFrameCallback(this);
@@ -2003,7 +2100,7 @@ final class WindowEngine {
         return s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
     }
     private void endCover(Session s){
-        TaskCover cover=s.cover;s.cover=null;coverTasks.remove(s.task);
+        TaskCover cover=s.cover;s.cover=null;s.coverFollowing=false;coverTasks.remove(s.task);
         if(cover!=null){
             cover.ownerAlpha(coverReleaseAlpha(s));cover.close();
             // Releasing the cover mask restores its surface alpha. Reapply the
@@ -2749,7 +2846,7 @@ final class WindowEngine {
             updateDecoration(s,s.placement,s.cover.preparedDensity(),!s.presented&&!a.inFrame()&&!s.backRequested);
             return;
         }
-        if("normal".equals(s.frame)&&!s.resizing&&!s.transitioning&&!s.entering&&!s.fullTransition){
+        if("normal".equals(s.frame)&&!s.resizing&&!s.coverFollowing&&!s.transitioning&&!s.entering&&!s.fullTransition){
             Geometry.Placement adjusted=normalForIme(s);
             if(adjusted!=null&&!adjusted.equals(s.placement)){
                 s.placement=adjusted;handler.post(()->{if(visible(s))frameReport("IME_PLACEMENT");});

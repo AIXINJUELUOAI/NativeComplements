@@ -38,6 +38,14 @@ for cls,name,sig in [
  assert any(m['name']==name and m['descriptor']==sig for m in game['classes'][cls]['methods']),(cls,name,sig)
 print('PASS: exact native recording-tile adapter signatures from device SystemUI archive')
 
+# Preserve an exact owned task before native proxy launch parameters inherit fullscreen.
+launch=json.loads((root/'tests/target/launch-input-members.json').read_text())['classes']
+assert any(m['name']=='computeLaunchParams' and m['descriptor']=='(Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/ActivityRecord;Lcom/android/server/wm/Task;)V'
+           for m in launch['Lcom/android/server/wm/ActivityStarter;']['methods'])
+assert any(f['name']=='mOptions' and f['type']=='Landroid/app/ActivityOptions;'
+           for f in launch['Lcom/android/server/wm/ActivityStarter;']['fields'])
+print('PASS: exact early owned-task launch parameter boundary')
+
 # Native notification creators may launch another package; correlate the original sender binder.
 requests=json.loads((root/'tests/target/window-request-members.json').read_text())['classes']
 assert any(m['name']=='getTarget' and m['descriptor']=='()Landroid/content/IIntentSender;'

@@ -77,6 +77,16 @@ final class ShareWindow {
                 method=a.method(starter,"startActivityUnchecked",next);parameters=next;taskArgument=7;
             }
             final int taskIndex=taskArgument,flagsIndex=taskArgument+4,argumentCount=parameters.length;
+            java.lang.reflect.Field optionsField=a.field(starter,"mOptions");
+            Method launchParams=a.method(starter,"computeLaunchParams",a.activity,a.activity,a.task);
+            handles.add(module.hook(launchParams).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                try{
+                    ActivityOptions kept=engine.ownedLaunchOptions(chain.getArg(0),chain.getArg(1),chain.getArg(2),
+                        (ActivityOptions)optionsField.get(chain.getThisObject()));
+                    if(kept!=null)optionsField.set(chain.getThisObject(),kept);
+                }catch(Exception error){log.accept("OWNED_LAUNCH_NATIVE "+FrameworkAccess.reason(error));}
+                return chain.proceed();
+            }));
             if(method.getReturnType()!=int.class)throw new NoSuchMethodException("share start result");
             a.field(starter,"mLastStartActivityRecord");
             a.method(a.activity,"isResolverOrDelegateActivity");

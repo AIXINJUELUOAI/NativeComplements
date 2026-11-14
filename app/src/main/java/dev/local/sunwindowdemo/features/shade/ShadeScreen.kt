@@ -11,7 +11,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.core.ui.GroupTitle
 import dev.local.sunwindowdemo.core.ui.SettingsGroup
-import dev.local.sunwindowdemo.core.ui.SettingRow
 import dev.local.sunwindowdemo.core.ui.SliderRow
 import dev.local.sunwindowdemo.core.ui.ToggleRow
 
@@ -53,10 +52,6 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
                 value = systemIconScale, range = 80..120, unit = "%") {
                 ShadeStore.setIconScale(context, false, it)
             }
-            SettingRow("恢复图标默认大小", "仅将两项图标大小恢复为 100%", onClick = {
-                ShadeStore.setIconScale(context, true, 100)
-                ShadeStore.setIconScale(context, false, 100)
-            })
             SliderRow("图标垂直位置", value = offset, range = -32..32, unit = " dp") {
                 ShadeStore.setOffset(context, it)
             }

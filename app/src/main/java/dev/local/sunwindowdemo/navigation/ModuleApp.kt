@@ -35,6 +35,7 @@ import dev.local.sunwindowdemo.features.motion.MotionScreen
 import dev.local.sunwindowdemo.features.motion.MotionStore
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
 import dev.local.sunwindowdemo.features.shade.ShadeScreen
+import dev.local.sunwindowdemo.features.shade.ShadeStore
 import dev.local.sunwindowdemo.features.navbar.NavbarScreen
 import dev.local.sunwindowdemo.features.navbar.NavbarAppScreen
 import dev.local.sunwindowdemo.features.navbar.NavbarDiagnosticsScreen
@@ -81,6 +82,12 @@ fun ModuleApp(
         expandedTitle = !selectingIcons,
         actions = {
             if (page == Page.Motion) MotionActions()
+            if (page == Page.Shade) IconButton(onClick = {
+                ShadeStore.setIconScale(context, true, 100)
+                ShadeStore.setIconScale(context, false, 100)
+            }) {
+                Icon(Icons.Default.Refresh, contentDescription = "仅将通知图标和系统状态图标大小恢复为 100%，不更改其他设置")
+            }
             if (selectingIcons) {
                 TextButton(onClick = {
                     iconSelection = if (selectedIcons.size == controller.apps.size) emptyList()
