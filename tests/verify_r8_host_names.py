@@ -18,6 +18,7 @@ REQUIRED = {
         "kotlin.Pair", "androidx.compose.runtime.ParcelableSnapshotMutableIntState",
         "androidx.compose.runtime.Composer", "androidx.compose.ui.Modifier"},
     (PREFIX + "features/shade/StackedSignalDisplay;", "<init>"): {"sun.misc.Unsafe"},
+    (PREFIX + "TaskCleanupGuard;", "install"): {"com.android.server.am.ActivityManagerService", "forceStopPackage"},
 }
 
 # Verify the delivered APK includes the restored runtime and the integrated navigation host.
@@ -26,7 +27,9 @@ RUNTIME_METHODS = {
     "WindowPolicy": {"backgroundTouchGuard", "startsTouchGuard", "coveredFullscreen"},
     "BackBridge": {"connect", "cancelNativeUp", "abort"},
     "Config": {"longBackWindow"},
-    "TaskCover": {"beforeReveal", "canRetarget", "reusesPresentation"},
+    "TaskCover": {"beforeReveal", "canRetarget", "reusesPresentation", "handoff"},
+    "TaskCleanupGuard": {"install", "delay", "acquired", "check"},
+    "LaunchCoverFlow": {"ready", "changed", "visibility"},
     "WindowControls": {"buildControlsRoot", "fillTouchRegion"},
     "features/edgetouch/EdgeInputFilter": {"install", "sync"},
     "features/edgetouch/EdgeInputPolicy": {"accepted", "regions"},

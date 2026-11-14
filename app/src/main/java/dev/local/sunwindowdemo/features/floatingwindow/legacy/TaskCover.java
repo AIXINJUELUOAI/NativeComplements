@@ -12,12 +12,12 @@ import android.view.Display;
 
 /** A temporary sibling surface. App buffers and lifecycle continue underneath it. */
 final class TaskCover {
-    final TaskVisibilityGuard mask;
+    TaskVisibilityGuard mask;
     private final FrameworkAccess a;
     private final Context iconContext;
     private final String pkg;
     private boolean iconDrawn;
-    private final Object task,parent;
+    private Object task,parent;
     private SurfaceControl background,icon;
     private final RectF from,to;
     private float radiusFrom;
@@ -33,7 +33,7 @@ final class TaskCover {
     private long frameClock=-1;
     private boolean closed,exiting;
     private float ownerAlpha;
-    private final boolean fadeIn;
+    private boolean fadeIn;
     private TaskDecoration decoration;
     private Geometry.Placement decorationCanvas;
     private final RectF decorationBounds=new RectF();
@@ -101,6 +101,25 @@ final class TaskCover {
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
     void beforeReveal(Reveal callback){beforeReveal=callback;}
     boolean canRetarget(){return !closed&&!exiting&&fadeAt<0&&mask.holding();}
+    /** Move the existing opaque surfaces to the next task without replaying the splash fade. */
+    void handoff(Object nextTask,Object nextParent,RectF bounds,float radius)throws Exception{
+        if(!canRetarget())throw new IllegalStateException("cover already revealing");
+        TaskVisibilityGuard nextMask=new TaskVisibilityGuard(a,nextTask);
+        nextMask.hide();
+        try{
+            SurfaceControl parentSurface=(SurfaceControl)a.field(nextParent,"mSurfaceControl");
+            try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
+                tx.reparent(background,parentSurface).reparent(icon,parentSurface).apply();
+            }
+            mask.release(0);
+            mask=nextMask;task=nextTask;parent=nextParent;
+            from.set(bounds);to.set(bounds);radiusFrom=radiusTo=radius;
+            began=SystemClock.elapsedRealtime();entryAt=fadeAt=hiddenAt=-1;
+            fadeIn=false;notBefore=0;preparedWidth=preparedHeight=0;
+            decoration=null;decorationAt=-1;exitAlpha=1;
+            paint(1,1);
+        }catch(Exception error){nextMask.release(0);throw error;}
+    }
     void prepared(Geometry.Placement canvas,float density){
         preparedFrames++;
         preparedWidth=canvas.width();preparedHeight=canvas.height();preparedDensity=density;

@@ -29,6 +29,8 @@ TARGETS = {
     INSETS+";", INSETS+"$InternalInsetsInfo;", INSETS+"$OnComputeInternalInsetsListener;",
     "Lcom/android/internal/policy/ScreenDecorationsUtils;", WM+"DisplayContent;",
     WM+"WindowState;", WM+"ActivityRecord;", "Landroid/app/BroadcastOptions;",
+    "Lcom/android/server/am/ActivityManagerService;", "Landroid/app/ApplicationPackageManager;",
+    "Landroid/view/SurfaceControl$Transaction;",
 }
 
 
@@ -87,6 +89,9 @@ def verify(classes, qpr2):
     field(WM+"ActivityRecord;", "mActivityComponent", "Landroid/content/ComponentName;")
     method(WM+"WindowState;", "getConfiguration", "()Landroid/content/res/Configuration;")
     method("Landroid/app/BroadcastOptions;", "setDeliveryGroupPolicy", "(I)Landroid/app/BroadcastOptions;")
+    method("Lcom/android/server/am/ActivityManagerService;", "forceStopPackage", "(Ljava/lang/String;I)V")
+    method("Landroid/app/ApplicationPackageManager;", "getPackageUidAsUser", "(Ljava/lang/String;I)I")
+    method("Landroid/view/SurfaceControl$Transaction;", "reparent", "(Landroid/view/SurfaceControl;Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;")
     adapter = EDGE+"EdgeBackGestureHandler$$ExternalSyntheticLambda"+("24;" if qpr2 else "20;")
     field(EDGE+"DisplayBackGestureHandlerImpl;", "onInputEvent", adapter if qpr2 else "Lkotlin/jvm/functions/Function1;")
     field(adapter, "f$0", EDGE+"EdgeBackGestureHandler;")
@@ -156,7 +161,7 @@ if __name__ == "__main__":
                           "emit","setIcon","start","filterInputEvent","setInputFilter","setInputFilterEnabled",
                           "injectInputEvent","getDisplayId","split","draw","addOnComputeInternalInsetsListener",
                           "onComputeInternalInsets","setTouchableInsets","getWindowCornerRadius","dispatchToBackAnimation",
-                          "getConfiguration","setDeliveryGroupPolicy"}
+                          "getConfiguration","setDeliveryGroupPolicy","forceStopPackage","getPackageUidAsUser","reparent"}
             field_names={"onInputEvent","f$0","f$1","f$2","f$3","f$4","f$5","second","legacyUseSplitShade",
                          "legacyUseSplitShade$delegate","isThemed","mNative","mInputFilterLock","mInputFilter",
                          "mBarBackground","touchableRegion","TOUCHABLE_INSETS_REGION","mAllowGesture","mLogGesture","mInRejectedExclusion","mOriginalStatusBarIconSize","mActivityComponent"}

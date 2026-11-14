@@ -56,6 +56,7 @@ public final class SunWindowModule extends XposedModule {
         try {
             FrameworkAccess a = new FrameworkAccess(p.getClassLoader());
             WindowEngine engine = new WindowEngine(a, this::note);
+            engine.installCleanupGuard(this, p.getClassLoader());
             WindowContinuation.install(this,a,engine,this::note);
             handles.add(hook(a.systemReady).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed(); note("WMS_READY_SEEN"); engine.attach(chain.getThisObject()); return result;
@@ -259,7 +260,7 @@ public final class SunWindowModule extends XposedModule {
                 handles.add(hook(a.method(a.activity,"activityResumedLocked",android.os.IBinder.class,boolean.class)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object result=chain.proceed();
                     android.os.IBinder token=(android.os.IBinder)chain.getArg(0);
-                    engine.trace.resumed(token);engine.iconAppResumed(token);return result;
+                    engine.trace.resumed(token);engine.appResumed(token);return result;
                 }));
             }catch(Exception e){note("ACTIVITY_RESUME_OBSERVER_UNAVAILABLE "+FrameworkAccess.reason(e));}
             ShareWindow.install(this,a,engine,this::note);

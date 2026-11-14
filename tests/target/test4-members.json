@@ -7,6 +7,31 @@
       "verification\\split-shade-device\\SystemUI.apk": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
     },
     "classes": {
+      "Landroid/app/ApplicationPackageManager;": {
+        "superclass": "Landroid/content/pm/PackageManager;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/app/ApplicationPackageManager;",
+            "name": "getPackageUidAsUser",
+            "descriptor": "(Ljava/lang/String;I)I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Landroid/app/ApplicationPackageManager;",
+            "name": "getPackageUidAsUser",
+            "descriptor": "(Ljava/lang/String;II)I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Landroid/app/ApplicationPackageManager;",
+            "name": "getPackageUidAsUser",
+            "descriptor": "(Ljava/lang/String;Landroid/content/pm/PackageManager$PackageInfoFlags;I)I",
+            "access_flags": 1
+          }
+        ]
+      },
       "Landroid/app/BroadcastOptions;": {
         "superclass": "Landroid/app/ComponentOptions;",
         "access_flags": 1,
@@ -49,6 +74,19 @@
             "name": "split",
             "descriptor": "(I)Landroid/view/MotionEvent;",
             "access_flags": 17
+          }
+        ]
+      },
+      "Landroid/view/SurfaceControl$Transaction;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/SurfaceControl$Transaction;",
+            "name": "reparent",
+            "descriptor": "(Landroid/view/SurfaceControl;Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;",
+            "access_flags": 1
           }
         ]
       },
@@ -114,6 +152,37 @@
             "name": "getWindowCornerRadius",
             "descriptor": "(Landroid/content/Context;)F",
             "access_flags": 9
+          }
+        ]
+      },
+      "Lcom/android/server/am/ActivityManagerService;": {
+        "superclass": "Landroid/app/IActivityManager$Stub;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "start",
+            "descriptor": "()V",
+            "access_flags": 2
+          },
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "forceStopPackage",
+            "descriptor": "(Ljava/lang/String;I)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "forceStopPackage",
+            "descriptor": "(Ljava/lang/String;IILjava/lang/String;)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "getConfiguration",
+            "descriptor": "()Landroid/content/res/Configuration;",
+            "access_flags": 1
           }
         ]
       },
@@ -215,6 +284,12 @@
             "name": "isResizeable",
             "descriptor": "()Z",
             "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/TaskFragment;ILjava/lang/String;)V",
+            "access_flags": 1
           }
         ]
       },
@@ -265,6 +340,24 @@
             "owner": "Lcom/android/server/wm/Task;",
             "name": "isResizeable",
             "descriptor": "(Z)Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/Task;IZLjava/lang/String;)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/TaskDisplayArea;Z)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/Task;ZIZZLjava/lang/String;)Z",
             "access_flags": 1
           }
         ]
@@ -631,6 +724,31 @@
       "verification\\pixel-qpr2-20261113\\apk\\SystemUIGoogle.apk": "458b481b241552d67d33963f3cb449a9e5e53d4cfcd28e8bb1d919b814fd982f"
     },
     "classes": {
+      "Landroid/app/ApplicationPackageManager;": {
+        "superclass": "Landroid/content/pm/PackageManager;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/app/ApplicationPackageManager;",
+            "name": "getPackageUidAsUser",
+            "descriptor": "(Ljava/lang/String;I)I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Landroid/app/ApplicationPackageManager;",
+            "name": "getPackageUidAsUser",
+            "descriptor": "(Ljava/lang/String;II)I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Landroid/app/ApplicationPackageManager;",
+            "name": "getPackageUidAsUser",
+            "descriptor": "(Ljava/lang/String;Landroid/content/pm/PackageManager$PackageInfoFlags;I)I",
+            "access_flags": 1
+          }
+        ]
+      },
       "Landroid/app/BroadcastOptions;": {
         "superclass": "Landroid/app/ComponentOptions;",
         "access_flags": 1,
@@ -689,6 +807,19 @@
           }
         ]
       },
+      "Landroid/view/SurfaceControl$Transaction;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/view/SurfaceControl$Transaction;",
+            "name": "reparent",
+            "descriptor": "(Landroid/view/SurfaceControl;Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;",
+            "access_flags": 1
+          }
+        ]
+      },
       "Landroid/view/ViewTreeObserver$InternalInsetsInfo;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 17,
@@ -738,6 +869,37 @@
             "name": "getWindowCornerRadius",
             "descriptor": "(Landroid/content/Context;)F",
             "access_flags": 9
+          }
+        ]
+      },
+      "Lcom/android/server/am/ActivityManagerService;": {
+        "superclass": "Landroid/app/IActivityManager$Stub;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "start",
+            "descriptor": "()V",
+            "access_flags": 2
+          },
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "forceStopPackage",
+            "descriptor": "(Ljava/lang/String;I)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "forceStopPackage",
+            "descriptor": "(Ljava/lang/String;IILjava/lang/String;)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/am/ActivityManagerService;",
+            "name": "getConfiguration",
+            "descriptor": "()Landroid/content/res/Configuration;",
+            "access_flags": 1
           }
         ]
       },
@@ -839,6 +1001,12 @@
             "name": "isResizeable",
             "descriptor": "()Z",
             "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/TaskFragment;ILjava/lang/String;)V",
+            "access_flags": 1
           }
         ]
       },
@@ -883,6 +1051,24 @@
             "owner": "Lcom/android/server/wm/Task;",
             "name": "isResizeable",
             "descriptor": "()Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/Task;IZLjava/lang/String;)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/TaskDisplayArea;Z)V",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/Task;",
+            "name": "reparent",
+            "descriptor": "(Lcom/android/server/wm/Task;ZIZZLjava/lang/String;)Z",
             "access_flags": 1
           }
         ]

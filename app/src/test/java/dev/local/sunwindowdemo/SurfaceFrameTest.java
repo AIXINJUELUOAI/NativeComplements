@@ -227,6 +227,32 @@ public class SurfaceFrameTest {
         assertFalse(cover.step(true,true));assertFalse(cover.canRetarget());
     }
 
+    @Test @LooperMode(LooperMode.Mode.PAUSED)
+    public void linkedHandoffRetainsOpaqueSurfacesAndMovesTheMaskToTheNewTask()throws Exception{
+        FrameworkAccess access=access();Task first=new Task(),second=new Task(),parent=new Task();
+        TaskCover cover=allocate(TaskCover.class);
+        SurfaceControl background=ReflectionHelpers.callConstructor(SurfaceControl.class);
+        SurfaceControl icon=ReflectionHelpers.callConstructor(SurfaceControl.class);
+        set(cover,"a",access);set(cover,"task",first);set(cover,"parent",parent);set(cover,"iconDrawn",true);
+        set(cover,"background",background);set(cover,"icon",icon);
+        set(cover,"from",new RectF(100,200,800,1600));set(cover,"to",new RectF(100,200,800,1600));
+        set(cover,"decorationBounds",new RectF());set(cover,"color",new float[]{.94f,.94f,.94f});
+        set(cover,"iconSize",100);set(cover,"splashPx",162f);set(cover,"duration",320L);set(cover,"fadeDuration",150L);
+        set(cover,"fadeAt",-1L);set(cover,"entryAt",-1L);set(cover,"hiddenAt",-1L);
+        TaskVisibilityGuard old=new TaskVisibilityGuard(access,first);set(cover,"mask",old);
+        var pose=new Geometry.Placement(900,1600,.7f,200,300);cover.prepared(pose,2.5f);
+        cover.handoff(second,parent,new RectF(200,300,830,1420),48);
+        assertSame(background,ReflectionHelpers.getField(cover,"background"));
+        assertSame(icon,ReflectionHelpers.getField(cover,"icon"));
+        assertFalse(old.holding());assertTrue(cover.mask.holding());assertSame(second,cover.mask.task);
+        assertEquals(0,((TransactionShadow)Shadow.extract(first.pending)).alpha.get(first.mSurfaceControl),0);
+        assertEquals(0,lastApplied.alpha.get(second.mSurfaceControl),0);
+        assertEquals(1,lastApplied.alpha.get(background),0);assertEquals(1,lastApplied.alpha.get(icon),0);
+        assertEquals(48,lastApplied.radii.get(background),0);
+        assertTrue(cover.canRetarget());assertFalse(cover.reusesPresentation(pose));
+        cover.close();assertFalse(cover.mask.holding());
+    }
+
     @Implements(SurfaceControl.class)
     public static class SurfaceShadow {
         boolean released;
@@ -239,6 +265,7 @@ public class SurfaceFrameTest {
         final Map<SurfaceControl,Float> alpha=new IdentityHashMap<>();
         final Map<SurfaceControl,Integer> layers=new IdentityHashMap<>();
         final Map<SurfaceControl,SurfaceControl> relativeTo=new IdentityHashMap<>();
+        final Map<SurfaceControl,SurfaceControl> parents=new IdentityHashMap<>();
         final Map<SurfaceControl,float[]> colors=new IdentityHashMap<>();
         final Map<SurfaceControl,Float> radii=new IdentityHashMap<>();
         final Map<SurfaceControl,Rect> crops=new IdentityHashMap<>();
@@ -249,6 +276,7 @@ public class SurfaceFrameTest {
         @Implementation protected void apply(){checkLock();lastApplied=this;}
         @Implementation protected void close(){checkLock();}
         @Implementation protected SurfaceControl.Transaction setRelativeLayer(SurfaceControl s,SurfaceControl relative,int layer){layers.put(s,layer);relativeTo.put(s,relative);return real;}
+        @Implementation protected SurfaceControl.Transaction reparent(SurfaceControl s,SurfaceControl parent){parents.put(s,parent);return real;}
         @Implementation protected SurfaceControl.Transaction setPosition(SurfaceControl s,float x,float y){return real;}
         @Implementation protected SurfaceControl.Transaction setScale(SurfaceControl s,float x,float y){return real;}
         @Implementation protected SurfaceControl.Transaction setWindowCrop(SurfaceControl s,int w,int h){crops.put(s,new Rect(0,0,w,h));return real;}

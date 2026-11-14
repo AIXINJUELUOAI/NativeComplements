@@ -31,6 +31,11 @@ final class WindowEngine {
     private Handler handler;
     private Choreographer frames;
     private WindowAudio audio;
+    private TaskCleanupGuard cleanup;
+    void installCleanupGuard(io.github.libxposed.api.XposedModule module,ClassLoader loader){
+        TaskCleanupGuard guard=new TaskCleanupGuard(log);
+        if(guard.install(module,loader))cleanup=guard;
+    }
     private SuggestionInput suggestionInput;
     private boolean visibleResumeReady;
     void visibleResumeReady(){visibleResumeReady=true;}
@@ -257,6 +262,7 @@ final class WindowEngine {
 
     private static final class Session {
         Session returnTo;
+        LaunchCoverFlow launchFlow;
         boolean parked,restoreForeground,endOnClose,surfaceHidden;
         TaskVisibilityGuard startMask,rotationMask;
         TaskCover cover;boolean coverDrawn,coverFullscreen;
@@ -318,6 +324,7 @@ final class WindowEngine {
             trace.attach(lock);
             HandlerThread worker = new HandlerThread("SunWindowDemo5",android.os.Process.THREAD_PRIORITY_DISPLAY); worker.start();
             handler = new Handler(worker.getLooper());
+            if(cleanup!=null)cleanup.connect(context,handler,this::cleanupVisible);
             handler.post(()->{
                 try{dev.local.sunwindowdemo.features.iconlayers.IconAssets.connect(context);}
                 catch(RuntimeException unavailable){log.accept("ICON_ASSETS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
@@ -739,11 +746,21 @@ final class WindowEngine {
         log.accept("OPEN_PHASE package="+request.getStringExtra("package")+" phase="+phase+" task="+id);
     }
 
-    void iconAppResumed(IBinder token){
+    void appResumed(IBinder token){
         if(lock==null)return;
         try{synchronized(lock){
             Object record=a.method(a.activity,"forTokenLocked",IBinder.class).invoke(null,token);
-            if(record!=null)dev.local.sunwindowdemo.features.iconlayers.IconAssets.started((String)a.field(record,"packageName"));
+            if(record!=null){
+                dev.local.sunwindowdemo.features.iconlayers.IconAssets.started((String)a.field(record,"packageName"));
+                Object task=a.call(record,"getTask");Session s=sessionFor(task);
+                if(cleanup!=null){
+                    if(visible(s)&&!s.parked&&!s.restoring)cleanup.acquired(s.pkg,s.userId,s.uid);
+                    else if(s==null&&task!=null&&a.bool(task,"isVisibleRequested")){
+                        int uid=a.integer(record,"getUid");
+                        cleanup.resumed((String)a.field(record,"packageName"),uid/100000,uid);
+                    }
+                }
+            }
         }}catch(Exception error){log.accept("ICON_LAUNCH_OBSERVER_FAILED "+FrameworkAccess.reason(error));}
     }
     /** Resolve source-less app-context starts only for the real foreground caller. */
@@ -803,6 +820,9 @@ final class WindowEngine {
         if(retained!=null){
             // Native ActivityStarter has already delivered the real Intent/grants/result chain.
             // Re-present that exact task; never substitute the package's launcher page.
+            if(retained.launchFlow==null||!retained.launchFlow.continuing(SystemClock.elapsedRealtime()))retained.launchFlow=new LaunchCoverFlow(SystemClock.elapsedRealtime());
+            else retained.launchFlow.changed(SystemClock.elapsedRealtime());
+            if("normal".equals(retained.frame)&&!retained.parked)beginCover(retained,retained.placement,retained.placement,false);
             return new ShareReused(retained);
         }
         String pkg=(String)a.field(request,"packageName");Session s;
@@ -815,6 +835,7 @@ final class WindowEngine {
             throw error;
         }
         s.entryFade=true;
+        s.launchFlow=new LaunchCoverFlow(SystemClock.elapsedRealtime());
         try{bindAndSave(s,launch.lease);}catch(Exception error){releaseToFullscreen(task);throw error;}
         Session previous=active,previousPinned=pinned,displaced=normalOccupied()?previous:null;
         if(displaced==null){if(previous!=null)pinned=previous;active=null;}
@@ -865,6 +886,34 @@ final class WindowEngine {
     private void bindAndSave(Session s,IBinder lease)throws Exception{
         bindLease(s,lease);
         try{save(s);}catch(Exception error){lease.unlinkToDeath(s.death,0);throw error;}
+        if(cleanup!=null)cleanup.acquired(s.pkg,s.userId,s.uid);
+    }
+
+    /** Sample on the engine worker. The cleanup hook never acquires the WM lock. */
+    private java.util.Set<TaskCleanupGuard.Key> cleanupVisible(java.util.Set<TaskCleanupGuard.Key> keys){
+        java.util.Set<TaskCleanupGuard.Key> present=new java.util.HashSet<>();
+        boolean screen=context.getSystemService(PowerManager.class).isInteractive()
+            &&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
+        synchronized(lock){
+            for(Session s:sessions)if(visible(s)&&!s.parked&&!s.restoring&&!s.closing&&s.edgeHidden)
+                present.add(new TaskCleanupGuard.Key(s.pkg,s.userId));
+            if(screen)try{
+                a.call(root,"forAllTasks",new Class<?>[]{Consumer.class},(Consumer<Object>)task->{
+                    try{
+                        if(!a.bool(task,"isLeafTask")||!a.bool(task,"isVisibleRequested"))return;
+                        Session managed=sessionFor(task);
+                        if(managed!=null&&(managed.parked||managed.screenSuspended
+                            ||managed.restoring&&!managed.restoreForeground))return;
+                        Object top=a.call(task,"topRunningActivity");
+                        if(top!=null){
+                            var key=new TaskCleanupGuard.Key((String)a.field(top,"packageName"),a.integer(top,"getUid")/100000);
+                            if(keys.contains(key))present.add(key);
+                        }
+                    }catch(Exception error){throw new IllegalStateException(error);}
+                });
+            }catch(Exception error){throw new IllegalStateException("cleanup visibility unavailable",error);}
+        }
+        return present;
     }
     /** One native-fullscreen exit for a freeform task the module does not (or no longer) manage. */
     private void releaseToFullscreen(Object task)throws Exception{
@@ -926,7 +975,11 @@ final class WindowEngine {
             // including starts originating inside an existing floating application.
             if(!ShareWindow.eligibleIntent((Intent)a.field(requestActivity,"intent"),false))return null;
             Object sourceTask=source==null?null:a.call(source,"getTask"),target=a.call(started,"getTask");
-            if(target==null||target==s.task)return null;
+            if(target==null)return null;
+            if(target==s.task){
+                if(sourceTask==s.task&&s.launchFlow!=null&&s.launchFlow.continuing(SystemClock.elapsedRealtime()))s.launchFlow.changed(SystemClock.elapsedRealtime());
+                return null;
+            }
             if(source!=null){if(sourceTask!=s.task)return null;}
             else{
                 Object caller=a.call(s.task,"topRunningActivity");
@@ -950,6 +1003,8 @@ final class WindowEngine {
                 bindAndSave(next,s.lease);
                 created=next;
             }else if(next.restoring)return null;
+            next.launchFlow=s.launchFlow!=null&&s.launchFlow.continuing(SystemClock.elapsedRealtime())?s.launchFlow:new LaunchCoverFlow(SystemClock.elapsedRealtime());
+            next.launchFlow.changed(SystemClock.elapsedRealtime());
             SwitchStart ticket=new SwitchStart(s,next,fresh,openGeneration);
             pendingStart=ticket;
             maskAndActivate(next,target,s.placement);
@@ -1021,6 +1076,7 @@ final class WindowEngine {
     private boolean presentExisting(Session next,boolean step)throws Exception{
         synchronized(lock){
             if(!live(next)||next.closing||next.fullTransition||next.returning||next.entering||next.transitioning||pendingStart!=null)return false;
+            if(cleanup!=null)cleanup.acquired(next.pkg,next.userId,next.uid);
             if(updateOrientation(next)&&visible(next))refresh(next);
             String target=WindowNavigation.wakeForm(next.frame,next.edgeHidden,step);
             if(visible(next)){
@@ -1055,6 +1111,7 @@ final class WindowEngine {
     private void activate(Session next,Geometry.Placement placement)throws Exception{
         if(recovering||next.restoring||!sessions.contains(next))throw new IllegalStateException("关联任务已退出");
         if(screenBlocked())throw new IllegalStateException("解锁后再切换小窗");
+        if(cleanup!=null)cleanup.acquired(next.pkg,next.userId,next.uid);
         next.screenSuspended=false;
         Session previous=active;
         boolean continuousDim=previous!=null&&previous!=next&&"normal".equals(previous.frame)&&"normal".equals(next.frame)
@@ -1062,7 +1119,9 @@ final class WindowEngine {
         if(next.decoration==null)next.decoration=new TaskDecoration(a);
         if(continuousDim)previous.decoration.transferDimTo(next.decoration,next.task);
         else next.decoration.enableDim();
-        long entryDelay=previous!=null&&previous!=next&&!previous.parked?exitCover(previous):0;
+        boolean continueCover=previous!=null&&previous!=next&&next.launchFlow!=null&&next.launchFlow.active()
+            &&previous.launchFlow==next.launchFlow&&previous.cover!=null&&previous.cover.canRetarget();
+        long entryDelay=previous!=null&&previous!=next&&!previous.parked&&!continueCover?exitCover(previous):0;
         endCover(next);
         if(previous!=null&&previous!=next){
             rememberOrientation(previous);
@@ -1081,7 +1140,20 @@ final class WindowEngine {
         try{
             prepareGeometry(next);
             if(next.decoration==null)next.decoration=new TaskDecoration(a);
-            beginCover(next,next.placement,next.placement,false);
+            if(continueCover){
+                TaskCover cover=previous.cover;
+                try{
+                    float density=a.config(next.task,false).densityDpi/160f;
+                    cover.handoff(next.task,next.parent,visualBounds(next.placement),density*MotionStyle.radius(next.placement.scale(),next.defaultScale));
+                    previous.cover=null;coverTasks.remove(previous.task);
+                    next.cover=cover;next.coverDrawn=false;next.coverFullscreen=false;
+                    prepareCover(next,cover);pollCover(next,cover);
+                    log.accept("COVER_CHAIN_HANDOFF from="+previous.taskId+" to="+next.taskId);
+                }catch(Exception error){
+                    endCover(previous);beginCover(next,next.placement,next.placement,false);
+                    log.accept("COVER_CHAIN_REPLACED "+FrameworkAccess.reason(error));
+                }
+            }else beginCover(next,next.placement,next.placement,false);
             // A retained parent can already have a valid buffer and need no relayout.
             Object top=a.call(next.task,"topRunningActivity");
             Object main=top==null?null:a.call(top,"findMainWindow",new Class<?>[]{boolean.class},false);
@@ -1836,10 +1908,7 @@ final class WindowEngine {
             float density=a.config(s.task,false).densityDpi/160f;
             float radius=a.integer(s.task,"getWindowingMode")==1?0:density*MotionStyle.radius(from.scale(),s.defaultScale);
             TaskCover cover=new TaskCover(a,context,s.task,s.parent,s.pkg,visualBounds(from),visualBounds(to),radius,fullscreen?0:density*MotionStyle.radius(to.scale(),s.defaultScale),coverReleaseAlpha(s),s.entering&&s.entryFade&&!fullscreen);
-            cover.beforeReveal(()->renderFrame(s));
-            cover.entryDecorations(s.entering&&!fullscreen);
-            if(s.startMask!=null&&s.startMask.holding()){s.startMask.transfer();s.startMask.continueWith(cover.mask);s.startMask=null;}
-            s.cover=cover;coverTasks.put(s.task,s);
+            s.cover=cover;prepareCover(s,cover);
             if(previous!=null){
                 log.accept("COVER_REPLACED task="+s.taskId+" old="+previous.state());
                 previous.ownerAlpha(0);previous.close();previous.mask.continueWith(cover.mask);cover.mask.hide();
@@ -1847,6 +1916,17 @@ final class WindowEngine {
             pollCover(s,cover);
             log.accept("COVER_BEGIN task="+s.taskId+" from="+visualBounds(from)+" to="+visualBounds(to)+" fullscreen="+fullscreen);
         }catch(Throwable error){log.accept("COVER_SKIPPED "+FrameworkAccess.reason(error));endCover(s);}
+    }
+    private void prepareCover(Session s,TaskCover cover)throws Exception{
+        cover.beforeReveal(()->{
+            renderFrame(s);
+            if(s.launchFlow!=null)s.launchFlow.finish();
+        });
+        cover.entryDecorations(s.entering&&!s.coverFullscreen);
+        if(s.startMask!=null&&s.startMask.holding()){
+            s.startMask.transfer();s.startMask.continueWith(cover.mask);s.startMask=null;
+        }
+        coverTasks.put(s.task,s);
     }
     private boolean coverConfigurationMatches(Session s,Object window)throws Exception{
         if(((WindowManager.LayoutParams)a.field(window,"mAttrs")).type==WindowManager.LayoutParams.TYPE_APPLICATION_STARTING)return false;
@@ -1890,6 +1970,13 @@ final class WindowEngine {
                         }else ready&=!s.entering&&!s.transitioning&&!s.rotation.active();
                         boolean visible=context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
                         long frameClock=SystemClock.elapsedRealtime()-Math.max(0,System.nanoTime()-frameTime)/1_000_000L;
+                        if(s.launchFlow!=null&&s.launchFlow.active()&&!cover.exiting()){
+                            s.launchFlow.visibility(visible,frameClock);
+                            if(visible){
+                                if(s.launchFlow.timedOut(frameClock)&&!ready)throw new IllegalStateException("launch chain frame timeout");
+                                ready=s.launchFlow.ready(ready,frameClock);
+                            }else ready=false;
+                        }
                         boolean continuing=cover.step(ready,visible,frameClock);
                         callbacks++;maxWork=Math.max(maxWork,SystemClock.elapsedRealtimeNanos()-started);
                         if(previous>=0)maxGap=Math.max(maxGap,frameTime-previous);previous=frameTime;
