@@ -52,12 +52,8 @@ final class FanView extends View {
         selected=next;invalidate();return next;
     }
     String picked(){return selected<0?null:selected==0?"":apps.get(selected-1).key();}
-    void updateApps(List<AppCatalog.App> catalog){
-        for(int i=0;i<apps.size();i++){
-            ShortcutTarget updated=ShortcutTarget.fromKey(getContext(),apps.get(i).key(),catalog);
-            if(updated!=null)apps.set(i,updated);
-        }
-        invalidate();
+    void updateTargets(List<ShortcutTarget> targets){
+        apps.clear();apps.addAll(targets);invalidate();
     }
     @Override protected void onDraw(Canvas c) {
         super.onDraw(c);float x=ox(),y=oy(),r=drawnRadius();

@@ -134,11 +134,25 @@ class HostBridgeTest {
         assertEquals(targets, WindowPreferenceStore(context).read().apps)
     }
 
-    @Test fun oldShortcutSelectionsArePrunedWithoutChangingAppOrder() {
+    @Test fun shortcutSelectionsSurviveTheTypedTargetListWithoutChangingAppOrder() {
         val store = WindowPreferenceStore(context)
         val original = listOf("com.example.first", "com.example.second")
         store.apps(original)
-        val oldShortcut = "shortcut:v1:0:com.example.first:scan"
+        val serial = ShortcutTarget.serial(context, android.os.Process.myUserHandle())
+        assertTrue(serial >= 0)
+        val shortcut = ShortcutTarget.shortcutKey(serial, "com.example.first", "scan")
+        assertTrue(ShortcutTarget.validKey(shortcut))
+        store.preferences.edit().putString("targets", org.json.JSONArray(listOf(original[0], shortcut, original[1])).toString()).commit()
+        assertEquals(listOf(original[0], shortcut, original[1]), store.read().apps)
+        assertTrue(store.preferences.getString("targets", "")!!.contains(shortcut))
+        assertNotNull(dev.local.sunwindowdemo.Config.validateTargets(listOf(shortcut), listOf("扫一扫")))
+        assertEquals(listOf(original[0], shortcut, original[1]), store.read().apps)
+    }
+    @Test fun malformedShortcutSelectionsArePrunedWithoutChangingAppOrder() {
+        val store = WindowPreferenceStore(context)
+        val original = listOf("com.example.first", "com.example.second")
+        store.apps(original)
+        val oldShortcut = "shortcut:v1:0:com.example.first"
         assertFalse(ShortcutTarget.validKey(oldShortcut))
         store.preferences.edit().putString("targets", org.json.JSONArray(listOf(original[0], oldShortcut, original[1])).toString()).commit()
         assertEquals(original, store.read().apps)

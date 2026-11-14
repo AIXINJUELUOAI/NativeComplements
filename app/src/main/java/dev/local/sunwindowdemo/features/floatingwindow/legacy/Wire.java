@@ -80,6 +80,17 @@ final class Wire {
             .putExtra("package",pkg).putExtra("taskId",-1).putExtra("token",token())
             .putExtra("wakeStep",wakeStep).putExtra("hideRecents",new Config(context).hideRecents()));
     }
+    /** A LauncherApps shortcut keeps the system-issued PendingIntent and its real intent stack. */
+    static void openShortcut(Context context,ShortcutTarget target,PendingIntent launch){
+        if(target==null||!target.isShortcut()||!allowedPackage(target.pkg)
+            ||launch==null||!launch.isActivity()||target.user==null
+            ||!android.os.Process.myUserHandle().equals(target.user))
+            throw new IllegalArgumentException("application shortcut");
+        sendRequest(context,new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")
+            .putExtra("package",target.pkg).putExtra("taskId",-1).putExtra("token",token())
+            .putExtra("hideRecents",new Config(context).hideRecents())
+            .putExtra("shortcutLaunch",launch).putExtra("shortcutUser",target.user));
+    }
     static void openNotification(Context context,String pkg,PendingIntent launch,Intent fill,ResultReceiver reply){
         if(!allowedPackage(pkg)||launch==null||!launch.isActivity())throw new IllegalArgumentException("notification activity");
         Intent request=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","OPEN")

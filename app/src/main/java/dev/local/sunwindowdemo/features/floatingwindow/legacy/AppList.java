@@ -26,12 +26,15 @@ import androidx.core.view.NestedScrollingChildHelper;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.BiConsumer;
 
 /** A View card inside the existing SystemUI overlay. Never starts an Activity or owns a task. */
 public final class AppList {
     interface SaveAction { void save(List<ShortcutTarget> targets,Consumer<Boolean> done); }
+    interface ShortcutSource { AppCatalog.Shortcuts load(List<AppCatalog.App> apps); }
 
     static View create(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
             Consumer<ShortcutTarget> launch,SaveAction save,Runnable close) {
@@ -39,11 +42,16 @@ public final class AppList {
     }
     static View create(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
             Consumer<ShortcutTarget> launch,SaveAction save,List<QuickEntry> quickEntries,Consumer<String> quickAction) {
-        return new Tabs(c,new Panel(c,all,selected,launch,save,null,true),quickEntries,quickAction);
+        return create(c,all,selected,launch,save,quickEntries,quickAction,null);
+    }
+    static View create(Context c,List<AppCatalog.App> all,List<ShortcutTarget> selected,
+            Consumer<ShortcutTarget> launch,SaveAction save,List<QuickEntry> quickEntries,Consumer<String> quickAction,
+            ShortcutSource shortcuts) {
+        return new Tabs(c,new Panel(c,all,selected,launch,save,null,true),quickEntries,quickAction,shortcuts);
     }
     static boolean back(View content){
-        if(content instanceof Tabs tabs&&tabs.quickShown){
-            tabs.select(false);
+        if(content instanceof Tabs tabs&&tabs.tab!=0){
+            tabs.select(0);
             return true;
         }
         return false;
@@ -59,13 +67,18 @@ public final class AppList {
         editState.accept(page.editing,page.saving);return page;
     }
     static void edit(View page){((Panel)page).toggleEditing();}
+    static void refreshShortcuts(View view){
+        Panel panel=view instanceof Tabs tabs?tabs.apps:(Panel)view;
+        if(panel.shortcutRequested)panel.loadShortcuts(true);
+    }
     static void updateApps(View view,List<AppCatalog.App> apps){
         Panel panel=view instanceof Tabs tabs?tabs.apps:(Panel)view;
         int first=panel.list.getFirstVisiblePosition();View top=panel.list.getChildAt(0);int offset=top==null?0:top.getTop();
         panel.apps=List.copyOf(apps);
         panel.appRows.clear();for(AppCatalog.App app:apps)panel.appRows.add(ShortcutTarget.app(panel.c,app));
-        panel.chosen.replaceAll(target->{ShortcutTarget updated=ShortcutTarget.fromKey(panel.c,target.key(),apps);return updated!=null?updated:target;});
+        panel.chosen.replaceAll(target->{ShortcutTarget updated=ShortcutTarget.fromKey(panel.c,target.key(),apps,target.isShortcut()?target.label:null);return updated!=null?updated:target;});
         panel.renderSelected();panel.refreshRows();panel.list.setSelectionFromTop(first,offset);
+        if(panel.shortcutRequested)panel.loadShortcuts(true);
     }
     /** Shared safe-area placement for the application and quick-function menu. */
     static Geometry.Placement placement(Context c,android.view.WindowMetrics metrics) {
@@ -172,39 +185,147 @@ public final class AppList {
         }
     }
 
+    /** A scrollable, recycling grid of LauncherApps shortcuts for the third menu tab. */
+    private static final class ShortcutPage extends FrameLayout {
+        final Panel panel;final MenuList list;final BaseAdapter adapter;final TextView status;
+        final ArrayList<List<ShortcutTarget>> rows=new ArrayList<>();
+        List<ShortcutTarget> items=List.of();
+        ShortcutPage(Panel panel){
+            super(panel.c);this.panel=panel;
+            list=new MenuList(panel.c);
+            list.setDivider(null);list.setDividerHeight(0);list.setClipToPadding(false);
+            list.setPadding(panel.dp(12),panel.dp(2),panel.dp(12),panel.dp(2));
+            list.setVerticalScrollBarEnabled(false);list.setSelector(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+            list.setNestedScrollingEnabled(true);
+            adapter=new BaseAdapter(){
+                public int getCount(){return rows.size();}
+                public Object getItem(int position){return rows.get(position);}
+                public long getItemId(int position){return position;}
+                public View getView(int position,View recycled,ViewGroup parent){
+                    List<ShortcutTarget> group=rows.get(position);
+                    LinearLayout row=recycled instanceof LinearLayout?(LinearLayout)recycled:new LinearLayout(panel.c);
+                    row.removeAllViews();row.setLayoutParams(new AbsListView.LayoutParams(-1,panel.dp(panel.appTileHeight())));
+                    for(int column=0;column<4;column++){
+                        View child;
+                        if(column<group.size()){
+                            ShortcutTarget target=group.get(column);
+                            boolean selected=panel.selectedIndex(target.key())>=0;
+                            child=new ShortcutTile(panel.c,panel.compact,target.label,target.appLabel,target.icon,
+                                panel.text,panel.secondary,panel.accent,selected,panel.editing);
+                            child.setOnClickListener(v->{if(!panel.saving){if(panel.editing)panel.toggle(target);else panel.launch.accept(target);}});
+                            child.setContentDescription(target.label+"，"+target.appLabel
+                                +(panel.editing?(selected?"，已选，点击移除":"，点击添加"):"，点击打开"));
+                        }else child=new View(panel.c);
+                        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,-1,1);p.setMargins(panel.dp(2),0,panel.dp(2),0);row.addView(child,p);
+                    }
+                    return row;
+                }
+            };
+            list.setAdapter(adapter);
+            addView(list,new FrameLayout.LayoutParams(-1,-1));
+            status=panel.label("",14,panel.secondary);status.setGravity(Gravity.CENTER);
+            status.setPadding(panel.dp(16),0,panel.dp(16),0);
+            addView(status,new FrameLayout.LayoutParams(-1,-1));
+            update(List.of(),"正在读取应用快捷方式…",true);
+        }
+        void update(List<ShortcutTarget> next,String message,boolean loading){
+            int first=list.getFirstVisiblePosition();View top=list.getChildAt(0);int offset=top==null?0:top.getTop();
+            items=List.copyOf(next);rows.clear();
+            for(int start=0;start<items.size();start+=4)rows.add(List.copyOf(items.subList(start,Math.min(start+4,items.size()))));
+            adapter.notifyDataSetChanged();
+            boolean empty=rows.isEmpty();
+            status.setText(loading?"正在读取应用快捷方式…":message==null||message.isBlank()?"暂无可用的应用快捷方式":message);
+            status.setVisibility(empty?VISIBLE:GONE);list.setVisibility(empty?GONE:VISIBLE);
+            if(!empty)list.setSelectionFromTop(first,offset);
+        }
+        void refresh(){adapter.notifyDataSetChanged();}
+    }
+
+    /** Shortcut tiles keep the application icon while naming both the action and its owner. */
+    private static final class ShortcutTile extends LinearLayout {
+        final ImageView image;final TextView title,owner;
+        ShortcutTile(Context c,boolean compact,String label,String appLabel,Drawable icon,
+                int text,int secondary,int accent,boolean selected,boolean editing){
+            super(c);setOrientation(VERTICAL);setGravity(Gravity.CENTER_HORIZONTAL);
+            setPadding(pixels(c,2),pixels(c,2),pixels(c,2),pixels(c,2));
+            GradientDrawable mask=new GradientDrawable();mask.setColor(Color.WHITE);mask.setCornerRadius(pixels(c,18));
+            setBackground(new RippleDrawable(ColorStateList.valueOf((accent&0x00ffffff)|0x26000000),null,mask));
+            FrameLayout artwork=new FrameLayout(c);
+            addView(artwork,new LinearLayout.LayoutParams(-1,pixels(c,compact?30:34)));
+            image=new ImageView(c);image.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            if(icon!=null&&icon.getConstantState()!=null)icon=icon.getConstantState().newDrawable(c.getResources()).mutate();
+            image.setImageDrawable(icon);
+            int size=pixels(c,compact?26:30);
+            artwork.addView(image,new FrameLayout.LayoutParams(size,size,Gravity.CENTER));
+            if(editing){
+                TextView badge=new TextView(c);badge.setText(selected?"−":"+");badge.setTextSize(14);badge.setTextColor(accent);
+                badge.setGravity(Gravity.CENTER);GradientDrawable disc=new GradientDrawable();
+                disc.setColor((accent&0x00ffffff)|0x1f000000);disc.setCornerRadius(pixels(c,10));
+                badge.setBackground(disc);badge.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+                artwork.addView(badge,new FrameLayout.LayoutParams(pixels(c,20),pixels(c,20),Gravity.TOP|Gravity.RIGHT));
+            }
+            title=new TextView(c);title.setText(label);title.setTextSize(11);title.setTextColor(text);
+            title.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);title.setSingleLine(true);
+            title.setIncludeFontPadding(false);title.setEllipsize(TextUtils.TruncateAt.END);
+            addView(title,new LinearLayout.LayoutParams(-1,pixels(c,compact?15:16)));
+            owner=new TextView(c);owner.setText(appLabel);owner.setTextSize(10);owner.setTextColor(secondary);
+            owner.setGravity(Gravity.TOP|Gravity.CENTER_HORIZONTAL);owner.setSingleLine(true);
+            owner.setIncludeFontPadding(false);owner.setEllipsize(TextUtils.TruncateAt.END);
+            addView(owner,new LinearLayout.LayoutParams(-1,pixels(c,compact?12:13)));
+        }
+    }
+
     private static final class Tabs extends LinearLayout {
-        final Panel apps;final View quick;
-        final TextView appTab,quickTab;boolean quickShown;
-        Tabs(Context c,Panel apps,List<QuickEntry> quickEntries,Consumer<String> quickAction){
+        final Panel apps;final ShortcutPage shortcuts;final View quick;
+        final TextView appTab,shortcutTab,quickTab;int tab;
+        Tabs(Context c,Panel apps,List<QuickEntry> quickEntries,Consumer<String> quickAction,
+                ShortcutSource shortcutSource){
             super(c);this.apps=apps;setOrientation(VERTICAL);setClipToOutline(true);
             apps.setBackgroundColor(Color.TRANSPARENT);apps.setClipToOutline(false);
-            apps.quickAction=quickAction;
-            // The shared title/selected area stays above both tabs; the tab row
+            apps.quickAction=quickAction;apps.shortcutSource=shortcutSource;
+            // The shared title/selected area stays above all tabs; the tab row
             // replaces the old divider and never jumps when switching pages.
             addView(apps.header,new LinearLayout.LayoutParams(-1,-2));
             LinearLayout tabs=new LinearLayout(c);tabs.setPadding(apps.dp(12),apps.dp(6),apps.dp(12),apps.dp(4));
-            appTab=apps.button("应用",()->select(false));quickTab=apps.button("快捷功能",()->select(true));
-            tabs.addView(appTab,new LinearLayout.LayoutParams(0,apps.dp(40),1));tabs.addView(quickTab,new LinearLayout.LayoutParams(0,apps.dp(40),1));addView(tabs);
+            appTab=apps.button("应用",()->select(0));shortcutTab=apps.button("快捷方式",()->select(1));
+            shortcutTab.setContentDescription("应用快捷方式");
+            quickTab=apps.button("快捷功能",()->select(2));
+            for(TextView tab:new TextView[]{appTab,shortcutTab,quickTab})
+                tabs.addView(tab,new LinearLayout.LayoutParams(0,apps.dp(40),1));
+            addView(tabs);
             apps.manage.setOnClickListener(v->apps.toggleEditing());
+            shortcuts=new ShortcutPage(apps);apps.shortcutPage=shortcuts;
+            if(shortcutSource==null)shortcuts.update(List.of(),"应用快捷方式不可用",false);
             quick=new QuickPage(c,availableQuick(quickEntries),id->{
                 if(apps.editing)apps.toggleQuick(id);else quickAction.accept(id);
             });
             apps.quickRefresher=()->updateQuick((QuickPage)quick,availableQuick(quickEntries));
-            quick.setOnScrollChangeListener((v,sx,sy,oldX,oldY)->{if(quickShown)apps.setSelectedCollapsed(sy>0);});
+            quick.setOnScrollChangeListener((v,sx,sy,oldX,oldY)->{if(tab==2)apps.setSelectedCollapsed(sy>0);});
+            // Keep the selected strip visible while browsing shortcuts, rolling it
+            // away only after the shortcut library itself starts scrolling.
+            shortcuts.list.setOnScrollListener(new AbsListView.OnScrollListener(){
+                public void onScrollStateChanged(AbsListView view,int state){}
+                public void onScroll(AbsListView view,int first,int count,int total){if(tab==1)apps.setSelectedCollapsed(first>0);}
+            });
             FrameLayout pages=new FrameLayout(c);addView(pages,new LinearLayout.LayoutParams(-1,0,1));
-            pages.addView(apps,new FrameLayout.LayoutParams(-1,-1));pages.addView(quick,new FrameLayout.LayoutParams(-1,-1));select(false);
+            pages.addView(apps,new FrameLayout.LayoutParams(-1,-1));
+            pages.addView(shortcuts,new FrameLayout.LayoutParams(-1,-1));
+            pages.addView(quick,new FrameLayout.LayoutParams(-1,-1));select(0);
         }
         private List<QuickEntry> availableQuick(List<QuickEntry> all){
             ArrayList<QuickEntry> visible=new ArrayList<>();
             for(QuickEntry entry:all)if(apps.selectedIndex(QuickActionCatalog.key(entry.id()))<0)visible.add(entry);
             return visible;
         }
-        void select(boolean show){
+        void select(int next){
             if(apps.saving)return;
-            quickShown=show;apps.setVisibility(show?GONE:VISIBLE);quick.setVisibility(show?VISIBLE:GONE);apps.setSelectedCollapsed(false);
-            for(TextView tab:new TextView[]{appTab,quickTab}){
-                boolean active=(tab==quickTab)==show;tab.setSelected(active);tab.setTextColor(active?apps.accent:apps.secondary);
-                tab.setBackground(active?apps.round(apps.tonal,20):null);
+            tab=next;apps.setVisibility(next==0?VISIBLE:GONE);shortcuts.setVisibility(next==1?VISIBLE:GONE);
+            quick.setVisibility(next==2?VISIBLE:GONE);apps.setSelectedCollapsed(false);
+            if(next==1)apps.loadShortcuts(false);
+            for(TextView item:new TextView[]{appTab,shortcutTab,quickTab}){
+                TextView active=next==0?appTab:next==1?shortcutTab:quickTab;
+                boolean selected=item==active;item.setSelected(selected);item.setTextColor(selected?apps.accent:apps.secondary);
+                item.setBackground(selected?apps.round(apps.tonal,20):null);
             }
         }
     }
@@ -261,6 +382,11 @@ public final class AppList {
         BiConsumer<Boolean,Boolean> editState;
         Consumer<String> quickAction=id->{};
         Runnable quickRefresher;
+        ShortcutSource shortcutSource;
+        ShortcutPage shortcutPage;
+        final ExecutorService shortcutWorker=Executors.newSingleThreadExecutor();
+        int shortcutGeneration;
+        boolean shortcutRequested;
         boolean selectedCollapsed;
         android.animation.ValueAnimator selectedAnimator;
         int hover=-1;
@@ -444,6 +570,29 @@ public final class AppList {
             ShortcutTarget target=action==null?null:ShortcutTarget.fromKey(c,QuickActionCatalog.key(id),apps);
             if(target!=null)toggle(target);
         }
+        void loadShortcuts(boolean force){
+            if(shortcutSource==null||saving||disposed)return;
+            if(shortcutRequested&&!force)return;
+            shortcutRequested=true;
+            int generation=++shortcutGeneration;
+            if(shortcutPage!=null)shortcutPage.update(List.of(),"正在读取应用快捷方式…",true);
+            List<AppCatalog.App> snapshot=apps;
+            shortcutWorker.execute(()->{
+                AppCatalog.Shortcuts result;
+                try{result=shortcutSource.load(snapshot);}
+                catch(RuntimeException failure){result=new AppCatalog.Shortcuts(List.of(),false,"应用快捷方式读取失败，请重试");}
+                AppCatalog.Shortcuts loaded=result;
+                main.post(()->{
+                    if(disposed||generation!=shortcutGeneration)return;
+                    for(int i=0;i<chosen.size();i++){
+                        String key=chosen.get(i).key();
+                        for(ShortcutTarget real:loaded.items)if(key.equals(real.key())){chosen.set(i,real);break;}
+                    }
+                    if(shortcutPage!=null)shortcutPage.update(loaded.items,loaded.message,false);
+                    renderSelected();
+                });
+            });
+        }
         void renderSelected(){
             main.removeCallbacks(dragScroll);hover=-1;
             resetSelectedHeight();
@@ -469,6 +618,7 @@ public final class AppList {
                 }
             }
             if(quickRefresher!=null)quickRefresher.run();
+            if(shortcutPage!=null)shortcutPage.refresh();
             selectedScroll.post(this::updateIndex);requestLayout();
         }
         int dropIndex(float px,float py){
@@ -561,7 +711,7 @@ public final class AppList {
             empty.setText("暂无可启动的应用");
             empty.setVisibility(noRows?VISIBLE:GONE);list.setVisibility(VISIBLE);updateIndex();bubble.setVisibility(GONE);
         }
-        @Override protected void onDetachedFromWindow(){disposed=true;main.removeCallbacksAndMessages(null);resetSelectedHeight();super.onDetachedFromWindow();}
+        @Override protected void onDetachedFromWindow(){disposed=true;shortcutGeneration++;shortcutWorker.shutdownNow();main.removeCallbacksAndMessages(null);resetSelectedHeight();super.onDetachedFromWindow();}
 
         final class IndexBar extends View {
             final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);

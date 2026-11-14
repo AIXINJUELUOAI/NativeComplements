@@ -246,6 +246,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(i.getStringExtra("event")!=null&&(i.getStringExtra("event").endsWith("FAILED")||"BLOCKED".equals(i.getStringExtra("event"))))Toast.makeText(this,WindowPolicy.failureMessage(i.getStringExtra("report")),Toast.LENGTH_SHORT).show();
     }
     private List<AppCatalog.App> all=List.of();
+    private List<ShortcutTarget> selectedShortcuts=List.of();
+    private int shortcutGeneration;
     private String foreground="";
     private boolean keyboard,cleaned;
     private int lastSelection=-1;
@@ -262,6 +264,20 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         }
     };
     private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){loadApps();}};
+    private android.content.pm.LauncherApps shortcutLauncher;
+    private final android.content.pm.LauncherApps.Callback shortcutChanges=new android.content.pm.LauncherApps.Callback(){
+        public void onPackageAdded(String pkg,android.os.UserHandle user){}
+        public void onPackageRemoved(String pkg,android.os.UserHandle user){}
+        public void onPackageChanged(String pkg,android.os.UserHandle user){}
+        public void onPackagesAvailable(String[] packages,android.os.UserHandle user,boolean replacing){shortcutCatalogChanged();}
+        public void onPackagesUnavailable(String[] packages,android.os.UserHandle user,boolean replacing){shortcutCatalogChanged();}
+        public void onShortcutsChanged(String pkg,List<android.content.pm.ShortcutInfo> shortcuts,android.os.UserHandle user){shortcutCatalogChanged();}
+    };
+    private void shortcutCatalogChanged(){
+        if(cleaned)return;
+        reloadSelectedShortcuts();
+        if(menuContent!=null)AppList.refreshShortcuts(menuContent);
+    }
     private int catalogGeneration;
     private final Runnable iconsReloaded=()->main.post(()->{if(!cleaned)loadApps();});
     private void initialize() {
@@ -281,6 +297,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         registerReceiver(screenReceiver,screen,Context.RECEIVER_NOT_EXPORTED);
         IntentFilter pkgs=new IntentFilter(Intent.ACTION_PACKAGE_ADDED);pkgs.addAction(Intent.ACTION_PACKAGE_REMOVED);pkgs.addAction(Intent.ACTION_PACKAGE_CHANGED);pkgs.addDataScheme("package");
         registerReceiver(packageReceiver,pkgs,Context.RECEIVER_NOT_EXPORTED);
+        try{shortcutLauncher=getSystemService(android.content.pm.LauncherApps.class);if(shortcutLauncher!=null)shortcutLauncher.registerCallback(shortcutChanges,main);}
+        catch(RuntimeException unavailable){shortcutLauncher=null;}
         registerReceiver(settingsReceiver,settingsFilter(),null,main,Context.RECEIVER_EXPORTED);
         registerReceiver(queryReceiver,new IntentFilter(LauncherGuard.QUERY),null,main,Context.RECEIVER_EXPORTED);
         getApplicationContext().registerComponentCallbacks(this);
@@ -290,16 +308,36 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void loadApps() {
         int generation=++catalogGeneration;
+        int shortcutsGeneration=++shortcutGeneration;
+        List<String> keys=config==null?List.of():config.targets();
         new Thread(()->{
             List<AppCatalog.App> apps=AppCatalog.load(this);
+            AppCatalog.Shortcuts shortcuts=AppCatalog.loadShortcuts(this,apps,keys);
             main.post(()->{
                 if(!connected||cleaned||generation!=catalogGeneration)return;all=apps;
+                if(shortcutsGeneration==shortcutGeneration)selectedShortcuts=shortcuts.items;
                 if(menuContent!=null)AppList.updateApps(menuContent,apps);
-                if(fan!=null)fan.updateApps(apps);
+                if(fan!=null)fan.updateTargets(selectedTargets());
                 if(openWaitIcon!=null)for(AppCatalog.App app:apps)if(app.pkg.equals(openWaitPackage)){openWaitIcon.setImageDrawable(app.icon);break;}
                 refresh();
             });
         },"corner-app-catalog").start();
+    }
+    /** Refresh only the shortcuts already in the fan after a save or package shortcut change. */
+    private void reloadSelectedShortcuts() {
+        int generation=++shortcutGeneration;
+        List<AppCatalog.App> catalog=all;
+        List<String> keys=config==null?List.of():config.targets();
+        try{
+            new Thread(()->{
+                AppCatalog.Shortcuts shortcuts=AppCatalog.loadShortcuts(this,catalog,keys);
+                main.post(()->{
+                    if(cleaned||generation!=shortcutGeneration)return;
+                    selectedShortcuts=shortcuts.items;
+                    if(fan!=null)fan.updateTargets(selectedTargets());
+                });
+            },"corner-shortcut-catalog").start();
+        }catch(RuntimeException unavailable){}
     }
     private void updateOverlayPriority(){
         for(View overlay:new View[]{panel,openWait})if(overlay!=null&&overlay.getLayoutParams() instanceof WindowManager.LayoutParams p){
@@ -404,12 +442,20 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         sendBroadcast(new Intent(state).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
     private List<ShortcutTarget> selectedTargets(){
+        java.util.Map<String,String> labels=config.targetLabels();
+        java.util.HashMap<String,ShortcutTarget> loaded=new java.util.HashMap<>();
+        for(ShortcutTarget target:selectedShortcuts)loaded.put(target.key(),target);
         List<ShortcutTarget> selected=new ArrayList<>();
         for(String key:config.targets()){
-            ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);
+            ShortcutTarget target=loaded.get(key);
+            if(target==null)target=ShortcutTarget.fromKey(this,key,all,labels.get(key));
             if(target!=null)selected.add(target);
         }
         return selected;
+    }
+    private ShortcutTarget targetFor(String key){
+        for(ShortcutTarget target:selectedShortcuts)if(target.key().equals(key))return target;
+        return ShortcutTarget.fromKey(this,key,all,config.targetLabels().get(key));
     }
     private void saveTargets(List<ShortcutTarget> targets,java.util.function.Consumer<Boolean> done){
         ArrayList<String> keys=new ArrayList<>(),labels=new ArrayList<>();for(ShortcutTarget target:targets){keys.add(target.key());labels.add(target.label.length()>200?target.label.substring(0,200):target.label);}
@@ -422,7 +468,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
                 android.os.Bundle snapshot=getContentResolver().call(android.net.Uri.parse("content://"+ConfigProvider.AUTHORITY),"read",null,null);
                 if(snapshot==null)throw new IllegalStateException("settings read after save");
                 ConfigProvider.copy(snapshot,config.prefs);
-                main.post(()->{if(!cleaned&&panel==savingPanel)done.accept(true);});
+                main.post(()->{if(!cleaned&&panel==savingPanel){done.accept(true);reloadSelectedShortcuts();}});
             }catch(Exception e){main.post(()->{if(!cleaned&&panel==savingPanel){done.accept(false);}});}
         });
     }
@@ -434,7 +480,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         };
         outside.setBackgroundColor(Color.TRANSPARENT);outside.setOnClickListener(v->hidePanel());
         View content=AppList.create(this,all,selectedTargets(),target->{hidePanel();launch(target.key(),false);},this::saveTargets,
-            quick==null?List.of():quick.entries(),this::quickAction);menuContent=content;
+            quick==null?List.of():quick.entries(),this::quickAction,apps->AppCatalog.loadShortcuts(this,apps));menuContent=content;
         AppList.blur(content,config.menuBlur());
         content.setOnClickListener(v->{});
         WindowMetrics metrics=wm.getCurrentWindowMetrics();
@@ -569,8 +615,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void launch(String key,boolean wakeStep) {
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastOpen<500)return;lastOpen=now;
-        ShortcutTarget target=ShortcutTarget.fromKey(this,key,all);if(target==null)return;
+        ShortcutTarget target=targetFor(key);if(target==null)return;
         if(target.quick){hidePanel();hideFan();quickAction(target.action);return;}
+        if(target.isShortcut()){
+            if(!backendReady){Toast.makeText(this,"后端尚未就绪，请先在模块内预检",Toast.LENGTH_LONG).show();return;}
+            cancelOpenWait();launchShortcut(target);return;
+        }
         cancelOpenWait();
         main.postDelayed(()->{
             if(cleaned)return;
@@ -578,7 +628,25 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             Wire.openApp(this,target.pkg,wakeStep);
         },180);
     }
+    /** Resolve the system-issued shortcut PendingIntent off the UI thread, then reuse the OPEN ticket. */
+    private void launchShortcut(ShortcutTarget target){
+        try{
+            settingsWorker.execute(()->{
+                try{
+                    android.content.pm.LauncherApps launcher=getSystemService(android.content.pm.LauncherApps.class);
+                    if(launcher==null||!launcher.hasShortcutHostPermission())throw new IllegalStateException("shortcut host");
+                    android.app.PendingIntent launch=launcher.getShortcutIntent(target.pkg,target.shortcutId,null,target.user);
+                    if(launch==null||!launch.isActivity())throw new IllegalStateException("shortcut unavailable");
+                    main.post(()->{if(!cleaned)Wire.openShortcut(SystemUiHost.this,target,launch);});
+                }catch(Exception failure){
+                    main.post(()->{if(!cleaned)Toast.makeText(SystemUiHost.this,"应用快捷方式已不可用，请重新添加",Toast.LENGTH_SHORT).show();});
+                }
+            });
+        }catch(RuntimeException unavailable){
+            Toast.makeText(this,"应用快捷方式已不可用，请重新添加",Toast.LENGTH_SHORT).show();
+        }
+    }
     @Override public void onConfigurationChanged(Configuration c){cancelOpenWait();hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(barrage!=null){barrage.close();barrage=null;}if(quick!=null){quick.close();quick=null;}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
+    private void cleanup(){if(cleaned)return;if(shortcutLauncher!=null)try{shortcutLauncher.unregisterCallback(shortcutChanges);}catch(RuntimeException ignored){}dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(barrage!=null){barrage.close();barrage=null;}if(quick!=null){quick.close();quick=null;}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
 }

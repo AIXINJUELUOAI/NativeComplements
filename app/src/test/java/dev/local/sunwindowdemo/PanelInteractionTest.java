@@ -82,6 +82,36 @@ public class PanelInteractionTest {
         assertTrue(sections[0]>=1);
         ListView list=(ListView)field(panel,"list");assertEquals(0,list.getPaddingRight());
     }
+    @Test public void shortcutTabAddsLauncherShortcutTargets()throws Exception{
+        AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
+        ShortcutTarget app=ShortcutTarget.app(context,alpha);
+        ShortcutTarget scan=ShortcutTarget.shortcut("example.alpha","scan",android.os.Process.myUserHandle(),0,
+            "扫一扫","Alpha",new ColorDrawable(Color.BLUE),"A");
+        List<String> launched=new ArrayList<>(),saved=new ArrayList<>();
+        View menu=AppList.create(context,List.of(alpha),List.of(app),target->launched.add(target.key()),
+            (targets,done)->{saved.addAll(targets.stream().map(ShortcutTarget::key).toList());done.accept(true);},
+            List.of(),id->{},apps->new AppCatalog.Shortcuts(List.of(scan),true,""));
+        assertEquals("应用快捷方式",((View)field(menu,"shortcutTab")).getContentDescription());
+        Object page=field(menu,"shortcuts");
+        invoke(page,"update",new Class<?>[]{List.class,String.class,boolean.class},List.of(scan),"",false);
+        android.widget.BaseAdapter adapter=(android.widget.BaseAdapter)field(page,"adapter");
+        View row=adapter.getView(0,null,(ViewGroup)field(page,"list"));
+        View tile=((ViewGroup)row).getChildAt(0);
+        assertEquals("扫一扫，Alpha，点击打开",tile.getContentDescription());
+        tile.performClick();
+        assertEquals(List.of(scan.key()),launched);
+        Object panel=field(menu,"apps");
+        invoke(panel,"toggleEditing",new Class<?>[]{});
+        row=adapter.getView(0,null,(ViewGroup)field(page,"list"));
+        tile=((ViewGroup)row).getChildAt(0);
+        assertEquals("扫一扫，Alpha，点击添加",tile.getContentDescription());
+        tile.performClick();
+        assertEquals(2,((List<?>)field(panel,"chosen")).size());
+        View manage=(View)field(panel,"manage");
+        manage.performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        assertTrue(saved.contains(app.key()));assertTrue(saved.contains(scan.key()));
+    }
     @Test public void mixedSelectionCapsAtTwelveAndThreeRows() throws Exception {
         List<AppCatalog.App> apps=new ArrayList<>();
         List<ShortcutTarget> selected=new ArrayList<>();
@@ -165,11 +195,24 @@ public class PanelInteractionTest {
         }finally{host.close();}
     }
     @SuppressWarnings("unchecked")
-    @Test public void thirdPartyShortcutsAreDiscardedAndDoneKeepsThePanel()throws Exception{
+    @Test public void applicationShortcutKeysAreValidatedAndDoneKeepsThePanel()throws Exception{
         AppCatalog.App alpha=new AppCatalog.App("example.alpha","Alpha",new ColorDrawable(Color.RED));
         View panel=AppList.create(context,List.of(alpha),List.of(ShortcutTarget.app(context,alpha)),target->{},(targets,done)->done.accept(true),()->{throw new AssertionError("unexpected close");});
         assertNull(((View)field(panel,"manage")).getBackground());
-        assertNull(ShortcutTarget.fromKey(context,"shortcut:v1:0:example.alpha:scan",List.of(alpha)));
+        assertTrue(ShortcutTarget.validKey("shortcut:v1:0:example.alpha:scan"));
+        assertFalse(ShortcutTarget.validKey("shortcut:v1:0:example.alpha"));
+        assertFalse(ShortcutTarget.validKey("shortcut:v1:x:example.alpha:scan"));
+        assertFalse(ShortcutTarget.validKey("shortcut:v1:0:example.alpha:a%2fb"));
+        assertFalse(ShortcutTarget.validKey("shortcut:v2:0:example.alpha:scan"));
+        long serial=ShortcutTarget.serial(context,android.os.Process.myUserHandle());
+        if(serial>=0){
+            String key=ShortcutTarget.shortcutKey(serial,"example.alpha","scan");
+            assertTrue(ShortcutTarget.validKey(key));
+            ShortcutTarget shortcut=ShortcutTarget.fromKey(context,key,List.of(alpha),"扫一扫");
+            assertNotNull(shortcut);
+            assertEquals("扫一扫",shortcut.label);assertEquals("example.alpha",shortcut.pkg);
+            assertEquals("scan",shortcut.shortcutId);assertTrue(shortcut.isShortcut());
+        }
         invoke(panel,"toggleEditing",new Class<?>[]{});
         invoke(panel,"toggleEditing",new Class<?>[]{});
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();

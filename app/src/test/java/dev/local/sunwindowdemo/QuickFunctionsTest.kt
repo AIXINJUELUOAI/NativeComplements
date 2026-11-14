@@ -96,6 +96,7 @@ class QuickFunctionsTest {
         compose.runOnIdle {
             assertTrue(native("更多").isShown)
             assertTrue(native("应用").isShown)
+            assertTrue(native("快捷方式").isShown)
             assertTrue(native("快捷功能").isShown)
             val app = native("示例应用，点击打开")
             val appLocation = IntArray(2)

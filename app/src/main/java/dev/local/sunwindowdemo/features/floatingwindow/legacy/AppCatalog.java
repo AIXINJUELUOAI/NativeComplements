@@ -4,14 +4,18 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.content.pm.LauncherApps;
+import android.content.pm.ShortcutInfo;
 import android.graphics.*;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.InsetDrawable;
+import android.os.Process;
+import android.os.UserHandle;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Locale;
 import android.icu.text.Transliterator;
@@ -76,4 +80,75 @@ final class AppCatalog {
     }
     static String section(String label) { return sectionFromKey(sortKey(label)); }
 
+    static final class Shortcuts {
+        final List<ShortcutTarget> items;
+        final boolean hostPermission;
+        final String message;
+        Shortcuts(List<ShortcutTarget> items,boolean hostPermission,String message) {
+            this.items=List.copyOf(items);this.hostPermission=hostPermission;this.message=message;
+        }
+    }
+
+    /** Worker-thread only. LauncherApps reports the permission of the actual SystemUI host. */
+    static Shortcuts loadShortcuts(Context c,List<App> apps) { return loadShortcuts(c,apps,null); }
+
+    /**
+     * Loads manifest, dynamic and pinned shortcuts for the current user. When onlyKeys is
+     * non-null, only the matching shortcuts have their labels and icons hydrated; this keeps
+     * the startup fan refresh cheap while the management tab still asks for the full list.
+     */
+    static Shortcuts loadShortcuts(Context c,List<App> apps,List<String> onlyKeys) {
+        HashSet<String> wanted=null;
+        if(onlyKeys!=null){
+            wanted=new HashSet<>();
+            for(String key:onlyKeys)if(key!=null&&key.startsWith("shortcut:"))wanted.add(key);
+            if(wanted.isEmpty())return new Shortcuts(List.of(),true,"");
+        }
+        LauncherApps launcher=c.getSystemService(LauncherApps.class);
+        try {
+            if(launcher==null||!launcher.hasShortcutHostPermission())
+                return new Shortcuts(List.of(),false,"系统界面没有应用快捷方式权限");
+            UserHandle user=Process.myUserHandle();
+            long serial=ShortcutTarget.serial(c,user);
+            if(serial<0)return new Shortcuts(List.of(),true,"暂未取得当前用户标识，请稍后重试");
+            var query=new LauncherApps.ShortcutQuery().setQueryFlags(
+                LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC|LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST
+                    |LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED);
+            List<ShortcutInfo> available=launcher.getShortcuts(query,user);
+            HashMap<String,App> owners=new HashMap<>();
+            for(App app:apps)owners.put(app.pkg,app);
+            ArrayList<ShortcutTarget> result=new ArrayList<>();
+            HashSet<String> seen=new HashSet<>();
+            if(available!=null)for(ShortcutInfo info:available) {
+                try {
+                    if(!info.isEnabled())continue;
+                    String pkg=info.getPackage(),id=info.getId();
+                    if(pkg==null||id==null||!Wire.allowedPackage(pkg)||pkg.equals(Wire.PKG))continue;
+                    String key=ShortcutTarget.shortcutKey(serial,pkg,id);
+                    if(wanted!=null&&!wanted.contains(key))continue;
+                    App owner=owners.get(pkg);
+                    if(owner==null)continue;
+                    CharSequence title=info.getShortLabel();
+                    if(title==null||title.length()==0)title=info.getLongLabel();
+                    if(title==null||title.length()==0)continue;
+                    Drawable icon;
+                    try{icon=launcher.getShortcutBadgedIconDrawable(info,c.getResources().getDisplayMetrics().densityDpi);}
+                    catch(RuntimeException unavailableIcon){icon=null;}
+                    icon=icon==null?owner.icon:normalized(c,icon);
+                    ShortcutTarget target=ShortcutTarget.shortcut(pkg,id,user,serial,
+                        title.toString(),owner.label,icon,owner.section);
+                    if(ShortcutTarget.validKey(target.key())&&seen.add(target.key()))result.add(target);
+                } catch(RuntimeException staleShortcut) {}
+            }
+            result.sort(Comparator.comparing((ShortcutTarget t)->{
+                String sort=sortKey(t.appLabel);return sectionFromKey(sort).equals("#")?"~"+sort:sort;
+            }).thenComparing(t->sortKey(t.label)).thenComparing(ShortcutTarget::key));
+            String message=result.isEmpty()?(wanted==null?"暂无可用的应用快捷方式":"已选的应用快捷方式暂不可用"):"";
+            return new Shortcuts(result,true,message);
+        } catch(SecurityException denied) {
+            return new Shortcuts(List.of(),false,"系统界面没有应用快捷方式权限");
+        } catch(RuntimeException failure) {
+            return new Shortcuts(List.of(),true,wanted==null?"应用快捷方式读取失败，请重试":"已选的应用快捷方式暂不可用");
+        }
+    }
 }
