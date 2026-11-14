@@ -483,4 +483,14 @@ main 从 81c32c9 开始，开工时工作区干净，版本代码 113。用户�
 
 原生截图也已进一步查：captureLayersSync→captureScreenCommon→setScreenshotSnapshotsAndDisplayState路径，后者以及getLayerSnapshotsForScreenshots有traverseVisibleLayers(true)入口；true在同线程直接执行pick/fill闭包而非普通Looper异步，但资格/失败缓存门控仍存在。特殊截图UID−340/−780绕过普通owner UID检查，−340额外排snapshot+830；后者来源已追到metadata110非0或父层同标志的继承，非导航背景名称筛选。app背景创建未写110或注册exclude，父链/额外回调仍依具体捕获状态。LayerSnapshotBuilder另按metadata101是否非0区分alpha：非0直接取本层alpha，0乘父snapshot alpha；不能以“所有子层天然同样继承alpha”解释厂商取色层。新增证据在shell-transition-study、server-transition-study、native-transition-study；静态生命周期基本闭合，未冒称显示帧视觉验收。未连接手机或修改产品。
 
-用户决定通知图标本轮暂缓；导航栏方向改为优先研究ColorOS，社区默认规则拟废弃、HyperOS降为备选参考，目前只确定研究方向，未修改产品规则或运行实现。竖屏掌心误触保留后续复现任务。
+用户最终决定本轮只做导航条，并彻底取消HyperOS备选，采用ColorOS机制依据+本模块应用/页面适配名单。通知图标及竖屏掌心误触暂缓。
+
+## 0.9.24 导航条单一路线实现
+
+- 移除HyperOS/社区派生默认及许可证/页面引用；资产改为来自已核实ColorOS XML的30包57个精确Activity资格例外（55个只限TYPE_BASE_APPLICATION，2个全应用窗口），不把enforce/透明flag偷换成会剥Insets的FLOATING。四参resolve缓存隔离主/非主窗口。保留用户Activity、应用及显式default_mode原值；仅缺键默认改取色，UI/Store一致。
+- 颜色统计替换为逐RGB通道10% trimmed整数mean/population variance门控，不再主色直方图/亮度猜黑白。目标实现仅接受全opaque输入，否则返回无新色；不声称移植厂商分离alpha。首轮阈值25来源构造初值，底3行同25为本模块兼容策略，非厂商默认line=0。
+- 窗口图层捕获导航顶上12..2px条带，不做横向缩放；首轮只统计左右内缩2px后的各10×10块，失败再读底三行按area/500步长。删除延迟view dump和基于控件树改采样位置路径。几何使用min(frame.bottom,bounds.bottom-nav)-frame.top避免非edge-to-edge双扣nav；读回后核验同窗frame/bounds未变，拒绝旧布局颜色。
+- 横屏Launcher回桌面/多任务不再因系统宿主ORIGINAL提前退出透明状态；仍受开关、手势、IME、实际导航区资格限制。Taskbar颜色/补色band保留原生paint alpha，alpha0不画，不再强255破坏原生淡出；不自造第二套266ms动画。
+- 沿用同页面1500ms短失败保色、窗口切换短等待、UID校验宿主传输与用户优先级；未声称具备ColorOS私有SF实时通知/Decor子层全套绘制。compat缩放/surfaceInsets、原生app快照底边、广告首帧时机与黑闪根治仍需真机逐项验收。
+
+已执行导航条50项及全库291项单元测试（0失败），44个API37接口与名单校验、运行时基线检查通过；发布构建通过。不等于手机视觉验证，无自动安装/重启/LSPosed变更。

@@ -4,8 +4,8 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class NavbarStabilityTest {
-    @Test public void matchingEdgesTakePriorityOverMovingCenter() {
-        assertEquals(0xffeeeeee, NavbarColors.background(new int[]{0xffeeeeee, 0xff000000, 0xff000000, 0xffeeeeee}));
+    @Test public void matchingEdgesDoNotHideHighVarianceCenter() {
+        assertEquals(0, NavbarColors.background(new int[]{0xffeeeeee, 0xff000000, 0xff000000, 0xffeeeeee}));
     }
     @Test public void smallColorChangesAreIgnored() {
         NavbarColors.Stability stability = new NavbarColors.Stability();

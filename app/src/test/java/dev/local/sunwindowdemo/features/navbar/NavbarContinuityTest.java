@@ -21,6 +21,23 @@ public class NavbarContinuityTest {
         assertFalse(NavbarSystem.supportsNavigation(portrait, true, true, false, false));
         assertTrue(NavbarSystem.supportsNavigation(portrait, false, true, true, false));
     }
+    @Test public void samplingBoundaryDoesNotSubtractNavigationInsetsTwice() {
+        Rect display = new Rect(0, 0, 1080, 2400);
+        assertEquals(2320, NavbarSystem.navigationTop(new Rect(0, 0, 1080, 2400), display, 80));
+        assertEquals(2320, NavbarSystem.navigationTop(new Rect(0, 0, 1080, 2320), display, 80));
+        assertEquals(2220, NavbarSystem.navigationTop(new Rect(0, 100, 1080, 2320), display, 80));
+    }
+
+    @Test public void landscapeLauncherKeepsClearThroughHomeAndRecentsButNotSystemPanels() {
+        String launcher = "com.google.android.apps.nexuslauncher/.NexusLauncherActivity";
+        assertFalse(NavbarSystem.keepsOriginal(NavbarStore.ORIGINAL, true, "系统宿主", launcher));
+        assertTrue(NavbarSystem.keepsOriginal(NavbarStore.ORIGINAL, false, "系统宿主", launcher));
+        assertTrue(NavbarSystem.keepsOriginal(NavbarStore.ORIGINAL, true, "系统宿主", "com.android.systemui/.Panel"));
+        assertTrue(NavbarSystem.keepsOriginal(NavbarStore.ORIGINAL, true, "系统窗口", null));
+        assertFalse(NavbarSystem.supportsNavigation(new Rect(0, 0, 2400, 1080), false, true, true, false));
+        assertFalse(NavbarSystem.supportsNavigation(new Rect(0, 0, 2400, 1080), true, true, true, true));
+    }
+
     public static final class Window {
         public final WindowManager.LayoutParams mAttrs = new WindowManager.LayoutParams();
         public Object mActivityRecord;

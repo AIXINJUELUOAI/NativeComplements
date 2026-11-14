@@ -1,40 +1,41 @@
 package dev.local.sunwindowdemo.features.navbar;
 
-/** Small quantized histogram avoids treating adjacent gradient colors as unrelated. */
+import java.util.Arrays;
+
+/** ColorOS-style per-channel trimmed integer mean and population variance. */
 public final class NavbarColors {
     private NavbarColors() {}
-    public static int background(int[] pixels) {
-        if (pixels.length == 0) return 0;
-        int left = pixels[0], right = pixels[pixels.length - 1];
-        if ((left >>> 24) == 255 && (right >>> 24) == 255 && similar(left, right, 10)) {
-            int red = (((left >>> 16) & 255) + ((right >>> 16) & 255)) / 2;
-            int green = (((left >>> 8) & 255) + ((right >>> 8) & 255)) / 2;
-            int blue = ((left & 255) + (right & 255)) / 2;
-            return 0xff000000 | (red << 16) | (green << 8) | blue;
+
+    /** 25 is the researched side-limit constructor value, not a verified runtime configuration. */
+    public static int background(int[] pixels) { return background(pixels, 25); }
+
+    /**
+     * Returns 0 for an unavailable/rejected sample; never substitutes a guessed black/white color.
+     * The target capture lacks vendor sample/layer alpha separation: only opaque input is safe.
+     * Threshold units are squared 8-bit channel values, compared with the integer RGB variance mean.
+     * The caller owns ROI selection, fallback capture and any retention of an earlier valid color.
+     */
+    public static int background(int[] pixels, int threshold) {
+        if (pixels == null || pixels.length == 0 || threshold < 0) return 0;
+        for (int color : pixels) if ((color >>> 24) != 255) return 0;
+        int trim = pixels.length / 10, end = pixels.length - trim, count = end - trim;
+        int[] channel = new int[pixels.length];
+        int result = 0xff000000;
+        long variance = 0;
+        for (int shift = 0; shift <= 16; shift += 8) {
+            for (int index = 0; index < pixels.length; index++) channel[index] = (pixels[index] >>> shift) & 255;
+            Arrays.sort(channel);
+            long sum = 0, squared = 0;
+            for (int index = trim; index < end; index++) sum += channel[index];
+            int mean = (int) (sum / count);
+            for (int index = trim; index < end; index++) {
+                int difference = channel[index] - mean;
+                squared += difference * difference;
+            }
+            variance += squared / count;
+            result |= mean << shift;
         }
-        int[] counts = new int[4096];
-        int winner = 0, valid = 0;
-        long red = 0, green = 0, blue = 0;
-        for (int color : pixels) {
-            if ((color >>> 24) != 255) continue;
-            int r = (color >>> 16) & 255, g = (color >>> 8) & 255, b = color & 255;
-            int key = ((r >>> 4) << 8) | ((g >>> 4) << 4) | (b >>> 4);
-            counts[key]++;
-            if (counts[key] > counts[winner]) winner = key;
-            red += r; green += g; blue += b; valid++;
-        }
-        if (valid < pixels.length * 3 / 4 || valid == 0) return 0;
-        if (counts[winner] * 100 < valid * 35) {
-            return (red * 299 + green * 587 + blue * 114) / valid < 128000 ? 0xff000000 : 0xffffffff;
-        }
-        red = 0; green = 0; blue = 0;
-        for (int color : pixels) {
-            int r = (color >>> 16) & 255, g = (color >>> 8) & 255, b = color & 255;
-            int key = ((r >>> 4) << 8) | ((g >>> 4) << 4) | (b >>> 4);
-            if ((color >>> 24) == 255 && key == winner) { red += r; green += g; blue += b; }
-        }
-        return 0xff000000 | ((int) (red / counts[winner]) << 16)
-                | ((int) (green / counts[winner]) << 8) | (int) (blue / counts[winner]);
+        return variance / 3 <= threshold ? result : 0;
     }
 
     private static boolean similar(int first, int second, int tolerance) {

@@ -60,7 +60,7 @@ final class NavbarTaskbarHost {
                     Object result = chain.proceed();
                     if (mode == NavbarStore.COLOR) {
                         band.setColor(color);
-                        drawBand((Canvas) chain.getArg(0), band, navHeight);
+                        drawBand((Canvas) chain.getArg(0), band, navHeight, previousAlpha);
                     }
                     return result;
                 } finally {
@@ -119,7 +119,11 @@ final class NavbarTaskbarHost {
 
     static void tint(Paint paint, int mode, int color) {
         if (mode == NavbarStore.FLOATING) paint.setAlpha(0);
-        else { paint.setColor(color); paint.setAlpha(255); }
+        else {
+            int nativeAlpha = paint.getAlpha();
+            paint.setColor(color);
+            paint.setAlpha(nativeAlpha);
+        }
     }
 
     static void restore(Paint target, Paint snapshot, int color, int alpha) {
@@ -128,8 +132,9 @@ final class NavbarTaskbarHost {
         target.setAlpha(alpha);
     }
 
-    static void drawBand(Canvas canvas, Paint paint, int height) {
-        if (height <= 0) return;
+    static void drawBand(Canvas canvas, Paint paint, int height, int nativeAlpha) {
+        if (height <= 0 || nativeAlpha <= 0) return;
+        paint.setAlpha(nativeAlpha);
         canvas.drawRect(0, Math.max(0, canvas.getHeight() - height), canvas.getWidth(), canvas.getHeight(), paint);
     }
 

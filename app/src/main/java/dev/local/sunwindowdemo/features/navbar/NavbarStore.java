@@ -64,7 +64,7 @@ public final class NavbarStore {
     public static Bundle read(Context context, String packageName) {
         Bundle result = new Bundle();
         result.putBoolean("enabled", preferences(context).getBoolean("enabled", false));
-        result.putInt("*", preferences(context).getInt("default_mode", ORIGINAL));
+        result.putInt("*", preferences(context).getInt("default_mode", COLOR));
         String prefix = packageName + "/";
         preferences(context).getAll().forEach((key, value) -> {
             if (key.startsWith(prefix) && value instanceof Integer) result.putInt(key.substring(prefix.length()), (Integer) value);

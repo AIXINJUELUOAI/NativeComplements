@@ -23,8 +23,26 @@ public class NavbarProviderTest {
         ShadowBinder.setCallingUid(99999);
         provider().call("system", null, null);
     }
+    @Test public void systemSnapshotDoesNotMigrateOrOverwriteSavedSettings() {
+        var context = RuntimeEnvironment.getApplication();
+        var preferences = NavbarStore.preferences(context);
+        preferences.edit().clear().putBoolean("enabled", true).putInt("default_mode", 0)
+                .putInt("com.tencent.mm/*", 2)
+                .putInt("com.tencent.mm/com.tencent.mm.framework.app.UIPageFragmentActivity", 0).commit();
+        var before = new java.util.HashMap<>(preferences.getAll());
+        try {
+            ShadowBinder.setCallingUid(1000);
+            var snapshot = provider().call("system", null, null);
+            assertEquals(0, snapshot.getInt("default_mode"));
+            assertEquals(2, snapshot.getInt("com.tencent.mm/*"));
+            assertEquals(0, snapshot.getInt("com.tencent.mm/com.tencent.mm.framework.app.UIPageFragmentActivity"));
+            assertEquals(before, preferences.getAll());
+        } finally { preferences.edit().clear().commit(); }
+    }
     @Test public void systemUidCanReadTemplateSnapshot() {
         ShadowBinder.setCallingUid(1000);
-        assertTrue(provider().call("system", null, null).getString("templates").contains("HyperNavBar Rules"));
+        var snapshot = provider().call("system", null, null);
+        assertTrue(snapshot.getString("templates").contains("类原生补全计划适配名单"));
+        assertTrue(snapshot.getString("templates").contains("ColorOS"));
     }
 }

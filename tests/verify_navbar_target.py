@@ -61,8 +61,14 @@ for owner, name, descriptor in [
     ("Lcom/android/launcher3/taskbar/TaskbarBackgroundRenderer;", "strokePaint", "Landroid/graphics/Paint;"),
 ]:
     assert any(field["name"] == name and field["type"] == descriptor for field in classes[owner]["fields"]), (owner, name)
-assert len(templates["packages"]) == 399
-assert sum(len(app["rules"]) for app in templates["packages"].values()) == 1352
-assert templates["omitted"] == 22
-assert "Copyright (c) 2025 Ianzb" in (ROOT / "app/src/main/assets/navbar/HyperNavBarRules-LICENSE.txt").read_text(encoding="utf-8")
-print(f"PASS: {count} exact public API37 methods and 399 applications / 1352 converted Activity rules; device behavior awaits verification")
+assert templates["name"] == "类原生补全计划适配名单"
+assert all(source["name"].startswith("ColorOS ") for source in templates["sources"])
+assert len(templates["packages"]) == 30
+rules = [rule for app in templates["packages"].values() for rule in app["rules"].values()]
+assert len(rules) == 57
+assert all(app["enabled"] for app in templates["packages"].values())
+assert all(rule["mode"] == 0 and isinstance(rule["base_only"], bool) and "color" not in rule for rule in rules)
+assert sum(not rule["base_only"] for rule in rules) == 2
+assert all("*" not in activity for app in templates["packages"].values() for activity in app["rules"])
+assert all(word not in json.dumps(templates) for word in ("HyperOS", "HyperNavBar"))
+print(f"PASS: {count} exact public API37 methods and 30 applications / 57 exact eligibility exceptions; device behavior awaits verification")

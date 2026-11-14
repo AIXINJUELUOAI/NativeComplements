@@ -19,12 +19,16 @@ public final class NavbarRules {
     }
 
     public Choice resolve(String packageName, String activity, long version) {
-        if (!settings.getBoolean("enabled", false)) return new Choice(0, null, "已关闭");
-        String key = packageName + "/" + activity + "/" + version;
-        return resolved.computeIfAbsent(key, ignored -> resolveEnabled(packageName, activity, version));
+        return resolve(packageName, activity, version, true);
     }
 
-    private Choice resolveEnabled(String packageName, String activity, long version) {
+    public Choice resolve(String packageName, String activity, long version, boolean isBaseApplication) {
+        if (!settings.getBoolean("enabled", false)) return new Choice(0, null, "已关闭");
+        String key = packageName + "/" + activity + "/" + version + "/" + isBaseApplication;
+        return resolved.computeIfAbsent(key, ignored -> resolveEnabled(packageName, activity, version, isBaseApplication));
+    }
+
+    private Choice resolveEnabled(String packageName, String activity, long version, boolean isBaseApplication) {
         String userKey = packageName + "/" + activity;
         if (settings.containsKey(userKey)) return new Choice(valid(settings.getInt(userKey)), null, "用户规则");
         String packageKey = packageName + "/*";
@@ -38,11 +42,12 @@ public final class NavbarRules {
             if (rules != null) {
                 String match = bestMatch(rules, activity);
                 JSONObject rule = match == null ? null : rules.optJSONObject(match);
-                if (rule != null) return new Choice(valid(rule.optInt("mode", 0)),
+                if (rule != null && (isBaseApplication || !rule.optBoolean("base_only", true)))
+                    return new Choice(valid(rule.optInt("mode", 0)),
                         rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));
             }
         }
-        return new Choice(valid(settings.getInt("default_mode", 0)), null, "通用策略");
+        return new Choice(valid(settings.getInt("default_mode", NavbarStore.COLOR)), null, "通用策略");
     }
 
     private static int valid(int mode) { return mode >= 0 && mode <= 2 ? mode : 0; }

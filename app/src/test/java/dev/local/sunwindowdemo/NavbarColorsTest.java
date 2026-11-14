@@ -13,8 +13,8 @@ public class NavbarColorsTest {
         assertEquals(0, NavbarColors.background(new int[]{}));
         assertEquals(0, NavbarColors.background(new int[]{0, 0, 0, 0xffabcdef}));
     }
-    @Test public void complexRowsUsePageBrightness() {
-        assertEquals(0xff000000, NavbarColors.background(new int[]{0xff100000, 0xff001000, 0xff000010, 0xff202020}));
-        assertEquals(0xffffffff, NavbarColors.background(new int[]{0xffffeeee, 0xffeeffee, 0xffeeeeff, 0xffdddddd}));
+    @Test public void complexRowsFailInsteadOfGuessingBlackOrWhite() {
+        assertEquals(0, NavbarColors.background(new int[]{0xff100000, 0xff001000, 0xff000010, 0xff202020}));
+        assertEquals(0, NavbarColors.background(new int[]{0xffffeeee, 0xffeeffee, 0xffeeeeff, 0xffdddddd}));
     }
 }

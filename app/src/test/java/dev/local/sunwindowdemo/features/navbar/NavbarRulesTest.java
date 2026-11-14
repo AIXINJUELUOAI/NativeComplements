@@ -52,25 +52,41 @@ public class NavbarRulesTest {
         assertFalse(NavbarRules.matches("sample.Page", "sampleXPage"));
         assertTrue(NavbarRules.matches("*", "sample.Other"));
     }
-    @Test public void bundledCommunityRulesCoverKnownPagesAndAllowUserOverride() throws Exception {
+    private Bundle bundledSettings() throws Exception {
         Bundle snapshot = settings();
         try (var input = RuntimeEnvironment.getApplication().getAssets().open("navbar/templates.json")) {
             snapshot.putString("templates", new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
         }
-        NavbarRules rules = new NavbarRules(snapshot);
-        assertEquals(1, rules.resolve("com.taobao.taobao", "com.taobao.tao.welcome.Welcome", Long.MAX_VALUE).mode());
-        assertEquals(2, rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", Long.MAX_VALUE).mode());
-        assertEquals(1, rules.resolve("com.sankuai.meituan", "com.meituan.android.pt.homepage.activity.MainActivity", Long.MAX_VALUE).mode());
-        var jd = new org.json.JSONObject(snapshot.getString("templates")).getJSONObject("packages")
-                .getJSONObject("com.jingdong.app.mall").getJSONObject("rules");
-        for (var keys = jd.keys(); keys.hasNext();) {
-            String activity = keys.next().replace("*", "Other");
-            assertEquals(0, rules.resolve("com.jingdong.app.mall", activity, Long.MAX_VALUE).mode());
-        }
-        assertEquals(0, rules.resolve("com.jingdong.app.mall", "new.UnknownActivity", Long.MAX_VALUE).mode());
-        snapshot.putInt("com.jingdong.app.mall/*", 1);
-        assertEquals(1, new NavbarRules(snapshot).resolve("com.jingdong.app.mall", "new.UnknownActivity", Long.MAX_VALUE).mode());
-        snapshot.putInt("com.taobao.taobao/com.taobao.android.detail2.core.framework.NewDetailActivity", 0);
-        assertEquals(0, new NavbarRules(snapshot).resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", Long.MAX_VALUE).mode());
+        return snapshot;
+    }
+    @Test public void eligibilityIsExactAndBaseWindowSensitiveIncludingCachedResults() throws Exception {
+        NavbarRules rules = new NavbarRules(bundledSettings());
+        String page = "com.tencent.mm.framework.app.UIPageFragmentActivity";
+        assertEquals(0, rules.resolve("com.tencent.mm", page, 1, true).mode());
+        assertEquals(1, rules.resolve("com.tencent.mm", page, 1, false).mode());
+        assertEquals(0, rules.resolve("com.tencent.mm", page, 1).mode());
+        assertEquals(1, rules.resolve("com.tencent.mm", page + "Other", 1, true).mode());
+        assertEquals(1, rules.resolve("another.package", page, 1, true).mode());
+        String music = "com.netease.cloudmusic.activity.PlayerActivity";
+        assertEquals(0, rules.resolve("com.netease.cloudmusic", music, 1, false).mode());
+        assertEquals(0, rules.resolve("com.netease.cloudmusic", music, 1, true).mode());
+    }
+    @Test public void ordinaryPagesHaveNoLegacyOverridesOrInventedFloatingMode() throws Exception {
+        NavbarRules rules = new NavbarRules(bundledSettings());
+        assertEquals(1, rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", 1).mode());
+        assertEquals(1, rules.resolve("com.jingdong.app.mall", "com.jingdong.app.mall.MainFrameActivity", 1).mode());
+        assertEquals(1, rules.resolve("com.jingdong.app.mall", "new.UnknownActivity", 1).mode());
+    }
+    @Test public void savedUserRulesAndDefaultRemainAuthoritative() throws Exception {
+        Bundle snapshot = bundledSettings();
+        String page = "com.tencent.mm.framework.app.UIPageFragmentActivity";
+        snapshot.putInt("com.tencent.mm/*", 2);
+        assertEquals(2, new NavbarRules(snapshot).resolve("com.tencent.mm", page, 1).mode());
+        snapshot.putInt("com.tencent.mm/" + page, 0);
+        assertEquals(0, new NavbarRules(snapshot).resolve("com.tencent.mm", page, 1).mode());
+        snapshot.putInt("default_mode", 0);
+        assertEquals(0, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
+        snapshot.remove("default_mode");
+        assertEquals(1, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
     }
 }
