@@ -54,12 +54,24 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final BroadcastReceiver queryReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
         try{int uid=getSentFromUid();if(uid==getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid||uid==getApplicationInfo().uid)publish(true);}catch(Exception ignored){}
     }};
+    private int settingsFailures;
     private void loadSettings(){settingsWorker.execute(()->{
         try{android.os.Bundle b=getContentResolver().call(android.net.Uri.parse("content://"+ConfigProvider.AUTHORITY),"read",null,null);
             if(b==null)throw new IllegalStateException("empty settings");
             ConfigProvider.copy(b,config.prefs);
+            if(settingsFailures>0)android.util.Log.i("NativeComplements","SETTINGS_READ_RECOVERED");
+            settingsFailures=0;
             main.post(()->{settingsReady=true;reloadSettings();});
-        }catch(Exception e){android.util.Log.e("NativeComplements","SETTINGS_READ_FAILED",e);main.postDelayed(()->{if(!cleaned)loadSettings();},3000);}
+        }catch(Exception e){
+            // The module process may be stopped (force-stop/stay-stopped, task cleaners). The host keeps the
+            // last complete snapshot already copied into its own preferences, including the enabled switch.
+            boolean cached;
+            try{cached=!config.prefs.getAll().isEmpty();}catch(RuntimeException locked){cached=false;}
+            if(settingsFailures++==0)android.util.Log.w("NativeComplements","SETTINGS_READ_FAILED cached="+cached,e);
+            boolean usable=cached;long delay=Math.min(60_000L,3000L<<Math.min(settingsFailures-1,5));
+            main.post(()->{if(!cleaned&&!settingsReady&&usable){settingsReady=true;reloadSettings();}});
+            main.postDelayed(()->{if(!cleaned)loadSettings();},delay);
+        }
     });}
     /* STATUS carries foreground/IME/overlay state used by corner rules, barrage and suggestions,
      * so it keeps 750ms while interactive. Screen off has nothing to show: stop until SCREEN_ON/USER_PRESENT. */

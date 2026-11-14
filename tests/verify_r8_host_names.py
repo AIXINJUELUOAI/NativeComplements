@@ -17,13 +17,14 @@ REQUIRED = {
     (PREFIX + "features/shade/SignalDisplay;", "installStacked"): {
         "kotlin.Pair", "androidx.compose.runtime.ParcelableSnapshotMutableIntState",
         "androidx.compose.runtime.Composer", "androidx.compose.ui.Modifier"},
+    (PREFIX + "features/shade/StackedSignalDisplay;", "<init>"): {"sun.misc.Unsafe"},
 }
 
 # Verify the delivered APK includes the restored runtime and the integrated navigation host.
 RUNTIME_METHODS = {
     "WindowEngine": {"blockBackgroundTouch", "trackTouchGuard", "clientOwner", "ownerInsets", "idle", "mayAllowResize", "visibleFullscreen"},
     "WindowPolicy": {"backgroundTouchGuard", "startsTouchGuard", "coveredFullscreen"},
-    "BackBridge": {"connect"},
+    "BackBridge": {"connect", "cancelNativeUp", "abort"},
     "Config": {"longBackWindow"},
     "TaskCover": {"beforeReveal", "canRetarget", "reusesPresentation"},
     "WindowControls": {"buildControlsRoot", "fillTouchRegion"},
@@ -33,6 +34,10 @@ RUNTIME_METHODS = {
     "features/iconlayers/IconPolicy": {"batch"},
     "features/navbar/NavbarTaskbarHost": {"installTransitions"},
     "features/navbar/NavbarModule": {"onPackageLoaded"},
+    "core/HostSnapshot": {"read", "cached", "store"},
+    "features/iconlayers/IconAssets": {"imageBytes"},
+    "features/iconlayers/IconImages": {"notificationSize"},
+    "features/navbar/NavbarSystem": {"requestTick", "frameOptions", "writeRuntime"},
 }
 
 def check(apk):

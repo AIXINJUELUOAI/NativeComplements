@@ -39,6 +39,7 @@ public class IconAssetsTest {
         provider.config.putStringArrayList("packages",new ArrayList<>(List.of(PKG)));
         provider.background=png(Color.BLUE);provider.foreground=png(Color.TRANSPARENT);
         set("host",context);set("worker",new Handler(Looper.getMainLooper()));set("ready",false);
+        set("settings",null);
         set("snapshot",new IconAssets.Snapshot(Map.of(),"",0,0,Set.of()));
         IconAssets.onReload(()->callbacks++);
     }
@@ -66,7 +67,7 @@ public class IconAssetsTest {
         provider.nullReads=1;provider.emptyReads=1;
         reload();assertFalse(IconAssets.ready());assertEquals(Color.TRANSPARENT,menuPixel());
         idle(250);assertFalse(IconAssets.ready());assertEquals(0,callbacks);
-        idle(500);assertTrue(IconAssets.ready());assertEquals(3,provider.reads);assertEquals(1,callbacks);
+        idle(1250);assertTrue(IconAssets.ready());assertEquals(3,provider.reads);assertEquals(1,callbacks);
         assertTrue(IconAssets.colored(context,PKG) instanceof ImportedIcon);
         assertEquals(Color.BLUE,menuPixel());
     }
@@ -78,15 +79,31 @@ public class IconAssetsTest {
         assertTrue(IconAssets.ready());assertEquals(Color.RED,menuPixel());
         idle(20000);assertEquals(reads,provider.reads);assertEquals(Color.RED,menuPixel());
     }
-    @Test public void retriesAreBoundedAndRemovedListenersStayRemoved()throws Exception{
+    @Test public void retriesBackOffAndRemovedListenersStayRemoved()throws Exception{
         provider.nullReads=100;Runnable listener=()->fail("removed listener called");
         IconAssets.onReload(listener);IconAssets.removeOnReload(listener);
         reload();idle(30000);assertEquals(6,provider.reads);assertFalse(IconAssets.ready());assertEquals(0,callbacks);
         provider.nullReads=0;provider.config=new Bundle();reload();assertTrue(IconAssets.ready());assertEquals(1,callbacks);
     }
 
+    @Test public void immutableAssetsSurviveProviderStopAndRejectCorruptRefresh()throws Exception{
+        Uri first=IconLayerStore.URI.buildUpon().path("layers/g_one/"+PKG+"/0.png").build();
+        Uri second=IconLayerStore.URI.buildUpon().path("layers/g_two/"+PKG+"/0.png").build();
+        byte[] original=IconAssets.imageBytes(context,first);
+        provider.background=png(Color.RED);
+        byte[] changed=IconAssets.imageBytes(context,second);
+        assertFalse(Arrays.equals(original,changed));
+        provider.unavailable=true;
+        assertArrayEquals(original,IconAssets.imageBytes(context,first));
+        assertArrayEquals(changed,IconAssets.imageBytes(context,second));
+        assertThrows(FileNotFoundException.class,()->IconAssets.imageBytes(context,IconLayerStore.URI.buildUpon().path("custom/missing.png").build()));
+        provider.unavailable=false;
+        try(var output=new FileOutputStream(provider.background)){output.write(new byte[]{1,2,3});}
+        assertArrayEquals(original,IconAssets.imageBytes(context,first));
+    }
+
     public static class TestProvider extends ContentProvider {
-        Bundle config;int reads,nullReads,emptyReads;File background,foreground;
+        Bundle config;int reads,nullReads,emptyReads;File background,foreground;boolean unavailable;
         @Override public boolean onCreate(){return true;}
         @Override public Bundle call(String method,String arg,Bundle extras){
             reads++;if(nullReads-->0)return null;
@@ -95,6 +112,7 @@ public class IconAssetsTest {
             return result;
         }
         @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException{
+            if(unavailable)throw new FileNotFoundException("provider stopped");
             return ParcelFileDescriptor.open("0.png".equals(uri.getLastPathSegment())?background:foreground,ParcelFileDescriptor.MODE_READ_ONLY);
         }
         @Override public Cursor query(Uri uri,String[] projection,String selection,String[] args,String order){throw new UnsupportedOperationException();}

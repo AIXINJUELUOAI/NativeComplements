@@ -88,11 +88,16 @@ class BarrageHost(private val context: Context): AutoCloseable {
     private fun load() {
         if(closed)return
         worker.execute {
-            val next=runCatching {context.contentResolver.call(Uri.parse("content://${BarrageStore.AUTHORITY}"),"read",null,null)}.getOrNull()
+            // A stopped module process keeps the last stored snapshot (including enabled); retries back off to 60s.
+            val snapshot=dev.local.sunwindowdemo.core.HostSnapshot.open(context,"barrage")
+            val read=snapshot.read { context.contentResolver.call(Uri.parse("content://${BarrageStore.AUTHORITY}"),"read",null,null) }
+            if(read.report())android.util.Log.w("NativeComplements","BARRAGE_SETTINGS ${read.summary()}")
+            val next=read.config()
+            val delay=snapshot.retryDelay(3000)
             main.post {
                 if(closed)return@post
                 config=next ?: Bundle();if(!eligible())hide() else drain()
-                if(next==null)main.postDelayed({load()},3000)
+                if(!read.live())main.postDelayed({load()},delay)
             }
         }
     }

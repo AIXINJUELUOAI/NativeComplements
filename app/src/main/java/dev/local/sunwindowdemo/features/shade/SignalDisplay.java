@@ -44,7 +44,7 @@ public final class SignalDisplay {
     }
     private SignalDisplay(){}
     private static Field field(Class<?> owner,String name)throws Exception{
-        Field f=owner.getDeclaredField(name);f.setAccessible(true);return f;
+        return StackedSignalTargets.field(owner,name);
     }
     // Runs only inside the scoped Xposed SystemUI host, never as an ordinary app API.
     // Missing/inaccessible framework members disable this optional adapter before hooks.
@@ -140,7 +140,7 @@ public final class SignalDisplay {
             log.accept("SIGNAL_DISPLAY_READY standard mobile drawable");
         }catch(Throwable failure){
             enabled=false;for(var hook:HOOKS)try{hook.unhook();}catch(Throwable ignored){}HOOKS.clear();
-            log.accept("SIGNAL_DISPLAY_UNAVAILABLE "+failure.getClass().getSimpleName());
+            log.accept("SIGNAL_DISPLAY_UNAVAILABLE "+StackedSignalTargets.describe(failure));
         }
     }
     private static void installStacked(XposedModule module,ClassLoader loader){
@@ -150,17 +150,21 @@ public final class SignalDisplay {
             Class<?> dual=Class.forName(prefix+"mobile.ui.model.DualSim",false,loader);
             Class<?> parser=Class.forName(prefix+"mobile.ui.model.DualSimKt",false,loader);
             Class<?> pair=Class.forName("kotlin.Pair",false,loader);
-            Method parse=parser.getDeclaredMethod("tryParseDualSim",List.class);
-            if(parse.getReturnType()!=dual)throw new NoSuchMethodException("dual SIM parser");
+            // Legacy builds copies with tryParseDualSim; QPR2 removed it and allocates DualSim directly.
+            Method parse=null;
+            for(Method m:parser.getDeclaredMethods())if(m.getName().equals("tryParseDualSim")){parse=StackedSignalTargets.method(parser,"tryParseDualSim",List.class);break;}
+            if(parse!=null&&parse.getReturnType()!=dual)throw new NoSuchMethodException(parser.getName()+"#tryParseDualSim returns "+parse.getReturnType().getName());
             StackedSignalDisplay adapter=new StackedSignalDisplay(dual,cellular,pair,parse);
             Class<?> state=Class.forName("androidx.compose.runtime.ParcelableSnapshotMutableIntState",false,loader);
-            Object revision=state.getDeclaredConstructor(int.class).newInstance(0);
-            Method read=state.getDeclaredMethod("getIntValue"),write=state.getDeclaredMethod("setIntValue",int.class);
+            Object revision=StackedSignalTargets.constructor(state,int.class).newInstance(0);
+            Method read=StackedSignalTargets.method(state,"getIntValue"),write=StackedSignalTargets.method(state,"setIntValue",int.class);
+            if(read.getReturnType()!=int.class)throw new NoSuchMethodException(state.getName()+"#getIntValue returns "+read.getReturnType().getName());
             Class<?> composer=Class.forName("androidx.compose.runtime.Composer",false,loader);
             Class<?> modifier=Class.forName("androidx.compose.ui.Modifier",false,loader);
             Class<?> draw=Class.forName(prefix+"shared.ui.composable.StackedMobileIconKt",false,loader);
-            Method render=draw.getDeclaredMethod("StackedMobileIcon-sW7UJKQ",dual,long.class,String.class,modifier,composer,int.class);
-            if(render.getReturnType()!=void.class||read.getReturnType()!=int.class)throw new NoSuchMethodException("stacked render");
+            // Legacy has an extra String parameter; QPR2 removed it. Chosen by exact parameter types.
+            Method render=StackedSignalTargets.render(draw,dual,modifier,composer);
+            final int changedArg=StackedSignalTargets.changedIndex(render);
             hooks.add(module.hook(render).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object input=chain.getArg(0),nativeModel=adapter.original(input),adjusted=nativeModel;
                 try{
@@ -169,25 +173,26 @@ public final class SignalDisplay {
                     if(!stackedSeen){stackedSeen=true;log.accept("SIGNAL_STACKED_RENDER_SEEN");}
                     if(adjusted!=nativeModel&&!stackedApplied){stackedApplied=true;log.accept("SIGNAL_STACKED_APPLIED");}
                 }catch(Exception failure){
-                    if(!stackedFailure){stackedFailure=true;log.accept("SIGNAL_STACKED_RENDER_FAILED "+failure.getClass().getSimpleName());}
+                    if(!stackedFailure){stackedFailure=true;log.accept("SIGNAL_STACKED_RENDER_FAILED "+StackedSignalTargets.describe(failure));}
                 }
                 Object[] args=chain.getArgs().toArray();args[0]=adjusted;
                 // A radio/config revision can change our copy while the native model is equal.
                 // Mark only DualSim as changed so Compose does not skip this render.
-                args[5]=((Integer)args[5]&~14)|4;
+                args[changedArg]=((Integer)args[changedArg]&~14)|4;
                 return chain.proceed(args);
             }));
             // The restart callback and parent composable may inline the render entry.
-            Class<?> parentVm=Class.forName(prefix+"mobile.ui.viewmodel.StackedMobileIconViewModel",false,loader);
-            Method parent=draw.getDeclaredMethod("StackedMobileIcon",parentVm,modifier,composer,int.class);
+            // Parent view model is StackedMobileIconViewModel (legacy) or StackedMobileIconViewModelImpl (QPR2).
+            Method parent=StackedSignalTargets.parent(draw,modifier,composer);
             Class<?> restart=Class.forName(prefix+"shared.ui.composable.StackedMobileIconKt$$ExternalSyntheticLambda6",false,loader);
-            if(!module.deoptimize(parent)||!module.deoptimize(restart.getDeclaredMethod("invoke",Object.class,Object.class)))
-                throw new IllegalStateException("stacked caller deoptimize");
+            Method restartInvoke=StackedSignalTargets.restart(restart,dual);
+            if(!module.deoptimize(parent))throw new IllegalStateException("deoptimize "+parent);
+            if(!module.deoptimize(restartInvoke))throw new IllegalStateException("deoptimize "+restartInvoke);
             stackedRevision=revision;stackedRevisionRead=read;stackedRevisionWrite=write;
-            HOOKS.addAll(hooks);log.accept("SIGNAL_STACKED_READY explicit subscription presentation copies");
+            HOOKS.addAll(hooks);log.accept("SIGNAL_STACKED_READY explicit subscription presentation copies "+render.getName());
         }catch(Throwable failure){
             for(var hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
-            log.accept("SIGNAL_STACKED_UNAVAILABLE "+failure.getClass().getSimpleName());
+            log.accept("SIGNAL_STACKED_UNAVAILABLE "+StackedSignalTargets.describe(failure));
         }
     }
     private record Callback(Field repo,Field sub,Method strength,Method service,Method ntn){}
@@ -233,7 +238,7 @@ public final class SignalDisplay {
             if(stackedRevision!=null)try{
                 int revision=(Integer)stackedRevisionRead.invoke(stackedRevision);
                 stackedRevisionWrite.invoke(stackedRevision,revision+1);
-            }catch(Exception failure){log.accept("SIGNAL_STACKED_REFRESH_FAILED "+failure.getClass().getSimpleName());}
+            }catch(Exception failure){log.accept("SIGNAL_STACKED_REFRESH_FAILED "+StackedSignalTargets.describe(failure));}
             List<Paint> snapshot;
             synchronized(PAINTS){PAINTS.removeIf(p->p.drawable.get()==null);snapshot=new ArrayList<>(PAINTS);}
             for(Paint p:snapshot){
@@ -251,14 +256,22 @@ public final class SignalDisplay {
         if(connected||HOOKS.isEmpty()||!ShadeStore.SYSTEM_UI.equals(app.getPackageName()))return;
         connected=true;
         var worker=Executors.newSingleThreadExecutor();
-        Runnable load=()->worker.execute(()->{
-            boolean value=false;
-            try{
-                Bundle config=app.getContentResolver().call(android.net.Uri.parse("content://"+ShadeStore.AUTHORITY),"read",null,null);
-                value=config!=null&&config.getBoolean("signalDisplay",false);
-            }catch(RuntimeException failure){log.accept("SIGNAL_SETTINGS_UNAVAILABLE");}
-            enabled=value;requestRedraw();
-        });
+        Runnable load=new Runnable(){
+            @Override public void run(){
+                worker.execute(()->{
+                    // Shares the shade snapshot; a stopped manager retains the stored choice.
+                    var snapshot=dev.local.sunwindowdemo.core.HostSnapshot.open(app,"shade");
+                    var read=snapshot.read(()->app.getContentResolver().call(
+                        android.net.Uri.parse("content://"+ShadeStore.AUTHORITY),"read",null,null));
+                    if(read.report())log.accept("SIGNAL_SETTINGS "+read.summary());
+                    Bundle config=read.config();
+                    enabled=config!=null&&config.getBoolean("signalDisplay",false);
+                    requestRedraw();
+                    MAIN.removeCallbacks(this);
+                    if(!read.live())MAIN.postDelayed(this,snapshot.retryDelay(3000));
+                });
+            }
+        };
         try{
             app.registerReceiver(new BroadcastReceiver(){
                 @Override public void onReceive(Context context,Intent intent){

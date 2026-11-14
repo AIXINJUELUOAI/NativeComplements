@@ -4,7 +4,6 @@ import android.app.Application;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.Icon;
 import android.os.*;
 import android.service.notification.StatusBarNotification;
 import android.view.View;
@@ -43,22 +42,20 @@ public final class SystemIconModule extends XposedModule {
     private void notifications()throws Exception{
         Class<?> view=Class.forName("com.android.systemui.statusbar.StatusBarIconView",false,loader);
         Class<?> descriptor=Class.forName("com.android.internal.statusbar.StatusBarIcon",false,loader);
-        Field notification=field(view,"mNotification"),conversation=field(view,"mShowsConversation"),sourceIcon=field(descriptor,"icon");
+        Field notification=field(view,"mNotification"),conversation=field(view,"mShowsConversation");
+        Field referenceSize=field(view,"mOriginalStatusBarIconSize");
         Method get=view.getDeclaredMethod("getIcon",descriptor);
         updateNotificationDrawable=view.getDeclaredMethod("updateDrawable",boolean.class);updateNotificationDrawable.setAccessible(true);
         hook(get).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
             Object object=chain.getThisObject();
             StatusBarNotification notice=(StatusBarNotification)notification.get(object);
             if(notice==null||conversation.getBoolean(object)||!notice.getUser().equals(android.os.Process.myUserHandle()))return chain.proceed();
-            Icon small=notice.getNotification().getSmallIcon(),incoming=(Icon)sourceIcon.get(chain.getArg(0));
-            // A conversation avatar or another semantic icon is not the application's identity glyph.
-            if(!sameSource(small,incoming))return chain.proceed();
             Context c=((View)object).getContext();Drawable replacement=IconAssets.notification(c,notice.getPackageName());
             track(object);
             if(replacement==null)return chain.proceed();
-            // Use the native drawable after its ROM-specific downscale and density adjustment.
-            Drawable original=(Drawable)chain.proceed();
-            return IconImages.notificationSize(c,replacement,original);
+            // Native notification scaling expects this reference canvas, irrespective of the
+            // resource/bitmap/URI variant delivered by the application for this notification.
+            return IconImages.notificationSize(c,replacement,referenceSize.getInt(object));
         });
         note("NOTIFICATION_READY");
     }
@@ -96,10 +93,5 @@ public final class SystemIconModule extends XposedModule {
         note("SPLASH_READY");
     }
     private static Field field(Class<?> cls,String name)throws Exception{Field field=cls.getDeclaredField(name);field.setAccessible(true);return field;}
-    private static boolean sameSource(Icon a,Icon b){
-        if(a==null||b==null)return false;if(a==b)return true;
-        return a.getType()==Icon.TYPE_RESOURCE&&b.getType()==Icon.TYPE_RESOURCE
-            &&a.getResId()==b.getResId()&&Objects.equals(a.getResPackage(),b.getResPackage());
-    }
     private void note(String s){try{log(4,"NcSystemIcons",s);}catch(Throwable ignored){}}
 }

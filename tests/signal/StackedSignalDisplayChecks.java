@@ -17,6 +17,13 @@ public final class StackedSignalDisplayChecks {
         public int primarySubId,secondarySubId;
         public Cell primary,secondary;
     }
+    /** Mirrors QPR2 DualSim after R8: final fields, constructor not callable by the adapter. */
+    public static final class Qpr2Dual {
+        public final int primarySubId,secondarySubId;
+        public final Object primary,secondary;
+        private Qpr2Dual(int a,Object p,int b,Object s){primarySubId=a;primary=p;secondarySubId=b;secondary=s;}
+        static Qpr2Dual of(int a,Object p,int b,Object s){return new Qpr2Dual(a,p,b,s);}
+    }
     public static Dual parse(List<Pair> pairs) {
         Dual dual=new Dual();dual.primarySubId=(Integer)pairs.get(0).first();dual.secondarySubId=(Integer)pairs.get(1).first();
         dual.primary=(Cell)pairs.get(0).second();dual.secondary=(Cell)pairs.get(1).second();return dual;
@@ -48,6 +55,17 @@ public final class StackedSignalDisplayChecks {
         original.primarySubId=original.secondarySubId;
         check(adapter.adjust(original,adjust)==original,"ambiguous identities stay native");
         check(adapter.adjust(null,adjust)==null,"null preserved");
+        // QPR2 shape: no parser, no usable constructor, slots typed as the CellularTypeIconModel supertype.
+        StackedSignalDisplay direct=new StackedSignalDisplay(Qpr2Dual.class,Cell.class,Pair.class,null);
+        Qpr2Dual native2=Qpr2Dual.of(2,new Cell(1,5,true,false),1,new Cell(2,6,false,false));
+        Qpr2Dual copy2=(Qpr2Dual)direct.adjust(native2,adjust);
+        check(copy2!=native2&&((Cell)copy2.primary).level==4&&((Cell)copy2.secondary).level==4,"qpr2 allocation copy");
+        check(copy2.primarySubId==2&&copy2.secondarySubId==1&&((Cell)copy2.primary).showExclamationMark,"qpr2 identity and flags");
+        check(((Cell)native2.primary).level==1,"qpr2 native unchanged");
+        check(direct.adjust(copy2,(state,sub)->state)==native2,"qpr2 disable restores original");
+        Qpr2Dual satellite=Qpr2Dual.of(2,"satellite",1,new Cell(2,5,false,false));
+        Qpr2Dual mixed=(Qpr2Dual)direct.adjust(satellite,adjust);
+        check(mixed.primary=="satellite"&&((Cell)mixed.secondary).level==3,"non-cellular slot stays native");
         System.out.println("PASS: stacked subscription mapping, inflation, flags, native immutability and restart/disable restoration");
     }
 }

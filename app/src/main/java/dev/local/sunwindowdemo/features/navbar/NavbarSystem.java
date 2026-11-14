@@ -8,6 +8,7 @@ import android.hardware.HardwareBuffer;
 import android.net.Uri;
 import android.os.*;
 import android.view.*;
+import dev.local.sunwindowdemo.core.HostSnapshot;
 import io.github.libxposed.api.*;
 import java.lang.reflect.*;
 import java.util.Map;
@@ -16,7 +17,20 @@ import java.util.Map;
 final class NavbarSystem {
     static final String FRAME = "dev.nativecomplements.module.NAVBAR_FRAME";
     static final long FRAME_TIMEOUT_MS = 3000;
+    /** Coalescing window for layout/draw bursts. */
+    static final long COALESCE_MS = 64;
+    /** One frame for the finishDrawing transaction to reach SurfaceFlinger before reading it back. */
+    static final long FIRST_DRAW_MS = 16;
+    /** A new page that has not drawn yet keeps the previous frame this long instead of restoring native. */
+    static final long SWITCH_HOLD_MS = 400;
     private final Handler worker;
+    private final NavbarColorCache cache = new NavbarColorCache();
+    private long switchedAt;
+    private boolean sampledSinceSwitch, cacheTried, waitingFirstFrame;
+    private int stableColor, stableSamples;
+    private Object pendingWindow;
+    private long pendingSince;
+    private final java.util.concurrent.atomic.AtomicBoolean urgentPending = new java.util.concurrent.atomic.AtomicBoolean();
     private final Map<String, Long> versions = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile NavbarRules rules = new NavbarRules(Bundle.EMPTY);
     private volatile boolean enabled;
@@ -31,8 +45,15 @@ final class NavbarSystem {
     private long treeGeneration;
     private boolean treePending;
     private final java.util.concurrent.ExecutorService viewReader = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ExecutorService statusWriter = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long lastFailure;
-    private String lastRuntime = "";
+    private volatile String lastRuntime = "";
+    private volatile long statusPausedUntil;
+    private volatile String pendingRuntime = "";
+    private final java.util.concurrent.atomic.AtomicBoolean statusPending = new java.util.concurrent.atomic.AtomicBoolean();
+    private HostSnapshot settings;
+    private boolean settingsApplied;
+    private final Runnable retryReload = this::reload;
     private int frameNavHeight;
     private Frame lastGood;
     private long lastPublished;
@@ -41,6 +62,12 @@ final class NavbarSystem {
     private final java.util.concurrent.atomic.AtomicBoolean refreshPending = new java.util.concurrent.atomic.AtomicBoolean();
     private final NavbarColors.Stability stability = new NavbarColors.Stability();
     private final Runnable tick = this::tick;
+    private final Runnable urgentTick = this::runUrgentTick;
+    private void runUrgentTick() {
+        urgentPending.set(false);
+        worker.removeCallbacks(tick);
+        tick();
+    }
     private final Class<?> insetsClass;
     private final NavbarInsets stateTools;
     private final Method sourceSize, sourceAt, sourceType, sourceVisible;
@@ -65,7 +92,9 @@ final class NavbarSystem {
         build = builder.getMethod("build");
         capture = captureClass.getMethod("captureLayers", args);
         broadcast = Context.class.getMethod("sendBroadcastAsUser", Intent.class, UserHandle.class, String.class, Bundle.class);
-        HandlerThread thread = new HandlerThread("NativeNavbar", android.os.Process.THREAD_PRIORITY_BACKGROUND);
+        // BACKGROUND moves the thread into the background cpuset, which is what delays ticks during
+        // the CPU-heavy app transition. The worker mostly sleeps; view dumps stay on viewReader.
+        HandlerThread thread = new HandlerThread("NativeNavbar", android.os.Process.THREAD_PRIORITY_DEFAULT);
         thread.start();
         worker = new Handler(thread.getLooper());
     }
@@ -97,7 +126,11 @@ final class NavbarSystem {
             for (Method event : new Method[]{focus, draw, layout}) {
                 module.hook(event).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                     Object result = chain.proceed();
-                    if (event != draw || chain.getThisObject() == backend.previousWindow) backend.requestTick();
+                    long delay;
+                    if (event == focus) delay = Boolean.TRUE.equals(result) ? 0 : COALESCE_MS;
+                    else if (event == draw) delay = backend.isTarget(chain.getThisObject()) ? FIRST_DRAW_MS : -1;
+                    else delay = COALESCE_MS;
+                    if (delay >= 0) backend.requestTick(delay);
                     return result;
                 });
             }
@@ -138,10 +171,18 @@ final class NavbarSystem {
     }
 
     private void reload() {
+        worker.removeCallbacks(retryReload);
         long identity = Binder.clearCallingIdentity();
         try {
-            Bundle config = context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "system", null, null);
-            if (config == null) throw new IllegalStateException("Missing navbar snapshot");
+            // A stopped module process keeps the last complete settings (including enabled) instead of restoring native handling.
+            if (settings == null) settings = HostSnapshot.open(context, "navbar");
+            HostSnapshot.Result read = settings.read(() ->
+                    context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "system", null, null));
+            if (read.report()) android.util.Log.i("NativeNavbar", read.summary());
+            Bundle config = read.config();
+            if (config == null) throw new IllegalStateException("Missing navbar settings");
+            if (!read.live()) worker.postDelayed(retryReload, settings.retryDelay(5000));
+            if (!read.live() && settingsApplied) return;
             rules = new NavbarRules(config);
             enabled = config.getBoolean("enabled", false);
             landscapeClear = config.getBoolean("landscape_clear", true);
@@ -152,13 +193,21 @@ final class NavbarSystem {
                 if (focused != null) NavbarReflect.call(focused, "notifyInsetsChanged");
                 NavbarReflect.call(wm, "requestTraversal");
             }
-            Bundle status = new Bundle();
-            status.putString("host", "系统框架已连接 · " + dev.local.sunwindowdemo.BuildConfig.VERSION_NAME);
-            context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "status", null, status);
+            if (read.live()) {
+                lastRuntime = "";
+                Bundle status = new Bundle();
+                status.putString("host", "系统框架已连接 · " + dev.local.sunwindowdemo.BuildConfig.VERSION_NAME);
+                try { context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "status", null, status); }
+                catch (RuntimeException ignored) { statusPausedUntil = SystemClock.uptimeMillis() + 60_000; }
+            }
+            settingsApplied = true;
         } catch (ReflectiveOperationException | RuntimeException failure) {
+            settingsApplied = false;
             enabled = false;
-            android.util.Log.w("NativeNavbar", "Settings unavailable; restoring native handling", failure);
-            worker.postDelayed(this::reload, 5000);
+            // Provider failures are already reported once per state change by HostSnapshot.
+            if (settings == null || settings.reachable())
+                android.util.Log.w("NativeNavbar", "Settings unavailable; restoring native handling", failure);
+            worker.postDelayed(retryReload, settings == null ? 5000 : settings.retryDelay(5000));
         } finally { Binder.restoreCallingIdentity(identity); }
         if (previousWindow != null) {
             try { synchronized (lock) { NavbarReflect.call(previousWindow, "notifyInsetsChanged"); } }
@@ -166,6 +215,7 @@ final class NavbarSystem {
         }
         previousWindow = null;
         lastGood = null;
+        cache.clear();
         treeGeneration++;
         worker.removeCallbacks(tick);
         worker.post(tick);
@@ -227,13 +277,36 @@ final class NavbarSystem {
         return (Boolean) NavbarReflect.call(previous, "isVisible") ? previous : null;
     }
 
-    private void requestTick() {
-        if (!enabled || context == null || !refreshPending.compareAndSet(false, true)) return;
+    /** Called from finishDrawing under the WM lock: the tracked window or the newly focused one. */
+    private boolean isTarget(Object window) {
+        if (window == previousWindow) return true;
+        if (!enabled) return false;
+        try {
+            Object display = NavbarReflect.call(window, "getDisplayContent");
+            return display != null && NavbarReflect.field(display, "mCurrentFocus") == window;
+        } catch (ReflectiveOperationException | RuntimeException failure) { return false; }
+    }
+
+    /**
+     * A focus change runs the next tick immediately, and the first draw of the target one frame later.
+     * Further events in the same burst fold into the pending tick; layout events keep the 64ms window.
+     */
+    private void requestTick(long delay) {
+        if (!enabled || context == null) return;
+        if (delay < COALESCE_MS) {
+            if (delay <= 0) {
+                worker.removeCallbacks(urgentTick);
+                urgentPending.set(true);
+                worker.post(urgentTick);
+            } else if (urgentPending.compareAndSet(false, true)) worker.postDelayed(urgentTick, delay);
+            return;
+        }
+        if (!refreshPending.compareAndSet(false, true)) return;
         worker.postDelayed(() -> {
             refreshPending.set(false);
             worker.removeCallbacks(tick);
             tick();
-        }, 64);
+        }, COALESCE_MS);
     }
 
     record Frame(Object window, int color, int mode, int height, long sampledAt) {
@@ -256,8 +329,14 @@ final class NavbarSystem {
         return stateTools.strip(original);
     }
 
+    /** A switch with no sample yet keeps an active host frame briefly while the new page draws. */
+    static boolean holdsSwitch(boolean sampled, boolean active, long switchedAt, long now) {
+        return !sampled && active && now >= switchedAt && now - switchedAt <= SWITCH_HOLD_MS;
+    }
+
     private void tick() {
         boolean adapting = false;
+        waitingFirstFrame = false;
         try {
             int navigationMode = navigationMode(context);
             gestures = navigationMode == 2;
@@ -275,7 +354,18 @@ final class NavbarSystem {
                 return;
             }
             Snapshot snapshot = snapshot();
-            if (snapshot == null) { runtime("当前窗口暂不适配"); publish(false, 0, 0); return; }
+            if (snapshot == null) {
+                // The focused page was added but has no frame yet: hold briefly instead of restoring native.
+                if (pendingWindow != null && holdsSwitch(false, publishedActive, pendingSince, SystemClock.uptimeMillis())) {
+                    adapting = true;
+                    waitingFirstFrame = true;
+                    runtime("等待页面布局");
+                    return;
+                }
+                runtime("当前窗口暂不适配");
+                publish(false, 0, 0);
+                return;
+            }
             Object window = snapshot.window();
             Object raw = snapshot.raw();
             Rect frame = snapshot.frame(), bounds = snapshot.bounds();
@@ -288,6 +378,11 @@ final class NavbarSystem {
                 treeTime = 0;
                 treeGeneration++;
                 stability.reset();
+                switchedAt = SystemClock.uptimeMillis();
+                sampledSinceSwitch = false;
+                cacheTried = false;
+                stableColor = 0;
+                stableSamples = 0;
                 synchronized (lock) { NavbarReflect.call(window, "notifyInsetsChanged"); }
             }
             if (selected.mode() == NavbarStore.ORIGINAL && (!landscape || "系统宿主".equals(selected.source()) || "系统窗口".equals(selected.source()))) {
@@ -313,6 +408,17 @@ final class NavbarSystem {
                 publish(true, lastGood.color(), lastGood.mode());
                 return;
             }
+            String key = selected.color() == null
+                    ? NavbarColorCache.key(snapshot.component(), selected.mode(), nav.bottom, snapshot.night(), landscape) : null;
+            // Offered once per page switch, so an unsamplable page cannot alternate cached and native frames.
+            Integer cached = cacheTried ? null : cache.get(key);
+            cacheTried = true;
+            if (cached != null) {
+                // Shown before the synchronous readback; a different sample must then be confirmed.
+                stability.seed(cached);
+                runtime("沿用页面最近颜色 · " + selected.source());
+                publish(true, cached, NavbarStore.COLOR);
+            }
             if (selected.color() == null && !treePending && SystemClock.uptimeMillis() - treeTime > 10_000)
                 readControl(window, frame.width(), frame.height(), nav.bottom);
             int y = control == null ? frame.height() - nav.bottom - 2 : control.bottom - 3;
@@ -325,18 +431,31 @@ final class NavbarSystem {
                 Object currentRaw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
                 current = enabled && eligible(window, display, currentRaw);
             }
-            if (!current) { requestTick(); return; }
+            if (!current) { requestTick(COALESCE_MS); return; }
             if (color == 0) {
-                if (lastGood != null && lastGood.canRetain(window, selected.mode(), nav.bottom, SystemClock.uptimeMillis())) {
+                long now = SystemClock.uptimeMillis();
+                if (lastGood != null && lastGood.canRetain(window, selected.mode(), nav.bottom, now)) {
                     runtime("暂用最近颜色 · " + selected.source());
                     publish(true, lastGood.color(), lastGood.mode());
+                } else if (holdsSwitch(sampledSinceSwitch, publishedActive, switchedAt, now)) {
+                    // The new page has no buffer yet: keep the current host frame (or the cached color
+                    // just sent) instead of flashing the native background, and retry on its first draw.
+                    waitingFirstFrame = true;
+                    runtime("等待页面首帧 · " + selected.source());
                 } else {
                     runtime("颜色采样暂不可用");
                     publish(false, 0, 0);
                 }
                 return;
             }
+            sampledSinceSwitch = true;
             color = stability.choose(color);
+            if (stability.needsConfirmation() || color != stableColor) {
+                stableColor = color;
+                stableSamples = stability.needsConfirmation() ? 0 : 1;
+            } else stableSamples++;
+            // Only a value seen on two consecutive samples is remembered for the next visit.
+            if (stableSamples >= 2) cache.put(key, color);
             lastGood = new Frame(window, color, NavbarStore.COLOR, nav.bottom, SystemClock.uptimeMillis());
             runtime("取色中 · " + selected.source());
             publish(true, color, NavbarStore.COLOR);
@@ -348,8 +467,10 @@ final class NavbarSystem {
             runtime("系统接口异常 · " + failure.getClass().getSimpleName());
             publish(false, 0, 0);
         } finally {
-            if (enabled && context.getSystemService(PowerManager.class).isInteractive())
-                worker.postDelayed(tick, adapting ? (stability.needsConfirmation() ? 64 : 160) : 1000);
+            if (enabled && context.getSystemService(PowerManager.class).isInteractive()) {
+                worker.removeCallbacks(tick);
+                worker.postDelayed(tick, adapting ? (stability.needsConfirmation() || waitingFirstFrame ? COALESCE_MS : 160) : 1000);
+            }
         }
     }
 
@@ -362,27 +483,62 @@ final class NavbarSystem {
         return id == 0 ? -1 : context.getResources().getInteger(id);
     }
 
+    /**
+     * Diagnostic status only, sent from the worker outside the WM lock and only when the text changes.
+     * A failed delivery (module process stopped) pauses reporting for 60s and never affects adaptation;
+     * the latest text is sent after the pause or the next successful settings read.
+     */
     private void runtime(String message) {
         if (message.equals(lastRuntime)) return;
-        lastRuntime = message;
-        Bundle status = new Bundle();
-        status.putString("runtime", message);
-        try { context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "status", null, status); }
-        catch (RuntimeException ignored) {}
+        if (SystemClock.uptimeMillis() < statusPausedUntil || settings != null && !settings.reachable()) return;
+        pendingRuntime = message;
+        if (statusPending.compareAndSet(false, true)) statusWriter.execute(this::writeRuntime);
     }
 
-    private record Snapshot(Object window, Object raw, Rect frame, Rect bounds, SurfaceControl surface, boolean screenshot) {}
+    private void writeRuntime() {
+        String message = pendingRuntime;
+        try {
+            Bundle status = new Bundle();
+            status.putString("runtime", message);
+            context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "status", null, status);
+            lastRuntime = message;
+        } catch (RuntimeException unavailable) { statusPausedUntil = SystemClock.uptimeMillis() + 60_000; }
+        finally {
+            statusPending.set(false);
+            if (!message.equals(pendingRuntime) && SystemClock.uptimeMillis() >= statusPausedUntil
+                    && statusPending.compareAndSet(false, true)) statusWriter.execute(this::writeRuntime);
+        }
+    }
+
+    private record Snapshot(Object window, Object raw, Rect frame, Rect bounds, SurfaceControl surface, boolean screenshot,
+                            String component, boolean night) {}
     private Snapshot snapshot() throws ReflectiveOperationException {
         synchronized (lock) {
             Object display = NavbarReflect.call(NavbarReflect.field(wm, "mRoot"), "getDefaultDisplay");
             Object window = targetWindow(display, previousWindow);
             Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
-            if (window == null || !eligible(window, display, raw)) return null;
+            if (window == null || !eligible(window, display, raw)) {
+                boolean laidOut = window == null || window == previousWindow || NavbarReflect.field(window, "mActivityRecord") == null
+                        || !((Rect) NavbarReflect.call(window, "getFrame")).isEmpty();
+                if (laidOut) pendingWindow = null;
+                else if (window != pendingWindow) {
+                    pendingWindow = window;
+                    pendingSince = SystemClock.uptimeMillis();
+                }
+                return null;
+            }
+            pendingWindow = null;
+            Object activity = NavbarReflect.field(window, "mActivityRecord");
+            ComponentName component = activity == null ? null : (ComponentName) NavbarReflect.field(activity, "mActivityComponent");
+            android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
             return new Snapshot(window, stateTools.copy(raw),
                     new Rect((Rect) NavbarReflect.call(window, "getFrame")),
                     new Rect((Rect) NavbarReflect.call(display, "getBounds")),
                     (SurfaceControl) NavbarReflect.call(window, "getSurfaceControl"),
-                    NavbarReflect.field(display, "mCurrentFocus") != null && NavbarReflect.field(display, "mCurrentFocus") != window);
+                    NavbarReflect.field(display, "mCurrentFocus") != null && NavbarReflect.field(display, "mCurrentFocus") != window,
+                    component == null ? null : component.flattenToShortString(),
+                    config != null && (config.uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+                            == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         }
     }
 
@@ -449,6 +605,12 @@ final class NavbarSystem {
         }
     }
 
+    /** A newer frame replaces an older one still queued for the same host, so a slow queue never replays stale colors. */
+    static Bundle frameOptions() {
+        return BroadcastOptions.makeBasic().setShareIdentityEnabled(true)
+                .setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT).toBundle();
+    }
+
     private void publish(boolean active, int color, int mode) {
         if (context == null) return;
         if (!active) { stability.reset(); lastGood = null; }
@@ -468,7 +630,7 @@ final class NavbarSystem {
         for (String host : new String[]{"com.android.systemui", "com.google.android.apps.nexuslauncher"}) {
             try {
                 broadcast.invoke(context, new Intent(intent).setPackage(host), android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE",
-                        BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+                        frameOptions());
             } catch (ReflectiveOperationException failure) {
                 android.util.Log.w("NativeNavbar", "Navigation host frame delivery failed", failure);
             }

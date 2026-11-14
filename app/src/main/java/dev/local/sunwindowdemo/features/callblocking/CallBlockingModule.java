@@ -10,6 +10,7 @@ import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import dev.local.sunwindowdemo.BuildConfig;
+import dev.local.sunwindowdemo.core.HostSnapshot;
 import io.github.libxposed.api.*;
 import java.lang.reflect.*;
 import java.util.*;
@@ -29,6 +30,7 @@ public final class CallBlockingModule extends XposedModule {
     private Field nativeAllows;
     private final Set<Object> recorded=Collections.newSetFromMap(new WeakHashMap<>());
     private long lastFailure;
+    private HostSnapshot snapshot;
 
     @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=p.isSystemServer();}
     @Override public void onSystemServerStarting(SystemServerStartingParam p){
@@ -124,11 +126,18 @@ public final class CallBlockingModule extends XposedModule {
     private void reload(){
         long identity=Binder.clearCallingIdentity();
         try{
-            Bundle value=context.getContentResolver().call(CallBlockingProvider.CONFIG,"read",null,null);
-            if(value==null)throw new IllegalStateException("empty config");
+            // A stopped module process must not silently disable blocking: keep the last complete snapshot.
+            if(snapshot==null)snapshot=HostSnapshot.open(context,"callblocking","backend_seen_at","backend_version","backend_error");
+            HostSnapshot.Result read=snapshot.read(()->context.getContentResolver().call(CallBlockingProvider.CONFIG,"read",null,null));
+            if(read.report())note((read.live()?"CALL_BLOCKING_CONFIG_RESTORED ":"CALL_BLOCKING_CONFIG_CACHED ")+"cached="+(read.config()!=null)
+                +" version="+BuildConfig.VERSION_NAME+" elapsed="+SystemClock.elapsedRealtime());
+            Bundle value=read.config();
+            if(value==null){config=Bundle.EMPTY;return;}
             Bundle previous=config;
             config=new Bundle(value);
-            reloadContacts();
+            // Contacts live in the module process; while it is unreachable the cached contact set expires and
+            // the existing stranger rule fails open (allows the call).
+            if(read.live())reloadContacts();
             if(previous==Bundle.EMPTY||previous.getLong("updated_at")!=value.getLong("updated_at")
                 ||previous.getBoolean("enabled")!=value.getBoolean("enabled")){
                 note("CALL_BLOCKING_CONFIG version="+BuildConfig.VERSION_NAME+" enabled="+value.getBoolean("enabled")
@@ -136,11 +145,12 @@ public final class CallBlockingModule extends XposedModule {
                     +" sim2RejectAll="+value.getBoolean("sim2_reject_all")+" sim2Follow="+value.getBoolean("sim2_follow_sim1")
                     +" sim1Rules="+ruleCount(value,"sim1_patterns")+" sim2Rules="+ruleCount(value,"sim2_patterns")
                     +" wall="+System.currentTimeMillis()+" elapsed="+SystemClock.elapsedRealtime()
-                    +" thread="+Thread.currentThread().getName());
+                    +" thread="+Thread.currentThread().getName()+" live="+read.live());
             }
+            if(!read.live())return;
             Bundle status=new Bundle();status.putString("error","");
             context.getContentResolver().call(CallBlockingProvider.CONFIG,"backend",BuildConfig.VERSION_NAME,status);
-        }catch(Throwable e){config=Bundle.EMPTY;failure(e);}
+        }catch(Throwable e){failure(e);}
         finally{Binder.restoreCallingIdentity(identity);}
     }
 

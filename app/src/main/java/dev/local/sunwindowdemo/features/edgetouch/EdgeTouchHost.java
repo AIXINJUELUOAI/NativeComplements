@@ -153,18 +153,15 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
         if (closed) return;
         main.removeCallbacks(retrySettings);
         worker.execute(() -> {
-            try {
-                Bundle loaded = context.getContentResolver().call(Uri.parse("content://" + EdgeTouchStore.AUTHORITY), "read", null, null);
-                if (loaded == null) throw new IllegalStateException("empty edge touch settings");
-                main.post(() -> { if (!closed) { settings = loaded; rebuild();main.removeCallbacks(heartbeat);heartbeat.run(); } });
-            } catch (Exception failure) {
-                main.post(() -> {
-                    if (closed) return;
-                    settings = null; removeWindows();publishRegions();state = "settings_unavailable";
-                    main.postDelayed(retrySettings, 3000);
-                });
-                android.util.Log.w("NativeComplements", "EDGE_TOUCH_SETTINGS_FAILED", failure);
-            }
+            var snapshot = dev.local.sunwindowdemo.core.HostSnapshot.open(context, "edgetouch");
+            var read = snapshot.read(() -> context.getContentResolver().call(Uri.parse("content://" + EdgeTouchStore.AUTHORITY), "read", null, null));
+            if (read.report()) android.util.Log.w("NativeComplements", "EDGE_TOUCH_SETTINGS " + read.summary());
+            main.post(() -> {
+                if (closed) return;
+                settings = read.config();
+                rebuild();main.removeCallbacks(heartbeat);heartbeat.run();
+                if (!read.live()) main.postDelayed(retrySettings, snapshot.retryDelay(3000));
+            });
         });
     }
 

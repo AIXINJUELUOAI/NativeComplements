@@ -7,6 +7,19 @@
       "verification\\split-shade-device\\SystemUI.apk": "a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972"
     },
     "classes": {
+      "Landroid/app/BroadcastOptions;": {
+        "superclass": "Landroid/app/ComponentOptions;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/app/BroadcastOptions;",
+            "name": "setDeliveryGroupPolicy",
+            "descriptor": "(I)Landroid/app/BroadcastOptions;",
+            "access_flags": 1
+          }
+        ]
+      },
       "Landroid/view/InputEvent;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 1025,
@@ -179,6 +192,32 @@
           }
         ]
       },
+      "Lcom/android/server/wm/ActivityRecord;": {
+        "superclass": "Lcom/android/server/wm/WindowToken;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "mActivityComponent",
+            "type": "Landroid/content/ComponentName;",
+            "access_flags": 17
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "isResizeable",
+            "descriptor": "()Z",
+            "access_flags": 1
+          }
+        ]
+      },
       "Lcom/android/server/wm/ActivityStarter;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 1,
@@ -226,6 +265,25 @@
             "owner": "Lcom/android/server/wm/Task;",
             "name": "isResizeable",
             "descriptor": "(Z)Z",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Lcom/android/server/wm/WindowState;": {
+        "superclass": "Lcom/android/server/wm/WindowContainer;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/WindowState;",
+            "name": "getConfiguration",
+            "descriptor": "()Landroid/content/res/Configuration;",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/WindowState;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
             "access_flags": 1
           }
         ]
@@ -379,6 +437,38 @@
           }
         ]
       },
+      "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "mAllowGesture",
+            "type": "Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "mInRejectedExclusion",
+            "type": "Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "mLogGesture",
+            "type": "Z",
+            "access_flags": 1
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "dispatchToBackAnimation",
+            "descriptor": "(Landroid/view/MotionEvent;)V",
+            "access_flags": 17
+          }
+        ]
+      },
       "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$special$$inlined$map$1$2;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 17,
@@ -401,6 +491,19 @@
             "name": "legacyUseSplitShade",
             "type": "Lkotlinx/coroutines/flow/Flow;",
             "access_flags": 17
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/statusbar/StatusBarIconView;": {
+        "superclass": "Lcom/android/systemui/statusbar/AnimatedImageView;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/StatusBarIconView;",
+            "name": "mOriginalStatusBarIconSize",
+            "type": "I",
+            "access_flags": 0
           }
         ],
         "methods": []
@@ -528,6 +631,19 @@
       "verification\\pixel-qpr2-20261113\\apk\\SystemUIGoogle.apk": "458b481b241552d67d33963f3cb449a9e5e53d4cfcd28e8bb1d919b814fd982f"
     },
     "classes": {
+      "Landroid/app/BroadcastOptions;": {
+        "superclass": "Landroid/app/ComponentOptions;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Landroid/app/BroadcastOptions;",
+            "name": "setDeliveryGroupPolicy",
+            "descriptor": "(I)Landroid/app/BroadcastOptions;",
+            "access_flags": 1
+          }
+        ]
+      },
       "Landroid/view/ViewTreeObserver$OnComputeInternalInsetsListener;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 1537,
@@ -700,6 +816,32 @@
           }
         ]
       },
+      "Lcom/android/server/wm/ActivityRecord;": {
+        "superclass": "Lcom/android/server/wm/WindowToken;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "mActivityComponent",
+            "type": "Landroid/content/ComponentName;",
+            "access_flags": 17
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/ActivityRecord;",
+            "name": "isResizeable",
+            "descriptor": "()Z",
+            "access_flags": 1
+          }
+        ]
+      },
       "Lcom/android/server/wm/ActivityStarter;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 1,
@@ -741,6 +883,25 @@
             "owner": "Lcom/android/server/wm/Task;",
             "name": "isResizeable",
             "descriptor": "()Z",
+            "access_flags": 1
+          }
+        ]
+      },
+      "Lcom/android/server/wm/WindowState;": {
+        "superclass": "Lcom/android/server/wm/WindowContainer;",
+        "access_flags": 1,
+        "fields": [],
+        "methods": [
+          {
+            "owner": "Lcom/android/server/wm/WindowState;",
+            "name": "getConfiguration",
+            "descriptor": "()Landroid/content/res/Configuration;",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/server/wm/WindowState;",
+            "name": "getDisplayId",
+            "descriptor": "()I",
             "access_flags": 1
           }
         ]
@@ -856,6 +1017,38 @@
           }
         ]
       },
+      "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;": {
+        "superclass": "Ljava/lang/Object;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "mAllowGesture",
+            "type": "Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "mInRejectedExclusion",
+            "type": "Z",
+            "access_flags": 1
+          },
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "mLogGesture",
+            "type": "Z",
+            "access_flags": 1
+          }
+        ],
+        "methods": [
+          {
+            "owner": "Lcom/android/systemui/navigationbar/gestural/EdgeBackGestureHandler;",
+            "name": "dispatchToBackAnimation",
+            "descriptor": "(Landroid/view/MotionEvent;)V",
+            "access_flags": 17
+          }
+        ]
+      },
       "Lcom/android/systemui/shade/data/repository/ShadeConfigRepository$onActivated$2$1$1;": {
         "superclass": "Ljava/lang/Object;",
         "access_flags": 17,
@@ -878,6 +1071,19 @@
             "name": "legacyUseSplitShade$delegate",
             "type": "Landroidx/compose/runtime/MutableState;",
             "access_flags": 17
+          }
+        ],
+        "methods": []
+      },
+      "Lcom/android/systemui/statusbar/StatusBarIconView;": {
+        "superclass": "Lcom/android/systemui/statusbar/AnimatedImageView;",
+        "access_flags": 17,
+        "fields": [
+          {
+            "owner": "Lcom/android/systemui/statusbar/StatusBarIconView;",
+            "name": "mOriginalStatusBarIconSize",
+            "type": "I",
+            "access_flags": 0
           }
         ],
         "methods": []

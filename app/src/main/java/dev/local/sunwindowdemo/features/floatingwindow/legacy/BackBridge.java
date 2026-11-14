@@ -27,9 +27,10 @@ public final class BackBridge extends XposedModule {
     private Field viewField,callbackField;
     private Method cancelBack;
     private volatile Stroke settling;
+    private Stroke cancelling;
     private static final class Stroke {
         float x,threshold,density;boolean left,armed;
-        long down;int stage,task,revision;String pkg,token;Object controller;
+        long down;int stage,task,revision;String pkg,token;Object controller,handler;
     }
     @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&PACKAGE.equals(p.getProcessName());}
     @Override public synchronized void onPackageLoaded(PackageLoadedParam p){
@@ -66,6 +67,23 @@ public final class BackBridge extends XposedModule {
             viewField=field(panel,"mView");callbackField=field(panel,"backCallback");
             cancelBack=Class.forName("com.android.systemui.plugins.NavigationEdgeBackPlugin$BackCallback",false,cl).getDeclaredMethod("cancelBack");
             Method motion=panel.getDeclaredMethod("onMotionEvent",MotionEvent.class);
+            Class<?> handlerClass=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler",false,cl);
+            Method dispatch=handlerClass.getDeclaredMethod("dispatchToBackAnimation",MotionEvent.class);
+            Field allow=field(handlerClass,"mAllowGesture"),logging=field(handlerClass,"mLogGesture"),rejected=field(handlerClass,"mInRejectedExclusion");
+            if(dispatch.getReturnType()!=void.class||allow.getType()!=boolean.class||logging.getType()!=boolean.class||rejected.getType()!=boolean.class)
+                throw new NoSuchMethodException("native Back cancellation signatures");
+            Class<?> input=field(Class.forName("com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl",false,cl),"onInputEvent").getType();
+            if(input.isInterface())input=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler$$ExternalSyntheticLambda20",false,cl);
+            // This native caller can inline dispatchToBackAnimation in an AOT SystemUI build.
+            if(!deoptimize(input.getDeclaredMethod("invoke",Object.class)))throw new IllegalStateException("native Back dispatcher deoptimize");
+            hooks.add(hook(dispatch).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                MotionEvent event=(MotionEvent)chain.getArg(0);Stroke s=cancelling;
+                if(s==null||!cancelNativeUp(s.handler,s.down,chain.getThisObject(),event))return chain.proceed();
+                cancelling=null;
+                MotionEvent cancel=MotionEvent.obtain(event);cancel.setAction(MotionEvent.ACTION_CANCEL);
+                try{return chain.proceed(new Object[]{cancel});}
+                finally{cancel.recycle();allow.setBoolean(s.handler,false);logging.setBoolean(s.handler,false);rejected.setBoolean(s.handler,false);}
+            }));
             hooks.add(hook(panel.getDeclaredMethod("onViewAttached")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object r=chain.proceed();try{connect(((View)viewField.get(chain.getThisObject())).getContext());}catch(Exception e){note("BACK_CONNECT_FAILED "+e.getClass().getSimpleName());}return r;
             }));
@@ -79,14 +97,14 @@ public final class BackBridge extends XposedModule {
                 if(!take)return chain.proceed();
                 // Cancel predictive back before the parent dispatches this physical UP to Shell.
                 Stroke committed=pending;pending=null;
-                try{cancelBack.invoke(callbackField.get(owner));}
-                catch(Exception ex){if(committed!=null)Wire.cancelBack(committed.token);note("BACK_CANCEL_FAILED "+ex.getClass().getSimpleName());return chain.proceed();}
+                try{cancelBack.invoke(callbackField.get(owner));cancelling=committed;}
+                catch(Exception ex){abort(committed);note("BACK_CANCEL_FAILED "+ex.getClass().getSimpleName());return chain.proceed();}
                 MotionEvent cancel=MotionEvent.obtain(e);cancel.setAction(MotionEvent.ACTION_CANCEL);
                 try{return chain.proceed(new Object[]{cancel});}finally{
                     cancel.recycle();if(committed!=null)main.post(()->waitForNativeBack(committed,0));
                 }
             }));
-            note("BACK_READY hooks=3 version="+BuildConfig.VERSION_NAME);
+            note("BACK_READY hooks=4 version="+BuildConfig.VERSION_NAME);
             installScreenshotHooks(cl);
         }catch(Throwable e){for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}note("BACK_DISABLED "+e.getClass().getSimpleName());}
     }
@@ -303,24 +321,28 @@ public final class BackBridge extends XposedModule {
     }
     private boolean live(){return enabled&&lease!=null&&lease.isBinderAlive()&&sink!=null&&sink.isBinderAlive();}
     private Stroke pending;
+    static boolean cancelNativeUp(Object expected,long down,Object owner,MotionEvent event){
+        return expected==owner&&event.getDownTime()==down&&event.getActionMasked()==MotionEvent.ACTION_UP;
+    }
+    private void abort(Stroke s){
+        if(s==null)return;
+        if(settling==s)settling=null;
+        if(pending==s)pending=null;
+        Wire.cancelBack(s.token);
+    }
     private synchronized boolean observe(Object owner,MotionEvent e) throws Exception {
         View view=(View)viewField.get(owner);connect(view.getContext());
         int action=e.getActionMasked();
         if(action==MotionEvent.ACTION_DOWN){
-            if(settling!=null){Wire.cancelBack(settling.token);settling=null;}
+            abort(settling);cancelling=null;
             generation++;
             Stroke old=strokes.remove(owner);if(old!=null)preview(old,0);
             if(!live()||e.getPointerCount()!=1||e.getToolType(0)!=MotionEvent.TOOL_TYPE_FINGER||view.getDisplay()==null||view.getDisplay().getDisplayId()!=0)return false;
-            if(context.getSystemService(KeyguardManager.class).isKeyguardLocked())return false;
-            Rect d=context.getSystemService(WindowManager.class).getCurrentWindowMetrics().getBounds();
-            ActivityManager.RunningTaskInfo task=context.getSystemService(ActivityManager.class).getRunningTasks(1).stream().findFirst().orElse(null);
-            if(task==null||task.topActivity==null)return false;
-            String pkg=task.topActivity.getPackageName();
-            if(!Wire.allowedPackage(pkg)||pkg.equals(Wire.PKG)||pkg.equals(PACKAGE)||pkg.equals(LauncherGuard.PACKAGE))return false;
-            Stroke s=new Stroke();s.x=e.getX();s.left=s.x<d.width()/2f;s.threshold=BackSwipe.threshold(d.width(),d.height());
-            s.density=context.getResources().getDisplayMetrics().density;s.down=e.getDownTime();s.task=task.taskId;s.pkg=pkg;
+            android.util.DisplayMetrics metrics=view.getResources().getDisplayMetrics();
+            Stroke s=new Stroke();s.x=e.getX();s.left=s.x<metrics.widthPixels/2f;s.threshold=BackSwipe.threshold(metrics.widthPixels,metrics.heightPixels);
+            s.density=metrics.density;s.down=e.getDownTime();
             s.revision=generation;
-            strokes.put(owner,s);note("BACK_BEGIN task="+s.task+" threshold="+Math.round(s.threshold));return false;
+            strokes.put(owner,s);return false;
         }
         Stroke s=strokes.get(owner);if(s==null)return false;
         if(!live()||s.down!=e.getDownTime()||action==MotionEvent.ACTION_CANCEL||e.getPointerCount()!=1||action==MotionEvent.ACTION_POINTER_DOWN){strokes.remove(owner);preview(s,0);return false;}
@@ -331,9 +353,17 @@ public final class BackBridge extends XposedModule {
         if(action!=MotionEvent.ACTION_UP)return false;
         strokes.remove(owner);preview(s,0);
         if(!s.armed)return false;
+        // Ordinary Back never needs a task/WM/Keyguard Binder query on its input path.
+        if(context.getSystemService(KeyguardManager.class).isKeyguardLocked())return false;
+        ActivityManager.RunningTaskInfo task=context.getSystemService(ActivityManager.class).getRunningTasks(1).stream().findFirst().orElse(null);
+        if(task==null||task.topActivity==null)return false;
+        String pkg=task.topActivity.getPackageName();
+        if(!Wire.allowedPackage(pkg)||pkg.equals(Wire.PKG)||pkg.equals(PACKAGE)||pkg.equals(LauncherGuard.PACKAGE))return false;
+        s.task=task.taskId;s.pkg=pkg;
         // Synchronous admission prevents swallowing Back when the module rejects the request.
         Object callback=callbackField.get(owner);
         Object handler=field(callback.getClass(),"this$0").get(callback);
+        s.handler=handler;
         Object animation=field(handler.getClass(),"mBackAnimation").get(handler);
         s.controller=animation==null?null:field(animation.getClass(),"this$0").get(animation);
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();
@@ -355,8 +385,8 @@ public final class BackBridge extends XposedModule {
         }finally{data.recycle();reply.recycle();}
     }
     private void waitForNativeBack(Stroke s,int attempt){
-        if(!live()||s.revision!=generation){Wire.cancelBack(s.token);return;}
-        if(attempt>=40){Wire.cancelBack(s.token);note("BACK_CANCEL_TIMEOUT");return;}
+        if(!live()||s.revision!=generation){abort(s);return;}
+        if(attempt>=40){abort(s);note("BACK_CANCEL_TIMEOUT");return;}
         try{
             Runnable check=()->{
                 try{
@@ -370,17 +400,17 @@ public final class BackBridge extends XposedModule {
                         idle.invoke(transitions,(Runnable)()->main.post(()->{if(settling==s)commit(s);}));
                         main.postDelayed(()->{if(settling==s){settling=null;Wire.cancelBack(s.token);note("BACK_TRANSITION_TIMEOUT");}},650);
                     }
-                }catch(Exception e){Wire.cancelBack(s.token);note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
+                }catch(Exception e){main.post(()->abort(s));note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
             };
-            // Read Shell-owned state on its own executor after it has received physical UP.
+            // Read Shell-owned state after the converted terminal CANCEL reaches its executor.
             if(s.controller==null)check.run();
             else ((java.util.concurrent.Executor)field(s.controller.getClass(),"mShellExecutor").get(s.controller)).execute(check);
-        }catch(Exception e){note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
+        }catch(Exception e){abort(s);note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
     }
     private void commit(Stroke s){
-        if(!live()||s.revision!=generation){Wire.cancelBack(s.token);return;}settling=null;Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+        if(!live()||s.revision!=generation){abort(s);return;}settling=null;Parcel data=Parcel.obtain(),reply=Parcel.obtain();
         try{data.writeInterfaceToken(CHANNEL);data.writeInt(s.task);data.writeString(s.pkg);data.writeString(s.token);
-            if(!sink.transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0)){note("BACK_COMMIT_FAILED");return;}
+            if(!sink.transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0)){Wire.cancelBack(s.token);note("BACK_COMMIT_FAILED");return;}
             reply.readException();boolean accepted=reply.readBoolean();if(!accepted)Wire.cancelBack(s.token);note(accepted?"BACK_HANDOFF":"BACK_COMMIT_REJECTED");
         }catch(RemoteException e){Wire.cancelBack(s.token);note("BACK_COMMIT_FAILED");}finally{data.recycle();reply.recycle();}
     }

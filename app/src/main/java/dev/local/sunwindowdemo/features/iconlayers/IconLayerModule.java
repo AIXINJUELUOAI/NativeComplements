@@ -31,6 +31,7 @@ public final class IconLayerModule extends XposedModule {
     private volatile Context context;
     private volatile Resources resources;
     private Handler worker;
+    private dev.local.sunwindowdemo.core.HostSnapshot settings;
     private ClassLoader loader;
     private BroadcastReceiver receiver;
     private final AtomicInteger replacements = new AtomicInteger(), animations = new AtomicInteger();
@@ -162,8 +163,18 @@ public final class IconLayerModule extends XposedModule {
     private void reload(int request) {
         if (request != epoch.get()) return;
         try {
-            Bundle config = context.getContentResolver().call(IconLayerStore.URI, "read", null, null);
+            if (settings == null) settings = dev.local.sunwindowdemo.core.HostSnapshot.open(context, "icons");
+            var read = settings.read(() -> {
+                Bundle result = context.getContentResolver().call(IconLayerStore.URI, "read", null, null);
+                if (result != null && result.getBoolean("enabled") && (result.getStringArrayList("targets") == null || result.getStringArrayList("targets").isEmpty()))
+                    throw new IllegalStateException("icon targets not ready");
+                return result;
+            });
+            if (read.report()) note("CONFIG " + read.summary());
+            if (!read.live()) worker.postDelayed(() -> { if (request == epoch.get()) reload(request); }, settings.retryDelay(3000));
+            Bundle config = read.config();
             if (config == null) throw new IllegalStateException("no config");
+            if (!read.live() && IconAssets.ready()) return;
             Set<String> previous = new HashSet<>(IconAssets.snapshot().entries().keySet());
             int previousDemo = IconAssets.snapshot().demo();
             if (!IconAssets.load(context, config, () -> request != epoch.get())) return;
@@ -182,7 +193,8 @@ public final class IconLayerModule extends XposedModule {
         } catch (Exception failure) {
             lastError = failure.toString(); note("CONFIG_FAILED " + lastError); report("图标设置读取失败");
             android.util.Log.w("NativeComplements","ICON_CONFIG_FAILED",failure);
-            worker.postDelayed(()->{if(request==epoch.get())queueReload();},3000);
+            if (settings == null || settings.reachable())
+                worker.postDelayed(()->{if(request==epoch.get())queueReload();},3000);
         }
     }
 
@@ -231,6 +243,7 @@ public final class IconLayerModule extends XposedModule {
     private void report(String status) {
         if (worker == null || context == null) return;
         worker.post(() -> {
+            if (settings != null && !settings.reachable()) return;
             try {
                 Bundle b = new Bundle(); b.putString("version", BuildConfig.VERSION_NAME);
                 b.putString("status", status); b.putString("error", lastError);

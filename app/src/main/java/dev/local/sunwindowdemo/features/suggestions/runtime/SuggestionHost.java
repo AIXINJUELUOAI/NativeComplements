@@ -134,7 +134,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(closed)return;main.removeCallbacks(retry);
         worker.execute(()->{
             try{
-                Bundle next=context.getContentResolver().call(Uri.parse("content://"+SuggestionStore.AUTHORITY),"read",null,null);
+                // A stopped module process keeps the last stored snapshot (including enabled); retries back off to 60s.
+                var snapshot=dev.local.sunwindowdemo.core.HostSnapshot.open(context,"suggestions");
+                var read=snapshot.read(()->context.getContentResolver().call(Uri.parse("content://"+SuggestionStore.AUTHORITY),"read",null,null));
+                if(read.report())status("SETTINGS "+read.summary());
+                if(!read.live()&&read.config()!=null)main.postDelayed(retry,snapshot.retryDelay(3000));
+                Bundle next=read.config();
                 if(next==null)throw new IllegalStateException();
                 main.post(()->{
                     if(closed)return;
@@ -157,7 +162,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 });
             }catch(Exception e){main.post(()->{if(!closed){
                 RotationDiagnostics.update("settings","读取失败: "+e.getClass().getSimpleName());
-                settings=new Bundle();awakeUntil=0;releaseAwake();removeView();restoreRotation();publishRotationSettings();main.postDelayed(retry,3000);
+                settings=new Bundle();awakeUntil=0;releaseAwake();removeView();restoreRotation();publishRotationSettings();
+                main.postDelayed(retry,dev.local.sunwindowdemo.core.HostSnapshot.open(context,"suggestions").retryDelay(3000));
             }});}
         });
     }

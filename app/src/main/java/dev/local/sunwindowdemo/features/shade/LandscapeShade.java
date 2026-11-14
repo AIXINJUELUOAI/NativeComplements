@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import dev.local.sunwindowdemo.core.HostSnapshot;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import java.lang.ref.WeakReference;
@@ -37,6 +38,7 @@ public final class LandscapeShade {
     private static Method updateResources;
     private static Consumer<String> logger = ignored -> {};
     private static String lastDecision = "";
+    private static boolean configLogged;
     private LandscapeShade() {}
 
     public static synchronized void install(XposedModule module, ClassLoader loader, Consumer<String> log) {
@@ -197,23 +199,21 @@ public final class LandscapeShade {
     private static void load() {
         if (!ready) return;
         worker.execute(() -> {
-            boolean value = false;
-            boolean retry = false;
-            try {
-                Bundle result = context.getContentResolver().call(Uri.parse("content://" + ShadeStore.AUTHORITY), "read", null, null);
-                if (result == null) throw new IllegalStateException("empty shade settings");
-                value = result.getBoolean("enabled", false);
-            } catch (Exception failure) {
-                retry = true;
-                note("SHADE_SETTINGS_FAILED " + failure.getClass().getSimpleName());
-            }
-            boolean next = value, failed = retry;
+            // The module process may be stopped; the last stored snapshot keeps the user's choice, including off.
+            HostSnapshot snapshot = HostSnapshot.open(context, "shade");
+            HostSnapshot.Result read = snapshot.read(() ->
+                    context.getContentResolver().call(Uri.parse("content://" + ShadeStore.AUTHORITY), "read", null, null));
+            if (read.report()) note("SHADE_SETTINGS " + read.summary());
+            boolean next = read.config() != null && read.config().getBoolean("enabled", false), failed = !read.live();
+            long delay = snapshot.retryDelay(3000);
             main.post(() -> {
                 if (!ready) return;
-                if (enabled != next) { enabled = next; refresh(); }
-                note("SHADE_CONFIG enabled=" + enabled + " panels=" + panels.size());
+                boolean changed = enabled != next;
+                if (changed) { enabled = next; refresh(); }
+                if (changed || read.report() || !failed && !configLogged) note("SHADE_CONFIG enabled=" + enabled + " panels=" + panels.size() + " live=" + !failed);
+                if (!failed) configLogged = true;
                 main.removeCallbacks(retryLoad);
-                if (failed) main.postDelayed(retryLoad, 3000);
+                if (failed) main.postDelayed(retryLoad, delay);
             });
         });
     }

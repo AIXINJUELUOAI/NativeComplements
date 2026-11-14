@@ -16,7 +16,8 @@ ICON = "Lcom/android/launcher3/views/FloatingIconView"
 BAR = "Lcom/android/systemui/shared/statusbar/phone/BarTransitions"
 INSETS = "Landroid/view/ViewTreeObserver"
 TARGETS = {
-    WM+"ActivityStarter;", WM+"Task;", EDGE+"DisplayBackGestureHandlerImpl;",
+    WM+"ActivityStarter;", WM+"Task;", EDGE+"DisplayBackGestureHandlerImpl;", EDGE+"EdgeBackGestureHandler;",
+    "Lcom/android/systemui/statusbar/StatusBarIconView;",
     EDGE+"EdgeBackGestureHandler$$ExternalSyntheticLambda20;",
     EDGE+"EdgeBackGestureHandler$$ExternalSyntheticLambda24;",
     *[CLICK+str(i)+";" for i in (6, 7, 10, 12)], "Lkotlin/Pair;",
@@ -27,6 +28,7 @@ TARGETS = {
     BAR+";", BAR+"$BarBackgroundDrawable;", "Lcom/android/launcher3/taskbar/TaskbarTransitions;",
     INSETS+";", INSETS+"$InternalInsetsInfo;", INSETS+"$OnComputeInternalInsetsListener;",
     "Lcom/android/internal/policy/ScreenDecorationsUtils;", WM+"DisplayContent;",
+    WM+"WindowState;", WM+"ActivityRecord;", "Landroid/app/BroadcastOptions;",
 }
 
 
@@ -78,6 +80,13 @@ def verify(classes, qpr2):
     assert (WM+"TaskDisplayArea;" in launch) == qpr2
     assert (WM+"ActivityCallerState$CallerInfo;" in launch) == qpr2
     method(WM+"Task;", "isResizeable", "()Z" if qpr2 else "(Z)Z")
+    method(EDGE+"EdgeBackGestureHandler;", "dispatchToBackAnimation", "(Landroid/view/MotionEvent;)V")
+    for name in ["mAllowGesture", "mLogGesture", "mInRejectedExclusion"]:
+        field(EDGE+"EdgeBackGestureHandler;", name, "Z")
+    field("Lcom/android/systemui/statusbar/StatusBarIconView;", "mOriginalStatusBarIconSize", "I")
+    field(WM+"ActivityRecord;", "mActivityComponent", "Landroid/content/ComponentName;")
+    method(WM+"WindowState;", "getConfiguration", "()Landroid/content/res/Configuration;")
+    method("Landroid/app/BroadcastOptions;", "setDeliveryGroupPolicy", "(I)Landroid/app/BroadcastOptions;")
     adapter = EDGE+"EdgeBackGestureHandler$$ExternalSyntheticLambda"+("24;" if qpr2 else "20;")
     field(EDGE+"DisplayBackGestureHandlerImpl;", "onInputEvent", adapter if qpr2 else "Lkotlin/jvm/functions/Function1;")
     field(adapter, "f$0", EDGE+"EdgeBackGestureHandler;")
@@ -146,10 +155,11 @@ if __name__ == "__main__":
             method_names={"handleStartResult","startActivityUnchecked","isResizeable","invoke","run","startPendingIntent",
                           "emit","setIcon","start","filterInputEvent","setInputFilter","setInputFilterEnabled",
                           "injectInputEvent","getDisplayId","split","draw","addOnComputeInternalInsetsListener",
-                          "onComputeInternalInsets","setTouchableInsets","getWindowCornerRadius"}
+                          "onComputeInternalInsets","setTouchableInsets","getWindowCornerRadius","dispatchToBackAnimation",
+                          "getConfiguration","setDeliveryGroupPolicy"}
             field_names={"onInputEvent","f$0","f$1","f$2","f$3","f$4","f$5","second","legacyUseSplitShade",
                          "legacyUseSplitShade$delegate","isThemed","mNative","mInputFilterLock","mInputFilter",
-                         "mBarBackground","touchableRegion","TOUCHABLE_INSETS_REGION"}
+                         "mBarBackground","touchableRegion","TOUCHABLE_INSETS_REGION","mAllowGesture","mLogGesture","mInRejectedExclusion","mOriginalStatusBarIconSize","mActivityComponent"}
             for owner, value in classes.items():
                 value["methods"]=[m for m in value["methods"] if m["name"] in method_names
                                   or owner == BAR+";" and m["name"] == "<init>"]

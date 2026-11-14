@@ -20,6 +20,7 @@ public final class IconAssets {
     private static volatile Handler worker;
     private static volatile boolean ready;
     private static Context host;
+    private static dev.local.sunwindowdemo.core.HostSnapshot settings;
     private static final List<Runnable> listeners=new ArrayList<>();
     private IconAssets() {}
 
@@ -45,6 +46,7 @@ public final class IconAssets {
         if(queue==null||!snapshot.algorithms.contains(pkg))return;
         queue.post(()->{
             if(!snapshot.algorithms.contains(pkg))return;
+            if(settings!=null&&!settings.reachable())return;
             try{host.getContentResolver().call(IconLayerStore.URI,"started",pkg,null);}
             catch(Exception failure){android.util.Log.w("NcIconAssets","launch generation failed: "+pkg,failure);}
         });
@@ -53,20 +55,27 @@ public final class IconAssets {
     private static void reload(int request,int attempt){
         if(request!=epoch.get())return;
         try{
-            Bundle config=host.getContentResolver().call(IconLayerStore.URI,"read",null,null);
+            if(settings==null)settings=dev.local.sunwindowdemo.core.HostSnapshot.open(host,"icons");
+            var read=settings.read(()->{
+                Bundle result=host.getContentResolver().call(IconLayerStore.URI,"read",null,null);
+                if(result!=null&&result.getBoolean("enabled")&&(result.getStringArrayList("targets")==null||result.getStringArrayList("targets").isEmpty()))
+                    throw new IllegalStateException("icon targets not ready");
+                return result;
+            });
+            if(read.report())android.util.Log.w("NcIconAssets",read.summary());
+            Bundle config=read.config();
             if(config==null)throw new IllegalStateException("icon config not ready");
-            if(config.getBoolean("enabled")&&(config.getStringArrayList("targets")==null||config.getStringArrayList("targets").isEmpty()))
-                throw new IllegalStateException("icon targets not ready");
-            if(load(host,config,()->request!=epoch.get())){
+            if((read.live()||!ready)&&load(host,config,()->request!=epoch.get())){
                 android.util.Log.i("NcIconAssets","loaded host="+host.getPackageName()+" entries="+snapshot.entries.size()+" failures="+snapshot.failures);
                 List<Runnable> callbacks;synchronized(IconAssets.class){callbacks=List.copyOf(listeners);}
                 for(Runnable callback:callbacks)try{callback.run();}catch(RuntimeException ignored){}
             }
+            if(!read.live()&&request==epoch.get())worker.postDelayed(()->reload(request,0),settings.retryDelay(3000));
         }catch(Exception failure){
             android.util.Log.w("NcIconAssets","reload failed attempt="+attempt,failure);
             // Boot providers and LauncherApps can become usable after the first request.
             // Keep the last snapshot; bounded retries are superseded by a newer refresh.
-            if(request==epoch.get()&&attempt<5)worker.postDelayed(()->reload(request,attempt+1),250L<<attempt);
+            if(request==epoch.get())worker.postDelayed(()->reload(request,Math.min(attempt+1,6)),Math.min(60_000,500L<<Math.min(attempt,7)));
         }
     }
 
@@ -172,17 +181,55 @@ public final class IconAssets {
         return decode(c,uri,side);
     }
     private static Bitmap decode(Context c,Uri uri,int side)throws Exception{
+        byte[] data=imageBytes(c,uri);
         BitmapFactory.Options o=new BitmapFactory.Options();o.inJustDecodeBounds=true;
-        try(InputStream in=c.getContentResolver().openInputStream(uri)){BitmapFactory.decodeStream(in,null,o);}
+        BitmapFactory.decodeByteArray(data,0,data.length,o);
         if(o.outWidth<1||o.outHeight<1||o.outWidth>2048||o.outHeight>2048)throw new IOException("image bounds");
         o.inSampleSize=1;while(Math.max(o.outWidth,o.outHeight)/(o.inSampleSize*2)>=side)o.inSampleSize*=2;
         o.inJustDecodeBounds=false;o.inPreferredConfig=Bitmap.Config.ARGB_8888;
-        try(InputStream in=c.getContentResolver().openInputStream(uri)){
-            Bitmap b=BitmapFactory.decodeStream(in,null,o);if(b==null)throw new IOException("image decode");
+        {
+            Bitmap b=BitmapFactory.decodeByteArray(data,0,data.length,o);if(b==null)throw new IOException("image decode");
             int max=Math.max(b.getWidth(),b.getHeight());
             if(max<=side)return b;
             Bitmap scaled=Bitmap.createScaledBitmap(b,Math.max(1,Math.round(b.getWidth()*(float)side/max)),Math.max(1,Math.round(b.getHeight()*(float)side/max)),true);
             if(scaled!=b)b.recycle();return scaled;
         }
+    }
+
+    /** Content-addressed asset URIs are immutable. This private host cache also survives a stopped manager. */
+    static byte[] imageBytes(Context c,Uri uri)throws Exception{
+        boolean remote=IconLayerStore.URI.getAuthority().equals(uri.getAuthority());
+        File cache=null;
+        if(remote){
+            byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(uri.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder name=new StringBuilder();
+            for(byte value:digest)name.append(Character.forDigit((value>>>4)&15,16)).append(Character.forDigit(value&15,16));
+            cache=new File(new File(dev.local.sunwindowdemo.core.HostSnapshot.directory(c),"icon_assets"),name.toString());
+        }
+        byte[] data;
+        try(InputStream input=c.getContentResolver().openInputStream(uri)){
+            if(input==null)throw new FileNotFoundException(uri.toString());
+            data=input.readNBytes(8*1024*1024+1);
+            if(data.length>8*1024*1024)throw new IOException("icon asset too large");
+            BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;
+            BitmapFactory.decodeByteArray(data,0,data.length,bounds);
+            if(bounds.outWidth<1||bounds.outHeight<1||bounds.outWidth>2048||bounds.outHeight>2048)throw new IOException("image bounds");
+        }catch(IOException|IllegalArgumentException unavailable){
+            if(cache==null||!cache.isFile()||cache.length()>8*1024*1024)throw unavailable;
+            return new android.util.AtomicFile(cache).readFully();
+        }
+        if(cache!=null){
+            var atomic=new android.util.AtomicFile(cache);FileOutputStream output=null;
+            try{
+                output=atomic.startWrite();output.write(data);atomic.finishWrite(output);
+                File[] files=cache.getParentFile().listFiles(File::isFile);
+                if(files!=null){
+                    Arrays.sort(files,Comparator.comparingLong(File::lastModified));
+                    long total=0;for(File file:files)total+=file.length();
+                    for(File file:files){if(total<=64L*1024*1024)break;if(!file.equals(cache)){long bytes=file.length();if(file.delete())total-=bytes;}}
+                }
+            }catch(IOException|RuntimeException failure){if(output!=null)atomic.failWrite(output);android.util.Log.w("NcIconAssets","asset cache unavailable",failure);}
+        }
+        return data;
     }
 }

@@ -56,6 +56,9 @@ public final class NavbarColors {
             } else pending = candidate;
             return applied;
         }
+        /** Starts a page from its last confirmed color; a different sample then needs confirmation. */
+        void seed(int color) { applied = color; pending = 0; }
+        int applied() { return applied; }
         boolean needsConfirmation() { return pending != 0; }
         void reset() { applied = 0; pending = 0; }
     }

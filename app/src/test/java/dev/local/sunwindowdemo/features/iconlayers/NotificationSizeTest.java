@@ -25,15 +25,21 @@ public class NotificationSizeTest {
         assertTrue(bounds.width()>=59&&bounds.width()<=61);
         assertEquals(2f,(float)bounds.width()/bounds.height(),.15f);
         Drawable replacement=new BitmapDrawable(context.getResources(),normalized);
-        Drawable original=new ColorDrawable(Color.WHITE){
-            @Override public int getIntrinsicWidth(){return 48;}
-            @Override public int getIntrinsicHeight(){return 48;}
-        };
-        Drawable result=IconImages.notificationSize(context,replacement,original);
+        Drawable result=IconImages.notificationSize(context,replacement,48);
         assertEquals(48,result.getIntrinsicWidth());assertEquals(48,result.getIntrinsicHeight());
         Rect rendered=IconImages.contentBounds(IconImages.render(result,48));
         assertTrue(rendered.width()>=44&&rendered.width()<=47);
         assertEquals(2f,(float)rendered.width()/rendered.height(),.2f);
-        assertSame(replacement,IconImages.notificationSize(context,replacement,null));
+        assertSame(replacement,IconImages.notificationSize(context,replacement,0));
+    }
+
+    @Test public void referenceCanvasIgnoresInputBitmapDensityAndPadding(){
+        Context context=RuntimeEnvironment.getApplication();
+        for(int side:new int[]{16,64,256}){
+            Bitmap bitmap=Bitmap.createBitmap(side,side,Bitmap.Config.ARGB_8888);
+            bitmap.setDensity(side*10);bitmap.eraseColor(Color.WHITE);
+            Drawable result=IconImages.notificationSize(context,new BitmapDrawable(context.getResources(),bitmap),48);
+            assertEquals(48,result.getIntrinsicWidth());assertEquals(48,result.getIntrinsicHeight());
+        }
     }
 }

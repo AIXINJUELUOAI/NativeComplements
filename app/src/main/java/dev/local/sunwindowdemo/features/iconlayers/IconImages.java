@@ -127,9 +127,7 @@ public final class IconImages {
         new Canvas(out).drawBitmap(source,content,new RectF((side-w)/2,(side-h)/2,(side+w)/2,(side+h)/2),new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG));
         return out;
     }
-    static Drawable notificationSize(Context context,Drawable replacement,Drawable original){
-        if(original==null)return replacement;
-        int side=Math.max(original.getIntrinsicWidth(),original.getIntrinsicHeight());
+    static Drawable notificationSize(Context context,Drawable replacement,int side){
         if(side<=0||side>512)return replacement;
         Bitmap pixels=render(replacement,side);
         pixels.setDensity(context.getResources().getDisplayMetrics().densityDpi);

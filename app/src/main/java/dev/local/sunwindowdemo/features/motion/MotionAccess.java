@@ -5,6 +5,7 @@ import android.content.pm.ApplicationInfo;
 import android.database.ContentObserver;
 import android.os.*;
 import dev.local.sunwindowdemo.BuildConfig;
+import dev.local.sunwindowdemo.core.HostSnapshot;
 import io.github.libxposed.api.*;
 import java.lang.reflect.*;
 import java.util.*;
@@ -21,6 +22,8 @@ public final class MotionAccess {
     private SensorCommand sensors;
     private boolean ready,enabled;
     private long lastFailure;
+    private HostSnapshot snapshot;
+    private String sentStatus;
     private final Runnable expiry=this::reconcile;
     private MotionAccess(Consumer<String> log){
         this.log=log;HandlerThread thread=new HandlerThread("NativeComplements-Motion",android.os.Process.THREAD_PRIORITY_BACKGROUND);
@@ -64,11 +67,16 @@ public final class MotionAccess {
         }catch(Exception e){failure(e);status("系统传感器接口未就绪："+reason(e));worker.postDelayed(this::connect,10000);}
     }
     private static IntentFilter packageFilter(){IntentFilter f=new IntentFilter();f.addAction(Intent.ACTION_PACKAGE_ADDED);f.addAction(Intent.ACTION_PACKAGE_REMOVED);f.addDataScheme("package");return f;}
-    private void poll(){reload();worker.postDelayed(this::poll,30000);}
+    private void poll(){reload();worker.postDelayed(this::poll,snapshot==null?30000:Math.max(30000,snapshot.retryDelay(30000)));}
     private void reload(){
         long identity=Binder.clearCallingIdentity();
         try{
-            Bundle b=context.getContentResolver().call(MotionStore.URI,"read",null,null);if(b==null)throw new IllegalStateException("motion config missing");
+            // The module process can be stopped; keep the last complete snapshot (including enabled) instead of releasing rules.
+            if(snapshot==null)snapshot=HostSnapshot.open(context,"motion","backend_version","backend_error","backend_seen");
+            HostSnapshot.Result read=snapshot.read(()->context.getContentResolver().call(MotionStore.URI,"read",null,null));
+            if(read.report())log.accept((read.live()?"MOTION_CONFIG ":"MOTION_CONFIG_UNAVAILABLE ")+read.summary());
+            if(read.live())sentStatus=null;
+            Bundle b=read.config();if(b==null)throw new IllegalStateException("motion config missing");
             enabled=b.getBoolean("enabled");Map<Integer,Integer> rules=new HashMap<>();Map<Integer,String> next=new HashMap<>();
             String[] packages=b.getStringArray("packages");int[] modes=b.getIntArray("modes");
             Map<String,Integer> overrides=new HashMap<>();
@@ -89,7 +97,12 @@ public final class MotionAccess {
                 }
             }
             targets.clear();targets.putAll(next);policy.configure(rules,SystemClock.elapsedRealtime());reconcile();
-        }catch(Exception e){enabled=false;policy.configure(Map.of(),SystemClock.elapsedRealtime());reconcile();failure(e);status("配置暂不可用，已释放限制");}
+        }catch(Exception e){
+            boolean wasEnabled=enabled;
+            enabled=false;policy.configure(Map.of(),SystemClock.elapsedRealtime());reconcile();
+            if(wasEnabled||snapshot==null||snapshot.reachable())failure(e);
+            status("配置暂不可用，已释放限制");
+        }
         finally{Binder.restoreCallingIdentity(identity);}
     }
     private void reconcile(){
@@ -116,9 +129,10 @@ public final class MotionAccess {
         if(!error.isEmpty())worker.postDelayed(expiry,5000);
         status(error);
     }
+    /** Reports backend state only when it changes; skipped while the provider is known to be unreachable. */
     private void status(String error){
-        if(context==null)return;long identity=Binder.clearCallingIdentity();
-        try{Bundle b=new Bundle();b.putString("error",error);context.getContentResolver().call(MotionStore.URI,"backend",BuildConfig.VERSION_NAME,b);}
+        if(context==null||error.equals(sentStatus)||snapshot!=null&&!snapshot.reachable())return;long identity=Binder.clearCallingIdentity();
+        try{Bundle b=new Bundle();b.putString("error",error);context.getContentResolver().call(MotionStore.URI,"backend",BuildConfig.VERSION_NAME,b);sentStatus=error;}
         catch(Exception ignored){}finally{Binder.restoreCallingIdentity(identity);}
     }
     private void failure(Exception e){long now=SystemClock.elapsedRealtime();if(now-lastFailure>10000){lastFailure=now;log.accept("MOTION_ERROR "+reason(e));}}

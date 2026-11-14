@@ -204,4 +204,29 @@ public class BackHandoffTest {
     @Test public void acceptedCommitCancelsPreparedBackWhenPolicyChangesBeforeDispatch()throws Exception {assertSecondaryRejection("systemFocus",true);}
     @Test public void acceptedCommitCancelsPreparedBackWhenBackendDisconnectsBeforeDispatch()throws Exception {assertSecondaryRejection("backendReady",false);}
     @Test public void acceptedCommitCancelsPreparedBackWhenDropSlotBecomesUnavailable()throws Exception {assertSecondaryRejection("backendState","opening");}
+
+    @Test public void nativeCancellationMatchesOnlyTheCommittedHandlersTerminalUp()throws Exception{
+        Object owner=new Object();
+        Method cancel=Class.forName("dev.local.sunwindowdemo.BackBridge").getDeclaredMethod("cancelNativeUp",Object.class,long.class,Object.class,android.view.MotionEvent.class);
+        cancel.setAccessible(true);
+        for(int action:new int[]{android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,android.view.MotionEvent.ACTION_UP,android.view.MotionEvent.ACTION_CANCEL}){
+            var event=android.view.MotionEvent.obtain(10,20,action,0,0,0);
+            try{
+                assertEquals(action==android.view.MotionEvent.ACTION_UP,cancel.invoke(null,owner,10,owner,event));
+                assertEquals(false,cancel.invoke(null,owner,11,owner,event));
+                assertEquals(false,cancel.invoke(null,owner,10,new Object(),event));
+            }finally{event.recycle();}
+        }
+    }
+
+    @Test public void nativeWaitTimeoutReleasesSettlingAndPreparedCover()throws Exception{
+        Object bridge=bridge();Class<?> type=Class.forName("dev.local.sunwindowdemo.BackBridge$Stroke");
+        Constructor<?> constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
+        Object stroke=constructor.newInstance();String token=Wire.token();set(stroke,"token",token);
+        set(bridge,"enabled",true);set(bridge,"lease",new Binder());set(bridge,"sink",new Binder());
+        set(bridge,"settling",stroke);set(bridge,"pending",stroke);
+        Method wait=bridge.getClass().getDeclaredMethod("waitForNativeBack",type,int.class);wait.setAccessible(true);
+        wait.invoke(bridge,stroke,40);
+        assertNull(get(bridge,"settling"));assertNull(get(bridge,"pending"));assertEquals(List.of(token),cancelled);
+    }
 }
