@@ -19,7 +19,9 @@ FACTORY = PREFIX + "graphics/theme/MonoIconThemeFactory;"
 CONTROLLER = PREFIX + "icons/mono/MonoIconThemeController;"
 ADAPTER_BASE = "Landroidx/recyclerview/widget/f1;"
 RECYCLER_IMPL = "Landroidx/recyclerview/widget/a2;"
-dex.TARGETS = [BUBBLE, ADAPTER, BITMAP, ITEM, SEARCH, RECYCLER, MONO, FACTORY, CONTROLLER, ADAPTER_BASE, RECYCLER_IMPL]
+PREDICTIONS = PREFIX + 'appprediction/PredictionRowView;'
+BASE_FACTORY = PREFIX + 'icons/BaseIconFactory;'
+dex.TARGETS = [BUBBLE, ADAPTER, BITMAP, ITEM, SEARCH, RECYCLER, MONO, FACTORY, CONTROLLER, ADAPTER_BASE, RECYCLER_IMPL, PREDICTIONS, BASE_FACTORY]
 classes, code = {}, {}
 with zipfile.ZipFile(APK) as archive:
     for name in archive.namelist():
@@ -91,7 +93,16 @@ assert 'if (!"read".equals(method)) throw new IllegalArgumentException' in provi
 assert 'Map<View, java.lang.ref.WeakReference<View>> gridIcons = new WeakHashMap<>()' in drawer
 assert 'gridIcons.get(view)' in drawer and 'searchRecycler.isInstance(parent)' in drawer
 assert 'view.getParent() == null' in drawer and '!searchRecycler.isInstance(createdFor)' in drawer
-assert 'appInfo.isInstance(chain.getArg(0))' in drawer and '&& isDrawer((View) chain.getThisObject())' in drawer
+assert 'eligibleItem(view, chain.getArg(0))' in drawer
+assert 'predictionParent(view)' in drawer and 'PredictionRowView' in drawer
+assets = (src / 'features/iconlayers/DrawerMonetAssets.java').read_text(encoding='utf-8')
+assert 'createThemed.invoke(controller, adaptive, sourceBitmap, factory, null)' in assets
+assert 'sourceBitmap = adapted == null ? bitmap : bitmapConstructor.newInstance' in assets
+assert 'factoryClose.invoke(factory)' in assets and 'badgeProvider.invoke(controller)' in assets
+assert 'IconAssets.drawerMonochrome' in assets
+assert 'nativeTheme != null' not in drawer, 'native cache must not bypass module precedence'
+assert 'safeMonochrome(context, adaptiveSource(icon), size)' in assets
+assert 'Bitmap.createBitmap' not in assets and 'MonoThemedBitmap' not in assets
 assert 'finally { if (previous == null) binding.remove(); else binding.set(previous); }' in drawer
 assert 'if (!enabled || !Boolean.TRUE.equals(binding.get())) return chain.proceed();' in drawer
 assert 'args[1] = ((Integer) args[1]) | 1;' in drawer
@@ -99,6 +110,8 @@ assert 'copies.size() >= 128' in drawer and 'generation != token' in drawer
 assert 'bitmap == key.bitmap && item == key.item' in drawer
 assert 'Boolean.TRUE.equals(lowRes.invoke(original))' in drawer
 module = (src / 'features/iconlayers/IconLayerModule.java').read_text(encoding='utf-8')
+assert 'DrawerMonetAssets.readingOriginal()' in module
+assert 'finally { if (previous == null) originalRead.remove(); else originalRead.set(previous); }' in assets
 assert module.index('drawerMonet.artworkChanged();', module.index('if (!IconAssets.load')) > module.index('if (!IconAssets.load')
 assert 'Intent.ACTION_MANAGED_PROFILE_AVAILABLE' in module and 'Intent.ACTION_USER_UNLOCKED' in module
 assert 'read.live() && read.config() != null' in drawer, "failed read must restore native, not stale enable"
@@ -130,5 +143,15 @@ if len(sys.argv) > 1:
     assert 'module.deoptimize(itemNewIcon(item))' in drawer
     assert 'item.getDeclaredMethod("newIcon", Context.class, int.class)' in drawer
     assert 'item.getDeclaredMethod("newIcon", int.class, Context.class)' in drawer
-    print("PASS: current-device item argument order and dynamically derived monochrome provider type")
+    factory_methods = live_classes[BASE_FACTORY]['methods']
+    assert any(m['name'] == '<init>' and m['descriptor'] == '(Landroid/content/Context;II)V' for m in factory_methods)
+    assert any(m['name'] == 'close' and m['descriptor'] == '()V' for m in factory_methods)
+    native_theme = next(m for m in live_classes[CONTROLLER]['methods'] if m['name'] == 'createThemedBitmap')
+    instructions = live_code[(CONTROLLER, 'createThemedBitmap', native_theme['descriptor'])]
+    assert calls(instructions, PREFIX + 'icons/MonochromeIconFactory;', 'drawDrawable'), 'native forced fallback must exist'
+    predictions = live_code[(PREDICTIONS, 'applyPredictionApps', '()V')]
+    assert calls(predictions, 'Landroid/widget/LinearLayout;', 'addView')
+    assert calls(predictions, BUBBLE, 'applyFromWorkspaceItem')
+    assert any(m['name'] == 'getBadgeProvider' for m in live_classes[CONTROLLER]['methods'])
+    print('PASS: current-device item ABI, recommendation binding, native forced monochrome factory and theme badges')
 print("PASS: exact launcher binding/themed fallback signatures and drawer setting/security/lifecycle guards; live visuals unverified")

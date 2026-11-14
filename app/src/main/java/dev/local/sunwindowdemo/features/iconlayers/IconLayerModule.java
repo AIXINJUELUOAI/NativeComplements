@@ -136,7 +136,7 @@ public final class IconLayerModule extends XposedModule {
     }
 
     private Drawable replacement(String pkg, String source, Drawable original) {
-        if (pkg == null) return null;
+        if (pkg == null || DrawerMonetAssets.readingOriginal()) return null;
         Context c = context;
         if (c == null) return null;
         Drawable result = IconAssets.desktop(c, pkg, original);

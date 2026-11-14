@@ -123,16 +123,74 @@ public class DrawerMonetTest {
         assertFalse((Boolean) qualifies.invoke(drawer, icon));
     }
 
-    @Test public void onlyExistingAdaptiveMonochromeCanProduceMaterial() {
-        assertNull(DrawerMonetAssets.monochrome(new ColorDrawable(Color.RED), 48));
-        assertNull(DrawerMonetAssets.monochrome(new AdaptiveIconDrawable(
-                new ColorDrawable(Color.RED), new ColorDrawable(Color.BLUE)), 48));
+    @Test public void adaptiveArtworkIsNotRerasterizedOrRescaledByModule() {
         var adaptive = new AdaptiveIconDrawable(new ColorDrawable(Color.RED),
                 new ColorDrawable(Color.BLUE), new ColorDrawable(Color.WHITE));
-        var result = DrawerMonetAssets.monochrome(adaptive, 48);
-        assertNotNull(result); assertEquals(48, result.getWidth());
-        assertEquals(android.graphics.Bitmap.Config.ALPHA_8, result.getConfig());
-        assertNull(DrawerMonetAssets.monochrome(adaptive, 0));
-        assertNull(DrawerMonetAssets.monochrome(adaptive, 513));
+        assertSame(adaptive, DrawerMonetAssets.adaptiveSource(adaptive));
+        assertNotNull(DrawerMonetAssets.adaptiveSource(new ColorDrawable(Color.RED)));
+        assertNull(DrawerMonetAssets.adaptiveSource(null));
+    }
+
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void oversizedMonoGetsSafePaddingWhileCorrectPaddingIsPreserved() {
+        int size=96;
+        var full=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE),new ColorDrawable(Color.WHITE));
+        var safe=DrawerMonetAssets.safeMonochrome(context,full,size);
+        assertNotSame(full,safe);
+        var pixels=IconImages.render(safe.getMonochrome(),size);
+        assertTrue(IconImages.contentBounds(pixels).width()<=size*.62f);
+        assertSame(safe,DrawerMonetAssets.safeMonochrome(context,safe,size));
+        assertNotNull(full.getMonochrome());
+        var corner=android.graphics.Bitmap.createBitmap(size,size,android.graphics.Bitmap.Config.ARGB_8888);
+        var canvas=new android.graphics.Canvas(corner);var paint=new android.graphics.Paint();paint.setColor(Color.WHITE);
+        canvas.drawRect(0,0,48,48,paint);
+        var offcenter=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE),new BitmapDrawable(context.getResources(),corner));
+        var centered=DrawerMonetAssets.safeMonochrome(context,offcenter,size);
+        assertNotSame(offcenter,centered);
+        var bounds=IconImages.contentBounds(IconImages.render(centered.getMonochrome(),size));
+        assertTrue(bounds.left>=size*.18f&&bounds.top>=size*.18f);
+    }
+
+    @Test public void drawerOnlyUsesModuleArtworkWhenMonochromeChannelChanged() throws Exception {
+        var field=IconAssets.class.getDeclaredField("snapshot");field.setAccessible(true);Object old=field.get(null);
+        var bitmap=android.graphics.Bitmap.createBitmap(32,32,android.graphics.Bitmap.Config.ARGB_8888);
+        var original=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE));
+        try {
+            var colorOnly=new IconAssets.Entry(bitmap,bitmap,null,null,true,false,false);
+            field.set(null,new IconAssets.Snapshot(java.util.Map.of("test.app",colorOnly),"",0,0,java.util.Set.of()));
+            assertNull(IconAssets.drawerMonochrome(context,"test.app",original));
+            var mono=new IconAssets.Entry(bitmap,bitmap,bitmap,null,true,true,false);
+            field.set(null,new IconAssets.Snapshot(java.util.Map.of("test.app",mono),"",0,0,java.util.Set.of()));
+            assertNotNull(IconAssets.drawerMonochrome(context,"test.app",original));
+            var nativeMono=new IconAssets.Entry(bitmap,bitmap,bitmap,null,false,true,true);
+            field.set(null,new IconAssets.Snapshot(java.util.Map.of("test.app",nativeMono),"",0,0,java.util.Set.of()));
+            var animated=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE)) {};
+            assertNotNull(((AdaptiveIconDrawable)IconAssets.drawerMonochrome(context,"test.app",animated)).getMonochrome());
+            assertNull(animated.getMonochrome());
+        } finally {field.set(null,old);}
+    }
+
+    public static class Predictions extends android.widget.LinearLayout {
+        public Predictions(Context c) { super(c); }
+    }
+    @Test public void recommendationWorkspaceItemsQualifyButOrdinaryWorkspaceAndSearchDoNot() throws Exception {
+        DrawerMonet drawer = new DrawerMonet();
+        for (var pair : new Object[][]{{"recycler",Grid.class},{"searchRecycler",SearchGrid.class},
+                {"predictionRow",Predictions.class},{"appInfo",String.class}}) {
+            var field=DrawerMonet.class.getDeclaredField((String)pair[0]);field.setAccessible(true);field.set(drawer,pair[1]);
+        }
+        var field=DrawerMonet.class.getDeclaredField("gridIcons");field.setAccessible(true);
+        var map=(java.util.Map<android.view.View,java.lang.ref.WeakReference<android.view.View>>)field.get(drawer);
+        var eligible=DrawerMonet.class.getDeclaredMethod("eligibleItem",android.view.View.class,Object.class);eligible.setAccessible(true);
+        Predictions row=new Predictions(context);var icon=new android.view.View(context);row.addView(icon);
+        map.put(icon,new java.lang.ref.WeakReference<>(row));Object workspaceItem=new Object();
+        assertTrue((Boolean)eligible.invoke(drawer,icon,workspaceItem));
+        SearchGrid outerSearch=new SearchGrid(context);outerSearch.addView(row);
+        assertFalse((Boolean)eligible.invoke(drawer,icon,workspaceItem));
+        outerSearch.removeView(row);
+        row.removeView(icon);new android.widget.FrameLayout(context).addView(icon);
+        assertFalse((Boolean)eligible.invoke(drawer,icon,workspaceItem));
+        ((android.view.ViewGroup)icon.getParent()).removeView(icon);new SearchGrid(context).addView(icon);
+        assertFalse((Boolean)eligible.invoke(drawer,icon,workspaceItem));
     }
 }

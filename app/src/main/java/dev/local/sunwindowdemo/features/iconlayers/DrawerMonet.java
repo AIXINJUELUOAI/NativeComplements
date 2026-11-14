@@ -28,17 +28,15 @@ final class DrawerMonet {
     }
     private final Map<MaterialKey, Object> copies = new LinkedHashMap<>();
     private DrawerMonetAssets assets;
-    private java.lang.reflect.Field itemBitmap, themedBitmap;
-    private Object unsupported;
+    private java.lang.reflect.Field itemBitmap;
     private int generation;
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean enabled;
     private Context context;
     private Handler worker;
     private HostSnapshot settings;
-    private Class<?> recycler, searchRecycler, appInfo;
+    private Class<?> recycler, searchRecycler, appInfo, predictionRow;
     private Method standard;
-    private final java.util.concurrent.atomic.AtomicInteger rendered = new java.util.concurrent.atomic.AtomicInteger();
     private final java.util.concurrent.atomic.AtomicInteger materials = new java.util.concurrent.atomic.AtomicInteger();
 
     void install(XposedModule module, ClassLoader loader) throws ReflectiveOperationException {
@@ -50,16 +48,17 @@ final class DrawerMonet {
         recycler = Class.forName("com.android.launcher3.allapps.AllAppsRecyclerView", false, loader);
         searchRecycler = Class.forName("com.android.launcher3.allapps.SearchRecyclerView", false, loader);
         appInfo = Class.forName("com.android.launcher3.model.data.AppInfo", false, loader);
+        predictionRow = Class.forName("com.android.launcher3.appprediction.PredictionRowView", false, loader);
         Method factory = adapter.getDeclaredMethod("getIconOnCreateSetup", android.view.ViewGroup.class);
         standard = bubble.getDeclaredMethod("setStandardIcon", item);
         standard.setAccessible(true);
         Method create = bitmap.getDeclaredMethod("newIcon", Context.class, int.class, shape);
         Method lowRes = bitmap.getDeclaredMethod("isLowRes");
         itemBitmap = item.getField("bitmap");
-        themedBitmap = bitmap.getField("themedBitmap");
-        unsupported = Class.forName("com.android.launcher3.icons.ThemedBitmap", false, loader).getField("NOT_SUPPORTED").get(null);
         assets = new DrawerMonetAssets(loader);
         module.deoptimize(bubble.getDeclaredMethod("applyIconAndLabel", item));
+        module.deoptimize(bubble.getDeclaredMethod("applyFromWorkspaceItem",
+                Class.forName("com.android.launcher3.model.data.WorkspaceItemInfo", false, loader)));
         module.deoptimize(itemNewIcon(item));
         List<XposedInterface.HookHandle> hooks = new ArrayList<>();
         try {
@@ -71,11 +70,15 @@ final class DrawerMonet {
                 return view;
             }));
             hooks.add(module.hook(standard).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                View view = (View) chain.getThisObject();
+                View predictions = predictionParent(view);
+                if (predictions != null) synchronized (gridIcons) {
+                    gridIcons.put(view, new java.lang.ref.WeakReference<>(predictions));
+                }
                 Object previousItem = boundItem.get();
                 boundItem.set(chain.getArg(0));
                 try {
-                    return inScope(binding, enabled && appInfo.isInstance(chain.getArg(0))
-                            && isDrawer((View) chain.getThisObject()), chain::proceed);
+                    return inScope(binding, enabled && eligibleItem(view, chain.getArg(0)), chain::proceed);
                 } finally { if (previousItem == null) boundItem.remove(); else boundItem.set(previousItem); }
             }));
             hooks.add(module.hook(create).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
@@ -85,11 +88,8 @@ final class DrawerMonet {
                 Object original = chain.getThisObject();
                 if (Boolean.TRUE.equals(lowRes.invoke(original))) return chain.proceed();
                 MaterialKey key = new MaterialKey(original, boundItem.get());
-                Object nativeTheme = themedBitmap.get(original);
-                if (nativeTheme != null && nativeTheme != unsupported) {
-                    if (rendered.incrementAndGet() <= 3) android.util.Log.i("NcDrawerMonet", "native themed drawer render");
-                    return chain.proceed(args);
-                }
+                // Always resolve module material first on the worker, even when the native cache has a theme.
+                // Otherwise an existing system theme silently bypasses per-app module monochrome choices.
                 if (worker == null) return chain.proceed(args);
                 Object copy;
                 synchronized (copies) {
@@ -147,7 +147,7 @@ final class DrawerMonet {
         List<View> views;
         synchronized (gridIcons) { views = new ArrayList<>(gridIcons.keySet()); }
         for (View view : views) {
-            if (!isDrawer(view) || !appInfo.isInstance(view.getTag())) continue;
+            if (!eligibleItem(view, view.getTag())) continue;
             try {
                 if (onlyBitmap == null || itemBitmap.get(view.getTag()) == onlyBitmap)
                     standard.invoke(view, view.getTag());
@@ -155,6 +155,21 @@ final class DrawerMonet {
                 android.util.Log.w("NcDrawerMonet", "native drawer rebind failed", failure);
             }
         }
+    }
+
+    private View predictionParent(View view) {
+        if (predictionRow == null) return null;
+        View row = null;
+        for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
+            if (searchRecycler.isInstance(parent)) return null;
+            if (predictionRow.isInstance(parent)) row = (View) parent;
+        }
+        return row;
+    }
+
+    private boolean eligibleItem(View view, Object item) {
+        return item != null && isDrawer(view)
+                && (appInfo.isInstance(item) || predictionParent(view) != null);
     }
 
     private boolean isDrawer(View view) {
@@ -166,11 +181,12 @@ final class DrawerMonet {
         }
         if (view.getParent() == null)
             return recycler.isInstance(createdFor) && !searchRecycler.isInstance(createdFor);
+        boolean drawer = false;
         for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
             if (searchRecycler.isInstance(parent)) return false;
-            if (recycler.isInstance(parent)) return true;
+            if (recycler.isInstance(parent) || (predictionRow != null && predictionRow.isInstance(parent))) drawer = true;
         }
-        return false;
+        return drawer;
     }
 
     static Context attachedContext(Context app) {
@@ -183,7 +199,6 @@ final class DrawerMonet {
         context = attachedContext(app);
         HandlerThread thread = new HandlerThread("NcDrawerMonet"); thread.start();
         worker = new Handler(thread.getLooper());
-        settings = HostSnapshot.open(context, "drawer_monet");
         context.registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent intent) { worker.post(DrawerMonet.this::reload); }
         }, new IntentFilter(ShadeStore.CHANGED), IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED);
@@ -195,6 +210,7 @@ final class DrawerMonet {
     }
 
     private void reload() {
+        if (settings == null) settings = HostSnapshot.open(context, "drawer_monet");
         var read = settings.read(() -> context.getContentResolver().call(
                 Uri.parse("content://" + ShadeStore.AUTHORITY), "drawer", null, null));
         // Unlike artwork snapshots, a failed opt-in read must leave the native renderer untouched.
