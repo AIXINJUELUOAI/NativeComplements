@@ -1,6 +1,6 @@
 {
   "name": "类原生补全计划适配名单",
-  "description": "依据已核实的 ColorOS 资格机制建立本模块适配例外，仅保留可表达的 Activity 黑名单；不是完整 ROM 名单移植，不包含强制透明、Insets 或厂商私有 API。",
+  "description": "依据已核实的 ColorOS 资格机制建立本模块适配名单；资格例外 rules 与透明策略 translucent_rules 独立保存，policy_flag 保留原始位语义，不等同模式或消费 Insets；不是完整 ROM 实现移植，不调用厂商私有 API。",
   "sources": [
     {
       "name": "ColorOS PJZ110 17.0.0.103 资格机制",
@@ -67,6 +67,83 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.tencent.mm.plugin.textstatus.ui.TextStatusCardFeedsActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.ui.chatting.SendImgProxyUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.pluginsdk.permission.PermissionActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.subapp.ui.gallery.GestureGalleryUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.sns.ui.SnsBrowseUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.brandservice.ui.flutter.BizFlutterTLFlutterViewActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.finder.nearby.newlivesquare.FinderLiveSquareNewEntranceUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.finder.nearby.live.square.find.FinderLiveFindPageUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.finder.feed.ui.FinderLiveVisitorWithoutAffinityU": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.lite.ui.WxaLiteAppLiteUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.topstory.ui.home.TopStoryHomeUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.recordvideo.activity.MMRecordUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.finder.nearby.NearbyUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.readerapp.ui.ReaderAppUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mm.plugin.emoji.ui.EmojiAddCustomDialogUI": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.tencent.mobileqq": {
@@ -76,6 +153,23 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.tencent.av.ui.AVActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mobileqq.qrscan.activity.DispatchScanResultActivity": {
+          "policy_flag": 6,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.mobileqq.olympic.activity.ScanTorchActivity": {
+          "policy_flag": 6,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -91,6 +185,28 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": false
+        }
+      },
+      "translucent_rules": {
+        "com.netease.cloudmusic.music.biz.lyric.LyricShareActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.netease.cloudmusic.music.biz.rn.activity.CloudMusicRNActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.netease.cloudmusic.music.biz.recognition.ui.activity.IdentifyActivityV2": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.netease.cloudmusic.activity.IconChangeDefaultAlias": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -117,6 +233,28 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.dragon.read.component.biz.impl.SearchActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.dragon.read.bullet.widget.BulletContainerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.dragon.read.component.biz.impl.category.BookCategoryActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.qrscan.barcodescanner.DragonCaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.ss.android.ugc.aweme": {
@@ -126,6 +264,118 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.ss.android.ugc.aweme.setting.ui.DouYinSettingNewVersionActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.search.activity.SearchResultActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.ui.SettingCommonProtocolActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.ui.SettingAccountAndSafetyActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.lvideo.theater.LVTheaterPageActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.lvideo.filter.TheaterFilterActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.account.business.accountmanager.AccountManagerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.emoji.store.store.EmojiStoreActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.emoji.store.detail.EmojiResourcesDetailActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.container.c2.c2_impl.GroupBuyPageActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.bytedance.ies.ugc.aweme.hunter.fullpage.HunterContainerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.homepage.commonsubscribe.ui.page.CommonSubscribeManageActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.homepage.commonsubscribe.ui.page.CommonSubscribeManageDetailActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.serverpush.ui.PushSettingManagerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.ui.SettingChatProtocolActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.bytedance.locallife.aweme.groupon.container.impl.GroupBuyPageActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.cjpay.hostimpl.container.CJLiveDummyActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.socialnotice.view.activity.NotificationDetailActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.bullet.ui.BulletContainerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.wallet.ui.WalletActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.qrcode.ecom.ScanCommodityActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.album.MvChoosePhotoActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -161,6 +411,18 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.xingin.alioth.search.GlobalSearchActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.xingin.comment.media.browser.CommentMediaBrowserActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -206,6 +468,28 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.alipay.android.phone.homemarket.marketnew.AppManageActivityV3": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.alipay.android.phone.businesscommon.globalsearch.ui.MainSearchActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.alipay.mobile.beehive.cityselect.ui.CeilingHomeCitySelectActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.alipay.mobile.scan.as.main.MainCaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -267,6 +551,48 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.yxcorp.gifshow.relation.explore.activity.ExploreFriendActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.gifshow.profile.activity.UserProfileActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.gifshow.reminder.ReminderActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kuaishou.merchant.pagedy.page.MerchantEraActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kwai.kds.krn.api.page.tabs.KrnMultiTabActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.plugin.search.SearchActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kwai.kds.krn.api.page.KwaiRnGestureBackActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.plugin.qrcode.api.QRCodeScanActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.phoenix.read": {
@@ -282,6 +608,18 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.dragon.read.component.biz.impl.SearchActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.qrscan.barcodescanner.DragonCaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.sankuai.meituan": {
@@ -296,6 +634,23 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.sankuai.waimai.business.restaurant.poicontainer.WMRestaurantActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.meituan.android.scan.NewArActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.meituan.android.edfu.mlensInterface.DefaultScanQRActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -317,6 +672,43 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.yxcorp.plugin.qrcode.api.QRCodeScanActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.gifshow.relation.explore.activity.ExploreFriendActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.gifshow.profile.activity.UserProfileActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kuaishou.merchant.pagedy.page.MerchantEraActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kwai.kds.krn.api.page.tabs.KrnMultiTabActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.yxcorp.plugin.search.SearchActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kwai.kds.krn.api.page.KwaiRnGestureBackActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.ss.android.article.news": {
@@ -337,6 +729,18 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.ss.android.article.base.feature.category.activity.CategoryExpandActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.qrscan.barcodescanner.CaptureActivity": {
+          "policy_flag": 6,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.ss.android.article.lite": {
@@ -347,6 +751,18 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "com.ss.android.article.base.feature.category.activity.CategoryExpandActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.bytedance.smash.journeyapps.barcodescanner.CaptureActivity": {
+          "policy_flag": 6,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "com.ss.android.ugc.aweme.lite": {
@@ -356,6 +772,103 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.ss.android.ugc.aweme.setting.ui.DouYinSettingNewVersionActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.search.activity.SearchResultActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.ui.SettingCommonProtocolActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.lvideo.theater.LVTheaterPageActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.lvideo.filter.TheaterFilterActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.bytedance.locallife.aweme.groupon.container.impl.GroupBuyPageActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.bytedance.ies.ugc.aweme.hunter.fullpage.HunterContainerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.KMPHostActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.serverpush.ui.PushSettingManagerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.ui.SettingChatProtocolActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.emoji.store.store.EmojiStoreActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.emoji.store.detail.EmojiResourcesDetailActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.setting.ui.SettingAccountAndSafetyActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.cjpay.hostimpl.container.CJLiveDummyActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.socialnotice.view.activity.NotificationDetailActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.bullet.ui.BulletContainerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.plugin.common.ui.PluginDialogBlankActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.qrcode.ecom.ScanCommodityActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ss.android.ugc.aweme.album.MvChoosePhotoActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -381,6 +894,13 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      },
+      "translucent_rules": {
+        "com.tencent.qqlive.qrcode.ui.ScanQRCustomActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     },
@@ -412,6 +932,13 @@
           "source": "ColorOS 资格例外",
           "base_only": true
         }
+      },
+      "translucent_rules": {
+        "org.iqiyi.video.activity.PlayerActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
       }
     },
     "cn.wenyu.bodian": {
@@ -441,6 +968,426 @@
           "mode": 0,
           "source": "ColorOS 资格例外",
           "base_only": true
+        }
+      }
+    },
+    "com.tencent.qqmusic": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.tencent.qqmusic.business.lockscreennew.LockScreenActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.qqmusic.camerascan.view.CameraScanActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.cocos.lib.nolib.MusicWorldActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.tencent.qqmusic.activity.QQMusicGalleryActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.taobao.taobao": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.taobao.android.detail2.core.framework.NewDetailActivity": {
+          "policy_flag": 4,
+          "base_only": false,
+          "source": "ColorOS 透明策略"
+        },
+        "com.etao.feimagesearch.capture.CaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.sina.weibo": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.sina.weibo.weiyou.contacts.ChooseContactsActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.sina.weibo.preview.MediaPreviewActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.sina.weibo.qrcode.CaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.sina.weibo.page.profilev2.detail.share.MyQrCodeV2Activity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.sina.weibo.weiyou.chat.wallpaper.DMWallpaperEditActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.ct.client": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.ct.client.zxing.activity.CtScanActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ct.client.activity.NewUserGuideActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.luna.music": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.luna.biz.profile.impl.account.AccountLoginActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.greenpoint.android.mc10086.activity": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.mc10086.cmcc.core.scan.CaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.tencent.jkchess": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.tencent.gcloud.msdk.webview.WebViewActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.ai.obc.cbn.app": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.ai.obc.cbn.app.ui.other.activity.SplashActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "cmb.pb": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.pb.capture.ui.PBCaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.ihuman.recite": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.ihuman.recite.ui.learn.evaluate.EvaluateActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ihuman.recite.ui.teaching.PracticeRoomActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ihuman.recite.ui.teaching.PrimaryActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ihuman.recite.ui.AdActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.ihuman.recite.ui.listen.ListenWordsActivity2": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.hupu.games": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.hupu.android.bbs_video.v2.BBSVideoListActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.microsoft.emmx": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "org.chromium.chrome.browser.edge_ntp.wallpaper.ui.WallpaperActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.microsoft.bing.voiceai.search.ui.VoiceActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.taobao.qianniu": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.qianniu.lite.commponent.scan.business.QNScanActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.coolapk.market": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.coolapk.market.view.photo.QRCodeActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.able.wisdomtree": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.able.wisdomtree.scan.MipcaActivityCaptureNew": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.able.wisdomtree.login.MainGroupActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.tencent.map": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.tencent.map.widget.ScanQRActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.ss.android.article.video": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.ixigua.feature.mine.qrcode.QRCodeActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.gamedo.hlw.nearme.gamecenter": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.cocos2dx.lua.LoadActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.cocos2dx.lua.AppActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.UCMobile": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.uc.module.barcode.CaptureActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.youku.phone": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.youku.saosao.activity.CaptureActivity": {
+          "policy_flag": 6,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.xunmeng.pinduoduo": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.xunmeng.pinduoduo.app_address_lego.CreateLegoAddressActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.bjev.arcfox": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.up72.beiqisdk.activity.PileScanCodeActivityV2": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.kongzue.tofuture": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.kongzue.tofuture.activity.MainActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kongzue.tofuture.activity.my_memories.UserActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        },
+        "com.kongzue.tofuture.activity.FirstLetterActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.ztgame.bob.op.nearme.gamecenter": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.ztgame.barcode.activity.BarcodeActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.taobao.etao": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.taobao.sns.app.camera.container.EtaoCameraActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.chinamworld.main": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.ccb.scan.view.ScanMenuMainActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.qqgame.hlddz": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.itop.gcloud.msdk.pixui.webview.WebViewActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.unionpay": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.unionpay.activity.react.UPActivityReactNative": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.carrot.iceworld": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.stars.service.activity.FYServiceActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
+        }
+      }
+    },
+    "com.dijiang.cn.bcm": {
+      "enabled": true,
+      "rules": {},
+      "translucent_rules": {
+        "com.dihong.bcm.DjMainActivity": {
+          "policy_flag": 4,
+          "base_only": true,
+          "source": "ColorOS 透明策略"
         }
       }
     }

@@ -45,6 +45,7 @@ final class NavbarSystem {
     private record LayerGeometry(Rect frame, Rect display, Rect surfaceInsets, int height) {}
     private final Map<Object, LayerGeometry> layerBounds = new java.util.IdentityHashMap<>();
     private boolean windowLayersAvailable;
+    private final ThreadLocal<NavbarRules.Choice> layoutChoice = new ThreadLocal<>();
     private Context context;
     private final java.util.concurrent.ExecutorService statusWriter = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long lastFailure;
@@ -155,8 +156,70 @@ final class NavbarSystem {
                     return result;
                 });
             }
+            backend.installTransparentLayout(module, loader, policy, window);
             android.util.Log.i("NativeNavbar", "SYSTEM_HOOK_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) { android.util.Log.e("NativeNavbar", "System preflight failed", error); }
+    }
+
+    /** Server-side layout only: never mutates the application's persistent LayoutParams/Decor. */
+    private void installTransparentLayout(XposedModule module, ClassLoader loader, Class<?> policy, Class<?> window) {
+        java.util.List<XposedInterface.HookHandle> installed = new java.util.ArrayList<>();
+        try {
+            Class<?> frames = Class.forName("com.android.server.wm.DisplayFrames", false, loader);
+            Class<?> layout = Class.forName("android.view.WindowLayout", false, loader);
+            Class<?> clientFrames = Class.forName("android.window.ClientWindowFrames", false, loader);
+            Method compute = layout.getDeclaredMethod("computeFrames", WindowManager.LayoutParams.class, insetsClass,
+                    Rect.class, Rect.class, int.class, int.class, int.class, int.class, float.class, clientFrames);
+            Method layoutWindow = policy.getDeclaredMethod("layoutWindowLw", window, window, frames);
+            installed.add(module.hook(compute).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                NavbarRules.Choice selected = layoutChoice.get();
+                if (selected == null) return chain.proceed();
+                WindowManager.LayoutParams original = (WindowManager.LayoutParams) chain.getArg(0);
+                WindowManager.LayoutParams adjusted = transparentLayout(original, selected);
+                Object[] args = new Object[10];
+                for (int i = 0; i < args.length; i++) args[i] = chain.getArg(i);
+                args[0] = adjusted;
+                return chain.proceed(args);
+            }));
+            installed.add(module.hook(layoutWindow).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                NavbarRules.Choice previous = layoutChoice.get();
+                NavbarRules.Choice selected = null;
+                try {
+                    Object target = chain.getArg(0);
+                    if (enabled && !suspended && gestures && context != null) {
+                        Object display = NavbarReflect.call(target, "getDisplayContent");
+                        Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
+                        NavbarRules.Choice candidate = choice(target, false);
+                        if (candidate.mode() == NavbarStore.FLOATING && candidate.policyFlags() != 0
+                                && eligible(target, display, raw)) selected = candidate;
+                    }
+                } catch (ReflectiveOperationException | RuntimeException failure) {
+                    // Exact layout context could not be established: leave the native input untouched.
+                }
+                layoutChoice.set(selected);
+                try { return chain.proceed(); }
+                finally { if (previous == null) layoutChoice.remove(); else layoutChoice.set(previous); }
+            }));
+            android.util.Log.i("NativeNavbar", "TRANSPARENT_LAYOUT_READY");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            installed.forEach(XposedInterface.HookHandle::unhook);
+            android.util.Log.w("NativeNavbar", "Transparent server layout unavailable", error);
+        }
+    }
+
+    static WindowManager.LayoutParams transparentLayout(WindowManager.LayoutParams original, NavbarRules.Choice selected) throws ReflectiveOperationException {
+        WindowManager.LayoutParams adjusted = new WindowManager.LayoutParams();
+        adjusted.copyFrom(original);
+        if ((selected.policyFlags() & 4) != 0) {
+            adjusted.flags |= WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION;
+            adjusted.systemUiVisibility |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+        }
+        if (selected.consumesNavigationInsets()) {
+            int fit = (Integer) NavbarReflect.call(adjusted, "getFitInsetsTypes");
+            WindowManager.LayoutParams.class.getMethod("setFitInsetsTypes", int.class)
+                    .invoke(adjusted, fit & ~WindowInsets.Type.navigationBars());
+        }
+        return adjusted;
     }
 
     private void connect() {
@@ -366,7 +429,7 @@ final class NavbarSystem {
         if (!enabled || suspended || !gestures || context == null) return original;
         Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
         if (frame.width() > frame.height()) return original;
-        if (choice(window, false).mode() != NavbarStore.FLOATING) return original;
+        if (!choice(window, false).consumesNavigationInsets()) return original;
         Object display = NavbarReflect.call(window, "getDisplayContent");
         Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
         if (!eligible(window, display, raw)) return original;

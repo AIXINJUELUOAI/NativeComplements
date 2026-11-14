@@ -5,7 +5,12 @@ import org.json.JSONObject;
 
 /** Immutable merged template snapshot. Explicit user rules always win, including ORIGINAL. */
 public final class NavbarRules {
-    public record Choice(int mode, Integer color, String source) {}
+    public record Choice(int mode, Integer color, String source, int policyFlags) {
+        public Choice(int mode, Integer color, String source) { this(mode, color, source, 0); }
+        public boolean consumesNavigationInsets() {
+            return mode == NavbarStore.FLOATING && (policyFlags == 0 || (policyFlags & 2) != 0);
+        }
+    }
     private final JSONObject packages;
     private final Bundle settings;
     private final java.util.concurrent.ConcurrentHashMap<String, Choice> resolved = new java.util.concurrent.ConcurrentHashMap<>();
@@ -38,6 +43,13 @@ public final class NavbarRules {
             return new Choice(0, null, "模板关闭适配");
         if (app != null && app.optBoolean("enabled")
                 && version > app.optLong("disableVersionCode", -1)) {
+            JSONObject translucent = app.optJSONObject("translucent_rules");
+            JSONObject transparent = translucent == null ? null : translucent.optJSONObject(activity);
+            if (transparent != null && (isBaseApplication || !transparent.optBoolean("base_only", true))) {
+                int flags = transparent.optInt("policy_flag", 4);
+                if ((flags & 4) != 0) return new Choice(NavbarStore.FLOATING, null,
+                        transparent.optString("source", "ColorOS 透明策略"), flags);
+            }
             JSONObject rules = app.optJSONObject("rules");
             if (rules != null) {
                 String match = bestMatch(rules, activity);
