@@ -30,7 +30,7 @@ public class DemoClassifierTest {
             assertEquals("EXTEND", result.getString("decision"));
             assertEquals(1, result.getDouble("dominantRatio"), 0);
             assertEquals(360, result.getInt("analyzedPixels"));
-            assertTrue(result.getString("algorithm").contains("v2"));
+            assertTrue(result.getString("algorithm").contains("v3"));
             assertFalse(result.containsKey("edgeRatio"));
         }
     }
@@ -39,12 +39,24 @@ public class DemoClassifierTest {
         assertEquals("EXTEND", result.getString("decision"));
         assertEquals(0.8, result.getDouble("dominantRatio"), 0.0001);
     }
-    @Test public void decisionThresholdsAreInclusiveAndMiddleIsUnknown() {
-        assertEquals("EXTEND", analyze(split(70)).getString("decision"));
-        assertEquals("UNKNOWN", analyze(split(60)).getString("decision"));
-        assertEquals(0.6, analyze(split(60)).getDouble("dominantRatio"), 0.0001);
-        assertEquals("NATIVE", analyze(split(50)).getString("decision"));
-        assertEquals(0.5, analyze(split(50)).getDouble("dominantRatio"), 0.0001);
+    private Bundle ratio(int percent) {
+        int[] pixels = new int[200 * 24];
+        Arrays.fill(pixels, 0xff000000);
+        for (int y = 0; y < 24; y++) Arrays.fill(pixels, y * 200, y * 200 + percent * 2, 0xffffffff);
+        return DemoClassifier.analyze(pixels, 200, 24, 1);
+    }
+    @Test public void seventyFiveThresholdAndReviewEndpointsAreInclusive() {
+        assertEquals("NATIVE", ratio(74).getString("decision"));
+        assertEquals("EXTEND", ratio(75).getString("decision"));
+        for (int percent : new int[]{70, 75, 80}) {
+            Bundle result = ratio(percent);
+            assertEquals("near_threshold", result.getString("reviewTrigger"));
+            assertEquals(result.getString("decision"), result.getString("initialDecision"));
+        }
+        for (int percent : new int[]{69, 81, 97}) assertEquals("none", ratio(percent).getString("reviewTrigger"));
+        for (int percent : new int[]{98, 100}) assertEquals("uniform", ratio(percent).getString("reviewTrigger"));
+        assertEquals("NATIVE", ratio(60).getString("decision"));
+        assertEquals("NATIVE", ratio(50).getString("decision"));
     }
     @Test public void variedTextureHasNoDominantNeighborhood() {
         int[] pixels = flat(0xff000000);

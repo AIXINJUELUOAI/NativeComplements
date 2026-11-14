@@ -99,6 +99,26 @@ public class DemoProviderTest {
         ShadowBinder.setCallingUid(1000); assertTrue(provider.call("sample",null,sample).containsKey("error"));
         owner(); assertFalse(provider.call("latest",null,null).containsKey("id"));
     }
+    @Test public void reviewDiagnosticsSurviveStoredIdentityAndExport() throws Exception {
+        Bundle enable=new Bundle(); enable.putBoolean("enabled",true); provider.call("control",null,enable);
+        Bundle sample=new Bundle(); sample.putLong("id",91); sample.putLong("generation",provider.call("config",null,null).getLong("generation"));
+        sample.putBoolean("valid",true); sample.putString("component","test/.Page"); sample.putString("decision","NATIVE");
+        sample.putString("initialDecision","EXTEND"); sample.putString("reviewTrigger","near_threshold");
+        sample.putString("reviewStatus","fresh"); sample.putString("reviewDecision","NATIVE"); sample.putString("reviewReason","repeated_structure");
+        sample.putString("structureAlgorithm","edge-layout-v1"); sample.putString("reviewCrop","surface=Rect");
+        sample.putDouble("structureScore",0.88); sample.putDouble("structureTexture",0.12);
+        sample.putInt("reviewHeightDp",320); sample.putInt("structureOffsetDp",100); sample.putLong("reviewAt",100); sample.putLong("reviewMs",15); sample.putLong("reviewCacheAgeMs",0);
+        sample.putByteArray("structurePixels",new byte[]{1});
+        ShadowBinder.setCallingUid(1000); provider.call("sample",null,sample); owner();
+        Bundle latest=provider.call("latest",null,null);
+        assertEquals("EXTEND",latest.getString("initialDecision")); assertEquals(0.88,latest.getDouble("structureScore"),0.0001);
+        assertEquals(320,latest.getInt("reviewHeightDp")); assertEquals(15,latest.getLong("reviewMs"));
+        assertFalse(latest.containsKey("structurePixels"));
+        Bundle annotation=new Bundle(); annotation.putBundle("sample",latest); annotation.putString("expected","NATIVE");
+        assertFalse(provider.call("annotate",null,annotation).containsKey("error"));
+        java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream(); DemoStore.export(RuntimeEnvironment.getApplication(),out);
+        String text=out.toString(java.nio.charset.StandardCharsets.UTF_8); assertTrue(text.contains("repeated_structure")); assertFalse(text.contains("structurePixels"));
+    }
     @Test public void sampleAnnotationUsesStoredIdentityAndExportsNoPixels() throws Exception {
         Bundle control=new Bundle(); control.putBoolean("enabled",true); provider.call("control",null,control);
         Bundle sample=new Bundle(); sample.putLong("id",17); sample.putLong("generation",provider.call("config",null,null).getLong("generation")); sample.putBoolean("valid",true); sample.putString("component","sample/.Page"); sample.putString("decision","EXTEND"); sample.putByteArray("pixels", new byte[]{1,2});

@@ -46,6 +46,8 @@ final class DemoCapture {
     private String lastPending = "";
     private record Remembered(Snapshot snapshot, long generation, byte[] stripHash) {}
     private final LinkedHashMap<Long, Remembered> recent = new LinkedHashMap<>();
+    private final DemoReviewCache<Bundle> reviewCache = new DemoReviewCache<>();
+    private record ReviewKey(Snapshot snapshot, String initialDecision, String trigger) {}
 
     DemoCapture(ClassLoader loader) throws ReflectiveOperationException {
         Class<?> screen = Class.forName("android.window.ScreenCaptureInternal", false, loader);
@@ -110,7 +112,7 @@ final class DemoCapture {
             boolean previous = enabled;
             enabled = config != null && config.getBoolean("enabled", false);
             long nextGeneration = config == null ? 0 : config.getLong("generation", 0);
-            if (generation != nextGeneration || !enabled) recent.clear();
+            if (generation != nextGeneration || !enabled) { recent.clear(); reviewCache.clear(); }
             generation = nextGeneration;
             Bundle pending = config == null ? null : config.getBundle("pending");
             if (enabled && pending != null) {
@@ -159,12 +161,18 @@ final class DemoCapture {
             classifyMs = SystemClock.elapsedRealtime() - classifyStarted;
             Snapshot after = snapshot();
             if (!before.same(after)) throw new IllegalStateException("window or geometry changed during capture");
-            result.putBoolean("valid", true);
+            String initial = result.getString("decision", "UNKNOWN");
+            boolean recognized = "EXTEND".equals(initial) || "NATIVE".equals(initial);
+            if (!recognized) result.putString("reviewTrigger", "none");
+            review(result, before, pixels, captureGeneration);
+            if (!before.same(snapshot())) reject("window changed before result delivery");
+            result.putBoolean("valid", recognized);
             metadata(result, before, started, captureGeneration, capturedAt, captureMs, classifyMs);
             recent.put(result.getLong("id"), new Remembered(before, captureGeneration, hash(pixels)));
             if (recent.size() > 256) recent.remove(recent.keySet().iterator().next());
             publish(result);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            reviewCache.clear();
             publish(unavailable(error.getClass().getSimpleName() + ": " + error.getMessage(), before, started,
                     captureGeneration, capturedAt, captureMs, classifyMs));
         }
@@ -272,7 +280,8 @@ final class DemoCapture {
             if (result == null) reject("capture empty");
             buffer = (HardwareBuffer) hardwareBuffer.invoke(result);
             if (buffer == null || Boolean.TRUE.equals(secure.invoke(result)) || Boolean.TRUE.equals(hdr.invoke(result))
-                    || (buffer.getUsage() & HardwareBuffer.USAGE_PROTECTED_CONTENT) != 0) reject("secure, protected or HDR buffer");
+                    || (buffer.getUsage() & HardwareBuffer.USAGE_PROTECTED_CONTENT) != 0)
+                throw new SecurityException("secure, protected, HDR or unavailable buffer");
             if (buffer.getFormat() != HardwareBuffer.RGBA_8888) reject("unsupported capture format");
             image = (Bitmap) bitmap.invoke(result);
             if (image == null || image.getWidth() != rectangle.width() || image.getHeight() != rectangle.height()
@@ -284,6 +293,96 @@ final class DemoCapture {
         } finally {
             if (image != null) image.recycle();
             if (buffer != null) buffer.close();
+        }
+    }
+
+    private void review(Bundle result, Snapshot expected, int[] strip, long epoch) throws ReflectiveOperationException {
+        result.putString("initialDecision", result.getString("initialDecision", result.getString("decision", "UNKNOWN")));
+        String trigger = result.getString("reviewTrigger", "none");
+        result.putString("reviewStatus", "skipped");
+        result.putString("reviewReason", "no structure review requested");
+        result.putLong("reviewMs", 0);
+        result.putLong("reviewAt", 0);
+        result.putLong("reviewCacheAgeMs", 0);
+        if ("none".equals(trigger)) return;
+        long started = SystemClock.elapsedRealtime();
+        ReviewKey key = new ReviewKey(expected, result.getString("initialDecision"), trigger);
+        Bundle cached = reviewCache.get(key, epoch, strip, started);
+        if (cached != null) {
+            result.putAll(cached);
+            result.putString("reviewStatus", "cached");
+            result.putLong("reviewCacheAgeMs", reviewCache.age(started));
+            result.putLong("reviewMs", 0);
+            applyReview(result);
+            return;
+        }
+        if (!reviewCache.begin(started)) {
+            result.putString("reviewStatus", "throttled");
+            result.putString("reviewReason", "review_rate_limit; large ROI at most 1 Hz, current initial decision retained");
+            return;
+        }
+        Rect region = new Rect(expected.screen.left,
+                Math.max(expected.frame.top, expected.screen.bottom - (int) Math.ceil(320d * expected.density)),
+                expected.screen.right, expected.screen.bottom);
+        region.offset(expected.padding.left - expected.frame.left, expected.padding.top - expected.frame.top);
+        Bundle review = new Bundle();
+        review.putString("reviewCrop", "surface=" + region);
+        review.putInt("reviewHeightDp", Math.round(region.height() / expected.density));
+        Bitmap image = null;
+        boolean failed = false;
+        try {
+            validateReviewWindow(expected);
+            image = captureBitmap(expected, region);
+            validateReviewWindow(expected);
+            int[] pixels = new int[image.getWidth() * image.getHeight()];
+            image.getPixels(pixels, 0, image.getWidth(), 0, 0, image.getWidth(), image.getHeight());
+            for (int pixel : pixels) if ((pixel >>> 24) != 255) throw new IllegalArgumentException("nonopaque structure capture");
+            int[] embeddedStrip = new int[strip.length];
+            System.arraycopy(pixels, pixels.length - strip.length, embeddedStrip, 0, strip.length);
+            if (!DemoReviewCache.similar(strip, embeddedStrip)) throw new IllegalStateException("strip changed in structure capture");
+            review.putAll(DemoStructure.analyze(pixels, image.getWidth(), image.getHeight(), expected.density));
+            validateReviewWindow(expected);
+            int[] after = pixels(expected);
+            validateReviewWindow(expected);
+            if (!DemoReviewCache.similar(strip, after)) throw new IllegalStateException("strip changed after structure analysis");
+            review.putString("reviewStatus", "INCONCLUSIVE".equals(review.getString("reviewDecision", "INCONCLUSIVE"))
+                    ? "inconclusive" : "fresh");
+        } catch (SecurityException unsafe) {
+            throw unsafe;
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            for (Throwable cause = error; cause != null; cause = cause.getCause())
+                if (cause instanceof SecurityException) throw new SecurityException("unsafe structure capture", error);
+            // Ordinary unsupported/unstable structure leaves the narrow-strip initial decision intact.
+            // Re-check outside this catch: window/secure changes must fail the whole sample closed.
+            review.clear();
+            review.putString("reviewDecision", "INCONCLUSIVE");
+            review.putString("reviewStatus", "failed");
+            review.putString("reviewReason", error.getClass().getSimpleName() + ": " + error.getMessage());
+            review.putString("reviewCrop", "surface=" + region);
+            review.putInt("reviewHeightDp", Math.round(region.height() / expected.density));
+            failed = true;
+        } finally { if (image != null) image.recycle(); }
+        if (!expected.same(snapshot())) reject("window changed before structure delivery");
+        // Only bottom-strip/window identity is checked, not full-ROI temporal identity.
+        review.putString("reviewMatchScope", "window_geometry_and_bottom_strip_only");
+        review.putLong("reviewAt", SystemClock.elapsedRealtime());
+        review.putLong("reviewMs", SystemClock.elapsedRealtime() - started);
+        review.putLong("reviewCacheAgeMs", 0);
+        reviewCache.put(key, epoch, strip, new Bundle(review), SystemClock.elapsedRealtime(), failed);
+        result.putAll(review);
+        applyReview(result);
+    }
+
+    private void validateReviewWindow(Snapshot expected) throws ReflectiveOperationException {
+        // Fatal even if focus changes away and back before the final validation.
+        if (!expected.same(snapshot())) throw new SecurityException("window changed during structure review");
+    }
+
+    static void applyReview(Bundle result) {
+        String decision = result.getString("reviewDecision", "INCONCLUSIVE");
+        if ("EXTEND".equals(decision) || "NATIVE".equals(decision)) {
+            result.putString("decision", decision);
+            result.putString("reason", result.getString("reason", "") + "; " + result.getString("reviewReason", ""));
         }
     }
 

@@ -14,9 +14,9 @@ public final class DemoProvider extends ContentProvider {
     private final LinkedHashMap<Long, Bundle> history = new LinkedHashMap<>();
     private Bundle latest = new Bundle(), pending, screenshotState = new Bundle();
     private long leaseUntil, request, generation;
-    private static final Set<String> TEXT = Set.of("component", "decision", "reason", "algorithm", "crop", "frame", "bounds", "source", "colorSpace");
-    private static final Set<String> LONGS = Set.of("id", "capturedAt", "elapsedMs", "captureMs", "classifyMs", "generation");
-    private static final Set<String> INTS = Set.of("width", "height", "segments", "navHeight", "rotation", "displayId", "analyzedPixels");
+    private static final Set<String> TEXT = Set.of("component", "decision", "reason", "algorithm", "crop", "frame", "bounds", "source", "colorSpace", "initialDecision", "reviewTrigger", "reviewStatus", "reviewDecision", "reviewReason", "reviewCrop", "structureAlgorithm", "reviewMatchScope");
+    private static final Set<String> LONGS = Set.of("id", "capturedAt", "elapsedMs", "captureMs", "classifyMs", "generation", "reviewAt", "reviewMs", "reviewCacheAgeMs");
+    private static final Set<String> INTS = Set.of("width", "height", "segments", "navHeight", "rotation", "displayId", "analyzedPixels", "reviewHeightDp", "structureOffsetDp");
     @Override public boolean onCreate() { return true; }
     @Override public synchronized Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
@@ -159,7 +159,7 @@ public final class DemoProvider extends ContentProvider {
         }
         for (String key : LONGS) if (input.containsKey(key)) output.putLong(key, input.getLong(key));
         for (String key : INTS) if (input.containsKey(key)) output.putInt(key, input.getInt(key));
-        for (String key : new String[]{"stableRatio", "edgeRatio", "dominantRatio"}) if (input.containsKey(key)) {
+        for (String key : new String[]{"stableRatio", "edgeRatio", "dominantRatio", "structureScore", "structureTexture"}) if (input.containsKey(key)) {
             double value = input.getDouble(key); if (Double.isFinite(value)) output.putDouble(key, value);
         }
         output.putFloat("density", input.getFloat("density", 0));

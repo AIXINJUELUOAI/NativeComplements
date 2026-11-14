@@ -181,10 +181,15 @@ public final class DemoOverlay extends Service {
         }
         if (pressing) return; // Keep the visible verdict and ID together until pointer-up.
         String decision = expected(latest, true);
-        summary.setText(decision == null ? (fresh(latest) ? "待定" : "等待") : decision.equals("EXTEND") ? "延伸" : "悬浮");
+        summary.setText(verdictText(latest));
         yes.setEnabled(!annotating && pendingToken == null && decision != null);
         no.setEnabled(!annotating && pendingToken == null && decision != null);
         unsure.setEnabled(!annotating && pendingToken == null && fresh(latest));
+    }
+
+    static String verdictText(Bundle sample) {
+        String decision = expected(sample, true);
+        return decision == null ? "等待" : decision.equals("EXTEND") ? "延伸" : "悬浮";
     }
 
     // NATIVE is the original pixel classifier's non-extension verdict, not proof of safe Insets removal.

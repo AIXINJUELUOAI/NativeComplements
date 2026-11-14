@@ -19,6 +19,12 @@ public class DemoOverlayTest {
         assertEquals("NATIVE",DemoOverlay.expected(sample("NATIVE"),true));
         assertEquals("EXTEND",DemoOverlay.expected(sample("NATIVE"),false));
     }
+    @Test public void verdictNeverAutomaticallyDisplaysUserPendingLabel() {
+        assertEquals("延伸",DemoOverlay.verdictText(sample("EXTEND")));
+        assertEquals("悬浮",DemoOverlay.verdictText(sample("NATIVE")));
+        assertEquals("等待",DemoOverlay.verdictText(sample("UNKNOWN")));
+        assertEquals("等待",DemoOverlay.verdictText(null));
+    }
     @Test public void unknownInvalidAndStaleCannotBeLabeled() {
         assertNull(DemoOverlay.expected(sample("UNKNOWN"),true));
         assertNull(DemoOverlay.expected(sample("UNAVAILABLE"),false));
