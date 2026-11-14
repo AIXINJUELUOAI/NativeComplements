@@ -6,9 +6,9 @@ import android.os.Bundle;
 public final class DemoClassifier {
     private DemoClassifier() {}
     // Experimental RGB approximation, not perceptual color difference or exact clustering.
-    private static final String ALGORITHM = "rgb-dominant-v3;input=ceil24dp+-1px;band=upper-ceil12dp;"
+    private static final String ALGORITHM = "rgb-dominant-v4;input=ceil24dp+-1px;band=upper-ceil12dp;"
             + "strideXY=2px;binRGB=16;topBins=8;candidate=first-real-pixel;"
-            + "neighbor=maxChannel<=24;EXTEND>=0.75;otherwise=NATIVE;review=[0.70,0.80]or>=0.98;edgeVeto=none";
+            + "neighbor=maxChannel<=24;EXTEND>=0.75;otherwise=NATIVE;review=all-valid-single-frame;edgeVeto=none";
 
     public static Bundle analyze(int[] pixels, int width, int height, float density) {
         if (pixels == null || width <= 0 || height < 2 || !Float.isFinite(density) || density <= 0
@@ -54,8 +54,7 @@ public final class DemoClassifier {
         Bundle result = new Bundle();
         result.putString("decision", decision);
         result.putString("initialDecision", decision);
-        result.putString("reviewTrigger", analyzed == 0 ? "none"
-                : ratio >= 0.70 && ratio <= 0.80 ? "near_threshold" : ratio >= 0.98 ? "uniform" : "none");
+        result.putString("reviewTrigger", analyzed == 0 ? "none" : "single_frame_structure");
         result.putString("reason", reason);
         result.putDouble("dominantRatio", ratio);
         result.putInt("analyzedPixels", analyzed);

@@ -30,7 +30,7 @@ public class DemoClassifierTest {
             assertEquals("EXTEND", result.getString("decision"));
             assertEquals(1, result.getDouble("dominantRatio"), 0);
             assertEquals(360, result.getInt("analyzedPixels"));
-            assertTrue(result.getString("algorithm").contains("v3"));
+            assertTrue(result.getString("algorithm").contains("v4"));
             assertFalse(result.containsKey("edgeRatio"));
         }
     }
@@ -45,16 +45,14 @@ public class DemoClassifierTest {
         for (int y = 0; y < 24; y++) Arrays.fill(pixels, y * 200, y * 200 + percent * 2, 0xffffffff);
         return DemoClassifier.analyze(pixels, 200, 24, 1);
     }
-    @Test public void seventyFiveThresholdAndReviewEndpointsAreInclusive() {
+    @Test public void seventyFiveThresholdIsInclusiveAndNoValidRatioSkipsStructure() {
         assertEquals("NATIVE", ratio(74).getString("decision"));
         assertEquals("EXTEND", ratio(75).getString("decision"));
-        for (int percent : new int[]{70, 75, 80}) {
+        for (int percent : new int[]{50, 60, 69, 70, 75, 80, 81, 90, 95, 97, 98, 100}) {
             Bundle result = ratio(percent);
-            assertEquals("near_threshold", result.getString("reviewTrigger"));
+            assertEquals("single_frame_structure", result.getString("reviewTrigger"));
             assertEquals(result.getString("decision"), result.getString("initialDecision"));
         }
-        for (int percent : new int[]{69, 81, 97}) assertEquals("none", ratio(percent).getString("reviewTrigger"));
-        for (int percent : new int[]{98, 100}) assertEquals("uniform", ratio(percent).getString("reviewTrigger"));
         assertEquals("NATIVE", ratio(60).getString("decision"));
         assertEquals("NATIVE", ratio(50).getString("decision"));
     }

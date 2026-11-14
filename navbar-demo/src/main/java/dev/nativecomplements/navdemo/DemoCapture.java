@@ -4,7 +4,6 @@ import android.app.KeyguardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.ColorSpace;
 import android.graphics.Insets;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
@@ -31,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Read-only window-layer capture. All GPU work and provider IPC stay outside the WM lock. */
 final class DemoCapture {
     private static final Uri PROVIDER = Uri.parse("content://dev.nativecomplements.navdemo.data");
-    private static final long INTERVAL = 250;
+    private static final long INTERVAL = 1000;
     private final Constructor<?> builder;
     private final Method crop, build, capture, hardwareBuffer, bitmap, secure, hdr, securePolicy, protectedPolicy;
     private final HandlerThread thread;
@@ -46,8 +45,8 @@ final class DemoCapture {
     private String lastPending = "";
     private record Remembered(Snapshot snapshot, long generation, byte[] stripHash) {}
     private final LinkedHashMap<Long, Remembered> recent = new LinkedHashMap<>();
-    private final DemoReviewCache<Bundle> reviewCache = new DemoReviewCache<>();
-    private record ReviewKey(Snapshot snapshot, String initialDecision, String trigger) {}
+    // Captures and pending requests are serialized on the observation worker.
+    private String captureColorSpace;
 
     DemoCapture(ClassLoader loader) throws ReflectiveOperationException {
         Class<?> screen = Class.forName("android.window.ScreenCaptureInternal", false, loader);
@@ -112,7 +111,7 @@ final class DemoCapture {
             boolean previous = enabled;
             enabled = config != null && config.getBoolean("enabled", false);
             long nextGeneration = config == null ? 0 : config.getLong("generation", 0);
-            if (generation != nextGeneration || !enabled) { recent.clear(); reviewCache.clear(); }
+            if (generation != nextGeneration || !enabled) recent.clear();
             generation = nextGeneration;
             Bundle pending = config == null ? null : config.getBundle("pending");
             if (enabled && pending != null) {
@@ -150,10 +149,19 @@ final class DemoCapture {
         long started = SystemClock.elapsedRealtime(), captureGeneration = generation;
         long capturedAt = 0, captureMs = 0, classifyMs = 0;
         Snapshot before = null;
+        captureColorSpace = null;
         try {
             before = snapshot();
             long captureStarted = SystemClock.elapsedRealtime();
-            int[] pixels = pixels(before);
+            Rect fullRegion = structureRegion(before);
+            int[] fullPixels;
+            Bitmap frame = captureBitmap(before, fullRegion);
+            try {
+                fullPixels = new int[frame.getWidth() * frame.getHeight()];
+                frame.getPixels(fullPixels, 0, frame.getWidth(), 0, 0, frame.getWidth(), frame.getHeight());
+                for (int pixel : fullPixels) if ((pixel >>> 24) != 255) reject("nonopaque single-frame capture");
+            } finally { frame.recycle(); }
+            int[] pixels = bottomStrip(fullPixels, before.local.width(), fullRegion.height(), before.local.height());
             capturedAt = SystemClock.elapsedRealtime();
             captureMs = capturedAt - captureStarted;
             long classifyStarted = capturedAt;
@@ -164,7 +172,7 @@ final class DemoCapture {
             String initial = result.getString("decision", "UNKNOWN");
             boolean recognized = "EXTEND".equals(initial) || "NATIVE".equals(initial);
             if (!recognized) result.putString("reviewTrigger", "none");
-            review(result, before, pixels, captureGeneration);
+            review(result, before, fullPixels, fullRegion, recognized);
             if (!before.same(snapshot())) reject("window changed before result delivery");
             result.putBoolean("valid", recognized);
             metadata(result, before, started, captureGeneration, capturedAt, captureMs, classifyMs);
@@ -172,7 +180,6 @@ final class DemoCapture {
             if (recent.size() > 256) recent.remove(recent.keySet().iterator().next());
             publish(result);
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
-            reviewCache.clear();
             publish(unavailable(error.getClass().getSimpleName() + ": " + error.getMessage(), before, started,
                     captureGeneration, capturedAt, captureMs, classifyMs));
         }
@@ -277,105 +284,76 @@ final class DemoCapture {
             securePolicy.invoke(args, 2);
             protectedPolicy.invoke(args, 2);
             Object result = capture.invoke(null, build.invoke(args));
-            if (result == null) reject("capture empty");
+            if (result == null) reject("capture_result_null; requested=" + rectangle.width() + "x" + rectangle.height());
             buffer = (HardwareBuffer) hardwareBuffer.invoke(result);
-            if (buffer == null || Boolean.TRUE.equals(secure.invoke(result)) || Boolean.TRUE.equals(hdr.invoke(result))
-                    || (buffer.getUsage() & HardwareBuffer.USAGE_PROTECTED_CONTENT) != 0)
-                throw new SecurityException("secure, protected, HDR or unavailable buffer");
-            if (buffer.getFormat() != HardwareBuffer.RGBA_8888) reject("unsupported capture format");
+            if (Boolean.TRUE.equals(secure.invoke(result)) || Boolean.TRUE.equals(hdr.invoke(result)))
+                throw new SecurityException("capture_secure_or_hdr");
+            if (buffer == null) reject("capture_buffer_null; requested=" + rectangle.width() + "x" + rectangle.height());
+            if ((buffer.getUsage() & HardwareBuffer.USAGE_PROTECTED_CONTENT) != 0)
+                throw new SecurityException("capture_protected");
+            if (buffer.getFormat() != HardwareBuffer.RGBA_8888) reject("capture_format=" + buffer.getFormat());
             image = (Bitmap) bitmap.invoke(result);
-            if (image == null || image.getWidth() != rectangle.width() || image.getHeight() != rectangle.height()
-                    || image.getColorSpace() == null || !image.getColorSpace().equals(ColorSpace.get(ColorSpace.Named.SRGB)))
-                reject("capture geometry or color space mismatch");
-            Bitmap software = image.copy(Bitmap.Config.ARGB_8888, false);
-            if (software == null) reject("software copy unavailable");
-            return software;
+            String diagnostic = "requested=" + rectangle.width() + "x" + rectangle.height()
+                    + "; buffer=" + buffer.getWidth() + "x" + buffer.getHeight()
+                    + "; bitmap=" + (image == null ? "null" : image.getWidth() + "x" + image.getHeight())
+                    + "; colorSpace=" + (image == null || image.getColorSpace() == null ? "unknown"
+                    : image.getColorSpace().getName() + "#" + image.getColorSpace().getId());
+            if (image == null) reject("capture_bitmap_null; " + diagnostic);
+            if (buffer.getWidth() != rectangle.width() || buffer.getHeight() != rectangle.height())
+                reject("capture_buffer_geometry; " + diagnostic);
+            if (image.getWidth() != rectangle.width() || image.getHeight() != rectangle.height())
+                reject("capture_bitmap_geometry; " + diagnostic);
+            captureColorSpace = image.getColorSpace() == null ? "unknown"
+                    : image.getColorSpace().getName() + "#" + image.getColorSpace().getId() + " -> sRGB";
+            try { return DemoCaptureColor.toSrgb(image); }
+            catch (RuntimeException error) { throw new IllegalStateException(error.getMessage() + "; " + diagnostic, error); }
         } finally {
             if (image != null) image.recycle();
             if (buffer != null) buffer.close();
         }
     }
 
-    private void review(Bundle result, Snapshot expected, int[] strip, long epoch) throws ReflectiveOperationException {
-        result.putString("initialDecision", result.getString("initialDecision", result.getString("decision", "UNKNOWN")));
-        String trigger = result.getString("reviewTrigger", "none");
-        result.putString("reviewStatus", "skipped");
-        result.putString("reviewReason", "no structure review requested");
-        result.putLong("reviewMs", 0);
-        result.putLong("reviewAt", 0);
-        result.putLong("reviewCacheAgeMs", 0);
-        if ("none".equals(trigger)) return;
-        long started = SystemClock.elapsedRealtime();
-        ReviewKey key = new ReviewKey(expected, result.getString("initialDecision"), trigger);
-        Bundle cached = reviewCache.get(key, epoch, strip, started);
-        if (cached != null) {
-            result.putAll(cached);
-            result.putString("reviewStatus", "cached");
-            result.putLong("reviewCacheAgeMs", reviewCache.age(started));
-            result.putLong("reviewMs", 0);
-            applyReview(result);
-            return;
-        }
-        if (!reviewCache.begin(started)) {
-            result.putString("reviewStatus", "throttled");
-            result.putString("reviewReason", "review_rate_limit; large ROI at most 1 Hz, current initial decision retained");
-            return;
-        }
+    private static Rect structureRegion(Snapshot expected) {
         Rect region = new Rect(expected.screen.left,
                 Math.max(expected.frame.top, expected.screen.bottom - (int) Math.ceil(320d * expected.density)),
                 expected.screen.right, expected.screen.bottom);
         region.offset(expected.padding.left - expected.frame.left, expected.padding.top - expected.frame.top);
-        Bundle review = new Bundle();
-        review.putString("reviewCrop", "surface=" + region);
-        review.putInt("reviewHeightDp", Math.round(region.height() / expected.density));
-        Bitmap image = null;
-        boolean failed = false;
-        try {
-            validateReviewWindow(expected);
-            image = captureBitmap(expected, region);
-            validateReviewWindow(expected);
-            int[] pixels = new int[image.getWidth() * image.getHeight()];
-            image.getPixels(pixels, 0, image.getWidth(), 0, 0, image.getWidth(), image.getHeight());
-            for (int pixel : pixels) if ((pixel >>> 24) != 255) throw new IllegalArgumentException("nonopaque structure capture");
-            int[] embeddedStrip = new int[strip.length];
-            System.arraycopy(pixels, pixels.length - strip.length, embeddedStrip, 0, strip.length);
-            if (!DemoReviewCache.similar(strip, embeddedStrip)) throw new IllegalStateException("strip changed in structure capture");
-            review.putAll(DemoStructure.analyze(pixels, image.getWidth(), image.getHeight(), expected.density));
-            validateReviewWindow(expected);
-            int[] after = pixels(expected);
-            validateReviewWindow(expected);
-            if (!DemoReviewCache.similar(strip, after)) throw new IllegalStateException("strip changed after structure analysis");
-            review.putString("reviewStatus", "INCONCLUSIVE".equals(review.getString("reviewDecision", "INCONCLUSIVE"))
-                    ? "inconclusive" : "fresh");
-        } catch (SecurityException unsafe) {
-            throw unsafe;
-        } catch (ReflectiveOperationException | RuntimeException error) {
-            for (Throwable cause = error; cause != null; cause = cause.getCause())
-                if (cause instanceof SecurityException) throw new SecurityException("unsafe structure capture", error);
-            // Ordinary unsupported/unstable structure leaves the narrow-strip initial decision intact.
-            // Re-check outside this catch: window/secure changes must fail the whole sample closed.
-            review.clear();
-            review.putString("reviewDecision", "INCONCLUSIVE");
-            review.putString("reviewStatus", "failed");
-            review.putString("reviewReason", error.getClass().getSimpleName() + ": " + error.getMessage());
-            review.putString("reviewCrop", "surface=" + region);
-            review.putInt("reviewHeightDp", Math.round(region.height() / expected.density));
-            failed = true;
-        } finally { if (image != null) image.recycle(); }
-        if (!expected.same(snapshot())) reject("window changed before structure delivery");
-        // Only bottom-strip/window identity is checked, not full-ROI temporal identity.
-        review.putString("reviewMatchScope", "window_geometry_and_bottom_strip_only");
-        review.putLong("reviewAt", SystemClock.elapsedRealtime());
-        review.putLong("reviewMs", SystemClock.elapsedRealtime() - started);
-        review.putLong("reviewCacheAgeMs", 0);
-        reviewCache.put(key, epoch, strip, new Bundle(review), SystemClock.elapsedRealtime(), failed);
-        result.putAll(review);
-        applyReview(result);
+        return region;
     }
 
-    private void validateReviewWindow(Snapshot expected) throws ReflectiveOperationException {
-        // Fatal even if focus changes away and back before the final validation.
-        if (!expected.same(snapshot())) throw new SecurityException("window changed during structure review");
+    static int[] bottomStrip(int[] pixels, int width, int height, int stripHeight) {
+        if (pixels == null || width <= 0 || height <= 0 || stripHeight <= 0 || stripHeight > height
+                || (long) width * height != pixels.length) throw new IllegalArgumentException("invalid single-frame geometry");
+        int[] strip = new int[width * stripHeight];
+        System.arraycopy(pixels, pixels.length - strip.length, strip, 0, strip.length);
+        return strip;
+    }
+
+    private void review(Bundle result, Snapshot expected, int[] pixels, Rect region, boolean recognized) {
+        result.putString("initialDecision", result.getString("initialDecision", result.getString("decision", "UNKNOWN")));
+        result.putLong("reviewCacheAgeMs", 0);
+        result.putLong("reviewMs", 0);
+        result.putLong("reviewAt", 0);
+        result.putString("reviewStatus", "skipped");
+        result.putString("reviewReason", "invalid initial classification");
+        if (!recognized) return;
+        long started = SystemClock.elapsedRealtime();
+        result.putString("reviewTrigger", "single_frame_structure");
+        result.putString("reviewCrop", "surface=" + region);
+        result.putInt("reviewHeightDp", Math.round(region.height() / expected.density));
+        result.putString("reviewMatchScope", "same_capture_bitmap; 1Hz observation may delay window events up to 1s");
+        try {
+            result.putAll(DemoStructure.analyze(pixels, region.width(), region.height(), expected.density));
+            result.putString("reviewStatus", "INCONCLUSIVE".equals(result.getString("reviewDecision", "INCONCLUSIVE"))
+                    ? "inconclusive" : "fresh");
+            applyReview(result);
+        } catch (RuntimeException error) {
+            result.putString("reviewDecision", "INCONCLUSIVE");
+            result.putString("reviewStatus", "failed");
+            result.putString("reviewReason", error.getClass().getSimpleName() + ": " + error.getMessage());
+        }
+        result.putLong("reviewAt", SystemClock.elapsedRealtime());
+        result.putLong("reviewMs", SystemClock.elapsedRealtime() - started);
     }
 
     static void applyReview(Bundle result) {
@@ -494,6 +472,7 @@ final class DemoCapture {
         result.putLong("captureMs", captureMs);
         result.putLong("classifyMs", classifyMs);
         result.putLong("elapsedMs", started == 0 ? 0 : now - started);
+        if (captureColorSpace != null) result.putString("colorSpace", captureColorSpace);
         result.putString("component", snapshot == null ? "" : snapshot.component.flattenToShortString());
         result.putInt("width", snapshot == null ? 0 : snapshot.local.width());
         result.putInt("height", snapshot == null ? 0 : snapshot.local.height());

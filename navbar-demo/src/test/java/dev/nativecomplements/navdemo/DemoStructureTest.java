@@ -11,99 +11,108 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 36, manifest = Config.NONE)
 public class DemoStructureTest {
-    private static final int W = 128, H = 288;
-    private int[] flat() {
-        int[] pixels = new int[W * H];
-        Arrays.fill(pixels, 0xffffffff);
-        return pixels;
-    }
-    private Bundle analyze(int[] pixels) { return DemoStructure.analyze(pixels, W, H, 1); }
-    // Layout repeats at 48dp while each card can have different RGB colors.
-    private int[] cards() {
-        int[] pixels = flat();
+    private static final int W = 128, H = 320;
+    private int[] flat() { int[] p = new int[W * H]; Arrays.fill(p, -1); return p; }
+    private Bundle analyze(int[] p) { return DemoStructure.analyze(p, W, H, 1); }
+    private int[] cards(boolean texture) {
+        int[] p = flat();
         for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
-            int row = (y / 4) % 12, column = x / 4;
-            if ((row >= 2 && row <= 8 && column >= 3 && column <= 10)
-                    || (row >= 3 && row <= 4 && column >= 15 && column <= 27)
-                    || (row >= 7 && row <= 8 && column >= 15 && column <= 24))
-                pixels[y * W + x] = (y / 48) % 2 == 0 ? 0xffff0000 : 0xff00a000;
+            int phase = y % 160;
+            boolean image = x >= 8 && x < 40 && phase >= 16;
+            boolean text = x >= 64 && x < 104 && ((phase >= 24 && phase < 44)
+                    || (phase >= 64 && phase < 84) || phase >= 104);
+            if (image || text) p[y * W + x] = texture && image
+                    ? (((x / 8 + y / 8) % 2 == 0) ? 0xffb02020 : 0xff2040b0)
+                    : (y < 160 ? 0xff208030 : 0xffb03070);
         }
-        return pixels;
+        return p;
     }
-    @Test public void repeatedCardsMatchLayoutDespiteDifferentColors() {
-        Bundle result = analyze(cards());
-        assertEquals("NATIVE", result.getString("reviewDecision"));
-        assertEquals("repeated_two_dimensional_layout", result.getString("reviewReason"));
-        assertEquals(1, result.getDouble("structureScore"), 0);
-        assertTrue(result.getInt("structureOffsetDp") >= 48);
-        assertTrue(result.getString("structureAlgorithm").contains("IoU>=0.85"));
+    @Test public void differentImageContentsSameOneHundredSixtyDpLayoutReachBottom() {
+        Bundle b = analyze(cards(true));
+        assertEquals("NATIVE", b.getString("reviewDecision"));
+        assertEquals("repeated_foreground_envelopes_reach_bottom", b.getString("reviewReason"));
+        assertTrue(b.getDouble("structureScore") >= .78);
+        assertTrue(b.getString("structureAlgorithm").contains("layout-envelope-v4"));
     }
-    @Test public void uniformWhiteIsNotARepeatedStructure() {
-        Bundle result = analyze(flat());
-        assertEquals("INCONCLUSIVE", result.getString("reviewDecision"));
-        assertEquals(0, result.getDouble("structureScore"), 0);
-        assertEquals(0, result.getDouble("structureTexture"), 0);
+    @Test public void sameImageColorsDifferentBottomLayoutIsNotEnough() {
+        int[] p = cards(false);
+        for (int y = 224; y < H; y++) {
+            Arrays.fill(p, y * W, (y + 1) * W, -1);
+            Arrays.fill(p, y * W + 112, (y + 1) * W, 0xff208030);
+        }
+        assertEquals("INCONCLUSIVE", analyze(p).getString("reviewDecision"));
     }
-    @Test public void onlyVerticalColumnsOrHorizontalRowsAreNotTwoDimensionalEvidence() {
+    @Test public void avatarsAndTailButtonsHaveRepeatableEnvelopes() {
+        int[] p = flat();
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+            int r = y % 80;
+            if ((x >= 8 && x < 32 && r >= 8 && r < 72)
+                    || (x >= 48 && x < 88 && ((r >= 12 && r < 32) || r >= 48))
+                    || (x >= 108 && x < 120 && r >= 48)) p[y * W + x] = 0xff202020;
+        }
+        assertEquals("NATIVE", analyze(p).getString("reviewDecision"));
+    }
+    @Test public void croppedContinuationCanMatchWithoutWholeCardVisible() {
+        int[] source = cards(true), p = flat();
+        System.arraycopy(source, 8 * W, p, 0, (H - 8) * W);
+        System.arraycopy(source, 152 * W, p, (H - 8) * W, 8 * W);
+        assertEquals("NATIVE", analyze(p).getString("reviewDecision"));
+    }
+    @Test public void uniformAndOneDimensionalStripesNeverProveLayout() {
+        assertEquals("INCONCLUSIVE", analyze(flat()).getString("reviewDecision"));
         for (boolean vertical : new boolean[]{true, false}) {
-            int[] pixels = flat();
+            int[] p = flat();
             for (int y = 0; y < H; y++) for (int x = 0; x < W; x++)
-                if (((vertical ? x : y) / 8) % 2 == 0) pixels[y * W + x] = 0xff000000;
-            assertEquals("INCONCLUSIVE", analyze(pixels).getString("reviewDecision"));
+                if (((vertical ? x : y) / 8) % 2 == 0) p[y * W + x] = 0xff000000;
+            assertEquals("INCONCLUSIVE", analyze(p).getString("reviewDecision"));
         }
     }
-    @Test public void isolatedFixedBottomBackgroundWithListAboveIsNotRepeatedContent() {
-        int[] pixels = cards();
-        Arrays.fill(pixels, (H - 48) * W, pixels.length, 0xff222222);
-        Bundle result = analyze(pixels);
-        assertEquals("INCONCLUSIVE", result.getString("reviewDecision"));
-        assertEquals("isolated_background_candidate", result.getString("reviewReason"));
-    }
-    @Test public void differentBottomStructureDoesNotMeanExtension() {
-        int[] pixels = cards();
-        for (int y = H - 48; y < H; y++) for (int x = 0; x < W; x++)
-            pixels[y * W + x] = ((x / 4 + y / 4) % 2 == 0) ? 0xff0000ff : 0xffffff00;
-        assertEquals("INCONCLUSIVE", analyze(pixels).getString("reviewDecision"));
-    }
-    @Test public void singleReferenceAtOneHundredSixtyDpPeriodIsEnough() {
-        int height = 320;
-        int[] pixels = new int[W * height];
-        Arrays.fill(pixels, 0xffffffff);
-        for (int y = 0; y < height; y++) for (int x = 0; x < W; x++) {
-            int r = (y % 160) / 4, c = x / 4;
-            if ((r >= 30 && r <= 36 && c >= 3 && c <= 10)
-                    || (r >= 31 && r <= 32 && c >= 15 && c <= 27)
-                    || (r >= 35 && r <= 36 && c >= 15 && c <= 24))
-                pixels[y * W + x] = y < 160 ? 0xffff0000 : 0xff00a000;
+    @Test public void fixedBottomRegionAndCardFooterCannotForceDecision() {
+        for (int color : new int[]{-1, 0xff303030}) {
+            int[] p = cards(true);
+            Arrays.fill(p, (H - 40) * W, p.length, color);
+            assertEquals("INCONCLUSIVE", analyze(p).getString("reviewDecision"));
         }
-        Bundle result = DemoStructure.analyze(pixels, W, height, 1);
-        assertEquals("NATIVE", result.getString("reviewDecision"));
-        assertEquals(160, result.getInt("structureOffsetDp"));
     }
-    @Test public void samePixelsCouldBeListFooterSoFlatBandIsOnlyCandidate() {
-        int[] footer = cards();
-        Arrays.fill(footer, (H - 40) * W, footer.length, 0xff222222);
-        assertEquals("INCONCLUSIVE", analyze(footer).getString("reviewDecision"));
-        assertEquals("isolated_background_candidate", analyze(footer).getString("reviewReason"));
-    }
-    @Test public void oneOrTwoPixelPhaseShiftDoesNotTurnBlankIntoSimilarity() {
+    @Test public void thinLinesOrSmallPhaseShiftsCannotTurnBlankIntoLayout() {
+        int[] p = flat();
+        for (int y = 0; y < H; y += 40) Arrays.fill(p, y * W, (y + 1) * W, 0xff000000);
+        assertEquals("INCONCLUSIVE", analyze(p).getString("reviewDecision"));
         for (int shift : new int[]{1, 2}) {
-            int[] source = cards(), shifted = flat();
-            System.arraycopy(source, 0, shifted, shift * W, (H - shift) * W);
-            String decision = analyze(shifted).getString("reviewDecision");
-            assertTrue(decision.equals("NATIVE") || decision.equals("INCONCLUSIVE"));
-            assertEquals("INCONCLUSIVE", analyze(flat()).getString("reviewDecision"));
+            int[] q = flat(); System.arraycopy(p, 0, q, shift * W, (H - shift) * W);
+            assertEquals("INCONCLUSIVE", analyze(q).getString("reviewDecision"));
         }
     }
-    @Test public void giantBottomBlankDoesNotGetPositiveExtensionEvidence() {
-        int[] pixels = cards();
-        Arrays.fill(pixels, (H - 100) * W, pixels.length, 0xff222222);
-        assertEquals("INCONCLUSIVE", analyze(pixels).getString("reviewDecision"));
+    private int[] spacedRows() {
+        int[] p = flat();
+        for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) {
+            int phase = y % 96;
+            if (phase >= 8 && phase < 72 && ((x >= 8 && x < 20) || (x >= 84 && x < 108)))
+                p[y * W + x] = 0xff202020;
+        }
+        return p;
     }
-    @Test public void invalidInputAndShortEvidenceAreInconclusive() {
+    @Test public void rowPitchAllowsMatchingShortTrailingBlank() {
+        int[] p = spacedRows();
+        // Shift to end at a complete row plus its normal 24dp row gap.
+        int[] q = flat();
+        System.arraycopy(p, 32 * W, q, 0, (H - 32) * W);
+        assertEquals("NATIVE", analyze(q).getString("reviewDecision"));
+    }
+    @Test public void repeatedContentAboveFixedTabOrButtonBarDoesNotMatchItsPitch() {
+        for (boolean tabs : new boolean[]{true, false}) for (int barHeight : new int[]{24, 32, 48}) {
+            int[] p = spacedRows();
+            int top = H - barHeight;
+            Arrays.fill(p, top * W, p.length, -1);
+            for (int y = top + 4; y < H - 4; y++) for (int x = 0; x < W; x++)
+                if (tabs ? ((x >= 12 && x < 24) || (x >= 56 && x < 68) || (x >= 100 && x < 112))
+                        : (x >= 36 && x < 100)) p[y * W + x] = 0xff606060;
+            assertEquals("INCONCLUSIVE", analyze(p).getString("reviewDecision"));
+        }
+    }
+    @Test public void invalidInputIsInconclusive() {
         assertEquals("INCONCLUSIVE", DemoStructure.analyze(null, W, H, 1).getString("reviewDecision"));
         assertEquals("INCONCLUSIVE", DemoStructure.analyze(flat(), W, H, Float.NaN).getString("reviewDecision"));
-        assertEquals("INCONCLUSIVE", DemoStructure.analyze(new int[128 * 100], 128, 100, 1).getString("reviewDecision"));
         assertEquals("INCONCLUSIVE", DemoStructure.analyze(new int[128 * 400], 128, 400, 1).getString("reviewDecision"));
     }
 }
