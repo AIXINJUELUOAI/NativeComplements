@@ -24,12 +24,24 @@ public final class ShadeStore {
         result.putInt("notificationIconScale", iconScale(context, true));
         result.putInt("systemIconScale", iconScale(context, false));
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
+        result.putBoolean("drawerMonet", drawerMonet(context));
         return result;
     }
 
     public static void setSignalDisplay(Context context, boolean enabled) {
         preferences(context).edit().putBoolean("signal_display", enabled).apply();
         context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+    }
+
+    public static boolean drawerMonet(Context context) {
+        return preferences(context).getBoolean("drawer_monet", false);
+    }
+
+    public static void setDrawerMonet(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("drawer_monet", enabled).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(
+                dev.local.sunwindowdemo.features.iconlayers.IconLayerStore.LAUNCHER), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 

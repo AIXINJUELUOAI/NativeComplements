@@ -1,0 +1,118 @@
+package dev.local.sunwindowdemo.features.iconlayers;
+
+import android.content.Context;
+import android.content.pm.*;
+import android.graphics.Color;
+import android.graphics.drawable.*;
+import android.os.Process;
+import dev.local.sunwindowdemo.features.shade.*;
+import org.junit.*;
+import org.junit.runner.RunWith;
+import org.robolectric.*;
+import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowBinder;
+import static org.junit.Assert.*;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 35)
+public class DrawerMonetTest {
+    private final Context context = RuntimeEnvironment.getApplication();
+    @Before public void clear() { ShadeStore.preferences(context).edit().clear().commit(); }
+    @After public void uid() { ShadowBinder.setCallingUid(Process.myUid()); }
+
+    @Test public void defaultOffTogglePersistsAndDoesNotEnableOtherFeatures() {
+        assertFalse(ShadeStore.drawerMonet(context));
+        ShadeStore.setDrawerMonet(context, true);
+        assertTrue(ShadeStore.drawerMonet(context.createDeviceProtectedStorageContext()));
+        assertTrue(ShadeStore.read(context).getBoolean("drawerMonet"));
+        assertFalse(ShadeStore.read(context).getBoolean("enabled"));
+        ShadeStore.setDrawerMonet(context, false);
+        assertFalse(ShadeStore.drawerMonet(context));
+        var intents = Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents();
+        assertEquals(ShadeStore.CHANGED, intents.get(intents.size()-1).getAction());
+        assertEquals(IconLayerStore.LAUNCHER, intents.get(intents.size()-1).getPackage());
+    }
+
+    @Test public void launcherGetsOnlyProjectionAndUnknownUidCannotReadOrWrite() {
+        PackageInfo launcher = new PackageInfo();
+        launcher.packageName = IconLayerStore.LAUNCHER;
+        launcher.applicationInfo = new ApplicationInfo();
+        launcher.applicationInfo.packageName = launcher.packageName;
+        launcher.applicationInfo.uid = 10042;
+        Shadows.shadowOf(context.getPackageManager()).installPackage(launcher);
+        ShadeProvider provider = new ShadeProvider();
+        ProviderInfo info = new ProviderInfo(); info.authority = ShadeStore.AUTHORITY;
+        provider.attachInfo(context, info);
+        ShadeStore.setDrawerMonet(context, true);
+        ShadowBinder.setCallingUid(10042);
+        var result = provider.call("drawer", null, null);
+        assertEquals(1, result.size()); assertTrue(result.getBoolean("drawerMonet"));
+        assertThrows(SecurityException.class, () -> provider.call("read", null, null));
+        assertThrows(SecurityException.class, () -> provider.call("write", null, null));
+        ShadowBinder.setCallingUid(12345);
+        assertThrows(SecurityException.class, () -> provider.call("drawer", null, null));
+        ShadowBinder.setCallingUid(context.getApplicationInfo().uid);
+        assertTrue(provider.call("drawer", null, null).getBoolean("drawerMonet"));
+        assertThrows(IllegalArgumentException.class, () -> provider.call("write", null, null));
+    }
+
+    @Test public void nestedScopesAndExceptionsRestorePriorBinding() throws Throwable {
+        ThreadLocal<Boolean> scope = new ThreadLocal<>();
+        assertNull(scope.get());
+        DrawerMonet.inScope(scope, true, () -> {
+            assertTrue(scope.get());
+            try {
+                DrawerMonet.inScope(scope, false, () -> { assertFalse(scope.get()); throw new IllegalStateException(); });
+                fail();
+            } catch (IllegalStateException expected) { assertTrue(scope.get()); }
+            return null;
+        });
+        assertNull(scope.get());
+        scope.set(false);
+        try { DrawerMonet.inScope(scope, true, () -> { throw new IllegalStateException(); }); }
+        catch (IllegalStateException expected) { assertFalse(scope.get()); }
+    }
+
+    public static class Grid extends android.widget.FrameLayout {
+        public Grid(Context c) { super(c); }
+    }
+    public static class SearchGrid extends Grid {
+        public SearchGrid(Context c) { super(c); }
+    }
+    @Test public void onlyRegisteredGridViewsQualifyBeforeAndAfterAttachment() throws Exception {
+        DrawerMonet drawer = new DrawerMonet();
+        var recycler = DrawerMonet.class.getDeclaredField("recycler"); recycler.setAccessible(true);
+        recycler.set(drawer, Grid.class);
+        var search = DrawerMonet.class.getDeclaredField("searchRecycler"); search.setAccessible(true);
+        search.set(drawer, SearchGrid.class);
+        var registered = DrawerMonet.class.getDeclaredField("gridIcons"); registered.setAccessible(true);
+        var map = (java.util.Map<android.view.View, java.lang.ref.WeakReference<android.view.View>>) registered.get(drawer);
+        var qualifies = DrawerMonet.class.getDeclaredMethod("isDrawer", android.view.View.class); qualifies.setAccessible(true);
+        Grid grid = new Grid(context);
+        var icon = new android.view.View(context);
+        assertFalse((Boolean) qualifies.invoke(drawer, icon));
+        map.put(icon, new java.lang.ref.WeakReference<>(grid));
+        assertTrue((Boolean) qualifies.invoke(drawer, icon));
+        grid.addView(icon);
+        assertTrue((Boolean) qualifies.invoke(drawer, icon));
+        grid.removeView(icon);
+        SearchGrid results = new SearchGrid(context); results.addView(icon);
+        assertFalse((Boolean) qualifies.invoke(drawer, icon));
+        results.removeView(icon);
+        new android.widget.FrameLayout(context).addView(icon);
+        assertFalse((Boolean) qualifies.invoke(drawer, icon));
+    }
+
+    @Test public void onlyExistingAdaptiveMonochromeCanProduceMaterial() {
+        assertNull(DrawerMonetAssets.monochrome(new ColorDrawable(Color.RED), 48));
+        assertNull(DrawerMonetAssets.monochrome(new AdaptiveIconDrawable(
+                new ColorDrawable(Color.RED), new ColorDrawable(Color.BLUE)), 48));
+        var adaptive = new AdaptiveIconDrawable(new ColorDrawable(Color.RED),
+                new ColorDrawable(Color.BLUE), new ColorDrawable(Color.WHITE));
+        var result = DrawerMonetAssets.monochrome(adaptive, 48);
+        assertNotNull(result); assertEquals(48, result.getWidth());
+        assertEquals(android.graphics.Bitmap.Config.ALPHA_8, result.getConfig());
+        assertNull(DrawerMonetAssets.monochrome(adaptive, 0));
+        assertNull(DrawerMonetAssets.monochrome(adaptive, 513));
+    }
+}

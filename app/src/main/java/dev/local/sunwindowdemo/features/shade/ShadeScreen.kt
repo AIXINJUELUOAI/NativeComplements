@@ -18,6 +18,7 @@ import dev.local.sunwindowdemo.core.ui.ToggleRow
 fun ShadeScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
+    var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
     var systemIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, false)) }
@@ -26,6 +27,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         val prefs = ShadeStore.preferences(context)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             enabled = ShadeStore.read(context).getBoolean("enabled")
+            drawerMonet = ShadeStore.drawerMonet(context)
             offset = ShadeStore.offset(context)
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
@@ -36,6 +38,12 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
+        GroupTitle("应用抽屉")
+        SettingsGroup {
+            ToggleRow("抽屉莫奈图标", "仅应用抽屉网格使用原生主题图标，无莫奈素材时保留原图标，不影响桌面与搜索",
+                value = drawerMonet) { ShadeStore.setDrawerMonet(context, it) }
+        }
+        GroupTitle("通知与控制中心")
         SettingsGroup {
             ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
         }

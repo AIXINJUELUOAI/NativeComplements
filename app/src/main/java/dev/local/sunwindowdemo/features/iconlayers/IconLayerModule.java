@@ -24,6 +24,7 @@ import java.util.function.Supplier;
 /** Separate entry: no system_server hooks, resource-ID marking or window-engine changes. */
 public final class IconLayerModule extends XposedModule {
     private boolean eligible, installed;
+    private DrawerMonet drawerMonet;
     private String acknowledgedGeneration = null;
     private final AtomicInteger epoch = new AtomicInteger();
     private final AtomicBoolean fullRefresh = new AtomicBoolean();
@@ -79,6 +80,13 @@ public final class IconLayerModule extends XposedModule {
                 catch (RuntimeException failure) { note("CONNECT_FAILED " + failure.getClass().getSimpleName()); }
                 return result;
             }));
+            try {
+                DrawerMonet drawer = new DrawerMonet();
+                drawer.install(this, loader);
+                drawerMonet = drawer;
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                note("DRAWER_MONET_UNAVAILABLE " + failure.getClass().getSimpleName());
+            }
             try { installAnimationProbe(handles); }
             catch (Exception failure) { lastError = "动画观察入口：" + failure.getClass().getSimpleName(); note("ANIMATION_PROBE_UNAVAILABLE " + failure.getClass().getSimpleName()); }
             note("READY version=" + BuildConfig.VERSION_NAME + " hooks=" + handles.size() + " target=" + IconLayerStore.TARGET);
@@ -140,6 +148,8 @@ public final class IconLayerModule extends XposedModule {
     private synchronized void connect(Context app) {
         if (context != null) return;
         context = app;
+        if (drawerMonet != null) try { drawerMonet.connect(app); }
+        catch (RuntimeException failure) { note("DRAWER_MONET_CONNECT_FAILED " + failure.getClass().getSimpleName()); }
         HandlerThread thread = new HandlerThread("NcIconLayers"); thread.start();
         worker = new Handler(thread.getLooper());
         receiver = new BroadcastReceiver() {
@@ -155,6 +165,14 @@ public final class IconLayerModule extends XposedModule {
         app.registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent i) { queueReload(); }
         }, packages, Context.RECEIVER_NOT_EXPORTED);
+        IntentFilter availability = new IntentFilter(Intent.ACTION_USER_UNLOCKED);
+        availability.addAction(Intent.ACTION_MANAGED_PROFILE_AVAILABLE);
+        app.registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) {
+                if (drawerMonet != null) drawerMonet.artworkChanged();
+                queueReload();
+            }
+        }, availability, Context.RECEIVER_NOT_EXPORTED);
         queueReload();
     }
 
@@ -178,6 +196,7 @@ public final class IconLayerModule extends XposedModule {
             Set<String> previous = new HashSet<>(IconAssets.snapshot().entries().keySet());
             int previousDemo = IconAssets.snapshot().demo();
             if (!IconAssets.load(context, config, () -> request != epoch.get())) return;
+            if (drawerMonet != null) drawerMonet.artworkChanged();
             IconAssets.Snapshot current = IconAssets.snapshot();
             loadFailures = current.failures(); acknowledgedGeneration = null; lastError = "";
             Set<String> changed = new HashSet<>(previous); changed.addAll(current.entries().keySet());

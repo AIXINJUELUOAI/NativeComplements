@@ -34,7 +34,7 @@ fun HomeScreen(
         FeatureRow("来电拦截", "phone", onCalls)
         FeatureRow("加速度传感器控制", "shake", onMotion)
         FeatureRow("边缘防误触", "edge", onEdgeTouch)
-        FeatureRow("通知与控制中心", "window", onShade)
+        FeatureRow("外观与控制", "window", onShade)
     }
     Spacer(Modifier.height(16.dp))
     SettingsGroup {
