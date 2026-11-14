@@ -467,4 +467,10 @@ main 从 81c32c9 开始，开工时工作区干净，版本代码 113。用户�
 
 后续用户明确继续追取色算法，不以策略名单研究代替算法完成。已补取14份可读原生库，结合mini-debug符号与反汇编确认JNI/libgui注册及Binder回传链；尚未找到采样区域、最终颜色选择和方差公式的服务端生产路径。设备拒绝读取/system/bin/surfaceflinger，常见目录未发现独立libsurfaceflinger.so；不绕过设备权限。下一必要输入为匹配构建的官方完整OTA/system镜像及相关厂商扩展，离线提取后继续分析。在线搜索工具未配置密钥，搜索网页读取亦不可用，目前没有核验过的固件URL。研究总索引为 verification/coloros-navbar/PJZ110-17.0.0.103/README.md。
 
+用户自行取得临时root后授权只读提取，SurfaceFlinger原程序已拿到（7,335,616字节，设备/电脑SHA256均为2c64eb2c8c7d4155bfcf5ed858b70c26a81099e0dcfaae4c63818a1477adf3bc），上段输入缺口解除。未写设备暂存、改SELinux、刷写、安装或重启；之后全部离线分析。通过.gnu_debugdata恢复OplusColorPickFill与Variance::pick，定位真正生产算法。
+
+新增静态证据：RGB三个通道独立排序，去掉两端各floor(N×0.1)个值，先求整数均值，再求整数总体方差；三个方差的整数平均不超过阈值才接受。alpha直接取遍历序列中点，不是排序中位数；此层不过滤透明像素或反预乘。首轮失败可回退原采样Rect底部三行，二次阈值小于1则禁用；均失败返回空optional，不在算法内部决定黑白/透明。8个正常输入数学模型断言通过，不等同原生执行或真机效果验证。
+
+采样普通路径以目标图层变换Rect顶部为参照，构造器默认取top−12至top−2条带（整数像素，非dp，未证实当前运行覆盖值），要求完整包含于关联层变换范围。限定关联图层重合成atlas后captureScreenshot，再GraphicBuffer.lock按stride读取；不是全屏截图随意猜背景。当前报告对Region及其补集的最终语义仍保留交叉核对边界，不把初步几何命名当结论。节流为逐目标fps时间门控，0值通常不触发fps限频；仍有dirty/force门控，不能称为无条件每帧采样。完整报告保存在color-algorithm-study/Findings.md、sampling-study/REPORT.md和fill-study/FILL-EVIDENCE.md。实际元数据阈值来源、失败回填及动画交接尚待闭环；未改产品实现。
+
 用户决定通知图标本轮暂缓；导航栏方向改为优先研究ColorOS，社区默认规则拟废弃、HyperOS降为备选参考，目前只确定研究方向，未修改产品规则或运行实现。竖屏掌心误触保留后续复现任务。
