@@ -39,6 +39,12 @@ final class NavbarSystem {
     private volatile boolean landscapeClear = true;
     private Object wm, lock;
     private volatile Object previousWindow;
+    private final Map<Object, NavbarWindowLayer> windowLayers = new java.util.IdentityHashMap<>();
+    private boolean publishedWindowOwned;
+    private NavbarWindowLayer layerPreflight;
+    private record LayerGeometry(Rect frame, Rect display, Rect surfaceInsets, int height) {}
+    private final Map<Object, LayerGeometry> layerBounds = new java.util.IdentityHashMap<>();
+    private boolean windowLayersAvailable;
     private Context context;
     private final java.util.concurrent.ExecutorService statusWriter = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long lastFailure;
@@ -106,6 +112,25 @@ final class NavbarSystem {
             Method draw = window.getDeclaredMethod("finishDrawing", SurfaceControl.Transaction.class, int.class);
             Class<?> policy = Class.forName("com.android.server.wm.DisplayPolicy", false, loader);
             Method layout = policy.getDeclaredMethod("finishPostLayoutPolicyLw");
+            // Native bottom ownership survives input focus moving into a freeform task.
+            policy.getDeclaredField("mNavBarBackgroundWindowCandidate");
+            window.getMethod("getSurfaceControl");
+            window.getDeclaredField("mGlobalScale");
+            try {
+                WindowManager.LayoutParams.class.getDeclaredField("surfaceInsets");
+                backend.layerPreflight = new NavbarWindowLayer();
+                backend.windowLayersAvailable = true;
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                android.util.Log.w("NativeNavbar", "Window layer preflight failed; retaining host fallback", failure);
+            }
+            Method removed = window.getDeclaredMethod("removeImmediately");
+            module.hook(removed).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                try { if (backend.lock != null) synchronized (backend.lock) { backend.clearLayer(chain.getThisObject()); } }
+                catch (ReflectiveOperationException | RuntimeException failure) {
+                    android.util.Log.w("NativeNavbar", "Window layer cleanup pending", failure);
+                }
+                return chain.proceed();
+            });
             module.hook(state).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object original = chain.proceed();
                 try { return backend.insets(chain.getThisObject(), original); }
@@ -260,18 +285,40 @@ final class NavbarSystem {
         return frame.width() > frame.height() ? clearLandscape : requested && visible;
     }
 
-    /** ScreenshotUI owns input temporarily while the same application still owns the visible page. */
+    /** Input focus may belong to a freeform task; the native policy still knows the bottom owner. */
     static Object targetWindow(Object display, Object previous) throws ReflectiveOperationException {
         Object focused = NavbarReflect.field(display, "mCurrentFocus");
         if (focused != null) {
             WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(focused, "mAttrs");
             boolean screenshot = "com.android.systemui".equals(attrs.packageName)
                     && "ScreenshotUI".contentEquals(attrs.getTitle());
-            if (!screenshot) return focused;
+            if (!screenshot) {
+                boolean application = attrs.type >= 1 && attrs.type <= 99;
+                if (application && (Integer) NavbarReflect.call(focused, "getWindowingMode") == 5) {
+                    Object policy = NavbarReflect.call(display, "getDisplayPolicy");
+                    Object bottom = NavbarReflect.field(policy, "mNavBarBackgroundWindowCandidate");
+                    if (bottom != null && (Integer) NavbarReflect.call(bottom, "getWindowingMode") == 1
+                            && (Boolean) NavbarReflect.call(bottom, "isVisible")) {
+                        WindowManager.LayoutParams bottomAttrs = (WindowManager.LayoutParams) NavbarReflect.field(bottom, "mAttrs");
+                        if (bottomAttrs.type >= 1 && bottomAttrs.type <= 99
+                                && (bottomAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0
+                                && NavbarReflect.call(bottom, "getDisplayContent") == display) return bottom;
+                    }
+                    return null;
+                }
+                return focused;
+            }
         }
         if (previous == null || NavbarReflect.field(previous, "mActivityRecord") == null
                 || NavbarReflect.field(previous, "mActivityRecord") != NavbarReflect.field(display, "mFocusedApp")) return null;
         return (Boolean) NavbarReflect.call(previous, "isVisible") ? previous : null;
+    }
+
+    private static boolean screenshotFocused(Object display) throws ReflectiveOperationException {
+        Object focused = NavbarReflect.field(display, "mCurrentFocus");
+        if (focused == null) return false;
+        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(focused, "mAttrs");
+        return "com.android.systemui".equals(attrs.packageName) && "ScreenshotUI".contentEquals(attrs.getTitle());
     }
 
     /** Called from finishDrawing under the WM lock: the tracked window or the newly focused one. */
@@ -338,6 +385,11 @@ final class NavbarSystem {
         return !landscape || "系统窗口".equals(source) || "系统宿主".equals(source) && !launcher;
     }
 
+    static boolean clearsLauncherHost(boolean landscape, boolean ownedTasks, String component) {
+        return !landscape && ownedTasks && component != null
+                && component.startsWith("com.google.android.apps.nexuslauncher/");
+    }
+
     /** A switch with no sample yet keeps an active host frame briefly while the new page draws. */
     static boolean holdsSwitch(boolean sampled, boolean active, long switchedAt, long now) {
         return !sampled && active && now >= switchedAt && now - switchedAt <= SWITCH_HOLD_MS;
@@ -392,6 +444,16 @@ final class NavbarSystem {
                 stableColor = 0;
                 stableSamples = 0;
                 synchronized (lock) { NavbarReflect.call(window, "notifyInsetsChanged"); }
+            }
+            // Home/recents owns the screen background, not the application's sampled color.
+            // Keep only its navigation host transparent while task children supply card backgrounds.
+            boolean launcherHandoff;
+            synchronized (lock) { launcherHandoff = !windowLayers.isEmpty(); }
+            if (clearsLauncherHost(landscape, launcherHandoff, snapshot.component())) {
+                runtime("桌面／最近任务导航背景透明");
+                frameNavHeight = 0;
+                publish(true, 0, NavbarStore.FLOATING);
+                return;
             }
             if (keepsOriginal(selected.mode(), landscape, selected.source(), snapshot.component())) {
                 if (!"系统宿主".equals(selected.source())) runtime("保留系统原有 · " + selected.source());
@@ -542,7 +604,7 @@ final class NavbarSystem {
                     new Rect((Rect) NavbarReflect.call(window, "getFrame")),
                     new Rect((Rect) NavbarReflect.call(display, "getBounds")),
                     (SurfaceControl) NavbarReflect.call(window, "getSurfaceControl"),
-                    NavbarReflect.field(display, "mCurrentFocus") != null && NavbarReflect.field(display, "mCurrentFocus") != window,
+                    screenshotFocused(display),
                     component == null ? null : component.flattenToShortString(),
                     config != null && (config.uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
                             == android.content.res.Configuration.UI_MODE_NIGHT_YES);
@@ -600,22 +662,88 @@ final class NavbarSystem {
                 .setDeliveryGroupPolicy(BroadcastOptions.DELIVERY_GROUP_POLICY_MOST_RECENT).toBundle();
     }
 
+    private void clearLayer(Object window) throws ReflectiveOperationException {
+        NavbarWindowLayer layer = windowLayers.get(window);
+        if (layer != null) { layer.clear(); windowLayers.remove(window); }
+        layerBounds.remove(window);
+    }
+
+    /** Keep inactive windows' children for native task capture; their parent controls visibility. */
+    private boolean updateWindowLayer(boolean active, int color, int mode) throws ReflectiveOperationException {
+        synchronized (lock) {
+            if (!windowLayersAvailable) return false;
+            for (Object window : windowLayers.keySet().toArray()) {
+                SurfaceControl parent = (SurfaceControl) NavbarReflect.call(window, "getSurfaceControl");
+                Object display = NavbarReflect.call(window, "getDisplayContent");
+                LayerGeometry geometry = layerBounds.get(window);
+                WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
+                Object raw = display == null ? null : NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
+                Rect bounds = display == null ? null : (Rect) NavbarReflect.call(display, "getBounds");
+                int height = bounds == null ? 0 : ((Insets) insetsClass.getMethod("calculateInsets", Rect.class, Rect.class, int.class, boolean.class)
+                        .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), true)).bottom;
+                if (!enabled || suspended || !gestures || !windowLayers.get(window).belongsTo(parent)
+                        || (Integer) NavbarReflect.call(window, "getWindowingMode") != 1
+                        || choice(window, false).mode() != NavbarStore.COLOR || geometry == null
+                        || !geometry.frame().equals(NavbarReflect.call(window, "getFrame"))
+                        || !geometry.display().equals(bounds) || geometry.height() != height
+                        || !geometry.surfaceInsets().equals(NavbarReflect.field(attrs, "surfaceInsets"))
+                        || ((Number) NavbarReflect.field(window, "mGlobalScale")).floatValue() != 1f
+                        || !(Boolean) window.getClass().getMethod("isRequestedVisible", int.class).invoke(window, WindowInsets.Type.navigationBars())
+                        || (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) clearLayer(window);
+            }
+            Object window = previousWindow;
+            if (!active || mode != NavbarStore.COLOR || window == null) {
+                if (window != null && (active || targetWindow(NavbarReflect.call(window, "getDisplayContent"), window) == window))
+                    clearLayer(window);
+                return false;
+            }
+            Object display = NavbarReflect.call(window, "getDisplayContent");
+            Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
+            if (!eligible(window, display, raw) || ((Number) NavbarReflect.field(window, "mGlobalScale")).floatValue() != 1f) {
+                clearLayer(window);
+                return false;
+            }
+            Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
+            Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
+            WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
+            Rect rectangle = NavbarWindowLayer.geometry(frame, bounds, frameNavHeight, (Rect) NavbarReflect.field(attrs, "surfaceInsets"));
+            if (rectangle == null) { clearLayer(window); return false; }
+            SurfaceControl parent = (SurfaceControl) NavbarReflect.call(window, "getSurfaceControl");
+            NavbarWindowLayer layer = windowLayers.get(window);
+            if (layer == null) {
+                layer = layerPreflight != null ? layerPreflight : new NavbarWindowLayer();
+                layerPreflight = null;
+                windowLayers.put(window, layer);
+            }
+            layer.update(parent, rectangle, color);
+            layerBounds.put(window, new LayerGeometry(new Rect(frame), new Rect(bounds),
+                    new Rect((Rect) NavbarReflect.field(attrs, "surfaceInsets")), frameNavHeight));
+            return layer.valid();
+        }
+    }
+
     private void publish(boolean active, int color, int mode) {
         if (context == null) return;
+        boolean windowOwned = false;
+        try { windowOwned = updateWindowLayer(active, color, mode); }
+        catch (ReflectiveOperationException | RuntimeException failure) {
+            android.util.Log.w("NativeNavbar", "Window color layer unavailable; using host fallback", failure);
+        }
         if (!active) { stability.reset(); lastGood = null; }
         int height = active ? frameNavHeight : 0;
         long now = SystemClock.uptimeMillis();
         if (publishedActive == active && publishedColor == color && publishedMode == mode
-                && publishedHeight == height && now - lastPublished < 750) return;
+                && publishedHeight == height && publishedWindowOwned == windowOwned && now - lastPublished < 750) return;
         publishedActive = active;
         publishedColor = color;
         publishedMode = mode;
         publishedHeight = height;
+        publishedWindowOwned = windowOwned;
         lastPublished = now;
         Intent intent = new Intent(FRAME)
                 .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
                 .putExtra("active", active).putExtra("color", color).putExtra("mode", mode)
-                .putExtra("navHeight", height);
+                .putExtra("navHeight", height).putExtra("windowOwned", windowOwned);
         for (String host : new String[]{"com.android.systemui", "com.google.android.apps.nexuslauncher"}) {
             try {
                 broadcast.invoke(context, new Intent(intent).setPackage(host), android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE",

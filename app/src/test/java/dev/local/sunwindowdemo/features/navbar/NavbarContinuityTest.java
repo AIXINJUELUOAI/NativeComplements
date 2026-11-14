@@ -21,6 +21,15 @@ public class NavbarContinuityTest {
         assertFalse(NavbarSystem.supportsNavigation(portrait, true, true, false, false));
         assertTrue(NavbarSystem.supportsNavigation(portrait, false, true, true, false));
     }
+    @Test public void launcherClearsHostOnlyWhileItOwnsScreenAndAdaptedTasksRemain() {
+        String launcher = "com.google.android.apps.nexuslauncher/.NexusLauncherActivity";
+        assertTrue(NavbarSystem.clearsLauncherHost(false, true, launcher));
+        assertFalse(NavbarSystem.clearsLauncherHost(false, false, launcher));
+        assertFalse(NavbarSystem.clearsLauncherHost(false, true, "com.taobao.taobao/.Main"));
+        assertFalse(NavbarSystem.clearsLauncherHost(false, true, null));
+        assertFalse(NavbarSystem.clearsLauncherHost(true, true, launcher));
+    }
+
     @Test public void samplingBoundaryDoesNotSubtractNavigationInsetsTwice() {
         Rect display = new Rect(0, 0, 1080, 2400);
         assertEquals(2320, NavbarSystem.navigationTop(new Rect(0, 0, 1080, 2400), display, 80));
@@ -42,10 +51,46 @@ public class NavbarContinuityTest {
         public final WindowManager.LayoutParams mAttrs = new WindowManager.LayoutParams();
         public Object mActivityRecord;
         public boolean visible = true;
+        public int mode = 1;
+        public Object display;
+        public Object getDisplayContent() { return display; }
         public boolean isVisible() { return visible; }
+        public int getWindowingMode() { return mode; }
+    }
+    public static final class Policy {
+        public Object mNavBarBackgroundWindowCandidate;
     }
     public static final class Display {
         public Object mCurrentFocus, mFocusedApp;
+        public final Policy policy = new Policy();
+        public Policy getDisplayPolicy() { return policy; }
+    }
+
+    @Test public void freeformFocusUsesNativeBottomOwnerNotThePreviousPage() throws Exception {
+        Window floating = new Window(), bottom = new Window(), stale = new Window();
+        floating.mAttrs.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+        floating.mode = 5;
+        Display display = new Display();
+        display.mCurrentFocus = floating;
+        display.policy.mNavBarBackgroundWindowCandidate = bottom;
+        bottom.mAttrs.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+        bottom.display = display;
+        assertSame(bottom, NavbarSystem.targetWindow(display, stale));
+        bottom.display = new Display();
+        assertNull(NavbarSystem.targetWindow(display, stale));
+        bottom.display = display;
+        bottom.mAttrs.type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        assertNull(NavbarSystem.targetWindow(display, stale));
+        bottom.mAttrs.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+        bottom.mAttrs.flags = WindowManager.LayoutParams.FLAG_SECURE;
+        assertNull(NavbarSystem.targetWindow(display, stale));
+        bottom.mAttrs.flags = 0;
+        bottom.visible = false;
+        assertNull(NavbarSystem.targetWindow(display, stale));
+        bottom.visible = true; bottom.mode = 5;
+        assertNull(NavbarSystem.targetWindow(display, stale));
+        display.policy.mNavBarBackgroundWindowCandidate = null;
+        assertNull(NavbarSystem.targetWindow(display, stale));
     }
 
     @Test public void screenshotKeepsTheVisibleApplicationAndFloatingInsetsOwner() throws Exception {

@@ -31,6 +31,12 @@ checks = {
     "com.android.launcher3.taskbar.TaskbarBackgroundRenderer": [("draw", "(Landroid/graphics/Canvas;)V")],
     "com.android.launcher3.taskbar.StashedHandleView": [("updateHandleColor", "(ZZ)V")],
 }
+checks["android.view.SurfaceControl"] = [("isSameSurface", "(Landroid/view/SurfaceControl;)Z")]
+checks["android.view.SurfaceControl$Builder"] = [("<init>", "()V"), ("setName", "(Ljava/lang/String;)Landroid/view/SurfaceControl$Builder;"), ("setParent", "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Builder;"), ("setHidden", "(Z)Landroid/view/SurfaceControl$Builder;"), ("setColorLayer", "()Landroid/view/SurfaceControl$Builder;"), ("build", "()Landroid/view/SurfaceControl;")]
+checks["android.view.SurfaceControl$Transaction"] = [("<init>", "()V"), ("apply", "()V"), ("close", "()V")] + [(n, "(Landroid/view/SurfaceControl;)Landroid/view/SurfaceControl$Transaction;") for n in ("show", "hide")] + [(n, "(Landroid/view/SurfaceControl;" + sig + ")Landroid/view/SurfaceControl$Transaction;") for n, sig in [("setColor", "[F"), ("setAlpha", "F"), ("setPosition", "FF"), ("setWindowCrop", "II"), ("setLayer", "I"), ("reparent", "Landroid/view/SurfaceControl;")]]
+checks["com.android.server.wm.DisplayContent"].append(("getDisplayPolicy", "()Lcom/android/server/wm/DisplayPolicy;"))
+checks["com.android.server.wm.WindowState"].append(("removeImmediately", "()V"))
+checks["android.view.WindowManager$LayoutParams"] = []
 dex.TARGETS = ["L" + name.replace(".", "/") + ";" for name in checks]
 classes = {}
 for relative, expected_hash in [
@@ -54,6 +60,12 @@ for name, methods in checks.items():
         matches = [entry for entry in classes[owner]["methods"] if entry["name"] == method and entry["descriptor"] == descriptor]
         assert len(matches) == 1 and matches[0]["access_flags"] & 1, (owner, method, descriptor)
         count += 1
+for owner, name, descriptor in [
+    ("Lcom/android/server/wm/DisplayPolicy;", "mNavBarBackgroundWindowCandidate", "Lcom/android/server/wm/WindowState;"),
+    ("Lcom/android/server/wm/WindowState;", "mGlobalScale", "F"),
+    ("Landroid/view/WindowManager$LayoutParams;", "surfaceInsets", "Landroid/graphics/Rect;"),
+]:
+    assert any(f["name"] == name and f["type"] == descriptor for f in classes[owner]["fields"]), (owner, name)
 templates = json.loads((ROOT / "app/src/main/assets/navbar/templates.json").read_text(encoding="utf-8"))
 for owner, name, descriptor in [
     ("Lcom/android/launcher3/taskbar/TaskbarDragLayer;", "mBackgroundRenderer", "Lcom/android/launcher3/taskbar/TaskbarBackgroundRenderer;"),

@@ -19,7 +19,7 @@ final class NavbarHost {
     private static final Map<View, Bar> bars = new WeakHashMap<>();
     private static final Map<Object, Float> handles = new WeakHashMap<>();
     private static Method setIntensity;
-    private static boolean active, connected, settingIntensity;
+    private static boolean active, connected, settingIntensity, windowOwned;
     private static int mode, color;
     private static final Runnable expired = () -> apply(false, 0, 0);
 
@@ -54,6 +54,7 @@ final class NavbarHost {
             @Override public void onReceive(Context context, Intent intent) {
                 if (getSentFromUid() != 1000) return;
                 main.removeCallbacks(expired);
+                windowOwned = intent.getBooleanExtra("windowOwned", false);
                 apply(intent.getBooleanExtra("active", false), intent.getIntExtra("color", 0), intent.getIntExtra("mode", 0));
                 main.postDelayed(expired, NavbarSystem.FRAME_TIMEOUT_MS);
             }
@@ -63,13 +64,14 @@ final class NavbarHost {
     private static void apply(boolean enabled, int nextColor, int nextMode) {
         boolean wasActive = active;
         active = enabled;
+        if (!active) windowOwned = false;
         color = nextColor;
         mode = nextMode;
         if (!active && !wasActive) return;
         bars.forEach((view, bar) -> {
             if (view.getDisplay() == null || view.getDisplay().getDisplayId() != 0) return;
             if (active) {
-                bar.tint().setColor(mode == NavbarStore.FLOATING ? Color.TRANSPARENT : color);
+                bar.tint().setColor(windowOwned || mode == NavbarStore.FLOATING ? Color.TRANSPARENT : color);
                 if (view.getBackground() != bar.tint()) view.setBackground(bar.tint());
             } else view.setBackground(bar.original());
         });

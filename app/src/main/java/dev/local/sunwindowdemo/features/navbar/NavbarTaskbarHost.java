@@ -17,7 +17,7 @@ final class NavbarTaskbarHost {
     private static final Map<Object, java.lang.ref.WeakReference<View>> backgrounds = new WeakHashMap<>();
     private static final Map<Object, Boolean> handles = new WeakHashMap<>();
     private static final Map<Object, java.lang.ref.WeakReference<View>> transitionBackgrounds = new WeakHashMap<>();
-    private static boolean active, connected, settingHandle;
+    private static boolean active, connected, settingHandle, windowOwned;
     private static int color, mode, navHeight;
     private static final Paint band = new Paint();
     private static Method updateHandle;
@@ -55,10 +55,10 @@ final class NavbarTaskbarHost {
                 int previousColor = paint.getColor(), previousStrokeColor = stroke.getColor();
                 Paint previous = new Paint(paint), previousStroke = new Paint(stroke);
                 try {
-                    tint(paint, mode, color);
-                    if (mode == NavbarStore.FLOATING) stroke.setAlpha(0);
+                    tint(paint, windowOwned ? NavbarStore.FLOATING : mode, color);
+                    if (windowOwned || mode == NavbarStore.FLOATING) stroke.setAlpha(0);
                     Object result = chain.proceed();
-                    if (mode == NavbarStore.COLOR) {
+                    if (mode == NavbarStore.COLOR && !windowOwned) {
                         band.setColor(color);
                         drawBand((Canvas) chain.getArg(0), band, navHeight);
                     }
@@ -101,7 +101,7 @@ final class NavbarTaskbarHost {
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 var reference = transitionBackgrounds.get(chain.getThisObject());
                 View owner = reference == null ? null : reference.get();
-                if (!active || mode != NavbarStore.FLOATING || owner == null || owner.getDisplay() == null
+                if (!active || (!windowOwned && mode != NavbarStore.FLOATING) || owner == null || owner.getDisplay() == null
                         || owner.getDisplay().getDisplayId() != 0) return chain.proceed();
                 Canvas canvas = (Canvas) chain.getArg(0);
                 int save = canvas.save();
@@ -146,6 +146,7 @@ final class NavbarTaskbarHost {
             @Override public void onReceive(Context context, Intent intent) {
                 if (getSentFromUid() != 1000) return;
                 main.removeCallbacks(expired);
+                windowOwned = intent.getBooleanExtra("windowOwned", false);
                 apply(intent.getBooleanExtra("active", false), intent.getIntExtra("color", 0), intent.getIntExtra("mode", 0), intent.getIntExtra("navHeight", 0));
                 main.postDelayed(expired, NavbarSystem.FRAME_TIMEOUT_MS);
             }
@@ -156,6 +157,7 @@ final class NavbarTaskbarHost {
     private static void apply(boolean enabled, int nextColor, int nextMode, int nextHeight) {
         boolean wasActive = active;
         active = enabled;
+        if (!active) windowOwned = false;
         color = nextColor;
         mode = nextMode;
         navHeight = nextHeight;
