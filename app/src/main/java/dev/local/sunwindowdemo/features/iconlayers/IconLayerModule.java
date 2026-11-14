@@ -84,8 +84,10 @@ public final class IconLayerModule extends XposedModule {
                 DrawerMonet drawer = new DrawerMonet();
                 drawer.install(this, loader);
                 drawerMonet = drawer;
+                note("DRAWER_MONET_READY");
             } catch (ReflectiveOperationException | RuntimeException failure) {
-                note("DRAWER_MONET_UNAVAILABLE " + failure.getClass().getSimpleName());
+                note("DRAWER_MONET_UNAVAILABLE " + failure);
+                android.util.Log.w("NcDrawerMonet", "drawer hook installation failed", failure);
             }
             try { installAnimationProbe(handles); }
             catch (Exception failure) { lastError = "动画观察入口：" + failure.getClass().getSimpleName(); note("ANIMATION_PROBE_UNAVAILABLE " + failure.getClass().getSimpleName()); }

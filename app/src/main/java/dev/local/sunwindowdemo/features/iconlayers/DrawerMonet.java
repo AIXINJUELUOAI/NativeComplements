@@ -58,7 +58,7 @@ final class DrawerMonet {
         unsupported = Class.forName("com.android.launcher3.icons.ThemedBitmap", false, loader).getField("NOT_SUPPORTED").get(null);
         assets = new DrawerMonetAssets(loader);
         module.deoptimize(bubble.getDeclaredMethod("applyIconAndLabel", item));
-        module.deoptimize(item.getDeclaredMethod("newIcon", int.class, Context.class));
+        module.deoptimize(itemNewIcon(item));
         List<XposedInterface.HookHandle> hooks = new ArrayList<>();
         try {
             hooks.add(module.hook(factory).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
@@ -109,6 +109,13 @@ final class DrawerMonet {
         } catch (Throwable failure) {
             for (var hook : hooks) try { hook.unhook(); } catch (Throwable ignored) {}
             throw failure;
+        }
+    }
+
+    static Method itemNewIcon(Class<?> item) throws NoSuchMethodException {
+        try { return item.getDeclaredMethod("newIcon", Context.class, int.class); }
+        catch (NoSuchMethodException currentUnavailable) {
+            return item.getDeclaredMethod("newIcon", int.class, Context.class);
         }
     }
 
@@ -183,6 +190,7 @@ final class DrawerMonet {
         main.post(() -> {
             if (enabled == next) return;
             enabled = next;
+            android.util.Log.i("NcDrawerMonet", "config enabled=" + next);
             synchronized (copies) { generation++; copies.clear(); }
             rebind(null);
         });

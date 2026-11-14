@@ -107,4 +107,28 @@ assert 'IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED' in drawer
 assert 'getDeclaredMethod("onBindViewHolder"' not in drawer, "avoid obfuscated bridge/overload hook"
 for page in ["home/HomeScreen.kt", "navigation/ModuleApp.kt"]:
     assert '"外观与控制"' in (src / page).read_text(encoding="utf-8")
+# Optional current-device APK catches ABI drift beyond the pinned research archive.
+# Run: python tests/verify_drawer_monet.py verification/NexusLauncher-drawer-live.apk
+import sys
+if len(sys.argv) > 1:
+    live_classes, live_code = {}, {}
+    with zipfile.ZipFile(sys.argv[1]) as archive:
+        for name in archive.namelist():
+            if name.startswith("classes") and name.endswith(".dex"):
+                parsed = dex.Dex(archive.read(name))
+                live_classes.update(parsed.classes)
+                for key in parsed.code:
+                    live_code[key] = parsed.instructions(*key)
+    item_methods = [m for m in live_classes[ITEM]["methods"] if m["name"] == "newIcon"]
+    supported = ["(Landroid/content/Context;I)", "(ILandroid/content/Context;)"]
+    entry = next(m for m in item_methods if any(m["descriptor"].startswith(s) for s in supported))
+    assert calls(live_code[(ITEM, "newIcon", entry["descriptor"])], BITMAP, "newIcon")
+    provider_type = next(f["type"] for f in live_classes[CONTROLLER]["fields"] if f["name"] == "colorProvider")
+    assert any(m["name"] == "<init>" and m["descriptor"] ==
+               "(Landroid/graphics/Bitmap;" + provider_type + "Ljava/lang/Double;)V"
+               for m in live_classes[MONO]["methods"])
+    assert 'module.deoptimize(itemNewIcon(item))' in drawer
+    assert 'item.getDeclaredMethod("newIcon", Context.class, int.class)' in drawer
+    assert 'item.getDeclaredMethod("newIcon", int.class, Context.class)' in drawer
+    print("PASS: current-device item argument order and dynamically derived monochrome provider type")
 print("PASS: exact launcher binding/themed fallback signatures and drawer setting/security/lifecycle guards; live visuals unverified")

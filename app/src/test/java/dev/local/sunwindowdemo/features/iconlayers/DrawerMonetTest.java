@@ -73,6 +73,16 @@ public class DrawerMonetTest {
         catch (IllegalStateException expected) { assertFalse(scope.get()); }
     }
 
+    static class CurrentItem { public void newIcon(Context context, int flags) {} }
+    static class ArchivedItem { public void newIcon(int flags, Context context) {} }
+    @Test public void currentAndArchivedItemIconArgumentOrdersAreSupported() throws Exception {
+        assertArrayEquals(new Class<?>[]{Context.class, int.class},
+                DrawerMonet.itemNewIcon(CurrentItem.class).getParameterTypes());
+        assertArrayEquals(new Class<?>[]{int.class, Context.class},
+                DrawerMonet.itemNewIcon(ArchivedItem.class).getParameterTypes());
+        assertThrows(NoSuchMethodException.class, () -> DrawerMonet.itemNewIcon(Object.class));
+    }
+
     public static class Grid extends android.widget.FrameLayout {
         public Grid(Context c) { super(c); }
     }
