@@ -473,4 +473,10 @@ main 从 81c32c9 开始，开工时工作区干净，版本代码 113。用户�
 
 采样普通路径以目标图层变换Rect顶部为参照，构造器默认取top−12至top−2条带（整数像素，非dp，未证实当前运行覆盖值），要求完整包含于关联层变换范围。限定关联图层重合成atlas后captureScreenshot，再GraphicBuffer.lock按stride读取；不是全屏截图随意猜背景。当前报告对Region及其补集的最终语义仍保留交叉核对边界，不把初步几何命名当结论。节流为逐目标fps时间门控，0值通常不触发fps限频；仍有dirty/force门控，不能称为无条件每帧采样。完整报告保存在color-algorithm-study/Findings.md、sampling-study/REPORT.md和fill-study/FILL-EVIDENCE.md。实际元数据阈值来源、失败回填及动画交接尚待闭环；未改产品实现。
 
+进一步补齐：pick全empty不写新色，调用者仍fill(nullopt)；fill pending可用持久旧色，仍empty则不写颜色；非pending且首次通知时发送snapshot现有色，不是在失败分支造固定黑白透明。sampleAlpha与关联layerAlpha分开保存，surface最终alpha取乘积；正常callback分开回传二者（flags0），首次旧色通知layerAlpha=1（flags1）。snapshot透明黑仅为构造初态，不代表每次失败回退。
+
+服务端交接补证：Launcher setRecentsAppBehindSystemBars接收端仅改TaskFragment.mCanAffectSystemUiFlags并requestTraversal，不直接写导航背景色。应用侧颜色层以app surface为parent，失去资格时删除并恢复color views；仅完全不透明的采集色回填DecorView。snapshot捕获会将原生NavigationBar窗口surface加入排除列表，但未证明app背景子层同样排除；Shell逐帧leash/alpha交接仍未闭环，不能宣称静态研究保证无黑闪。完整新增报告见本地failure-study/Findings.md与transition-study/TRANSITION-EVIDENCE.md。全程电脑离线分析。
+
+选区与阈值交叉核对修正：metadata101→fps字段+7cc，102→lineVarianceLimit来源+7d8，103→sideVarianceLimit来源+7d4；SF构造缺键初值分别0、0、25，但Java创建时通常显式设置，不与实际运行值混同。metadata101变化置force标记。首轮ROI实际接收R−E而非构造的E：足够宽且使用构造默认时，为条带左侧内缩2px后的10px宽小块及右侧对应小块，并非整条中央区域。窄窗口及覆盖参数保留通用Region运算，不强套两块公式。
+
 用户决定通知图标本轮暂缓；导航栏方向改为优先研究ColorOS，社区默认规则拟废弃、HyperOS降为备选参考，目前只确定研究方向，未修改产品规则或运行实现。竖屏掌心误触保留后续复现任务。
