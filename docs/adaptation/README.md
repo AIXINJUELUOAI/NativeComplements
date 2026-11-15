@@ -1,10 +1,29 @@
 # 跨系统接入与小窗拆分索引
 
-## 当前状态：0.10.0 / code139 实施中
+## 当前状态：0.10.0 / code139 第一轮代码闭环完成
 
-当前第一轮小窗解耦与同源独立小窗版正在实施，版本为 `0.10.0` / versionCode `139`，以 [构建配置](<../../app/build.gradle.kts>) 为准。**不是全部解耦完成、独立版可用或 LOS 兼容声明。** Alive 与其他功能重构仍暂缓。
+第一轮授权的小窗规则/状态与原生执行分界、同源独立小窗产品隔离已完成，版本为 `0.10.0` / versionCode `139`，以[构建配置](<../../app/build.gradle.kts>)为准。**这是代码与主机验证交付，不是设备效果或 LOS 兼容声明，也不是任意系统可替换的完整平台接口。** Alive 与其他功能重构仍暂缓。
 
-### 最新进度：a8d6d60 已提交并 push
+### 最新进度：恢复与生命周期闭环
+
+- 恢复阶段 `912070f` 已 push，receipt：`cbd207b..912070f`。纯 [WindowRecoveryPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowRecoveryPolicy.java>)承载 boot/live 资格、100 次重试与就绪一次复查；[WindowHistory](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowHistory.java>)承载 120ms 稳定观察，native snapshot 仍先于历史删除。该阶段完整单测 full 405 / window 400，零失败。
+- 生命周期阶段 `a0f3a7b` 已 push，receipt：`912070f..a0f3a7b`。纯 [WindowLifecycle](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowLifecycle.java>)承载 tick、priority/input、continuation 与 visible-resume 值规则；原生 lease 最后采样、隐藏分支无 lease、WM 锁内重验及执行顺序保持。
+- 最终完整单测 **full 415 / window 410，均零失败、零错误**；基线 **4 unchanged / 22 documented changes / 37 additions**、全部 host checks、无 Android 编译依赖的标准 javac 纯类检查及归档接口检查通过。current/QPR2 入口归档签名检查通过，不能替代真机回归。
+- 最终双 Release/R8 与双 APK 原签名、独立 IDs、三个静态 scope、full 七/window 四入口、快捷方式及禁止非小窗 Hook 的 DEX 边界核验通过。导航、恢复、生命周期独立审查 P0/P1 均为 0；纯规则均有实际生产调用。
+- [WindowEngine](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java>)保留 Android 协调、原生对象身份、WM/事务、AtomicFile/Parcel 与恢复副作用；不为单实现新增通用平台接口，不以文件大小衡量解耦。当前计划中的五个闭环已收口，设备回归按[设备验收](<../../DEVICE_ACCEPTANCE.md>)执行，安装/重启/LSPosed 配置由用户操作。
+
+### 最终双 APK
+
+版本均为 `0.10.0` / code `139`，使用原覆盖升级证书；只交付双 APK，不交付源码 ZIP 或额外报告。
+
+| 产物 | SHA-256 |
+|---|---|
+| 主模块（本地交付产物，不入库） | `d422c90bcb2e5c73630a017ca77726fcefd38c9c298b0b5d7f9dc971702e62d2` |
+| 独立小窗（本地交付产物，不入库） | `0db253d3dde78c781c33dc8c63b5ebdccb39c5c60a59598b963b243ab6a4ccbb` |
+
+APK 在本地生成且不入 Git；以上核验对应 `a0f3a7b` 的运行源码。安装/重启/框架配置由用户操作，建议只启用一个小窗后端；主版覆盖升级，独立版使用隔离身份、配置和恢复记录，不自动迁移主版设置。
+
+### 历史阶段：a8d6d60 已提交并 push
 
 最新阶段 `a8d6d60` 已 commit 并 push main，receipt：`00b6db6..a8d6d60`。本节集中记录最新证据；后面的提交与数字均是对应阶段历史，不覆盖后续未提交改动。
 
@@ -13,12 +32,7 @@
 - 完整双单测 **full 396 / window 391，均 0 失败**；`verify_runtime` 的原基线 5 unchanged / 21 documented changes 与 35 additions、全部 host checks，以及无 Android 编译依赖的标准 javac 纯类检查通过。
 - 双 release/R8、双 APK 打包的原签名、IDs、scope、entries、shortcuts 与 forbidden DEX 检查通过；独立 review 的 P0/P1 为 0。以上均是阶段静态/主机/构建证据，**不是设备或 LOS 兼容结论**。
 
-仍剩两闭环，未完成前不称整轮解耦完成，也不以 Engine 行数衡量进度：
-
-1. **恢复**：boot/retry 决策与 History 120ms 链；`monet-fix` task32 独占 Engine 恢复工作，尚未纳入本节已验证阶段。
-2. **窗口生命周期**：tick、priority、input、continuation eligibility，以及 lease/screen schedule；task33 需等恢复阶段 push 后由 `window-server` 接续，避免并写 Engine。
-
-生成 APK 仍为阶段检查产物，不 present/tag，不提前宣布独立版可用。Alive、其他功能重构仍暂缓；native AtomicFile/Parcel/WM/Binder 留在适配侧，复用已有规则不重复重写。
+该阶段当时剩余恢复、窗口生命周期两闭环；现均已在上方最新阶段完成。该阶段的 APK/hash 只作历史证据，不作为最终交付包。Alive、其他功能重构仍暂缓；native AtomicFile/Parcel/WM/Binder 留在适配侧。
 
 ### 此前已提交并 push 的边界
 
@@ -43,7 +57,7 @@
 
 推送 receipt：`a6da12a..004aa43` 到 main。完整双全测 **full 368 / window 363，均零失败**；基线/全部主机规则与归档接口检查通过。此阶段未重新发布 APK；之后未提交改动不得沿用该结果。
 
-`004aa43` 当时剩余导航/Policy、恢复、tick 调度、Host admission 与 Back handoff 五闭环；其中导航/Policy、Host admission、Back handoff 已在后续阶段推进，**当前只剩恢复与窗口生命周期两项**，范围和协作顺序以[最新进度](<#最新进度a8d6d60-已提交并-push>)为准。编译、单测、R8、当前设备回归和目标系统验证分开记录。
+`004aa43` 当时剩余导航/Policy、恢复、tick 调度、Host admission 与 Back handoff 五闭环；其中导航/Policy、Host admission、Back handoff 已在后续阶段推进，其余恢复与窗口生命周期也已在最新阶段收口，完整证据以[最新进度](<#最新进度恢复与生命周期闭环>)为准。编译、单测、R8、当前设备回归和目标系统验证分开记录。
 
 未来 LOS 贡献顺序：**先由我们完成 refactor → 贡献者再 fork / adapt / test 并提交 PR → 我们 review 并做现设备回归 → 最后决定 merge**。不在当前未冻结边界上承诺适配完成，不凭 ROM 名或 Freeform 开关宣称兼容。
 
