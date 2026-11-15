@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 135
-        versionName = "0.9.45-immersive-test1"
+        versionCode = 136
+        versionName = "0.9.46-immersive-test2"
     }
     signingConfigs {
         create("demoUpdate") {
@@ -55,7 +55,7 @@ dependencies {
     compileOnly(files("libs/libxposed-api-101.0.1.jar"))
     // Hidden framework classes used only in system_server (source: libs/hidden-stubs-src).
     compileOnly(files("libs/hidden-stubs.jar"))
-    testRuntimeOnly(files("libs/libxposed-api-101.0.1.jar"))
+    testImplementation(files("libs/libxposed-api-101.0.1.jar"))
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.activity:activity-compose:1.11.0")
     implementation("androidx.compose.ui:ui")

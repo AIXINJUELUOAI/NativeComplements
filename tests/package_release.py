@@ -47,7 +47,7 @@ def main():
         assert archive.testzip() is None, "APK CRC failure"
         assert "assets/navbar/templates.json" not in archive.namelist(), "Removed navigation templates asset in APK"
         check_scopes(archive.read("META-INF/xposed/scope.list").decode("utf-8"))
-        assert "staticScope=false" in archive.read("META-INF/xposed/module.prop").decode(), "Keep existing user-authorized scopes compatible"
+        assert "staticScope=true" in archive.read("META-INF/xposed/module.prop").decode().splitlines(), "Expected static three-system scope policy"
         assert set(archive.read("META-INF/xposed/java_init.list").decode().splitlines()) == {
             "dev.local.sunwindowdemo.SunWindowModule",
             "dev.local.sunwindowdemo.LauncherGuard",
