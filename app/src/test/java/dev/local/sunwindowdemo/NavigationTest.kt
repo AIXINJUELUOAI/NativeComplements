@@ -149,20 +149,37 @@ class NavigationTest {
         compose.runOnIdle { assertFalse(home.onBackPressedDispatcher.hasEnabledCallbacks()) }
     }
 
-    @Test fun navbarHasItsOwnHomeEntryAndNativeSettingsPage() {
+    @Test fun navbarImmersiveIsOnlyUnderAppearanceAndControl() {
         val (homeScenario, home) = launch(intent())
-        compose.onNodeWithText("导航栏适配").performScrollTo().performClick()
-        val navbarIntent = nextPage(home, Page.Navbar)
+        compose.onNodeWithText("导航栏适配").assertDoesNotExist()
+        compose.onNodeWithText("小白条沉浸").assertDoesNotExist()
+        compose.onNodeWithText("外观与控制").performScrollTo().performClick()
+        val shadeIntent = nextPage(home, Page.Shade)
         homeScenario.moveToState(Lifecycle.State.CREATED)
-        val (_, navbar) = launch(navbarIntent)
-        compose.onNodeWithTag("page-title-导航栏适配").assertIsDisplayed()
-        compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("启用导航栏适配").fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithText("启用导航栏适配").assertIsDisplayed()
-        compose.onNodeWithText("系统宿主").assertDoesNotExist()
+        val (_, shade) = launch(shadeIntent)
+        compose.onNodeWithTag("page-title-外观与控制").assertIsDisplayed()
+        compose.onNodeWithText("小白条沉浸").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("逐应用设置").assertDoesNotExist()
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.runOnIdle { assertTrue(navbar.isFinishing) }
+        compose.runOnIdle { assertTrue(shade.isFinishing) }
+    }
+
+    @Test fun developerToolsNoLongerExposeNavbarDiagnostics() {
+        launch(intent(Page.Tools))
+        compose.onNodeWithText("小窗诊断与恢复").assertIsDisplayed()
+        compose.onNodeWithText("图标实验与诊断").assertIsDisplayed()
+        compose.onNodeWithText("导航栏诊断与标注").assertDoesNotExist()
+        compose.onNodeWithText("标注模式").assertDoesNotExist()
+    }
+
+    @Test fun removedNavbarDestinationsFallBackToHome() {
+        for (destination in listOf("Navbar", "NavbarApp", "NavbarDiagnostics")) {
+            val (scenario, _) = launch(Intent(ApplicationProvider.getApplicationContext(), SettingsActivity::class.java)
+                .putExtra(MainActivity.PAGE_EXTRA, destination))
+            compose.onNodeWithTag("page-title-类原生补全计划").assertIsDisplayed()
+            compose.onNodeWithText("导航栏适配").assertDoesNotExist()
+            scenario.close()
+        }
     }
 
     @Test fun legacySettingsEntryStillOpensWindowAndRecreationKeepsDestination() {

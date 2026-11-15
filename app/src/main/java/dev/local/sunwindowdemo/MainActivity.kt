@@ -18,7 +18,7 @@ open class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         dev.local.sunwindowdemo.features.diagnostics.Diagnostics.initialize(this, dev.local.sunwindowdemo.features.diagnostics.Diagnostics.APP)
         controller = WindowController(this)
-        setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish, initialAppPackage, ::openIconApp, ::openNavbarApp) } }
+        setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish, initialAppPackage, ::openIconApp) } }
         if (intent.action == "recover") controller.restore()
     }
     override fun onResume() { super.onResume(); if (::controller.isInitialized) controller.resume() }
@@ -33,9 +33,6 @@ open class MainActivity : ComponentActivity() {
     private fun openIconApp(pkg: String) {
         startActivity(Intent(this, SettingsActivity::class.java).putExtra(PAGE_EXTRA, Page.IconApp.name).putExtra(APP_EXTRA, pkg))
     }
-    private fun openNavbarApp(pkg: String) {
-        startActivity(Intent(this, SettingsActivity::class.java).putExtra(PAGE_EXTRA, Page.NavbarApp.name).putExtra(APP_EXTRA, pkg))
-    }
 
     companion object { const val PAGE_EXTRA = "settingsPage"; const val APP_EXTRA = "iconAppPackage" }
 }
@@ -43,6 +40,9 @@ open class MainActivity : ComponentActivity() {
 // Preserve the component referenced by Android accessibility settings and the existing fan panel.
 class SettingsActivity : MainActivity() {
     override val initialPage: Page
-        get() = Page.entries.firstOrNull { it.name == intent.getStringExtra(PAGE_EXTRA) } ?: Page.Window
+        get() {
+            val destination = intent.getStringExtra(PAGE_EXTRA) ?: return Page.Window
+            return Page.entries.firstOrNull { it.name == destination } ?: Page.Home
+        }
     override val initialAppPackage: String? get() = intent.getStringExtra(APP_EXTRA)
 }

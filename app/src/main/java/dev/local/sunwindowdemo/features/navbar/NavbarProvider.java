@@ -6,44 +6,26 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
-import java.util.Arrays;
 
+/** Only the manager and SystemUI may read the immersive switch; there are no rule/write endpoints. */
 public final class NavbarProvider extends ContentProvider {
+    public static final Uri URI = Uri.parse("content://" + NavbarStore.AUTHORITY);
     @Override public boolean onCreate() { return true; }
-    @Override public Bundle call(String method, String packageName, Bundle extras) {
+
+    @Override public Bundle call(String method, String arg, Bundle extras) {
+        if (!"system".equals(method)) throw new IllegalArgumentException("system read only");
         int uid = Binder.getCallingUid();
-        if ("label".equals(method)) {
+        if (uid != getContext().getApplicationInfo().uid) {
             try {
-                if (uid != getContext().getApplicationInfo().uid
-                        && uid != getContext().getPackageManager().getApplicationInfo("com.android.systemui", 0).uid)
-                    throw new SecurityException("navbar labeller");
-            } catch (android.content.pm.PackageManager.NameNotFoundException error) { throw new SecurityException(error); }
-            if (extras == null) return Bundle.EMPTY;
-            Bundle reply = new Bundle();
-            reply.putInt("previous", NavbarStore.label(getContext(), extras.getString("package"),
-                    extras.getString("activity"), extras.getInt("mode", -2)));
-            return reply;
-        }
-        if ("system".equals(method) || "status".equals(method)) {
-            try {
-                if (uid != 1000 && uid != getContext().getApplicationInfo().uid
-                        && uid != getContext().getPackageManager().getApplicationInfo("com.android.systemui", 0).uid)
-                    throw new SecurityException("navbar system reader");
-            } catch (android.content.pm.PackageManager.NameNotFoundException error) { throw new SecurityException(error); }
-            if ("status".equals(method)) {
-                var edit = getContext().createDeviceProtectedStorageContext().getSharedPreferences("navbar_status", 0).edit();
-                if (extras != null && extras.containsKey("host")) edit.putString("host", extras.getString("host", ""));
-                if (extras != null && extras.containsKey("runtime")) edit.putString("runtime", extras.getString("runtime", ""));
-                edit.apply();
-                return Bundle.EMPTY;
+                if (uid != getContext().getPackageManager().getApplicationInfo("com.android.systemui", 0).uid)
+                    throw new SecurityException("immersive navbar reader");
+            } catch (android.content.pm.PackageManager.NameNotFoundException error) {
+                throw new SecurityException(error);
             }
-            return NavbarStore.systemSnapshot(getContext());
         }
-        if (!"read".equals(method) || packageName == null) throw new IllegalArgumentException("read package");
-        String[] packages = getContext().getPackageManager().getPackagesForUid(uid);
-        if (packages == null || !Arrays.asList(packages).contains(packageName)) throw new SecurityException("navbar reader");
-        return NavbarStore.read(getContext(), packageName);
+        return NavbarStore.systemSnapshot(getContext());
     }
+
     @Override public Cursor query(Uri u, String[] p, String s, String[] a, String o) { throw new UnsupportedOperationException(); }
     @Override public String getType(Uri u) { return null; }
     @Override public Uri insert(Uri u, ContentValues v) { throw new UnsupportedOperationException(); }

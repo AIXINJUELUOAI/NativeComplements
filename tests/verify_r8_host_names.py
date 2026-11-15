@@ -9,8 +9,12 @@ REQUIRED = {
     (PREFIX + "TaskCover;", "refreshScreenCorners"): {"com.android.internal.policy.ScreenDecorationsUtils"},
     (PREFIX + "WindowControls;", "buildControlsRoot"): {
         "android.view.ViewTreeObserver$OnComputeInternalInsetsListener", "android.view.ViewTreeObserver$InternalInsetsInfo"},
-    (PREFIX + "features/navbar/NavbarTaskbarHost;", "installTransitions"): {
-        "com.android.launcher3.taskbar.TaskbarTransitions", "com.android.systemui.shared.statusbar.phone.BarTransitions"},
+    (PREFIX + "features/navbar/NavbarHost;", "<init>"): {
+        "mContext", "mNavBarMode", "mNavigationBarTransitions", "mBarBackground", "repositionNavigationBar",
+        "providedInsets", "getType", "setInsetsSize"},
+    (PREFIX + "features/navbar/NavbarHost;", "install"): {
+        "com.android.systemui.navigationbar.views.NavigationBar", "android.view.InsetsFrameProvider",
+        "getBarLayoutParamsForRotation", "onInit", "draw", "callApplicationOnCreate", "IMMERSIVE_HOOK_READY"},
     (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit"},
     (PREFIX + "features/shade/ComposeShadeLayout;", "install"): {"kotlin.coroutines.Continuation"},
     (PREFIX + "features/shade/SignalDisplay;", "install"): {"kotlin.Pair"},
@@ -35,13 +39,20 @@ RUNTIME_METHODS = {
     "features/edgetouch/EdgeInputPolicy": {"accepted", "regions"},
     "features/iconlayers/IconOverrides": {"prune"},
     "features/iconlayers/IconPolicy": {"batch"},
-    "features/navbar/NavbarTaskbarHost": {"installTransitions"},
     "features/navbar/NavbarModule": {"onPackageLoaded"},
+    "features/navbar/NavbarHost": {"install", "eligible", "onLayout", "removeNavigationInset", "hideBackground", "applyEnabled", "refreshBars"},
     "core/HostSnapshot": {"read", "cached", "store"},
     "features/iconlayers/IconAssets": {"imageBytes"},
     "features/iconlayers/IconImages": {"notificationSize"},
-    "features/navbar/NavbarSystem": {"requestTick", "frameOptions", "writeRuntime"},
 }
+
+REMOVED_NAVBAR_CLASSES = {
+    "NavbarApp", "NavbarSystem", "NavbarContainer", "NavbarRules", "NavbarStructure", "NavbarSignature",
+    "NavbarTaskbarHost", "NavbarTrace", "NavbarLabelHost", "NavbarViewTree", "NavbarInsets", "NavbarReflect",
+    "NavbarColorCache", "NavbarColors", "NavbarWindowLayer", "NavbarLayout", "NavbarScreenKt",
+}
+REMOVED_NAVBAR_OWNERS = {PREFIX + "features/navbar/" + name + ";" for name in REMOVED_NAVBAR_CLASSES}
+
 
 def check(apk):
     runtime = {PREFIX + owner + ";": methods for owner, methods in RUNTIME_METHODS.items()}
@@ -53,6 +64,11 @@ def check(apk):
             if not name.endswith(".dex"):
                 continue
             data = dex.Dex(archive.read(name))
+            # Inspect definitions, not type references: include nested remnants without parsing every class body.
+            owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
+            obsolete = {owner for owner in owners if owner.split("$", 1)[0].rstrip(";") + ";" in REMOVED_NAVBAR_OWNERS}
+            if obsolete:
+                raise RuntimeError(f"Removed navigation runtime still present in final DEX: {sorted(obsolete)}")
             for owner, cls in data.classes.items():
                 if owner in runtime:
                     missing = runtime[owner] - {method["name"] for method in cls["methods"]}
@@ -78,7 +94,7 @@ def check(apk):
     if runtime_found != set(runtime):
         raise RuntimeError(f"Missing integrated runtime classes: {set(runtime) - runtime_found}")
     print("PASS: final DEX retains Kotlin/Compose host-loader reflection names at all checked hooks")
-    print("PASS: final DEX includes restored window optimizations, icon cleanup and navigation host")
+    print("PASS: final DEX includes restored window optimizations, icon cleanup and immersive navigation host; removed navigation runtime absent")
 
 if __name__ == "__main__":
     check(Path(sys.argv[1]))

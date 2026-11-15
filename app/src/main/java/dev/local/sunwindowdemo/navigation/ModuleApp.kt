@@ -36,9 +36,6 @@ import dev.local.sunwindowdemo.features.motion.MotionStore
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
 import dev.local.sunwindowdemo.features.shade.ShadeScreen
 import dev.local.sunwindowdemo.features.shade.ShadeStore
-import dev.local.sunwindowdemo.features.navbar.NavbarScreen
-import dev.local.sunwindowdemo.features.navbar.NavbarAppScreen
-import dev.local.sunwindowdemo.features.navbar.NavbarDiagnosticsScreen
 import dev.local.sunwindowdemo.home.AboutScreen
 import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.home.LicensesScreen
@@ -47,7 +44,7 @@ enum class Page(val title: String) {
     Home("类原生补全计划"), Window("小窗设置"), Shade("外观与控制"), Barrage("弹幕通知"), BarrageHistory("弹幕记录"), Suggestions("快捷建议"),
     IconLayers("图标适配"), IconApp("图标设置"), Motion("加速度传感器控制"), EdgeTouch("边缘防误触"), Calls("来电拦截"), Records("拦截记录"),
     Gestures("手势与菜单"), Behavior("窗口与多任务"), Prevention("小窗触发限制"), Blocked("禁用应用"),
-    About("关于"), Logs("诊断日志"), Licenses("开源许可"), Navbar("导航栏适配"), NavbarApp("导航栏设置"), NavbarDiagnostics("导航栏诊断"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
+    About("关于"), Logs("诊断日志"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
 }
 
 @Composable
@@ -58,7 +55,6 @@ fun ModuleApp(
     back: () -> Unit,
     appPackage: String? = null,
     openIconApp: (String) -> Unit = {},
-    openNavbarApp: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     var iconBatch by rememberSaveable { mutableStateOf(false) }
@@ -69,13 +65,11 @@ fun ModuleApp(
     fun cancelIconBatch() { iconBatch = false; showIconBatch = false; iconSelection = emptyList() }
     BackHandler(selectingIcons && !showIconBatch) { cancelIconBatch() }
     val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
-    val navbarApp = if (page == Page.NavbarApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
     // Standard Activity navigation leaves predictive Back and its animation with Android.
     SettingsPage(
         title = when (page) {
             Page.IconLayers -> if (selectingIcons) "已选择 ${selectedIcons.size} 个应用" else page.title
             Page.IconApp -> iconApp?.label ?: "图标设置"
-            Page.NavbarApp -> navbarApp?.label ?: "导航栏设置"
             else -> page.title
         },
         onBack = if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
@@ -101,8 +95,6 @@ fun ModuleApp(
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
             Page.Shade -> ShadeScreen(bottomInset)
-            Page.Navbar -> NavbarScreen(controller.apps, controller.catalogLoaded, bottomInset, openNavbarApp)
-            Page.NavbarApp -> NavbarAppScreen(navbarApp, controller.catalogLoaded, bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
@@ -120,7 +112,6 @@ fun ModuleApp(
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onBarrage = { navigate(Page.Barrage) },
                         onShade = { navigate(Page.Shade) },
-                        onNavbar = { navigate(Page.Navbar) },
                     )
                     Page.Window -> WindowScreen(controller.preferences, navigate, controller::toggleControl)
                     Page.Suggestions -> SuggestionScreen(controller)
@@ -143,8 +134,7 @@ fun ModuleApp(
                         dev.local.sunwindowdemo.features.diagnostics.DiagnosticsScreen(bottomInset)
                     }
                     Page.Licenses -> LicensesScreen()
-                    Page.Tools -> DeveloperTools(onWindow = { navigate(Page.Diagnostics) }, onIcons = { navigate(Page.IconDiagnostics) }, onNavbar = { navigate(Page.NavbarDiagnostics) })
-                    Page.NavbarDiagnostics -> NavbarDiagnosticsScreen()
+                    Page.Tools -> DeveloperTools(onWindow = { navigate(Page.Diagnostics) }, onIcons = { navigate(Page.IconDiagnostics) })
                     Page.Diagnostics -> DiagnosticsScreen(controller)
                     Page.IconDiagnostics -> IconDiagnosticsScreen()
                     else -> Unit
@@ -207,7 +197,7 @@ private fun IconLayerActions(onBatch: () -> Unit) {
 }
 
 @Composable
-private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit, onNavbar: () -> Unit) {
+private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
     val context = LocalContext.current
     var calls by remember { mutableStateOf(CallBlockingStore.readConfig(context)) }
     var motion by remember { mutableStateOf(MotionStore.read(context)) }
@@ -221,7 +211,6 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit, onNavbar: 
     SettingsGroup {
         SettingRow("小窗诊断与恢复", onClick = onWindow)
         SettingRow("图标实验与诊断", onClick = onIcons)
-        SettingRow("导航栏诊断与标注", "运行状态与人工标注", onClick = onNavbar)
     }
     GroupTitle("其他服务")
     SettingsGroup {

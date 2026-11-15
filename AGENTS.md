@@ -1,11 +1,11 @@
 # NativeComplements
 
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
-- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制、图标适配、导航栏适配与通知／控制中心横屏双栏，不创建其他功能的占位页面或接口。
+- 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制、图标适配与外观和控制（含小白条沉浸、通知／控制中心横屏双栏），不创建其他功能的占位页面或接口。
 - 管理页面共用 SettingsPage 标题栏和系统安全区，页面内部不重复创建标题与 Scaffold。开发者工具仅从“关于”连续点击版本号七次后显示，日常页面不展示后端连接及实验信息。
-- 正式功能集中在 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。用户另授权 navbar-demo 独立观察 APK（dev.nativecomplements.navdemo，独立 system 作用域），仅采样/人工标注，不改导航、页面或 Insets；实验前关闭正式导航总开关并由用户重启。Demo 0.1.6（layout-v6）每次捕获一张导航上方最多320dp应用图连同窗口内导航区域行；应用层导航区域非纯色即判悬浮（应用已自行绘制），3–6个窄、等距、对称且上方2dp平静、不与上方列重复的底部导航项判延伸（底栏内淡纹理>8%视为半透明模糊判悬浮），否则底部≥32dp空白或有边界/等距排列且不与上方重复的底栏判延伸，内容被边界截断、与上方重复或无法确认判悬浮；12–24dp主色占比仅记录。离线原型与样本集在 verification/navbar-demo-live/layout-v5（proto.py 与 DemoLayout.java 保持同步）。每次肯定/否定/待定都保存该分析区域（PNG优先，≤800KiB，最多400张）及样本JSON，忙碌或过期时仍记录标注但不截图；日志与截图仅本地、可ZIP导出/清空，不上传；构建签名检查用 python tests/package_navbar_demo.py，额外归档接口核验用 python tests/verify_navbar_demo_target.py。
+- 正式功能集中在 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。用户另授权 navbar-demo 独立观察 APK（dev.nativecomplements.navdemo，独立 system 作用域），仅采样/人工标注，不改导航、页面或 Insets；实验前关闭“小白条沉浸”并由用户重启。Demo 0.1.6（layout-v6）每次捕获一张导航上方最多320dp应用图连同窗口内导航区域行；应用层导航区域非纯色即判悬浮（应用已自行绘制），3–6个窄、等距、对称且上方2dp平静、不与上方列重复的底部导航项判延伸（底栏内淡纹理>8%视为半透明模糊判悬浮），否则底部≥32dp空白或有边界/等距排列且不与上方重复的底栏判延伸，内容被边界截断、与上方重复或无法确认判悬浮；12–24dp主色占比仅记录。离线原型与样本集在 verification/navbar-demo-live/layout-v5（proto.py 与 DemoLayout.java 保持同步）。每次肯定/否定/待定都保存该分析区域（PNG优先，≤800KiB，最多400张）及样本JSON，忙碌或过期时仍记录标注但不截图；日志与截图仅本地、可ZIP导出/清空，不上传；构建签名检查用 python tests/package_navbar_demo.py，额外归档接口核验用 python tests/verify_navbar_demo_target.py。
 - 第一版行为基线是 Demo8.2。基线原有26个Java文件，当前变更清单记录于 tests/runtime-changes.json，代码位于 features/floatingwindow/legacy，Java 源码包路径保持 dev.local.sunwindowdemo。修改小窗时记录原因，不改基线摘要来隐藏差异。
-- applicationId 自 0.6.0 起为 dev.nativecomplements.module（模块名“类原生补全计划”）；它与三个系统作用域、签名权限和 corner 偏好键是覆盖升级兼容点。使用 SystemUI 宿主与协议16，不依赖无障碍，导航栏取色由 system、SystemUI 与 Pixel 桌面宿主执行，透明绘制由用户授权作用域中的应用侧 Hook 配合。推荐作用域从已核实 ColorOS 配置外层包名生成，安装后须在 LSPosed 确认作用域，推荐不等于授权；本模块不自动修改作用域。Activity 模板由 UID 校验 Provider 同步，普通应用仅能读取自己包的规则。
+- applicationId 自 0.6.0 起为 dev.nativecomplements.module（模块名“类原生补全计划”）；它与三个系统作用域、签名权限和 corner 偏好键是覆盖升级兼容点。使用 SystemUI 宿主与协议16，不依赖无障碍。推荐作用域仅保留 system、SystemUI 与 Pixel 桌面三个系统作用域；小白条沉浸仅注入 SystemUI，不依赖普通应用授权，无应用侧或system_server导航Hook。本模块不自动修改用户已有作用域。
 - .local/demo.keystore 是现有覆盖升级签名，仅本地保存。不要提交签名、设备数据或本机配置。
 - JDK17+、SDK android-37.0、Gradle8.14.4。本机可用 Android Studio JBR，跨目录构建通过环境变量配置路径。
 - 构建：gradlew.bat --no-daemon --console=plain :app:assembleRelease。按变更运行必要的针对性检查，不把构建成功表述为真机效果保证。
@@ -25,17 +25,14 @@
 - 抽屉莫奈图标开关位于“外观与控制”（原“通知与控制中心”），默认关闭且独立于图标适配总开关。仅抽屉网格限定原生渲染链，复用原生monochrome/主题色/角标；缺素材回原生，不全局启用主题，不写共享BitmapInfo，不改桌面、搜索与通知图标。Launcher UID仅能读取该布尔投影；宿主私有素材有界缓存，配置/素材发布/包及用户可用性变化后失效，关闭重绑恢复。抽屉 AppInfo 查询补齐主题位（CacheLookupFlag 8），缺主题位的已绑定图标在后台按原 flag+8 重载一次。
 - “莫奈图标”分组含抽屉、遮罩（应用／小窗启动与变换遮罩，TaskCover）、小窗（悬浮菜单与扇区，AppCatalog.windowIcon）三个独立开关；三者均受系统“壁纸与样式 → 主题图标”门控，Launcher 由 ThemeManager.verifyIconState 上报 system_themed，未开启时开关置灰且实际关闭。遮罩与小窗配色同 AOSP MonoIconThemeController，素材优先模块 mono，其次原生 monochrome，缺失回原有图标。
 - 状态栏图标垂直位置与“外观与控制”共用同一设定快照，范围 -32~+32 dp，仅平移可见内容，不改高度、刘海或 DPI。系统悬浮旋转按钮在“快捷建议 → 屏幕旋转”开启时由本模块替换，关闭即恢复原生；仅点击时写入目标方向，不改自动旋转总开关。
-- 导航取色保留现有应用图层窄条算法；小窗获焦时以原生 DisplayPolicy 底部背景候选选择全屏归属，补色为 WindowState 容器下的无输入子层，宿主仅透明背景并同步手势条明暗，接口失败回退宿主补色。失焦不立即销层以保留任务截图机会；窗口删除、父 Surface／几何／规则／安全状态变化和功能暂停时清理。桌面／最近任务在仍有适配任务时仅清理宿主导航背景，不铺前应用颜色；真机快照与转场结果需独立验证。
-- 导航栏位于 features/navbar，首页独立入口保留逐应用列表、Activity 子页、搜索及页面人工规则；不增加逐应用启用开关。竖屏用户页面 > 用户Activity > 用户应用 > 白名单/手写模板 > 自动；com.google.android.* 与白名单保留系统原有。透明策略 policy_flag/base_only 保留（4仅透明，6另处理Insets），小黑盒 StoryActivity 保留显式悬浮；横屏独立默认开启清理宿主背景。安全窗口不截图，键盘/分屏/其他显示器旁路原生，安全窗口可用显式悬浮规则。取色继续截整窗口后软件裁剪，用导航边界上方一行拉伸，缓冲子层失败退单色；截图排除补色层，ScreenshotUI 同窗口短暂采样失败保留颜色最多1500ms。桌面/最近任务与SystemUI面板目标选择及stickyFloating沿用现有策略。
-- 0.9.43-container-test1 删除正式模块旧像素 NavbarLayout 自动分类与自动学习/投票/seed/导出清除入口，旧 navbar_learned/navbar_labels 磁盘不主动删除但不再读取，learned=true 模板不参与决策。AUTO=3 改为应用作用域内 NavbarContainer 标准View底部结构检查：有界节点256/深度32/4ms软预算，只读类与几何/可交互信息、不读文本、不截图、不用无障碍；固定操作区→取色、滚动视口贴底→悬浮、结构不明→原有。滚到末尾仍按容器类型判断；Compose/WebView/Surface/自绘无法深入时明确未知，不以旧像素算法兜底。不承诺所有应用可读或20ms端到端响应。QQ等验证需用户在LSPosed确认应用授权并重启应用；本模块不代改作用域。
-- 容器检查随layout/scroll节流64ms、存续窗口750ms心跳；应用 NAVBAR_PAGE 报告绑定真实 ViewRootImpl.mWindow Binder，系统核对当前窗口UID/IWindow并自行读取Activity归属（不信任发端Activity），1500ms过期恢复原有并请求Insets更新，不跨Activity缓存模式。system_server反馈原始导航高度与当前悬浮状态，避免已剥离客户端Insets使边界丢失；配置/报告解析失败保守恢复。页面签名仅兼容人工页面规则（有界子节点），不驱动学习或自动模式记忆。0.9.44-container-test2 的 SystemUI 可拖动/折叠标注浮窗仅显示容器类型、建议/实际模式两行，规则覆盖时短注，详细节点/边界/耗时/原因只进本地日志，规则覆盖时仍检查；按钮取色/悬浮/保留/自动及撤销保留。诊断与开关仅开发者工具展示，NavbarTrace保留本地环形日志。navbar-demo 独立观察APK保持原实验算法，不与正式容器链路混用。
-- 0.9.44-container-test2 应用侧在 WindowManagerGlobal.addView 成功后追踪所有主线程窗口根，getWindowViews 补齐现存根，detach清理观察；Activity仅保留人工页面规则归属。删除“透明背景+全屏根”推断已适配。系统以既有底部归属为锚点，按真实窗口Z序确认贴底窗口，UID/IWindow精确认证；弹窗/子窗先只诊断保留，不把被遮住Activity当底部证据，不扩大原有全屏base布局修改范围。自定义ViewGroup可深入标准子节点，底部空间剪枝尊重clipChildren=false，绘制倒序与Z/祖先alpha检查遮挡；整宽确认不透明前景剪下层，混合/半透明未知。无逐应用专用判断，不引入语义树/像素分类。
+- 0.9.45-immersive-test1 将正式导航栏适配收敛为“外观与控制 → 小白条沉浸”单开关，默认关闭，使用独立 navbar_immersive 配置，不继承旧总开关。删除独立板块、逐应用/Activity/页面规则、取色、模板、容器检测、学习、标注浮窗及应用/server/Launcher导航Hook；历史磁盘偏好不主动删除但不再读取。navbar-demo 独立观察APK不改动。
+- 小白条沉浸只在默认显示器手势导航生效：SystemUI创建原生导航栏参数时仅修改 navigationBars Insets provider，保留原生横条、手势触摸区域、其他Insets源和窗口几何；仅对该导航栏所属的背景Drawable临时空裁剪，仍运行原生绘制/动画状态，关闭invalidate恢复，不接管横条颜色/明暗。配置由UID校验Provider只向管理器/SystemUI暴露enabled；更改监听异步读配置、主线程调用原生导航重新布局，关闭重新生成原生参数，不用已被改过的尺寸作恢复值。不读取应用内容、不截图、不取色、不修改安全窗口和逐应用Insets。实际键盘、横屏、转场和关闭恢复效果需要真机独立验证，不宣称构建通过即全面兼容。
 - 长侧滑打开小窗由 corner.longBackWindow 独立控制，沿用已保存值，旧安装缺键时保留原先开启行为，新安装默认关闭。Provider 首次导出前完成迁移，宿主快照只读。完全不透明的 TaskCover 遮挡期间可复用真实窗口呈现状态，揭开前强制刷新；进入淡出、退出或释放阶段的旧遮罩应替换，交接时延续已持有的原生动画图层。
 - TaskCover 由现有 SF Choreographer 驱动，与窗口共享帧节奏，日志覆盖遮罩帧间隔、呈现复用次数及完整动画回调的长耗时。
 - 弹幕并发档位通过滑块选择三条、五条、无限，旧配置默认三条，调低档位保留当前消息；无限档用满可见轨道后复用轨道。有限档满额后排队，成功显示并保存历史后取消对应版本的原通知。
 - 边缘防误触使用 system_server 输入过滤边界，按每根手指的 DOWN 决定整条流，保留已有无障碍输入过滤器。区域由 SystemUI UID 校验广播同步，3 秒租约失效释放；宿主连接失败回退透明窗口。角落按四个旋转选择握持侧两个角，默认 24dp 可调，系统安全区与小窗控件继续保留。
 
-- 小窗触控区域合并到单个受信任窗口，通过 InternalInsetsInfo 的可触区域并集保留内容穿透、过渡阻断、入场手势、键盘安全区与系统优先级；隐藏接口预检失败时回退原六窗口。横屏导航背景同时处理 Launcher 的 TaskbarBackgroundRenderer 和 TaskbarTransitions 专属 BarBackgroundDrawable，保持原生动画状态更新与到期恢复。
+- 小窗触控区域合并到单个受信任窗口，通过 InternalInsetsInfo 的可触区域并集保留内容穿透、过渡阻断、入场手势、键盘安全区与系统优先级；隐藏接口预检失败时回退原六窗口。
 - 图标批量设置仅从图标适配页顶部菜单进入，先选择应用，再独立选择桌面、莫奈、通知模式，每路默认保持现有。素材与生成缓存各应用独立保留，一次提交整个批次并刷新。
 
 - TaskCover 的全屏端点使用所属显示器的 ScreenDecorationsUtils.getWindowCornerRadius，按系统统一窗口半径规则处理分辨率缩放并与小窗圆角插值；新建、恢复衔接及目标边界变化时更新，逐帧复用。

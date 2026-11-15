@@ -1,90 +1,199 @@
 package dev.local.sunwindowdemo.features.navbar;
 
 import android.app.Application;
-import android.content.*;
-import android.graphics.Color;
+import android.app.Instrumentation;
+import android.content.Context;
+import android.database.ContentObserver;
+import android.graphics.Canvas;
+import android.graphics.Insets;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.ColorDrawable;
-import android.os.*;
-import android.view.View;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Looper;
+import android.view.Display;
+import android.view.WindowInsets;
+import android.view.WindowManager;
 import io.github.libxposed.api.*;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.WeakHashMap;
 
-/** Colors the native navigation window, preserving its original touch and gesture handling. */
+/** Removes only the native navigation source's occupied space, not its window or gestures. */
 final class NavbarHost {
-    private static final Handler main = new Handler(Looper.getMainLooper());
-    private record Bar(Drawable original, ColorDrawable tint) {}
-    private static final Map<View, Bar> bars = new WeakHashMap<>();
-    private static final Map<Object, Float> handles = new WeakHashMap<>();
-    private static Method setIntensity;
-    private static boolean active, connected, settingIntensity, windowOwned;
-    private static int mode, color;
-    private static final Runnable expired = () -> apply(false, 0, 0);
+    private static final String TAG = "NativeNavbar";
+    private final Handler main = new Handler(Looper.getMainLooper());
+    // All controller access, configuration publication and layout mutation stay on the main thread.
+    private final Map<Object, Context> bars = new WeakHashMap<>();
+    private final Map<Drawable, java.lang.ref.WeakReference<Object>> backgrounds = new WeakHashMap<>();
+    private final Field context, navigationMode, transitions, background, providedInsets;
+    private final Method reposition, providerType, setInsetsSize;
+    private Handler reader;
+    private Application application;
+    private boolean enabled, observing;
+    private final Runnable reload = this::readSettings;
+    private final Runnable refresh = this::refreshBars;
 
-    static void install(XposedModule module, ClassLoader loader) {
-        try {
-            Class<?> bar = Class.forName("com.android.systemui.navigationbar.views.NavigationBarView", false, loader);
-            for (var constructor : bar.getDeclaredConstructors()) {
-                module.hook(constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                    Object result = chain.proceed();
-                    View view = (View) chain.getThisObject();
-                    main.post(() -> bars.put(view, new Bar(view.getBackground(), new ColorDrawable())));
-                    return result;
-                });
-            }
-            Class<?> handle = Class.forName("com.android.systemui.navigationbar.gestural.NavigationHandle", false, loader);
-            setIntensity = handle.getDeclaredMethod("setDarkIntensity", float.class);
-            module.hook(setIntensity).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                if (!settingIntensity) handles.put(chain.getThisObject(), (Float) chain.getArg(0));
-                View view = (View) chain.getThisObject();
-                if (active && mode == NavbarStore.COLOR && view.getDisplay() != null && view.getDisplay().getDisplayId() == 0)
-                    return chain.proceed(new Object[]{Color.luminance(color) > 0.5f ? 1f : 0f});
-                return chain.proceed();
-            });
-            android.util.Log.i("NativeNavbar", "SYSTEM_UI_HOOK_READY");
-        } catch (ReflectiveOperationException error) { android.util.Log.e("NativeNavbar", "SystemUI preflight failed", error); }
+    NavbarHost(Class<?> bar, Class<?> provider) throws ReflectiveOperationException {
+        context = bar.getDeclaredField("mContext");
+        navigationMode = bar.getDeclaredField("mNavBarMode");
+        transitions = bar.getDeclaredField("mNavigationBarTransitions");
+        background = transitions.getType().getSuperclass().getDeclaredField("mBarBackground");
+        transitions.setAccessible(true);
+        background.setAccessible(true);
+        reposition = bar.getDeclaredMethod("repositionNavigationBar", int.class);
+        context.setAccessible(true);
+        navigationMode.setAccessible(true);
+        reposition.setAccessible(true);
+        providedInsets = WindowManager.LayoutParams.class.getField("providedInsets");
+        providerType = provider.getMethod("getType");
+        setInsetsSize = provider.getMethod("setInsetsSize", Insets.class);
     }
 
-    static void connect(Application app) {
-        if (connected || !app.getPackageName().equals("com.android.systemui")) return;
-        connected = true;
-        app.registerReceiver(new BroadcastReceiver() {
-            @Override public void onReceive(Context context, Intent intent) {
-                if (getSentFromUid() != 1000) return;
-                main.removeCallbacks(expired);
-                windowOwned = intent.getBooleanExtra("windowOwned", false);
-                apply(intent.getBooleanExtra("active", false), intent.getIntExtra("color", 0), intent.getIntExtra("mode", 0));
-                main.postDelayed(expired, NavbarSystem.FRAME_TIMEOUT_MS);
-            }
-        }, new IntentFilter(NavbarSystem.FRAME), "android.permission.STATUS_BAR_SERVICE", main, Context.RECEIVER_EXPORTED);
+    static NavbarHost install(XposedModule module, ClassLoader loader) {
+        var hooks = new ArrayList<XposedInterface.HookHandle>();
+        try {
+            Class<?> bar = Class.forName("com.android.systemui.navigationbar.views.NavigationBar", false, loader);
+            NavbarHost host = new NavbarHost(bar,
+                    Class.forName("android.view.InsetsFrameProvider", false, loader));
+            Method layout = bar.getDeclaredMethod("getBarLayoutParamsForRotation", int.class);
+            if (layout.getReturnType() != WindowManager.LayoutParams.class)
+                throw new NoSuchMethodException("NavigationBar layout return type");
+            Method init = bar.getDeclaredMethod("onInit");
+            Method draw = host.background.getType().getDeclaredMethod("draw", Canvas.class);
+            Method applicationCreate = Instrumentation.class.getDeclaredMethod("callApplicationOnCreate", Application.class);
+            if (!module.deoptimize(host.reposition) || !module.deoptimize(init))
+                throw new IllegalStateException("Navigation layout callers deoptimize failed");
+            hooks.add(module.hook(layout).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Object result = chain.proceed();
+                host.onLayout(chain.getThisObject(), (WindowManager.LayoutParams) result);
+                return result;
+            }));
+            hooks.add(module.hook(draw).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Drawable drawable = (Drawable) chain.getThisObject();
+                if (!host.hideBackground(drawable)) return chain.proceed();
+                Canvas canvas = (Canvas) chain.getArg(0);
+                int save = canvas.save();
+                try {
+                    canvas.clipRect(0, 0, 0, 0);
+                    // Run native animation/time/invalidation logic without painting the backdrop.
+                    return chain.proceed();
+                } finally { canvas.restoreToCount(save); }
+            }));
+            hooks.add(module.hook(applicationCreate).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Object result = chain.proceed();
+                host.connect((Application) chain.getArg(0));
+                return result;
+            }));
+            android.util.Log.i(TAG, "IMMERSIVE_HOOK_READY");
+            return host;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            for (var hook : hooks) try { hook.unhook(); } catch (RuntimeException ignored) {}
+            android.util.Log.e(TAG, "Immersive SystemUI preflight failed", error);
+            return null;
+        }
     }
 
-    private static void apply(boolean enabled, int nextColor, int nextMode) {
-        boolean wasActive = active;
-        active = enabled;
-        if (!active) windowOwned = false;
-        color = nextColor;
-        mode = nextMode;
-        if (!active && !wasActive) return;
-        bars.forEach((view, bar) -> {
-            if (view.getDisplay() == null || view.getDisplay().getDisplayId() != 0) return;
-            if (active) {
-                bar.tint().setColor(windowOwned || mode == NavbarStore.FLOATING ? Color.TRANSPARENT : color);
-                if (view.getBackground() != bar.tint()) view.setBackground(bar.tint());
-            } else view.setBackground(bar.original());
-        });
-        settingIntensity = true;
-        try {
-            for (var entry : handles.entrySet()) {
-                View view = (View) entry.getKey();
-                if (view.getDisplay() == null || view.getDisplay().getDisplayId() != 0) continue;
-                float intensity = active && mode == NavbarStore.COLOR
-                        ? (Color.luminance(color) > 0.5f ? 1f : 0f) : entry.getValue();
-                try { setIntensity.invoke(entry.getKey(), intensity); }
-                catch (ReflectiveOperationException ignored) {}
+    static boolean eligible(boolean enabled, Display display, int navigationMode) {
+        return enabled && display != null && display.getDisplayId() == Display.DEFAULT_DISPLAY
+                && navigationMode == 2;
+    }
+
+    void onLayout(Object controller, WindowManager.LayoutParams params) throws ReflectiveOperationException {
+        if (Looper.myLooper() != Looper.getMainLooper()) return;
+        Context owner = (Context) context.get(controller);
+        bars.put(controller, owner);
+        Drawable drawable = (Drawable) background.get(transitions.get(controller));
+        if (drawable != null) backgrounds.put(drawable, new java.lang.ref.WeakReference<>(controller));
+        if (eligible(enabled, owner.getDisplay(), navigationMode.getInt(controller))) removeNavigationInset(params);
+    }
+
+    boolean hideBackground(Drawable drawable) throws ReflectiveOperationException {
+        if (Looper.myLooper() != Looper.getMainLooper()) return false;
+        var reference = backgrounds.get(drawable);
+        Object controller = reference == null ? null : reference.get();
+        return controller != null && eligible(enabled, ((Context) context.get(controller)).getDisplay(),
+                navigationMode.getInt(controller));
+    }
+
+    // Each native call builds fresh params, including all rotations. Disabled calls return them untouched.
+    void removeNavigationInset(WindowManager.LayoutParams params) throws ReflectiveOperationException {
+        Object[] providers = (Object[]) providedInsets.get(params);
+        if (providers == null) return;
+        for (Object provider : providers) {
+            if (provider != null && (Integer) providerType.invoke(provider) == WindowInsets.Type.navigationBars()) {
+                // Keep IME InsetsSizeOverrides, minimal cutout policy, source flags and gesture providers intact.
+                setInsetsSize.invoke(provider, Insets.NONE);
             }
-        } finally { settingIntensity = false; }
+        }
+    }
+
+    void connect(Application app) {
+        if (!"com.android.systemui".equals(app.getPackageName())) return;
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            main.post(() -> connect(app));
+            return;
+        }
+        if (application != null) return;
+        application = app;
+        HandlerThread thread = new HandlerThread("NativeNavbarConfig");
+        thread.start();
+        reader = new Handler(thread.getLooper());
+        reader.post(reload);
+    }
+
+    private void readSettings() {
+        reader.removeCallbacks(reload);
+        boolean next = false;
+        try {
+            if (!observing) {
+                application.getContentResolver().registerContentObserver(NavbarProvider.URI, false,
+                        new ContentObserver(reader) {
+                            @Override public void onChange(boolean selfChange) {
+                                reader.removeCallbacks(reload);
+                                reader.post(reload);
+                            }
+                        });
+                observing = true;
+            }
+            Bundle settings = application.getContentResolver().call(NavbarProvider.URI, "system", null, null);
+            if (settings == null) throw new IllegalStateException("No navbar system snapshot");
+            next = settings.getBoolean("enabled", false);
+        } catch (RuntimeException error) {
+            // Provider restart/unlock failure must restore native layout rather than leave stale immersion on.
+            android.util.Log.w(TAG, "IMMERSIVE_CONFIG_UNAVAILABLE", error);
+            reader.postDelayed(reload, 5000);
+        }
+        boolean desired = next;
+        main.post(() -> applyEnabled(desired));
+    }
+
+    void applyEnabled(boolean desired) {
+        if (Looper.myLooper() != Looper.getMainLooper())
+            throw new IllegalStateException("Navigation layout requires main thread");
+        if (enabled == desired) return;
+        enabled = desired;
+        refreshBars();
+    }
+
+    private void refreshBars() {
+        main.removeCallbacks(refresh);
+        boolean retry = false;
+        for (var entry : new ArrayList<>(bars.entrySet())) {
+            Context owner = entry.getValue();
+            Display display = owner.getDisplay();
+            if (display == null || display.getDisplayId() != Display.DEFAULT_DISPLAY) continue;
+            try {
+                // Native reposition rebuilds the current params and paramsForRotation[0..3], on BOTH edges.
+                reposition.invoke(entry.getKey(), display.getRotation());
+            } catch (ReflectiveOperationException | RuntimeException error) {
+                retry = true;
+                android.util.Log.w(TAG, "IMMERSIVE_UPDATE_UNAVAILABLE", error);
+            }
+        }
+        for (Drawable drawable : new ArrayList<>(backgrounds.keySet())) drawable.invalidateSelf();
+        if (retry) main.postDelayed(refresh, 5000);
     }
 }

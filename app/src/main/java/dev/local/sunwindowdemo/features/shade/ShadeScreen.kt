@@ -14,6 +14,7 @@ import dev.local.sunwindowdemo.core.ui.SettingsGroup
 import dev.local.sunwindowdemo.core.ui.SliderRow
 import dev.local.sunwindowdemo.core.ui.ToggleRow
 import dev.local.sunwindowdemo.features.iconlayers.IconLayerStore
+import dev.local.sunwindowdemo.features.navbar.NavbarStore
 
 @Composable
 fun ShadeScreen(bottomInset: Dp = 0.dp) {
@@ -27,6 +28,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
     var systemIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, false)) }
     var signalDisplay by remember { mutableStateOf(ShadeStore.read(context).getBoolean("signalDisplay")) }
+    var navbarImmersive by remember { mutableStateOf(NavbarStore.preferences(context).getBoolean("enabled", false)) }
     DisposableEffect(context) {
         val prefs = ShadeStore.preferences(context)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -43,11 +45,17 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         val themeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             systemThemed = IconLayerStore.systemThemed(context)
         }
+        val navbar = NavbarStore.preferences(context)
+        val navbarListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            navbarImmersive = navbar.getBoolean("enabled", false)
+        }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         icons.registerOnSharedPreferenceChangeListener(themeListener)
+        navbar.registerOnSharedPreferenceChangeListener(navbarListener)
         onDispose {
             prefs.unregisterOnSharedPreferenceChangeListener(listener)
             icons.unregisterOnSharedPreferenceChangeListener(themeListener)
+            navbar.unregisterOnSharedPreferenceChangeListener(navbarListener)
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -65,6 +73,12 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         GroupTitle("通知与控制中心")
         SettingsGroup {
             ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
+        }
+        GroupTitle("导航栏")
+        SettingsGroup {
+            ToggleRow("小白条沉浸", "保留原生手势条，取消底部占位", value = navbarImmersive) {
+                NavbarStore.setEnabled(context, it)
+            }
         }
         GroupTitle("状态栏")
         SettingsGroup {
