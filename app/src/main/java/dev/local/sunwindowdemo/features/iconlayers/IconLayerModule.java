@@ -46,6 +46,12 @@ public final class IconLayerModule extends XposedModule {
         if (!eligible || installed || !IconLayerStore.LAUNCHER.equals(p.getPackageName())) return;
         installed = true;
         loader = p.getDefaultClassLoader();
+        // Theme observation survives optional desktop/drawer ABI failure and installs no replacements.
+        LauncherThemeReporter themeReporter=new LauncherThemeReporter(themed->{
+            if(drawerMonet!=null)drawerMonet.systemThemed(themed);
+        });
+        try{themeReporter.install(this,loader);note("LAUNCHER_THEME_REPORTER_READY");}
+        catch(ReflectiveOperationException|RuntimeException failure){themeReporter.close();note("LAUNCHER_THEME_REPORTER_UNAVAILABLE "+failure.getClass().getSimpleName());}
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         try {
             Class<?> provider = Class.forName("com.android.launcher3.icons.IconProvider", false, loader);

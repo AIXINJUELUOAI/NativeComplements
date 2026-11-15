@@ -23,10 +23,8 @@ final class DrawerMonet {
     private final Map<Object, Boolean> upgraded = Collections.synchronizedMap(new WeakHashMap<>());
     private volatile boolean userEnabled, systemThemed;
     private Object iconCacheRef;
-    private Method updateInBackground, updateMask, themeGet;
-    private Field bitmapField, themedField, themeState, themeController;
-    private Object themeSingleton;
-    private Boolean reportedThemed;
+    private Method updateInBackground, updateMask;
+    private Field bitmapField, themedField;
     private final Map<View, java.lang.ref.WeakReference<View>> gridIcons = new WeakHashMap<>();
     private final ThreadLocal<Boolean> binding = new ThreadLocal<>();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -62,12 +60,6 @@ final class DrawerMonet {
                 android.content.pm.LauncherActivityInfo.class, byte[].class, boolean.class, lookup);
         bitmapField = item.getField("bitmap");
         themedField = bitmap.getField("themedBitmap");
-        Class<?> theme = Class.forName("com.android.launcher3.graphics.ThemeManager", false, loader);
-        themeSingleton = theme.getField("INSTANCE").get(null);
-        themeGet = themeSingleton.getClass().getMethod("get", Context.class);
-        themeState = theme.getField("iconState");
-        themeController = themeState.getType().getField("themeController");
-        Method verify = theme.getDeclaredMethod("verifyIconState");
         module.deoptimize(bubble.getDeclaredMethod("applyIconAndLabel", item));
         module.deoptimize(bubble.getDeclaredMethod("applyFromWorkspaceItem",
                 Class.forName("com.android.launcher3.model.data.WorkspaceItemInfo", false, loader)));
@@ -105,13 +97,6 @@ final class DrawerMonet {
                 Object[] args = chain.getArgs().toArray();
                 args[1] = themedLookup(args[1]);
                 return chain.proceed(args);
-            }));
-            // The wallpaper picker themed-icon switch lands here; follow it and tell the module.
-            hooks.add(module.hook(verify).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                Object result = chain.proceed();
-                // Runs inside ThemeManager construction: never touch the Dagger singleton here.
-                refreshSystemTheme(chain.getThisObject());
-                return result;
             }));
             hooks.add(module.hook(create).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 if (!enabled || !Boolean.TRUE.equals(binding.get())) return chain.proceed();
@@ -157,31 +142,7 @@ final class DrawerMonet {
         return iconCacheRef;
     }
 
-    private boolean readSystemTheme(Object manager) {
-        try {
-            if (manager == null) manager = themeGet.invoke(themeSingleton, context);
-            Object state = manager == null ? null : themeState.get(manager);
-            return state != null && themeController.get(state) != null;
-        } catch (ReflectiveOperationException | RuntimeException failure) {
-            return false;
-        }
-    }
-
-    private void refreshSystemTheme() { refreshSystemTheme(null); }
-
-    private void refreshSystemTheme(Object manager) {
-        if (context == null || worker == null) return;
-        boolean themed = readSystemTheme(manager);
-        main.post(() -> { systemThemed = themed; apply(); });
-        worker.post(() -> {
-            if (Boolean.valueOf(themed).equals(reportedThemed)) return;
-            try {
-                Bundle report = new Bundle(); report.putBoolean("systemThemed", themed);
-                context.getContentResolver().call(IconLayerStore.URI, "report", null, report);
-                reportedThemed = themed;
-            } catch (RuntimeException failure) { android.util.Log.w("NcDrawerMonet", "theme report failed", failure); }
-        });
-    }
+    void systemThemed(boolean themed) { systemThemed = themed; apply(); }
 
     private void apply() {
         boolean next = userEnabled && systemThemed;
@@ -265,7 +226,6 @@ final class DrawerMonet {
             @Override public void onReceive(Context c, Intent intent) { worker.post(DrawerMonet.this::reload); }
         }, new IntentFilter(ShadeStore.CHANGED), IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED);
         worker.post(this::reload);
-        main.post(this::refreshSystemTheme);
     }
 
     void artworkChanged() { main.post(this::rebind); }

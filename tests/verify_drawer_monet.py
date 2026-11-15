@@ -111,6 +111,13 @@ assert 'finally { if (previous == null) scope.remove(); else scope.set(previous)
 assert 'if (!enabled || !Boolean.TRUE.equals(binding.get())) return chain.proceed();' in drawer
 module = (src / 'features/iconlayers/IconLayerModule.java').read_text(encoding='utf-8')
 assert 'readingOriginal' not in module
+reporter = (src / 'features/iconlayers/LauncherThemeReporter.java').read_text(encoding='utf-8')
+window_theme = (src / 'features/iconlayers/LauncherThemeModule.java').read_text(encoding='utf-8')
+assert 'verifyIconState' in reporter and 'themeController' in reporter and '"systemThemed"' in reporter
+assert 'ThemeManager' not in drawer and '"report"' not in drawer
+assert 'LauncherThemeReporter' in module and 'LauncherThemeReporter' in window_theme
+for forbidden in ['BubbleTextView', 'IconCache', 'replacement(', 'DrawerMonet', 'IconAssets.']:
+    assert forbidden not in reporter and forbidden not in window_theme, 'theme-only entry must not install render replacements: ' + forbidden
 assert module.index('drawerMonet.artworkChanged();', module.index('if (!IconAssets.load')) > module.index('if (!IconAssets.load')
 assert 'Intent.ACTION_MANAGED_PROFILE_AVAILABLE' in module and 'Intent.ACTION_USER_UNLOCKED' in module
 assert 'read.live() && read.config() != null' in drawer, "failed read must restore native, not stale enable"
