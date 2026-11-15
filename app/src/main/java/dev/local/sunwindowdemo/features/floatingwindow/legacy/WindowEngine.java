@@ -20,6 +20,7 @@ import org.json.*;
  */
 final class WindowEngine {
     final FrameworkAccess a;
+    private final AndroidWindowPresentation presentation;
     private final Consumer<String> log;
     private final AtomicFile journal = new AtomicFile(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.systemFile("sunwindow-demo5.json"));
     private final WindowOrientation orientations=new WindowOrientation(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.systemFile("nativecomplements-window-orientation.json"));
@@ -260,7 +261,7 @@ final class WindowEngine {
     private String last = "后端正在初始化";
     private boolean attached;
 
-    private static final class Session {
+    static final class Session {
         Session returnTo;
         LaunchCoverFlow launchFlow;
         boolean parked,restoreForeground,endOnClose,surfaceHidden;
@@ -316,7 +317,7 @@ final class WindowEngine {
     private record SwitchStart(Session from,Session target,boolean created,long generation) {}
     private record OwnedStart(Session target) {}
     WindowEngine(FrameworkAccess access, Consumer<String> logger) {
-        a=access;log=logger;trace=new EntryTrace(a,logger);
+        a=access;log=logger;trace=new EntryTrace(a,logger);presentation=new AndroidWindowPresentation(this);
     }
 
     void attach(Object service) {
@@ -1901,7 +1902,7 @@ final class WindowEngine {
             s.displayW=displayBounds.width();s.displayH=displayBounds.height();s.displayRotation=a.integer(display,"getRotation");
             s.safeBounds=new Rect(safe);s.miniBounds=mini;s.placementMargin=margin;
     }
-    private Geometry.Placement normalForIme(Session s)throws Exception{
+    Geometry.Placement normalForIme(Session s)throws Exception{
         Geometry.Placement normal=s.normalPlacement;
         if(normal==null||s.displayW>s.displayH)return normal;
         Object display=a.call(s.task,"getDisplayContent");Rect bounds=(Rect)a.call(display,"getBounds");
@@ -2099,14 +2100,7 @@ final class WindowEngine {
             }
         });
     }
-    private float coverReleaseAlpha(Session s){
-        if(s.prioritySuspended&&!s.priorityHideTask&&!s.screenSuspended&&!s.parked)return 1;
-        if(s.cover!=null&&s.cover.exiting())return 0;
-        if(s.parked||s.priorityHideTask||s.screenSuspended)return 0;
-        if(s.restoring)return s.restoreForeground?1:0;
-        if(s.startMask!=null&&s.startMask.holding()||s.rotationMask!=null&&s.rotationMask.holding())return 0;
-        return s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
-    }
+    private float coverReleaseAlpha(Session s){return WindowPresentation.coverReleaseAlpha(presentationState(s));}
     private void endCover(Session s){
         TaskCover cover=s.cover;s.cover=null;s.coverFollowing=false;coverTasks.remove(s.task);
         if(cover!=null){
@@ -2525,11 +2519,13 @@ final class WindowEngine {
         s.rotationProbeQueued=true;
         handler.postDelayed(()->{synchronized(lock){s.rotationProbeQueued=false;probeRotation(s);}},delay);
     }
-    private float presentationAlpha(Session s){
-        if(s.prioritySuspended&&!s.priorityHideTask&&!s.screenSuspended&&!s.parked)return 1;
-        return s.parked||s.restoring||s.priorityHideTask||s.screenSuspended||s.startMask!=null&&s.startMask.holding()
-            ||s.cover!=null&&s.cover.mask.holding()?0:s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
+    private WindowPresentation.Alpha presentationState(Session s){
+        return new WindowPresentation.Alpha(s.prioritySuspended,s.priorityHideTask,s.parked,s.screenSuspended,
+            s.restoring,s.restoreForeground,s.startMask!=null&&s.startMask.holding(),
+            s.rotationMask!=null&&s.rotationMask.holding(),s.cover!=null&&s.cover.mask.holding(),
+            s.cover!=null&&s.cover.exiting(),s.opacity,s.rotation.alpha(SystemClock.elapsedRealtime()));
     }
+    float presentationAlpha(Session s){return WindowPresentation.alpha(presentationState(s));}
     private TaskVisibilityGuard presentationMask(Session s){
         if(s.rotationMask!=null&&s.rotationMask.holding())return s.rotationMask;
         if(s.startMask!=null&&s.startMask.holding())return s.startMask;
@@ -2614,7 +2610,7 @@ final class WindowEngine {
             frameReport("ROTATION_VISIBLE");
         }catch(Throwable e){log.accept("ROTATION_VISIBLE_FAILED "+FrameworkAccess.reason(e));}
     }
-    private void rotationFailure(Session s,Throwable e){
+    void rotationFailure(Session s,Throwable e){
         log.accept("ROTATION_GUARD_FAILED "+FrameworkAccess.reason(e));
         endRotation(s,true);
     }
@@ -2819,92 +2815,24 @@ final class WindowEngine {
             try{apply(s);success=true;}finally{a.endFrame(success);}
         }
     }
-    private void surfaceVisible(Session s,boolean visible)throws Exception{
-        if(visible&&!s.surfaceHidden)return;
-        // Alpha zero leaves embedded input channels touchable. Native hide is
-        // inherited by the whole surface tree, including non-WindowState input.
-        a.call(a.transaction(s.task),visible?"show":"hide",new Class<?>[]{android.view.SurfaceControl.class},
-            a.field(s.task,"mSurfaceControl"));
-        s.surfaceHidden=!visible;
-    }
+    private void surfaceVisible(Session s,boolean visible)throws Exception{presentation.visible(s,visible);}
     private void apply(Session s) throws Exception {
-        if (!sessions.contains(s)||!a.bool(s.task,"isAttached")) return;
-        if(s.restoring){
+        boolean managed=sessions.contains(s);
+        WindowPresentation.Route admission=WindowPresentation.admission(managed,managed&&a.bool(s.task,"isAttached"),s.restoring,s.placement!=null);
+        if(admission==WindowPresentation.Route.RESTORING){
             if(!s.restoreForeground&&s.startMask!=null)s.startMask.hold();
             return;
         }
-        if(s.placement==null)return;
+        if(admission!=WindowPresentation.Route.PROBE_NATIVE)return;
         updatePriorityState(s);
         if(s.decoration!=null)s.decoration.updateBacking(s.task,s.placement.width(),s.placement.height(),
-            !s.prioritySuspended&&!s.parked&&!s.screenSuspended);
-        if(s.prioritySuspended){
-            if(s.cover!=null){s.cover.ownerAlpha(s.priorityHideTask?0:1);s.cover.step(false,false);}
-            if(s.decoration!=null)s.decoration.hide(s.task);
-            if(s.priorityHideTask||s.screenSuspended||s.parked){a.opacity(s.task,0);surfaceVisible(s,false);return;}
-            // Same-task permission UI remains transformed like its native task, but never masked by our controls.
-            surfaceVisible(s,true);a.opacity(s.task,1);
-            Rect parent=(Rect)a.call(s.parent,"getBounds");Geometry.Placement p=s.placement;
-            a.transform(s.task,p.scale(),p.x()-parent.left,p.y()-parent.top);return;
-        }
-        if(s.parked||s.screenSuspended){
-            surfaceVisible(s,false);
-            a.opacity(s.task,0);if(s.decoration!=null)s.decoration.hide(s.task);return;
-        }
-        surfaceVisible(s,true);
-        if(s.startMask!=null&&s.startMask.holding()){
-            s.startMask.hold();if(s.decoration!=null)s.decoration.hide(s.task);return;
-        }
-        if(s.rotation.active()&&!s.rotation.fading()){
-            try{if(s.rotationMask!=null)s.rotationMask.hold();}
-            catch(Throwable e){rotationFailure(s,e);}
-            if(s.decoration!=null)s.decoration.hide(s.task);return;
-        }
-        if(a.presentationLeashed(s.task)){
-            if(s.entering||s.closing)a.opacity(s.task,0);
-            if(s.cover==null&&s.decoration!=null){
-                if("normal".equals(s.frame)&&!s.entering&&!s.closing&&!s.fullTransition)s.decoration.hideHandle(s.task);
-                else s.decoration.hide(s.task);
-            }return;
-        }
-        if(s.cover!=null&&s.cover.reusesPresentation(s.placement)){
-            s.cover.mask.hold();
-            updateDecoration(s,s.placement,s.cover.preparedDensity(),!s.presented&&!a.inFrame()&&!s.backRequested);
-            return;
-        }
-        if("normal".equals(s.frame)&&!s.resizing&&!s.coverFollowing&&!s.transitioning&&!s.entering&&!s.fullTransition){
-            Geometry.Placement adjusted=normalForIme(s);
-            if(adjusted!=null&&!adjusted.equals(s.placement)){
-                s.placement=adjusted;handler.post(()->{if(visible(s))frameReport("IME_PLACEMENT");});
-            }
-        }
-        Rect parentBounds = (Rect) a.call(s.parent, "getBounds");
-        Geometry.Placement p = s.placement;
-        // Transform the task; preserve native child-window layout/input metadata.
-        a.transform(s.task, p.scale(), p.x() - parentBounds.left, p.y() - parentBounds.top);
-        // One configuration read per frame serves both the corner radius and the decoration.
-        float density=a.config(s.task,false).densityDpi/160f;
-        float visualRadius=Math.min(density*MotionStyle.radius(p.scale(),s.defaultScale)*s.radiusFactor,Math.min(p.width(),p.height())*p.scale()/2f);
-        Rect crop=new Rect(0,0,p.width(),p.height());
-        Object main=a.call(s.task,"getTopVisibleAppMainWindow");
-        if(main!=null){
-            Rect window=(Rect)a.call(main,"getFrame"),bounds=(Rect)a.call(s.task,"getBounds");
-            // Some base windows start below the logical origin (native top inset).
-            // Round their visible edge, rather than rounding transparent space
-            // above it. Do not crop dialogs, partial-width windows or IME resize.
-            if(window.left<=bounds.left&&window.right>=bounds.right&&window.bottom>=bounds.bottom
-                &&window.top>bounds.top&&window.top<bounds.bottom)
-                crop.top=window.top-bounds.top;
-        }
-        a.style(s.task,crop,Math.min(visualRadius/p.scale(),crop.height()/2f));
-        if(!crop.equals(s.lastSurfaceCrop)){
-            s.lastSurfaceCrop=new Rect(crop);
-            log.accept("VISIBLE_WINDOW_CROP task="+s.taskId+" crop="+crop+" main="+main);
-        }
-        a.opacity(s.task,presentationAlpha(s));
-        if(s.cover!=null)s.cover.prepared(p,density);
-        updateDecoration(s,p,density,!a.inFrame()&&!s.backRequested);
+            WindowPresentation.backing(s.prioritySuspended,s.parked,s.screenSuspended));
+        WindowPresentation.Route route=WindowPresentation.gate(new WindowPresentation.Facts(true,true,false,true,
+            s.prioritySuspended,s.priorityHideTask,s.parked,s.screenSuspended,
+            s.startMask!=null&&s.startMask.holding(),s.rotation.active()&&!s.rotation.fading()));
+        presentation.apply(s,route);
     }
-    private void updateDecoration(Session s,Geometry.Placement p,float density,boolean structural)throws Exception{
+    void updateDecoration(Session s,Geometry.Placement p,float density,boolean structural)throws Exception{
         if(s.prioritySuspended){if(s.decoration!=null)s.decoration.hide(s.task);return;}
         if(s.decoration!=null){
             boolean wasPresented=s.presented;
@@ -2925,10 +2853,15 @@ final class WindowEngine {
             });
         }
     }
+    void imePlacementChanged(Session s){handler.post(()->{if(visible(s))frameReport("IME_PLACEMENT");});}
+    void presentationCropChanged(Session s,Rect crop,Object main){
+        if(!crop.equals(s.lastSurfaceCrop)){
+            s.lastSurfaceCrop=new Rect(crop);
+            log.accept("VISIBLE_WINDOW_CROP task="+s.taskId+" crop="+crop+" main="+main);
+        }
+    }
     private float surfaceRadius(Session s,Geometry.Placement p,Rect crop)throws Exception{
-        float visual=Math.min(a.config(s.task,false).densityDpi/160f*MotionStyle.radius(p.scale(),s.defaultScale)*s.radiusFactor,
-            Math.min(p.width(),p.height())*p.scale()/2f);
-        return Math.min(visual/p.scale(),crop.height()/2f);
+        return WindowPresentation.radius(p,a.config(s.task,false).densityDpi/160f,s.defaultScale,s.radiusFactor,crop.height());
     }
     void configurationChanged(Object task) {
         Session changed=sessionFor(task);
