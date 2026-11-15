@@ -47,7 +47,15 @@ public class WindowRecoveryTest {
         Atm(Recents value){mRecentTasks=value;}
     }
     public static final class Root {
-        public Object anyTaskForId(int id,int mode){assertEquals(192,id);assertTrue(mode==0||mode==1);return null;}
+        Object task;
+        public Object anyTaskForId(int id,int mode){assertEquals(192,id);assertTrue(mode==0||mode==1);return task;}
+    }
+    public static class Task {
+        public int mTaskId=192,mUserId=0;
+        public android.content.ComponentName realActivity=new android.content.ComponentName("example.old","example.old.Main");
+        public String baseIdentifier="old-page";
+        public Intent getBaseIntent(){return new Intent().setIdentifier(baseIdentifier);}
+        public boolean isAttached(){return false;}
     }
     @Before public void setup()throws Throwable{
         Context context=RuntimeEnvironment.getApplication();
@@ -116,10 +124,36 @@ public class WindowRecoveryTest {
         call("completeOpen",new Class<?>[]{Intent.class,boolean.class},request,false);
         assertNull(get(engine,"recoveryOpen"));assertTrue(journal.getBaseFile().exists());
     }
+    @Test public void liveMissingTaskCompletesWithoutWaitingForBootReadiness()throws Throwable{
+        set(session,"task",new Task());
+        assertEquals(true,call("restoreTask",new Class<?>[]{session.getClass(),boolean.class},session,false));
+        assertTrue(journal.getBaseFile().exists()); // Eligibility alone never forgets the durable record.
+    }
+    @Test public void reusedIdRejectsUnknownBootButLoadedRecentsReleasesStaleIdentity()throws Throwable{
+        Task reused=new Task();reused.mUserId=10;((Root)get(engine,"root")).task=reused;
+        try{call("restoreTask",new Class<?>[]{session.getClass(),boolean.class},session,false);fail("Expected identity rejection");}
+        catch(IllegalStateException expected){assertTrue(expected.getMessage().contains("身份"));}
+        assertTrue(journal.getBaseFile().exists());recents.loaded=true;
+        assertEquals(true,call("restoreTask",new Class<?>[]{session.getClass(),boolean.class},session,false));
+        assertTrue(logs.stream().anyMatch(s->s.contains("reason=task-id-reused")));assertTrue(journal.getBaseFile().exists());
+    }
+    @Test public void matchingLegacyTaskWithoutBaseIdWaitsBeforeNativeRestore()throws Throwable{
+        Task legacy=new Task();legacy.baseIdentifier=null;
+        set(session,"baseId",null);set(session,"component",legacy.realActivity.flattenToString());((Root)get(engine,"root")).task=legacy;
+        assertEquals(false,call("restoreTask",new Class<?>[]{session.getClass(),boolean.class},session,false));
+        assertTrue(journal.getBaseFile().exists());
+    }
+    @Test public void readinessRecheckRestartsExhaustedQueueOnlyOnce()throws Throwable{
+        call("recover",new Class<?>[]{String.class},"初始化恢复");idle(10100);
+        var retry=(WindowRecoveryPolicy.Retry)get(engine,"recoveryRetryState");assertEquals(101,retry.waits());
+        recents.loaded=true;call("historyTick",new Class<?>[]{});
+        assertFalse(retry.needsReadinessCheck());idle(1);assertFalse(journal.getBaseFile().exists());
+        assertEquals(1,logs.stream().filter(s->s.contains("RECOVERY_STALE_RELEASED task=192")).count());
+    }
     @Test public void recheckingRecoveryKeepsOnlyOneScheduledRetryLoop()throws Throwable{
         call("recover",new Class<?>[]{String.class},"初始化恢复");
         call("recover",new Class<?>[]{String.class},"自动恢复后续接");
-        assertEquals(2,get(engine,"recoveryWaits"));idle(100);
-        assertEquals(3,get(engine,"recoveryWaits"));
+        assertEquals(2,((WindowRecoveryPolicy.Retry)get(engine,"recoveryRetryState")).waits());idle(100);
+        assertEquals(3,((WindowRecoveryPolicy.Retry)get(engine,"recoveryRetryState")).waits());
     }
 }

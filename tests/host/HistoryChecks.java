@@ -22,6 +22,14 @@ public final class HistoryChecks {
         int[] ids=h.ids();ids[0]=999;check(h.get(458)!=null&&h.get(999)==null,"published ids do not mutate history");
         loaded.removed(458);check(loaded.ids().length==0,"removed task is pruned");
         check(h.get(458)!=null,"copies independent");
-        System.out.println("PASS history: multi-task close/switch persistence, fullscreen draw/transition gating, reload and task removal");
+        check(!h.observeFullscreen(458,true,1000),"first frame waits");
+        check(!h.observeFullscreen(458,true,1119),"119ms not stable");
+        check(h.observeFullscreen(458,true,1120),"120ms stable");
+        check(h.get(458)!=null,"observation preserves history until snapshot");
+        check(!h.observeFullscreen(458,false,1121),"invalid frame resets");
+        check(!h.observeFullscreen(458,true,1300),"stable interval restarts");
+        h.removed(458);check(h.observeFullscreen(458,true,1420),"pruning preserves old seen semantics");
+        h.clearFullscreen(458);check(!h.observeFullscreen(458,true,1420),"explicit release clears stability");
+        System.out.println("PASS history: multi-task persistence, fullscreen gating, 120ms stability before snapshot/release and explicit cleanup");
     }
 }

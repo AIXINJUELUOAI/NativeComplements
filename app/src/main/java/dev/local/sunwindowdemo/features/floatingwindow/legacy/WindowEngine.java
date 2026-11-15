@@ -101,7 +101,7 @@ final class WindowEngine {
     static final String HISTORY=Wire.PKG+".HISTORY",HISTORY_QUERY=Wire.PKG+".HISTORY_QUERY";
     private final WindowHistory history=new WindowHistory();
     private final AtomicFile historyFile=new AtomicFile(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.systemFile("sunwindow-hidden-tasks.json"));
-    private final java.util.Map<Integer,Long> fullscreenSeen=new java.util.HashMap<>();
+
     private final PathInterpolator modeCurve=new PathInterpolator(.2f,0,0,1);
     private final Binder controlChannel=new Binder(){
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws RemoteException {
@@ -249,10 +249,10 @@ final class WindowEngine {
     private volatile boolean recovering;
     final EntryTrace trace;
     private Session pendingRecovery;
-    private int recoveryWaits;
+    private final WindowRecoveryPolicy.Retry recoveryRetryState=new WindowRecoveryPolicy.Retry();
     private volatile int windowDim=Config.DEFAULT_WINDOW_DIM;
     private Runnable recoveryRetry;
-    private boolean recoveryReadyRechecked;
+
     private Intent recoveryOpen;
     private int endedTaskId=-1;
     private volatile long openGeneration;
@@ -439,7 +439,7 @@ final class WindowEngine {
                 control(i); return;
             }
             if ("RESTORE".equals(op)) {
-                openGeneration++;cancelRecoveryOpen(null);cancelStart("manual-restore");trace.stop();recoveryWaits=0;
+                openGeneration++;cancelRecoveryOpen(null);cancelStart("manual-restore");trace.stop();recoveryRetryState.resetWaits();
                 // An explicit recovery must also escape a stalled native close queue.
                 Session s=active;if(s!=null){s.restoring=true;s.animationRev++;s.closing=false;}
                 // An already pending queue must receive the explicit recovery intent
@@ -698,7 +698,7 @@ final class WindowEngine {
         if(screenBlocked()||uiLease==null||!uiLease.isBinderAlive())throw new IllegalStateException("打开请求已取消");
         long now=SystemClock.elapsedRealtime();
         if(!request.hasExtra("recoveryBegan")){
-            request.putExtra("recoveryBegan",now);recoveryOpen=request;recoveryWaits=0;
+            request.putExtra("recoveryBegan",now);recoveryOpen=request;recoveryRetryState.resetWaits();
             log.accept("OPEN_AUTO_RECOVERY_BEGIN package="+request.getStringExtra("package"));
             recover("自动恢复后续接");report("OPEN_RECOVERING");
         }
@@ -2095,9 +2095,8 @@ final class WindowEngine {
     }
     private void historyTick(){
         try{synchronized(lock){
-            if(recovering&&!recoveryReadyRechecked&&pendingRecovery!=null&&recoveryStateReady(pendingRecovery)){
-                recoveryReadyRechecked=true;
-                if(recoveryWaits>100){recoveryWaits=0;recover("系统就绪后恢复");}
+            if(recovering&&recoveryRetryState.needsReadinessCheck()&&pendingRecovery!=null&&recoveryStateReady(pendingRecovery)){
+                if(recoveryRetryState.becameReady())recover("系统就绪后恢复");
             }
         }}catch(Exception error){log.accept("RECOVERY_READINESS_FAILED "+FrameworkAccess.reason(error));}
         boolean changed=false;
@@ -2120,13 +2119,11 @@ final class WindowEngine {
                 ready=a.integer(reportedWindow,"getWindowingMode")==1&&!frame.isEmpty()
                     &&expected.contains(frame)&&!actual.isEmpty();
             }
-            if(!ready){fullscreenSeen.remove(e.taskId());continue;}
-            long now=SystemClock.elapsedRealtime();Long seen=fullscreenSeen.putIfAbsent(e.taskId(),now);
-            if(seen==null||now-seen<120)continue;
+            if(!history.observeFullscreen(e.taskId(),ready,SystemClock.elapsedRealtime()))continue;
             try{a.call(a.field(wms,"mTaskSnapshotController"),"recordSnapshot",new Class<?>[]{a.task},task);}
             catch(Exception ex){log.accept("SNAPSHOT_REFRESH_FAILED task="+e.taskId()+" "+FrameworkAccess.reason(ex));}
             if(history.fullscreenReady(e.taskId(),false,true,true,true,false)){
-                fullscreenSeen.remove(e.taskId());changed=true;log.accept("HISTORY_FULLSCREEN_READY task="+e.taskId());
+                history.clearFullscreen(e.taskId());changed=true;log.accept("HISTORY_FULLSCREEN_READY task="+e.taskId());
             }
         }}catch(Exception ex){log.accept("HISTORY_CHECK_FAILED task="+e.taskId()+" "+FrameworkAccess.reason(ex));}
         if(changed){saveHistory();notifyRecents();}
@@ -3035,7 +3032,7 @@ final class WindowEngine {
         // swipe into recents hide this task again as soon as it loses focus.
         // Background restores keep their history, including parked linked tasks.
         if(s.restoreForeground){
-            history.removed(s.taskId);fullscreenSeen.remove(s.taskId);
+            history.removed(s.taskId);history.clearFullscreen(s.taskId);
             saveHistory();notifyRecents();
             log.accept("HISTORY_FULLSCREEN_RELEASED task="+s.taskId+" source=foreground-restore");
         }
@@ -3083,24 +3080,22 @@ final class WindowEngine {
         return (Boolean)a.call(recents,"isRecentTasksLoaded",new Class<?>[]{int.class},s.userId);
     }
     private boolean releaseStaleRecovery(Session s,String reason)throws Exception{
-        history.removed(s.taskId);fullscreenSeen.remove(s.taskId);saveHistory();notifyRecents();
+        history.removed(s.taskId);history.clearFullscreen(s.taskId);saveHistory();notifyRecents();
         log.accept("RECOVERY_STALE_RELEASED task="+s.taskId+" reason="+reason);return true;
     }
     private boolean restoreTask(Session s,boolean foreground)throws Exception{
         boolean stateReady=recoveryStateReady(s);
         Object task=find(s.taskId);boolean attached=task!=null;
-        if(task==null){
-            task=a.lookup.invoke(root,s.taskId,1);
-            if(task==null){
-                if(stateReady)return releaseStaleRecovery(s,"missing-after-recents-loaded");
-                return s.task!=null; // Wait while boot-time recents are still unknown.
-            }
+        if(task==null)task=a.lookup.invoke(root,s.taskId,1);
+        WindowRecoveryPolicy.Eligibility eligibility=WindowRecoveryPolicy.eligibility(s.task!=null,stateReady,task!=null,
+            task!=null&&identity(task,s),s.task==task,s.baseId!=null);
+        switch(eligibility){
+            case WAIT: return false;
+            case COMPLETE: return true; // A live task already finished; unknown boot recents must still wait.
+            case RELEASE_STALE: return releaseStaleRecovery(s,task==null?"missing-after-recents-loaded":"task-id-reused");
+            case REJECT: throw new IllegalStateException("恢复任务身份已改变");
+            case RESTORE: break;
         }
-        if(!identity(task,s)||s.task!=null&&s.task!=task){
-            if(stateReady)return releaseStaleRecovery(s,"task-id-reused");
-            throw new IllegalStateException("恢复任务身份已改变");
-        }
-        if(s.task==null&&s.baseId==null&&!stateReady)return false;
         boolean surfaceAttached=attached&&a.bool(task,"isAttached");
         if(surfaceAttached){
             Object display=a.call(task,"getDisplayContent");
@@ -3248,17 +3243,17 @@ final class WindowEngine {
                         a.opacity(s.task,0);
                     }
                 }
-                sessions=java.util.List.copyOf(ordered);recovering=true;active=null;pinned=null;recoveryWaits=0;recoveryReadyRechecked=false;
+                sessions=java.util.List.copyOf(ordered);recovering=true;active=null;pinned=null;recoveryRetryState.begin();
             }
             if(sessions.isEmpty()){
-                recovering=false;pendingRecovery=null;recoveryWaits=0;journal.delete();notifyRecents();note("RESTORED："+why);return;
+                recovering=false;pendingRecovery=null;recoveryRetryState.resetWaits();journal.delete();notifyRecents();note("RESTORED："+why);return;
             }
             Session s=sessions.get(0);pendingRecovery=s;
             if(restoreTask(s,s.restoreForeground)){
-                forget(s);pendingRecovery=null;recoveryWaits=0;
+                forget(s);pendingRecovery=null;recoveryRetryState.resetWaits();
                 handler.post(recoveryRetry=()->recover(why));return;
             }
-            if(++recoveryWaits>100){note("RECOVERY_PENDING：保留全部恢复记录，可手动恢复");return;}
+            if(!recoveryRetryState.failed()){note("RECOVERY_PENDING：保留全部恢复记录，可手动恢复");return;}
             handler.postDelayed(recoveryRetry=()->recover(why),100);
         }}catch(Throwable e){note("RECOVERY_FAILED："+FrameworkAccess.reason(e)+"；保留全部恢复记录");}
     }

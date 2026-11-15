@@ -6,6 +6,14 @@ import java.util.*;
 final class WindowHistory {
     record Entry(int taskId,int userId,String pkg,String component,String baseId){}
     private final Map<Integer,Entry> entries=new LinkedHashMap<>();
+    private final Map<Integer,Long> fullscreenSeen=new HashMap<>();
+    /** Observe stability without removing history: the adapter must snapshot before committing release. */
+    synchronized boolean observeFullscreen(int id,boolean ready,long now){
+        if(!ready){fullscreenSeen.remove(id);return false;}
+        Long seen=fullscreenSeen.putIfAbsent(id,now);
+        return seen!=null&&now-seen>=120;
+    }
+    synchronized void clearFullscreen(int id){fullscreenSeen.remove(id);}
     synchronized void windowed(Entry e){entries.put(e.taskId(),e);}
     synchronized Entry get(int id){return entries.get(id);}
     synchronized boolean fullscreenReady(int id,boolean owned,boolean focused,boolean drawn,boolean correctBounds,boolean animating){

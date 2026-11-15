@@ -21,7 +21,7 @@ jdk=pathlib.Path(os.environ.get('JAVA_HOME',r'C:\Program Files\Android\Android S
 out=root/'verification/host-classes';out.mkdir(parents=True,exist_ok=True)
 names=['Geometry','GestureMath','Rules','GestureGate','MotionStyle','BackSwipe','WindowHistory','WindowPolicy','RotationGate','MiniMagnet','CornerGesture',
        'WindowAdmission','WindowPresentation','WindowControl','LongBackGesture','OpenWaitState','LaunchCoverFlow',
-       'WindowNavigation','BackHandoffState','WindowHostPolicy']
+       'WindowNavigation','BackHandoffState','WindowHostPolicy','WindowRecoveryPolicy']
 files=[root/'app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionPolicy.java']+[src/(n+'.java') for n in names]+[root/'app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeTouchGeometry.java']+list((root/'tests/host').glob('*.java'))
 subprocess.run([str(jdk/'javac.exe'),'--release','17','-encoding','UTF-8','-d',str(out),*map(str,files)],check=True)
 for n in ['GeometryCheck','StateChecks','GestureGateChecks','GeometryChecks','MotionChecks','DropChecks','HistoryChecks']:
