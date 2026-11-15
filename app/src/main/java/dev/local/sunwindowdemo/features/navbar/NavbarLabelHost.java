@@ -27,7 +27,7 @@ import android.widget.TextView;
 final class NavbarLabelHost {
     static final String LABEL = "dev.nativecomplements.module.NAVBAR_LABEL";
     private static final Uri PROVIDER = Uri.parse("content://" + NavbarStore.AUTHORITY);
-    private static final long SHOW_MS = 6000, PREVIEW_IDLE_MS = 9000;
+    private static final long SHOW_MS = 20000, PREVIEW_IDLE_MS = 20000;
     /** Hidden WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL (FIRST_SYSTEM_WINDOW + 24), SystemUI-only. */
     private static final int TYPE_NAVIGATION_BAR_PANEL = 2024;
     private static final Handler main = new Handler(Looper.getMainLooper());
@@ -58,10 +58,13 @@ final class NavbarLabelHost {
 
     private static void verdict(String nextPkg, String nextActivity, int nextMode) {
         if (nextPkg == null || nextActivity == null || nextMode < 0 || previewing) return;
-        boolean same = nextPkg.equals(pkg) && nextActivity.equals(activity) && nextMode == mode;
-        // The same verdict for the same page is shown again only after the chip had time to go away.
-        if (same && chip != null && chip.isAttachedToWindow()) return;
-        if (same && SystemClock.uptimeMillis() - lastShownAt < SHOW_MS + 4000) return;
+        boolean same = nextPkg.equals(pkg) && nextActivity.equals(activity) && nextMode == verdictMode;
+        // While labelling the chip stays up: a repeated verdict only extends it.
+        if (same && chip != null && chip.isAttachedToWindow()) {
+            main.removeCallbacks(hide);
+            main.postDelayed(hide, SHOW_MS);
+            return;
+        }
         pkg = nextPkg; activity = nextActivity; mode = nextMode; verdictMode = nextMode;
         try { label = String.valueOf(app.getPackageManager().getApplicationLabel(app.getPackageManager().getApplicationInfo(pkg, 0))); }
         catch (Exception unknown) { label = pkg; }
