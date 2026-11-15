@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前源码版本：**0.9.19-signal-test1**（versionCode 96）。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前运行源码版本：**0.9.48-fixes-test2**（versionCode 138）。目前暂停新功能开发，先整理跨系统接入与独立小窗边界，见[接入与架构索引](<docs/adaptation/README.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 
@@ -101,12 +101,12 @@
 
 ## 最近更新
 
-**0.9.19-signal-test1**
+**0.9.48-fixes-test2**
 
-- 补充 Stacked Compose 双卡信号绘制适配，按实际 subscription ID 关联，保留原生模型和关闭恢复路径。
-- 2026-11-13 用户安装重启后反馈顶部状态栏已显示满格；该反馈不代替双卡、关闭恢复及网络切换的完整验收。
-- 保留通知前台任务判定修复，避免把当前小窗直接当作全屏前台任务。
-- Release 构建、13 项信号／设置页单元测试、新增适配器主机检查和归档检查通过。构建成功不代表所有设备效果通过。
+- 按用户授权为小窗任务增加低层白色背板，填充透明内容区，继承任务圆角和裁剪，不猜顶部高度或覆盖真实内容。整个任务透到外部的透明区都会变白，深色模式仍白，实际效果待用户验证。
+- 小窗菜单及启动／变换遮罩在缺少模块和原生 mono 时后台强制转换图标，照片保留明暗；不改变抽屉图标策略。
+- 保留 0.9.47 用户已反馈正常的沉浸、安全确认优先级与重叠触控修复。新版针对性测试、原签名 Release 与三个系统作用域检查通过；全量 311 项中 4 项既有 SurfaceFrameTest 失败，未宣称全量通过。
+- 当前仅推进[项目接入梳理](<docs/adaptation/README.md>)，尚未实现独立小窗版、Freeform 总开关前置校验或 Alive 适配；后续功能版本计划进入 0.10.0。
 
 历史变更可查看 [Git 提交记录](https://github.com/AIXINJUELUOAI/NativeComplements/commits/main) 和 [版本标签](https://github.com/AIXINJUELUOAI/NativeComplements/tags)。
 
@@ -125,6 +125,8 @@ python -X utf8 tests/package_release.py
 归档目标检查依赖本地系统文件，不随源码发布；缺少归档时不代表检查已通过。打包脚本沿用本地升级签名，校验身份与作用域，仅输出 APK，不安装或操作设备；签名不提交 Git，新开发环境需自行配置。APK 不随源码仓库保存。
 
 管理界面按功能组织，小窗运行代码保留 Demo8.2 包路径；不可变原始基线及变更登记用于回归检查，不能当作临时文件清理。开发约定见 [AGENTS.md](<AGENTS.md>)，小窗实机检查要点见 [DEVICE_ACCEPTANCE.md](<DEVICE_ACCEPTANCE.md>)。
+
+准备适配 LineageOS 等其他系统或拆分小窗时，请先读[跨系统接入索引](<docs/adaptation/README.md>)与[现有架构](<docs/adaptation/architecture.md>)，再按[小窗 Hook 边界](<docs/adaptation/floating-window.md>)、[其他系统功能](<docs/adaptation/system-features.md>)和[独立产物依赖](<docs/adaptation/standalone-window.md>)提交小步 PR。本轮文档不表示已经完成解耦或增加 ROM 支持。
 
 ## 授权与致谢
 
