@@ -123,51 +123,13 @@ public class DrawerMonetTest {
         assertFalse((Boolean) qualifies.invoke(drawer, icon));
     }
 
-    @Test public void adaptiveArtworkIsNotRerasterizedOrRescaledByModule() {
-        var adaptive = new AdaptiveIconDrawable(new ColorDrawable(Color.RED),
-                new ColorDrawable(Color.BLUE), new ColorDrawable(Color.WHITE));
-        assertSame(adaptive, DrawerMonetAssets.adaptiveSource(adaptive));
-        assertNotNull(DrawerMonetAssets.adaptiveSource(new ColorDrawable(Color.RED)));
-        assertNull(DrawerMonetAssets.adaptiveSource(null));
-    }
-
-    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
-    public void oversizedMonoGetsSafePaddingWhileCorrectPaddingIsPreserved() {
-        int size=96;
-        var full=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE),new ColorDrawable(Color.WHITE));
-        var safe=DrawerMonetAssets.safeMonochrome(context,full,size);
-        assertNotSame(full,safe);
-        var pixels=IconImages.render(safe.getMonochrome(),size);
-        assertTrue(IconImages.contentBounds(pixels).width()<=size*.62f);
-        assertSame(safe,DrawerMonetAssets.safeMonochrome(context,safe,size));
-        assertNotNull(full.getMonochrome());
-        var corner=android.graphics.Bitmap.createBitmap(size,size,android.graphics.Bitmap.Config.ARGB_8888);
-        var canvas=new android.graphics.Canvas(corner);var paint=new android.graphics.Paint();paint.setColor(Color.WHITE);
-        canvas.drawRect(0,0,48,48,paint);
-        var offcenter=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE),new BitmapDrawable(context.getResources(),corner));
-        var centered=DrawerMonetAssets.safeMonochrome(context,offcenter,size);
-        assertNotSame(offcenter,centered);
-        var bounds=IconImages.contentBounds(IconImages.render(centered.getMonochrome(),size));
-        assertTrue(bounds.left>=size*.18f&&bounds.top>=size*.18f);
-    }
-
-    @Test public void drawerOnlyUsesModuleArtworkWhenMonochromeChannelChanged() throws Exception {
-        var field=IconAssets.class.getDeclaredField("snapshot");field.setAccessible(true);Object old=field.get(null);
-        var bitmap=android.graphics.Bitmap.createBitmap(32,32,android.graphics.Bitmap.Config.ARGB_8888);
-        var original=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE));
-        try {
-            var colorOnly=new IconAssets.Entry(bitmap,bitmap,null,null,true,false,false);
-            field.set(null,new IconAssets.Snapshot(java.util.Map.of("test.app",colorOnly),"",0,0,java.util.Set.of()));
-            assertNull(IconAssets.drawerMonochrome(context,"test.app",original));
-            var mono=new IconAssets.Entry(bitmap,bitmap,bitmap,null,true,true,false);
-            field.set(null,new IconAssets.Snapshot(java.util.Map.of("test.app",mono),"",0,0,java.util.Set.of()));
-            assertNotNull(IconAssets.drawerMonochrome(context,"test.app",original));
-            var nativeMono=new IconAssets.Entry(bitmap,bitmap,bitmap,null,false,true,true);
-            field.set(null,new IconAssets.Snapshot(java.util.Map.of("test.app",nativeMono),"",0,0,java.util.Set.of()));
-            var animated=new AdaptiveIconDrawable(new ColorDrawable(Color.RED),new ColorDrawable(Color.BLUE)) {};
-            assertNotNull(((AdaptiveIconDrawable)IconAssets.drawerMonochrome(context,"test.app",animated)).getMonochrome());
-            assertNull(animated.getMonochrome());
-        } finally {field.set(null,old);}
+    @Test public void onlyThemedBitChangesAndRepeatedBindsNeedNoMaterialState() {
+        for(int flags:new int[]{0,1,2,4,16,127,255}) {
+            int result=DrawerMonet.themedFlags(flags);
+            assertEquals(flags|1,result);
+            assertEquals(flags&~1,result&~1);
+            assertEquals(result,DrawerMonet.themedFlags(result));
+        }
     }
 
     public static class Predictions extends android.widget.LinearLayout {

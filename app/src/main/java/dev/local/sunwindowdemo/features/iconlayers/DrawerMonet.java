@@ -11,25 +11,10 @@ import io.github.libxposed.api.*;
 import java.lang.reflect.Method;
 import java.util.*;
 
-/** Opt-in native themed rendering at the drawer grid's binding boundary only. */
+/** Drawer-only themed flag; all material, geometry, delegates and caching belong to Launcher. */
 final class DrawerMonet {
     private final Map<View, java.lang.ref.WeakReference<View>> gridIcons = new WeakHashMap<>();
     private final ThreadLocal<Boolean> binding = new ThreadLocal<>();
-    private final ThreadLocal<Object> boundItem = new ThreadLocal<>();
-    // ponytail: at most 128 native-sized private copies; eldest eviction retries only on later binding.
-    private static final class MaterialKey {
-        private final Object bitmap, item;
-        MaterialKey(Object bitmap, Object item) { this.bitmap = bitmap; this.item = item; }
-        Object bitmap() { return bitmap; }
-        @Override public boolean equals(Object other) {
-            return other instanceof MaterialKey key && bitmap == key.bitmap && item == key.item;
-        }
-        @Override public int hashCode() { return 31 * System.identityHashCode(bitmap) + System.identityHashCode(item); }
-    }
-    private final Map<MaterialKey, Object> copies = new LinkedHashMap<>();
-    private DrawerMonetAssets assets;
-    private java.lang.reflect.Field itemBitmap;
-    private int generation;
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean enabled;
     private Context context;
@@ -37,7 +22,6 @@ final class DrawerMonet {
     private HostSnapshot settings;
     private Class<?> recycler, searchRecycler, appInfo, predictionRow;
     private Method standard;
-    private final java.util.concurrent.atomic.AtomicInteger materials = new java.util.concurrent.atomic.AtomicInteger();
 
     void install(XposedModule module, ClassLoader loader) throws ReflectiveOperationException {
         Class<?> bubble = Class.forName("com.android.launcher3.BubbleTextView", false, loader);
@@ -53,9 +37,6 @@ final class DrawerMonet {
         standard = bubble.getDeclaredMethod("setStandardIcon", item);
         standard.setAccessible(true);
         Method create = bitmap.getDeclaredMethod("newIcon", Context.class, int.class, shape);
-        Method lowRes = bitmap.getDeclaredMethod("isLowRes");
-        itemBitmap = item.getField("bitmap");
-        assets = new DrawerMonetAssets(loader);
         module.deoptimize(bubble.getDeclaredMethod("applyIconAndLabel", item));
         module.deoptimize(bubble.getDeclaredMethod("applyFromWorkspaceItem",
                 Class.forName("com.android.launcher3.model.data.WorkspaceItemInfo", false, loader)));
@@ -75,40 +56,13 @@ final class DrawerMonet {
                 if (predictions != null) synchronized (gridIcons) {
                     gridIcons.put(view, new java.lang.ref.WeakReference<>(predictions));
                 }
-                Object previousItem = boundItem.get();
-                boundItem.set(chain.getArg(0));
-                try {
-                    return inScope(binding, enabled && eligibleItem(view, chain.getArg(0)), chain::proceed);
-                } finally { if (previousItem == null) boundItem.remove(); else boundItem.set(previousItem); }
+                return inScope(binding, enabled && eligibleItem(view, chain.getArg(0)), chain::proceed);
             }));
             hooks.add(module.hook(create).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 if (!enabled || !Boolean.TRUE.equals(binding.get())) return chain.proceed();
                 Object[] args = chain.getArgs().toArray();
-                args[1] = ((Integer) args[1]) | 1;
-                Object original = chain.getThisObject();
-                if (Boolean.TRUE.equals(lowRes.invoke(original))) return chain.proceed();
-                MaterialKey key = new MaterialKey(original, boundItem.get());
-                // Always resolve module material first on the worker, even when the native cache has a theme.
-                // Otherwise an existing system theme silently bypasses per-app module monochrome choices.
-                if (worker == null) return chain.proceed(args);
-                Object copy;
-                synchronized (copies) {
-                    if (!copies.containsKey(key)) {
-                        if (copies.size() >= 128) copies.remove(copies.keySet().iterator().next());
-                        copies.put(key, null);
-                        Object currentItem = boundItem.get();
-                        int token = generation;
-                        worker.post(() -> loadMaterial(currentItem, key, token));
-                    }
-                    copy = copies.get(key);
-                }
-                if (copy != null) {
-                    Boolean previous = binding.get();
-                    binding.set(false);
-                    try { return create.invoke(copy, args); }
-                    catch (ReflectiveOperationException | RuntimeException failure) { return chain.proceed(); }
-                    finally { if (previous == null) binding.remove(); else binding.set(previous); }
-                }
+                args[1] = themedFlags((Integer) args[1]);
+                // Same BitmapInfo and native rendering as desktop: no async copies or rescaling.
                 return chain.proceed(args);
             }));
         } catch (Throwable failure) {
@@ -116,6 +70,8 @@ final class DrawerMonet {
             throw failure;
         }
     }
+
+    static int themedFlags(int flags) { return flags | 1; }
 
     static Method itemNewIcon(Class<?> item) throws NoSuchMethodException {
         try { return item.getDeclaredMethod("newIcon", Context.class, int.class); }
@@ -132,26 +88,13 @@ final class DrawerMonet {
         finally { if (previous == null) scope.remove(); else scope.set(previous); }
     }
 
-    private void loadMaterial(Object item, MaterialKey key, int token) {
-        Object copy = null;
-        try { if (enabled && item != null) copy = assets.build(context, item, key.bitmap()); }
-        catch (ReflectiveOperationException | RuntimeException failure) {
-            android.util.Log.w("NcDrawerMonet", "native monochrome material unavailable", failure);
-        }
-        synchronized (copies) { if (generation != token || !copies.containsKey(key)) return; copies.put(key, copy); }
-        if (materials.incrementAndGet() <= 6) android.util.Log.i("NcDrawerMonet", "monochrome material ready=" + (copy != null));
-        if (copy != null) main.post(() -> rebind(key.bitmap()));
-    }
-
-    private void rebind(Object onlyBitmap) {
+    private void rebind() {
         List<View> views;
         synchronized (gridIcons) { views = new ArrayList<>(gridIcons.keySet()); }
         for (View view : views) {
             if (!eligibleItem(view, view.getTag())) continue;
-            try {
-                if (onlyBitmap == null || itemBitmap.get(view.getTag()) == onlyBitmap)
-                    standard.invoke(view, view.getTag());
-            } catch (ReflectiveOperationException | RuntimeException failure) {
+            try { standard.invoke(view, view.getTag()); }
+            catch (ReflectiveOperationException | RuntimeException failure) {
                 android.util.Log.w("NcDrawerMonet", "native drawer rebind failed", failure);
             }
         }
@@ -205,22 +148,19 @@ final class DrawerMonet {
         worker.post(this::reload);
     }
 
-    void artworkChanged() {
-        main.post(() -> { synchronized (copies) { generation++; copies.clear(); } rebind(null); });
-    }
+    void artworkChanged() { main.post(this::rebind); }
 
     private void reload() {
         if (settings == null) settings = HostSnapshot.open(context, "drawer_monet");
         var read = settings.read(() -> context.getContentResolver().call(
                 Uri.parse("content://" + ShadeStore.AUTHORITY), "drawer", null, null));
-        // Unlike artwork snapshots, a failed opt-in read must leave the native renderer untouched.
+        // A failed opt-in read must leave the native renderer untouched.
         boolean next = read.live() && read.config() != null && read.config().getBoolean("drawerMonet", false);
         main.post(() -> {
             if (enabled == next) return;
             enabled = next;
             android.util.Log.i("NcDrawerMonet", "config enabled=" + next);
-            synchronized (copies) { generation++; copies.clear(); }
-            rebind(null);
+            rebind();
         });
         if (!read.live()) worker.postDelayed(this::reload, settings.retryDelay(3000));
     }

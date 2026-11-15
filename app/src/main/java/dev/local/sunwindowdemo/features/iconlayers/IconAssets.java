@@ -129,14 +129,6 @@ public final class IconAssets {
         }
         return IconLayerStore.TARGET.equals(pkg)&&current.demo!=0?new LayeredTestIcon(c.getResources(),current.demo):null;
     }
-    /** Drawer precedence follows the monochrome channel, never a color-only desktop replacement. */
-    static Drawable drawerMonochrome(Context c,String pkg,Drawable original){
-        Entry entry=snapshot.entries.get(pkg);
-        if(entry==null||!entry.monoChanged||entry.mono==null)return null;
-        if(entry.nativeColor&&original instanceof AdaptiveIconDrawable adaptive)
-            return new AdaptiveIconDrawable(adaptive.getBackground(),adaptive.getForeground(),drawable(c,entry.mono));
-        return new ImportedIcon(c.getResources(),entry.background,entry.foreground,entry.mono);
-    }
     public static Drawable notification(Context c,String pkg){
         Entry entry=snapshot.entries.get(pkg);
         return entry==null||entry.notification==null?null:drawable(c,entry.notification);
