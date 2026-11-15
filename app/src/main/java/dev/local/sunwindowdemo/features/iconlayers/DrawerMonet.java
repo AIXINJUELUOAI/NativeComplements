@@ -109,7 +109,8 @@ final class DrawerMonet {
             // The wallpaper picker themed-icon switch lands here; follow it and tell the module.
             hooks.add(module.hook(verify).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed();
-                refreshSystemTheme();
+                // Runs inside ThemeManager construction: never touch the Dagger singleton here.
+                refreshSystemTheme(chain.getThisObject());
                 return result;
             }));
             hooks.add(module.hook(create).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
@@ -156,9 +157,9 @@ final class DrawerMonet {
         return iconCacheRef;
     }
 
-    private boolean readSystemTheme() {
+    private boolean readSystemTheme(Object manager) {
         try {
-            Object manager = themeGet.invoke(themeSingleton, context);
+            if (manager == null) manager = themeGet.invoke(themeSingleton, context);
             Object state = manager == null ? null : themeState.get(manager);
             return state != null && themeController.get(state) != null;
         } catch (ReflectiveOperationException | RuntimeException failure) {
@@ -166,9 +167,11 @@ final class DrawerMonet {
         }
     }
 
-    private void refreshSystemTheme() {
+    private void refreshSystemTheme() { refreshSystemTheme(null); }
+
+    private void refreshSystemTheme(Object manager) {
         if (context == null || worker == null) return;
-        boolean themed = readSystemTheme();
+        boolean themed = readSystemTheme(manager);
         main.post(() -> { systemThemed = themed; apply(); });
         worker.post(() -> {
             if (Boolean.valueOf(themed).equals(reportedThemed)) return;
