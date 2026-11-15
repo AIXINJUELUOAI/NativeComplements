@@ -30,6 +30,7 @@ public final class BackBridge extends XposedModule {
     private Stroke cancelling;
     private static final class Stroke {
         final LongBackGesture gesture=new LongBackGesture();
+        BackHandoffState handoff; // Created only after prepareBack succeeds.
         int task;String pkg,token;Object controller,handler;
     }
     @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&PACKAGE.equals(p.getProcessName());}
@@ -301,6 +302,12 @@ public final class BackBridge extends XposedModule {
         if(s==null)return;
         if(settling==s)settling=null;
         if(pending==s)pending=null;
+        if(s.handoff.cancel())Wire.cancelBack(s.token);
+    }
+    /** State already consumed the cancellation transition; release only this native ticket. */
+    private void cancelPrepared(Stroke s){
+        if(settling==s)settling=null;
+        if(pending==s)pending=null;
         Wire.cancelBack(s.token);
     }
     private synchronized boolean observe(Object owner,MotionEvent e) throws Exception {
@@ -354,26 +361,35 @@ public final class BackBridge extends XposedModule {
                     }
                 }catch(Exception ignored){}
                 if(!Wire.prepareBack(s.task,s.pkg,s.token,pose,leash)){note("BACK_PREPARE_REJECTED");return false;}
-                BackVisual.claim(s.task);pending=s;settling=s;
+                BackVisual.claim(s.task);s.handoff=new BackHandoffState(s.gesture.revision());pending=s;settling=s;
             }
             note(accepted?"BACK_ADMITTED":"BACK_REJECTED");return accepted;
         }finally{data.recycle();reply.recycle();}
     }
     private void waitForNativeBack(Stroke s,int attempt){
-        if(!live()||s.gesture.revision()!=generation){abort(s);return;}
-        if(attempt>=40){abort(s);note("BACK_CANCEL_TIMEOUT");return;}
+        BackHandoffState.Action decision=s.handoff.check(live(),generation,attempt);
+        if(decision==BackHandoffState.Action.ABORT){cancelPrepared(s);if(attempt>=BackHandoffState.NATIVE_ATTEMPTS)note("BACK_CANCEL_TIMEOUT");return;}
+        if(decision!=BackHandoffState.Action.CHECK_NATIVE)return;
         try{
             Runnable check=()->{
                 try{
                     boolean busy=s.controller!=null&&(field(s.controller.getClass(),"mBackNavigationInfo").get(s.controller)!=null
                         ||field(s.controller.getClass(),"mPostCommitAnimationInProgress").getBoolean(s.controller));
-                    if(busy)main.postDelayed(()->waitForNativeBack(s,attempt+1),40);
-                    else if(s.controller==null)main.post(()->commit(s));
-                    else{
+                    BackHandoffState.Action next=s.handoff.nativeState(busy,s.controller!=null,live(),generation);
+                    if(next==BackHandoffState.Action.ABORT)main.post(()->cancelPrepared(s));
+                    else if(next==BackHandoffState.Action.WAIT_NATIVE)main.postDelayed(()->waitForNativeBack(s,attempt+1),BackHandoffState.NATIVE_RETRY_MS);
+                    else if(next==BackHandoffState.Action.COMMIT)main.post(()->commit(s));
+                    else if(next==BackHandoffState.Action.WAIT_IDLE){
                         Object transitions=field(s.controller.getClass(),"mTransitions").get(s.controller);
                         Method idle=transitions.getClass().getDeclaredMethod("runOnIdle",Runnable.class);idle.setAccessible(true);
-                        idle.invoke(transitions,(Runnable)()->main.post(()->{if(settling==s)commit(s);}));
-                        main.postDelayed(()->{if(settling==s){settling=null;Wire.cancelBack(s.token);note("BACK_TRANSITION_TIMEOUT");}},650);
+                        idle.invoke(transitions,(Runnable)()->main.post(()->{
+                            BackHandoffState.Action ready=s.handoff.idle(live(),generation);
+                            if(ready==BackHandoffState.Action.COMMIT)commit(s);
+                            else if(ready==BackHandoffState.Action.ABORT)cancelPrepared(s);
+                        }));
+                        main.postDelayed(()->{
+                            if(s.handoff.idleTimeout()==BackHandoffState.Action.ABORT){cancelPrepared(s);note("BACK_TRANSITION_TIMEOUT");}
+                        },BackHandoffState.IDLE_TIMEOUT_MS);
                     }
                 }catch(Exception e){main.post(()->abort(s));note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
             };
@@ -383,11 +399,16 @@ public final class BackBridge extends XposedModule {
         }catch(Exception e){abort(s);note("BACK_WAIT_FAILED "+e.getClass().getSimpleName());}
     }
     private void commit(Stroke s){
-        if(!live()||s.gesture.revision()!=generation){abort(s);return;}settling=null;Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+        BackHandoffState.Action decision=s.handoff.commit(live(),generation);
+        if(decision==BackHandoffState.Action.ABORT){cancelPrepared(s);return;}
+        if(decision!=BackHandoffState.Action.COMMIT)return;
+        if(settling==s)settling=null;Parcel data=Parcel.obtain(),reply=Parcel.obtain();
         try{data.writeInterfaceToken(CHANNEL);data.writeInt(s.task);data.writeString(s.pkg);data.writeString(s.token);
-            if(!sink.transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0)){Wire.cancelBack(s.token);note("BACK_COMMIT_FAILED");return;}
-            reply.readException();boolean accepted=reply.readBoolean();if(!accepted)Wire.cancelBack(s.token);note(accepted?"BACK_HANDOFF":"BACK_COMMIT_REJECTED");
-        }catch(RemoteException e){Wire.cancelBack(s.token);note("BACK_COMMIT_FAILED");}finally{data.recycle();reply.recycle();}
+            if(!sink.transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0)){abort(s);note("BACK_COMMIT_FAILED");return;}
+            reply.readException();boolean accepted=reply.readBoolean();
+            if(accepted)s.handoff.completed();else abort(s);
+            note(accepted?"BACK_HANDOFF":"BACK_COMMIT_REJECTED");
+        }catch(RemoteException|RuntimeException e){abort(s);note("BACK_COMMIT_FAILED");}finally{data.recycle();reply.recycle();}
     }
     private void preview(Stroke s,int stage){
         if(!s.gesture.hintChanged(stage)||sink==null)return;

@@ -87,11 +87,12 @@ final class WindowEngine {
     }
     private boolean keepNativeForeground(NativeForeground before,Object task,String pkg,int user,Object display){
         if(before==null)return false;
-        if(WindowPolicy.nativeForeground(before.task,task,before.pkg,pkg,before.userId,user,
-            before.display,display,before.mode,before.owned))return true;
+        if(WindowPolicy.nativeForeground(before.task!=null&&before.task==task,before.pkg,pkg,before.userId,user,
+            before.display!=null&&before.display==display,before.mode,before.owned))return true;
         // A focused floating window may cover the real fullscreen app. Starting that exact
         // task must bring it forward natively instead of converting it into a window.
-        return WindowPolicy.coveredFullscreen(before.fullscreen,before.task,task,before.display,display);
+        return WindowPolicy.coveredFullscreen(before.fullscreen!=null&&before.fullscreen!=before.task&&before.fullscreen==task,
+            before.display!=null&&before.display==display);
     }
     private String uiTouch="尚未收到角落触摸";
     private boolean controlUid(int uid){return uid>=0&&(uid==clientUid||uid==uiUid);}
@@ -234,8 +235,8 @@ final class WindowEngine {
         request.removeExtra("openReply");
         if(reply!=null){
             Bundle result=new Bundle();result.putBoolean("dispatched",request.getBooleanExtra("launchDispatched",false));result.putBoolean("superseded",request.getLongExtra("generation",-1)!=openGeneration);
-            WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
-            result.putInt("taskId",ticket!=null&&ticket.generation==request.getLongExtra("generation",-1)?ticket.taskId:request.getIntExtra("taskId",-1));
+            AndroidWindowLaunch ticket=pendingShortcutLaunch.get();
+            result.putInt("taskId",ticket!=null&&ticket.state.generation==request.getLongExtra("generation",-1)?ticket.state.taskId:request.getIntExtra("taskId",-1));
             reply.send(success?1:0,result);
         }
     }
@@ -255,7 +256,7 @@ final class WindowEngine {
     private Intent recoveryOpen;
     private int endedTaskId=-1;
     private volatile long openGeneration;
-    private final java.util.concurrent.atomic.AtomicReference<WindowNavigation.Launch> pendingShortcutLaunch=
+    private final java.util.concurrent.atomic.AtomicReference<AndroidWindowLaunch> pendingShortcutLaunch=
         new java.util.concurrent.atomic.AtomicReference<>();
     private volatile boolean refreshQueued;
     private String last = "后端正在初始化";
@@ -582,14 +583,14 @@ final class WindowEngine {
             final Object[] candidate={null};final long[] newest={Long.MIN_VALUE};
             if(shortcut){
                 if(request.getBooleanExtra("launched",false)){
-                    WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
-                    if(ticket==null||ticket.generation!=generation||!pkg.equals(ticket.hint)||shortcutUser!=ticket.userId)
+                    AndroidWindowLaunch ticket=pendingShortcutLaunch.get();
+                    if(ticket==null||!ticket.state.currentRequest(generation,pkg,shortcutUser))
                         throw new IllegalStateException("快捷功能启动请求已失效");
-                    if(ticket.dispatched&&ticket.taskId>=0)synchronized(lock){
-                        Object task=find(ticket.taskId);
+                    if(ticket.state.dispatched&&ticket.state.taskId>=0)synchronized(lock){
+                        Object task=find(ticket.state.taskId);
                         ComponentName component=task==null?null:(ComponentName)a.field(task,"realActivity");
-                        if(task!=null&&(task!=ticket.task||(Integer)a.field(task,"mUserId")!=ticket.userId
-                            ||component==null||!component.getPackageName().equals(ticket.targetPackage)
+                        if(task!=null&&(task!=ticket.task||(Integer)a.field(task,"mUserId")!=ticket.state.userId
+                            ||component==null||!component.getPackageName().equals(ticket.state.targetPackage)
                             ||!a.bool(task,"isRootTask")||!a.bool(task,"isLeafTask")))
                             throw new IllegalStateException("快捷功能目标任务已改变");
                         candidate[0]=task;
@@ -625,15 +626,17 @@ final class WindowEngine {
                         Object focused=a.focused.invoke(root),top=focused==null?null:a.call(focused,"topRunningActivity");
                         if(top!=null)foregroundPackage=(String)a.field(top,"packageName");
                     }
-                    WindowNavigation.Launch ticket=new WindowNavigation.Launch(generation,pkg,
-                        request.getBooleanExtra("notificationLaunch",false)?null:pkg,shortcutUser,ShortcutStarter.sender(shortcutLaunch),SystemClock.elapsedRealtime(),foregroundPackage);
+                    String expected=request.getBooleanExtra("notificationLaunch",false)?null:pkg;
+                    IBinder sender=ShortcutStarter.sender(shortcutLaunch);
+                    AndroidWindowLaunch ticket=new AndroidWindowLaunch(new WindowNavigation.Launch(generation,pkg,
+                        expected,shortcutUser,SystemClock.elapsedRealtime(),foregroundPackage),sender);
                     // Every PendingIntent jump (notification or suggestion) compares its bound target with the
                     // pre-send fullscreen foreground: landing in that exact task keeps it native.
                     ticket.foreground=nativeForeground();
                     pendingShortcutLaunch.set(ticket);
                     int result=ShortcutStarter.send(shortcutLaunch,context,request.getParcelableExtra("launchFillIn",Intent.class),(pi,intent,code,data,extras)->{
                         synchronized(ticket){
-                            if(pendingShortcutLaunch.get()==ticket&&ticket.generation==openGeneration)ticket.dispatched=true;
+                            if(pendingShortcutLaunch.get()==ticket&&ticket.state.generation==openGeneration)ticket.state.dispatched(openGeneration);
                         }
                     },handler,options);
                     if(result<0||result>3)throw new IllegalStateException("快捷功能启动未获系统接受，result="+result);
@@ -647,15 +650,15 @@ final class WindowEngine {
                 handler.postDelayed(()->open(request,attempt+1),32);return;
             }
             if(shortcut){
-                WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
-                if(ticket==null||ticket.generation!=generation)throw new IllegalStateException("快捷功能启动请求已失效");
-                if(!ticket.dispatched){waitOpen(request,attempt,"wait-shortcut",-1);return;}
+                AndroidWindowLaunch ticket=pendingShortcutLaunch.get();
+                if(ticket==null||ticket.state.generation!=generation)throw new IllegalStateException("快捷功能启动请求已失效");
+                if(!ticket.state.dispatched){waitOpen(request,attempt,"wait-shortcut",-1);return;}
             }
             // A delegated launch may finish its intermediate task before opening the target.
             // Keep observing this exact send until the common bounded launch deadline.
             if(candidate[0]==null){waitOpen(request,attempt,"wait-task",-1);return;}
-            WindowNavigation.Launch resolved=pendingShortcutLaunch.get();
-            if(shortcut&&resolved!=null&&resolved.keepNativeForeground()){
+            AndroidWindowLaunch resolved=pendingShortcutLaunch.get();
+            if(shortcut&&resolved!=null&&resolved.state.keepNativeForeground()){
                 // The notification publisher may differ from the actual PendingIntent target.
                 // Compare with the foreground before send, not with the task the send just raised.
                 synchronized(lock){
@@ -663,7 +666,7 @@ final class WindowEngine {
                     a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
                 }
                 completeOpen(request,true);clearShortcutLaunch(generation);
-                log.accept("NOTIFICATION_NATIVE_FOREGROUND package="+resolved.targetPackage+" task="+id);return;
+                log.accept("NOTIFICATION_NATIVE_FOREGROUND package="+resolved.state.targetPackage+" task="+id);return;
             }
             synchronized(lock){if(a.entryBusy(candidate[0],false)){
                 waitOpen(request,attempt,"wait-native",id);return;}
@@ -676,15 +679,15 @@ final class WindowEngine {
                 }
                 completeOpen(request,true);clearShortcutLaunch(generation);report("INTENT_REUSED");return;
             }
-            String actual=shortcut&&resolved!=null&&resolved.targetPackage!=null?resolved.targetPackage:pkg;
+            String actual=shortcut&&resolved!=null&&resolved.state.targetPackage!=null?resolved.state.targetPackage:pkg;
             clearShortcutLaunch(generation);
             openPhase(request,"start",id);command(new Intent(request).putExtra("package",actual).putExtra("op","START")
                 .putExtra("taskId",id).putExtra("fadeEntry",true).putExtra("allowInheritedFreeform",shortcut));
         }catch(Throwable e){completeOpen(request,false);clearShortcutLaunch(generation);note("OPEN_FAILED："+pkg+"："+FrameworkAccess.reason(e));}
     }
     private void clearShortcutLaunch(long generation){
-        WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
-        if(ticket!=null&&ticket.generation==generation)pendingShortcutLaunch.compareAndSet(ticket,null);
+        AndroidWindowLaunch ticket=pendingShortcutLaunch.get();
+        if(ticket!=null&&ticket.state.generation==generation)pendingShortcutLaunch.compareAndSet(ticket,null);
     }
     private boolean recoveryPending(){return recovering||anyRestoring()||unrecoveredJournal();}
     /** Retain this exact request through one bounded recovery; never redispatch its PendingIntent. */
@@ -717,8 +720,8 @@ final class WindowEngine {
         if(waiting)result.putExtra("waitingPackage",request.getStringExtra("package")).putExtra("waitingToken",request.getStringExtra("token"));
     }
     Object shortcutLaunchTicket(Object originating,Object source){
-        WindowNavigation.Launch ticket=pendingShortcutLaunch.get();
-        if(ticket!=null&&ticket.generation!=openGeneration){pendingShortcutLaunch.compareAndSet(ticket,null);return null;}
+        AndroidWindowLaunch ticket=pendingShortcutLaunch.get();
+        if(ticket!=null&&ticket.state.generation!=openGeneration){pendingShortcutLaunch.compareAndSet(ticket,null);return null;}
         if(ticket==null)return null;
         try{
             IBinder sender=originating instanceof IBinder binder?binder:null;
@@ -730,21 +733,21 @@ final class WindowEngine {
      * Keep the last matching activity in a shortcut's real intent stack, including
      * singleTask/onNewIntent reuse; never guess from the package's recent tasks. */
     void shortcutActivityStarted(Object value,Object started){
-        if(!(value instanceof WindowNavigation.Launch ticket)||started==null||lock==null)return;
+        if(!(value instanceof AndroidWindowLaunch ticket)||started==null||lock==null)return;
         try{synchronized(lock){
-            if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration)return;
+            if(pendingShortcutLaunch.get()!=ticket||ticket.state.generation!=openGeneration)return;
             Object task=a.call(started,"getTask");
-            if(task==null||(Integer)a.field(task,"mUserId")!=ticket.userId)return;
+            if(task==null||(Integer)a.field(task,"mUserId")!=ticket.state.userId)return;
             ComponentName component=(ComponentName)a.field(task,"realActivity");
             if(component==null||!ticket.targetAllowed(component.getPackageName(),(Integer)a.field(task,"mUserId"))
                 ||Wire.PKG.equals(component.getPackageName())||BackBridge.PACKAGE.equals(component.getPackageName())
                 ||LauncherGuard.PACKAGE.equals(component.getPackageName())||a.integer(task,"getActivityType")!=1)return;
             synchronized(ticket){
-                if(pendingShortcutLaunch.get()!=ticket||ticket.generation!=openGeneration)return;
-                ticket.task=task;ticket.taskId=(Integer)a.field(task,"mTaskId");ticket.targetPackage=component.getPackageName();
-                ticket.nativeTarget=keepNativeForeground(ticket.foreground,task,ticket.targetPackage,ticket.userId,a.call(task,"getDisplayContent"));
+                if(pendingShortcutLaunch.get()!=ticket||ticket.state.generation!=openGeneration)return;
+                ticket.task=task;ticket.state.bind((Integer)a.field(task,"mTaskId"),component.getPackageName());
+                ticket.state.nativeTarget=keepNativeForeground(ticket.foreground,task,ticket.state.targetPackage,ticket.state.userId,a.call(task,"getDisplayContent"));
             }
-            log.accept("WINDOW_LAUNCH_BOUND generation="+ticket.generation+" source="+ticket.hint+" package="+ticket.targetPackage+" task="+ticket.taskId);
+            log.accept("WINDOW_LAUNCH_BOUND generation="+ticket.state.generation+" source="+ticket.state.hint+" package="+ticket.state.targetPackage+" task="+ticket.state.taskId);
         }}catch(Exception e){log.accept("SHORTCUT_TASK_BIND_FAILED "+FrameworkAccess.reason(e));}
     }
     /** One bounded retry step of open(): record the phase, then poll again in 32ms. */
@@ -981,7 +984,7 @@ final class WindowEngine {
                 ||!a.bool(target,"isAttached")||find(owner.taskId)!=target)return null;
             Intent intent=(Intent)a.field(request,"intent");
             if(!ShareWindow.eligibleIntent(intent,false)||(intent.getFlags()&Intent.FLAG_ACTIVITY_CLEAR_TASK)!=0)return null;
-            if(!WindowPolicy.ownedLaunch(a.integer(request,"getUid"),owner.uid,
+            if(!ownedLaunch(a.integer(request,"getUid"),owner.uid,
                 (Integer)a.field(target,"mUserId"),owner.userId,
                 a.call(request,"getDisplayContent"),a.call(target,"getDisplayContent")))return null;
             if(options!=null){int mode=(Integer)a.call(options,"getLaunchWindowingMode");if(mode!=0&&mode!=1&&mode!=5)return null;}
@@ -990,6 +993,9 @@ final class WindowEngine {
             log.accept("OWNED_LAUNCH_KEEP task="+owner.taskId+" sourceOwned="+(source!=null&&sessionFor(a.call(source,"getTask"))!=null));
             return ShareWindow.launchOptions(options,new Rect(0,0,owner.placement.width(),owner.placement.height()));
         }
+    }
+    private static boolean ownedLaunch(int targetUid,int ownerUid,int targetUser,int ownerUser,Object requestDisplay,Object targetDisplay){
+        return WindowPolicy.ownedLaunch(targetUid,ownerUid,targetUser,ownerUser,targetDisplay!=null,requestDisplay==null||requestDisplay==targetDisplay);
     }
     private void preserveOwnedTask(Session s)throws Exception{
         if(a.integer(s.task,"getWindowingMode")==5)return;
@@ -1019,7 +1025,7 @@ final class WindowEngine {
             if(target==null)return null;
             if(target==s.task){
                 if(sourceTask==s.task&&s.launchFlow!=null&&s.launchFlow.continuing(SystemClock.elapsedRealtime()))s.launchFlow.changed(SystemClock.elapsedRealtime());
-                if(WindowPolicy.ownedLaunch(a.integer(requestActivity,"getUid"),s.uid,
+                if(ownedLaunch(a.integer(requestActivity,"getUid"),s.uid,
                     (Integer)a.field(target,"mUserId"),s.userId,a.call(requestActivity,"getDisplayContent"),a.call(target,"getDisplayContent"))){
                     preserveOwnedTask(s);return new OwnedStart(s);
                 }
@@ -1743,7 +1749,7 @@ final class WindowEngine {
         if (task == null || (Integer) a.field(task, "mTaskId") != s.taskId || (Integer) a.field(task, "mUserId") != s.userId) return false;
         // A live task may change its root component/base intent after a document or payment return.
         // The in-memory task object, id and user are stronger identity than mutable activity metadata.
-        if(s.task!=null&&WindowPolicy.sameLiveTask(task,s.task,(Integer)a.field(task,"mTaskId"),s.taskId,(Integer)a.field(task,"mUserId"),s.userId))return true;
+        if(s.task!=null&&WindowPolicy.sameLiveTask(task!=null&&task==s.task,(Integer)a.field(task,"mTaskId"),s.taskId,(Integer)a.field(task,"mUserId"),s.userId))return true;
         Intent base = (Intent) a.call(task, "getBaseIntent");
         ComponentName real = (ComponentName) a.field(task, "realActivity");
         return base != null && java.util.Objects.equals(s.baseId,base.getIdentifier()) && real != null
@@ -2360,7 +2366,7 @@ final class WindowEngine {
         if(handler==null)return;
         Session owner=active;
         boolean guarded=entryGuard(owner);long now=SystemClock.uptimeMillis();
-        if(WindowPolicy.startsTouchGuard(owner,touchGuardOwner,guarded,touchGuarded)){
+        if(WindowPolicy.startsTouchGuard(owner==touchGuardOwner,guarded,touchGuarded)){
             touchGuardSince=now;touchGuardUntil=0;
             handler.postDelayed(this::refreshTouchGuard,TOUCH_GUARD_MAX_MS+16);
         }else if(!guarded&&touchGuarded){

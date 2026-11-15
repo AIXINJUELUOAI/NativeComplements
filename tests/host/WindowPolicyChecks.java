@@ -1,6 +1,15 @@
 package dev.local.sunwindowdemo;
 
 public final class WindowPolicyChecks {
+    private static boolean sameLiveTask(Object task,Object owned,int id,int expectedId,int user,int expectedUser){
+        return WindowPolicy.sameLiveTask(task!=null&&task==owned,id,expectedId,user,expectedUser);
+    }
+    private static boolean coveredFullscreen(Object fullscreen,Object focused,Object target,Object beforeDisplay,Object targetDisplay){
+        return WindowPolicy.coveredFullscreen(fullscreen!=null&&fullscreen!=focused&&fullscreen==target,beforeDisplay!=null&&beforeDisplay==targetDisplay);
+    }
+    private static boolean startsTouchGuard(Object owner,Object previous,boolean guarded,boolean reported){
+        return WindowPolicy.startsTouchGuard(owner==previous,guarded,reported);
+    }
     private static void require(boolean value){if(!value)throw new AssertionError();}
     public static void main(String[] args){
         require(!WindowPolicy.entryBusy(false,0));
@@ -49,19 +58,19 @@ public final class WindowPolicyChecks {
         require(!WindowPolicy.mayRestoreNormalFocus(1,false,2)); // PiP
         require(!WindowPolicy.mayRestoreNormalFocus(1,false,5)); // other floating task
         Object owned=new Object();
-        require(WindowPolicy.sameLiveTask(owned,owned,10,10,0,0));
-        require(!WindowPolicy.sameLiveTask(new Object(),owned,10,10,0,0));
-        require(!WindowPolicy.sameLiveTask(owned,owned,11,10,0,0));
-        require(!WindowPolicy.sameLiveTask(owned,owned,10,10,10,0));
-        require(!WindowPolicy.sameLiveTask(null,null,10,10,0,0));
+        require(sameLiveTask(owned,owned,10,10,0,0));
+        require(!sameLiveTask(new Object(),owned,10,10,0,0));
+        require(!sameLiveTask(owned,owned,11,10,0,0));
+        require(!sameLiveTask(owned,owned,10,10,10,0));
+        require(!sameLiveTask(null,null,10,10,0,0));
         // A focused floating window covering a fullscreen app: starting that exact app task stays native.
         Object floating=new Object(),covered=new Object(),other=new Object(),display=new Object();
-        require(WindowPolicy.coveredFullscreen(covered,floating,covered,display,display));
-        require(!WindowPolicy.coveredFullscreen(covered,floating,other,display,display)); // a different task may still open linked
-        require(!WindowPolicy.coveredFullscreen(covered,covered,covered,display,display)); // focused fullscreen keeps the exact-package rule
-        require(!WindowPolicy.coveredFullscreen(null,floating,covered,display,display)); // Home or nothing beneath
-        require(!WindowPolicy.coveredFullscreen(covered,floating,covered,display,new Object()));
-        require(!WindowPolicy.coveredFullscreen(covered,floating,covered,null,null));
+        require(coveredFullscreen(covered,floating,covered,display,display));
+        require(!coveredFullscreen(covered,floating,other,display,display)); // a different task may still open linked
+        require(!coveredFullscreen(covered,covered,covered,display,display)); // focused fullscreen keeps the exact-package rule
+        require(!coveredFullscreen(null,floating,covered,display,display)); // Home or nothing beneath
+        require(!coveredFullscreen(covered,floating,covered,display,new Object()));
+        require(!coveredFullscreen(covered,floating,covered,null,null));
         // Background touch gate behind a normal window: entry (capped at max), then grace, never without a shown normal window.
         require(WindowPolicy.backgroundTouchGuard(true,true,false,0,0,5000,3000)); // first input update before any frame
         require(WindowPolicy.backgroundTouchGuard(true,true,true,1000,0,3999,3000));
@@ -71,13 +80,13 @@ public final class WindowPolicyChecks {
         require(!WindowPolicy.backgroundTouchGuard(false,true,true,1000,9999,1001,3000)); // mini/closing/parked: native touch
         // A replacement receives a fresh cap; repeated frames cannot extend the same owner's cap.
         Object guardA=new Object(),guardB=new Object();
-        require(WindowPolicy.startsTouchGuard(guardA,null,true,false));
-        require(!WindowPolicy.startsTouchGuard(guardA,guardA,true,true));
-        require(WindowPolicy.startsTouchGuard(guardB,guardA,true,true));
-        require(!WindowPolicy.startsTouchGuard(guardB,guardA,false,true));
-        require(WindowPolicy.startsTouchGuard(guardA,guardA,true,false));
+        require(startsTouchGuard(guardA,null,true,false));
+        require(!startsTouchGuard(guardA,guardA,true,true));
+        require(startsTouchGuard(guardB,guardA,true,true));
+        require(!startsTouchGuard(guardB,guardA,false,true));
+        require(startsTouchGuard(guardA,guardA,true,false));
         long guardSince=1000;
-        if(WindowPolicy.startsTouchGuard(guardB,guardA,true,true))guardSince=4001;
+        if(startsTouchGuard(guardB,guardA,true,true))guardSince=4001;
         require(WindowPolicy.backgroundTouchGuard(true,true,true,guardSince,0,4001,3000));
         require(WindowPolicy.backgroundTouchGuard(true,true,true,guardSince,0,7000,3000));
         require(!WindowPolicy.backgroundTouchGuard(true,true,true,guardSince,0,7001,3000));

@@ -1,46 +1,32 @@
 package dev.local.sunwindowdemo;
 
-import android.os.IBinder;
-
-/** Shared admission and wake rules. An app hint is not the identity of a launched task. */
+/** Shared navigation values. Native sender/task identities are sampled by AndroidWindowLaunch. */
 final class WindowNavigation {
-    static String wakeForm(String frame, boolean hidden, boolean step) {
-        return step && hidden && "mini".equals(frame) ? "restore-mini" : "normal";
+    static String wakeForm(String frame,boolean hidden,boolean step){
+        return step&&hidden&&"mini".equals(frame)?"restore-mini":"normal";
     }
-
-    /** One explicit native PendingIntent send; matched by its binder, never by recent-task order. */
     static final class Launch {
-        final long generation;
-        final String hint, expectedPackage, foregroundPackage;
+        final long generation,sentAt;
+        final String hint,expectedPackage,foregroundPackage;
         final int userId;
-        final IBinder sender;
-        final long sentAt;
-        volatile Object task;
-        volatile int taskId = -1;
+        volatile int taskId=-1;
         volatile String targetPackage;
-        volatile boolean dispatched;
-        WindowEngine.NativeForeground foreground;
-        volatile boolean nativeTarget;
-
-        Launch(long generation, String hint, String expectedPackage, int userId, IBinder sender, long sentAt,
-               String foregroundPackage) {
+        volatile boolean dispatched,nativeTarget;
+        Launch(long generation,String hint,String expectedPackage,int userId,long sentAt,String foregroundPackage){
             this.generation=generation;this.hint=hint;this.expectedPackage=expectedPackage;
-            this.userId=userId;this.sender=sender;this.sentAt=sentAt;this.foregroundPackage=foregroundPackage;
+            this.userId=userId;this.sentAt=sentAt;this.foregroundPackage=foregroundPackage;
         }
-
-        boolean accepts(long current, IBinder originatingSender, Object sourceTask) {
-            return generation==current && (sender!=null && sender.equals(originatingSender)
-                || task!=null && task==sourceTask);
+        boolean currentRequest(long current,String requestHint,int requestUser){
+            return generation==current&&hint.equals(requestHint)&&userId==requestUser;
         }
-
-        boolean targetAllowed(String pkg, int user) {
-            return user==userId && Wire.allowedPackage(pkg)
-                && (expectedPackage==null || expectedPackage.equals(pkg));
+        boolean accepts(long current,boolean sameSender,boolean sameBoundTask){
+            return generation==current&&(sameSender||sameBoundTask);
         }
-
-        /** The send landed in the exact fullscreen task that was in front (or covered) before it. */
-        boolean keepNativeForeground() {
-            return nativeTarget;
+        boolean targetAllowed(String pkg,int user,boolean allowedPackage){
+            return user==userId&&allowedPackage&&(expectedPackage==null||expectedPackage.equals(pkg));
         }
+        void dispatched(long current){if(generation==current)dispatched=true;}
+        void bind(int id,String pkg){taskId=id;targetPackage=pkg;}
+        boolean keepNativeForeground(){return nativeTarget;}
     }
 }

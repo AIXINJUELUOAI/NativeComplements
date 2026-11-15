@@ -219,10 +219,136 @@ public class BackHandoffTest {
         }
     }
 
+    private Object stroke(String token,Object controller)throws Exception {
+        Class<?> type=Class.forName("dev.local.sunwindowdemo.BackBridge$Stroke");
+        Constructor<?> constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
+        Object stroke=constructor.newInstance();set(stroke,"handoff",new BackHandoffState(0));set(stroke,"token",token);set(stroke,"controller",controller);
+        set(stroke,"task",42);set(stroke,"pkg","dev.example.target");return stroke;
+    }
+    private void callStroke(Object bridge,String method,Object stroke)throws Exception {
+        Method target=bridge.getClass().getDeclaredMethod(method,stroke.getClass());target.setAccessible(true);target.invoke(bridge,stroke);
+    }
+    private void waitNative(Object bridge,Object stroke)throws Exception {
+        Method target=bridge.getClass().getDeclaredMethod("waitForNativeBack",stroke.getClass(),int.class);
+        target.setAccessible(true);target.invoke(bridge,stroke,0);
+    }
+    private static final class NativeTransitions {
+        Runnable callback;
+        boolean immediate;
+        public void runOnIdle(Runnable callback){this.callback=callback;if(immediate)callback.run();}
+    }
+    private static final class NativeController {
+        Object mBackNavigationInfo;
+        boolean mPostCommitAnimationInProgress;
+        final NativeTransitions mTransitions=new NativeTransitions();
+        final List<Runnable> shell=new ArrayList<>();
+        final java.util.concurrent.Executor mShellExecutor=shell::add;
+        void runShell(){shell.remove(0).run();}
+    }
+    private Object liveBridge(List<String> committed,boolean accepted)throws Exception {
+        Object bridge=bridge();set(bridge,"enabled",true);set(bridge,"lease",new Binder());
+        set(bridge,"sink",new Binder(){
+            @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags){
+                assertEquals(IBinder.FIRST_CALL_TRANSACTION,code);assertEquals(0,flags);
+                data.enforceInterface(BackBridge.CHANNEL);assertEquals(42,data.readInt());
+                assertEquals("dev.example.target",data.readString());committed.add(data.readString());data.enforceNoDataAvail();
+                reply.writeNoException();reply.writeBoolean(accepted);return true;
+            }
+        });return bridge;
+    }
+    @Test public void shellIdleHandoffCommitsOnMainOnceDespiteDuplicateCallbacks()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();String token=Wire.token();Object stroke=stroke(token,controller);
+        set(bridge,"settling",stroke);waitNative(bridge,stroke);
+        assertNull(controller.mTransitions.callback);assertTrue(committed.isEmpty());
+        controller.runShell();assertNotNull(controller.mTransitions.callback);assertTrue(committed.isEmpty());
+        controller.mTransitions.callback.run();controller.mTransitions.callback.run();
+        assertTrue(committed.isEmpty());idle(0);
+        assertEquals(List.of(token),committed);assertNull(get(bridge,"settling"));
+        controller.mTransitions.callback.run();idle(650);
+        assertEquals(List.of(token),committed);assertTrue(cancelled.isEmpty());
+    }
+    @Test public void synchronousShellAndIdleCallbacksStillPostCommitToMainWithoutDeadlock()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();controller.mTransitions.immediate=true;
+        String token=Wire.token();Object stroke=stroke(token,controller);set(bridge,"settling",stroke);
+        set(controller,"mShellExecutor",(java.util.concurrent.Executor)Runnable::run);
+        waitNative(bridge,stroke);assertTrue(committed.isEmpty());idle(0);
+        assertEquals(List.of(token),committed);idle(650);assertTrue(cancelled.isEmpty());
+    }
+    @Test public void idleTimeoutRejectsLateCallbackAndCancelsOnlyOnce()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();String token=Wire.token();Object stroke=stroke(token,controller);
+        set(bridge,"settling",stroke);set(bridge,"pending",stroke);waitNative(bridge,stroke);controller.runShell();
+        idle(649);assertTrue(cancelled.isEmpty());idle(1);
+        assertEquals(List.of(token),cancelled);assertNull(get(bridge,"settling"));assertNull(get(bridge,"pending"));
+        controller.mTransitions.callback.run();controller.mTransitions.callback.run();idle(0);
+        callStroke(bridge,"abort",stroke);assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
+    }
+    @Test public void newGenerationLeavesNewTicketIntactWhenOldIdleCallbackArrives()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();String token=Wire.token();Object old=stroke(token,controller);
+        set(bridge,"settling",old);waitNative(bridge,old);controller.runShell();
+        // Same native invalidation used at a new DOWN, before installing the next owner ticket.
+        callStroke(bridge,"abort",old);set(bridge,"generation",1);
+        Object next=stroke(Wire.token(),null);set(bridge,"settling",next);set(bridge,"pending",next);
+        controller.mTransitions.callback.run();idle(650);
+        assertSame(next,get(bridge,"settling"));assertSame(next,get(bridge,"pending"));
+        assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
+    }
+    @Test public void lateShellCheckCannotRegisterIdleAfterOldTicketIsAborted()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();String token=Wire.token();Object old=stroke(token,controller);
+        set(bridge,"settling",old);waitNative(bridge,old);callStroke(bridge,"abort",old);
+        controller.runShell();idle(0);
+        assertNull(controller.mTransitions.callback);assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
+    }
+    @Test public void noControllerPathAlsoRejectsDuplicateWaitAndCommitCalls()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        String token=Wire.token();Object stroke=stroke(token,null);set(bridge,"settling",stroke);
+        waitNative(bridge,stroke);waitNative(bridge,stroke);idle(0);callStroke(bridge,"commit",stroke);
+        callStroke(bridge,"abort",stroke);
+        assertEquals(List.of(token),committed);assertTrue(cancelled.isEmpty());
+    }
+    @Test public void rejectedCommitCancelsSendingTicketOnceDespiteDuplicateCallbacks()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,false);
+        String token=Wire.token();Object stroke=stroke(token,null);set(bridge,"settling",stroke);
+        waitNative(bridge,stroke);idle(0);callStroke(bridge,"commit",stroke);callStroke(bridge,"abort",stroke);
+        assertEquals(List.of(token),committed);assertEquals(List.of(token),cancelled);
+    }
+    @Test public void disabledLeaseBeforeIdleCancelsOldTokenWithoutCommitting()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();String token=Wire.token();Object stroke=stroke(token,controller);
+        set(bridge,"settling",stroke);waitNative(bridge,stroke);controller.runShell();set(bridge,"enabled",false);
+        controller.mTransitions.callback.run();idle(650);
+        assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
+    }
+
+    @Test public void changedGenerationAtIdleCannotClearNewSettlingTicket()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        NativeController controller=new NativeController();String token=Wire.token();Object old=stroke(token,controller);
+        set(bridge,"settling",old);waitNative(bridge,old);controller.runShell();
+        set(bridge,"generation",1);Object next=stroke(Wire.token(),null);set(bridge,"settling",next);set(bridge,"pending",next);
+        controller.mTransitions.callback.run();idle(650);
+        assertSame(next,get(bridge,"settling"));assertSame(next,get(bridge,"pending"));
+        assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
+    }
+    @Test public void commitExceptionCancelsExactSendingTicketAndDoesNotRetry()throws Exception {
+        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
+        set(bridge,"sink",new Binder(){
+            @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags)throws RemoteException {
+                throw new RemoteException("disconnected");
+            }
+        });
+        String token=Wire.token();Object stroke=stroke(token,null);set(bridge,"settling",stroke);
+        waitNative(bridge,stroke);idle(0);callStroke(bridge,"commit",stroke);callStroke(bridge,"abort",stroke);
+        assertEquals(List.of(token),cancelled);assertNull(get(bridge,"settling"));
+    }
+
     @Test public void nativeWaitTimeoutReleasesSettlingAndPreparedCover()throws Exception{
         Object bridge=bridge();Class<?> type=Class.forName("dev.local.sunwindowdemo.BackBridge$Stroke");
         Constructor<?> constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
-        Object stroke=constructor.newInstance();String token=Wire.token();set(stroke,"token",token);
+        Object stroke=constructor.newInstance();set(stroke,"handoff",new BackHandoffState(0));String token=Wire.token();set(stroke,"token",token);
         set(bridge,"enabled",true);set(bridge,"lease",new Binder());set(bridge,"sink",new Binder());
         set(bridge,"settling",stroke);set(bridge,"pending",stroke);
         Method wait=bridge.getClass().getDeclaredMethod("waitForNativeBack",type,int.class);wait.setAccessible(true);

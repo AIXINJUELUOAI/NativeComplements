@@ -13,6 +13,12 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35)
 public class WindowBehaviorTest {
+    private static boolean nativeForeground(Object before,Object target,String beforePackage,String targetPackage,int beforeUser,int targetUser,Object beforeDisplay,Object targetDisplay,int mode,boolean owned){
+        return WindowPolicy.nativeForeground(before!=null&&before==target,beforePackage,targetPackage,beforeUser,targetUser,beforeDisplay!=null&&beforeDisplay==targetDisplay,mode,owned);
+    }
+    private static boolean coveredFullscreen(Object fullscreen,Object focused,Object target,Object beforeDisplay,Object targetDisplay){
+        return WindowPolicy.coveredFullscreen(fullscreen!=null&&fullscreen!=focused&&fullscreen==target,beforeDisplay!=null&&beforeDisplay==targetDisplay);
+    }
     private static void set(Object owner,String name,Object value)throws Exception{
         Field f=owner.getClass().getDeclaredField(name);f.setAccessible(true);f.set(owner,value);
     }
@@ -91,14 +97,14 @@ public class WindowBehaviorTest {
     }
     @Test public void fullscreenExceptionRequiresExactPrelaunchTaskUserDisplayAndOwnership(){
         Object task=new Object(),display=new Object();
-        assertTrue(WindowPolicy.nativeForeground(task,task,"target","target",0,0,display,display,1,false));
-        assertFalse(WindowPolicy.nativeForeground(task,new Object(),"target","target",0,0,display,display,1,false));
-        assertFalse(WindowPolicy.nativeForeground(task,task,"target","other",0,0,display,display,1,false));
-        assertFalse(WindowPolicy.nativeForeground(task,task,"target","target",0,10,display,display,1,false));
-        assertFalse(WindowPolicy.nativeForeground(task,task,"target","target",0,0,display,new Object(),1,false));
-        assertFalse(WindowPolicy.nativeForeground(task,task,"target","target",0,0,display,display,5,false));
-        assertFalse(WindowPolicy.nativeForeground(task,task,"target","target",0,0,display,display,1,true));
-        assertFalse(WindowPolicy.nativeForeground(null,task,"target","target",0,0,display,display,1,false));
+        assertTrue(nativeForeground(task,task,"target","target",0,0,display,display,1,false));
+        assertFalse(nativeForeground(task,new Object(),"target","target",0,0,display,display,1,false));
+        assertFalse(nativeForeground(task,task,"target","other",0,0,display,display,1,false));
+        assertFalse(nativeForeground(task,task,"target","target",0,10,display,display,1,false));
+        assertFalse(nativeForeground(task,task,"target","target",0,0,display,new Object(),1,false));
+        assertFalse(nativeForeground(task,task,"target","target",0,0,display,display,5,false));
+        assertFalse(nativeForeground(task,task,"target","target",0,0,display,display,1,true));
+        assertFalse(nativeForeground(null,task,"target","target",0,0,display,display,1,false));
     }
     @Test public void backgroundStaysUntouchableWhileANormalWindowEnters(){
         assertTrue("Gate applies before the first frame reports",WindowPolicy.backgroundTouchGuard(true,true,false,0,0,5000,3000));
@@ -109,10 +115,10 @@ public class WindowBehaviorTest {
     }
     @Test public void focusedFloatingWindowDoesNotPullTheCoveredFullscreenTaskIntoAWindow(){
         Object floating=new Object(),covered=new Object(),display=new Object();
-        assertTrue(WindowPolicy.coveredFullscreen(covered,floating,covered,display,display));
-        assertFalse("Another task still opens as a linked window",WindowPolicy.coveredFullscreen(covered,floating,new Object(),display,display));
-        assertFalse("Focused fullscreen keeps the exact pre-launch rule",WindowPolicy.coveredFullscreen(covered,covered,covered,display,display));
-        assertFalse("Home or nothing beneath",WindowPolicy.coveredFullscreen(null,floating,covered,display,display));
-        assertFalse(WindowPolicy.coveredFullscreen(covered,floating,covered,display,new Object()));
+        assertTrue(coveredFullscreen(covered,floating,covered,display,display));
+        assertFalse("Another task still opens as a linked window",coveredFullscreen(covered,floating,new Object(),display,display));
+        assertFalse("Focused fullscreen keeps the exact pre-launch rule",coveredFullscreen(covered,covered,covered,display,display));
+        assertFalse("Home or nothing beneath",coveredFullscreen(null,floating,covered,display,display));
+        assertFalse(coveredFullscreen(covered,floating,covered,display,new Object()));
     }
 }

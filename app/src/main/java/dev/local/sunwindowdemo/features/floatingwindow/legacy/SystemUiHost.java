@@ -164,12 +164,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             if(taskId<0||!Wire.allowedPackage(pkg)||Wire.PKG.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg))return false;
             boolean probe=code==android.os.IBinder.FIRST_CALL_TRANSACTION+2;
             if(!probe&&!Wire.validToken(backToken))return false;
-            boolean accepted=!cleaned&&allowed()&&config.longBackWindow()&&backendReady&&dropAvailable()
+            boolean accepted=!cleaned&&allowed()&&WindowHostPolicy.slotConfigured(config.longBackWindow(),backendReady,dropAvailable())
                 &&!config.blocked().contains(pkg)&&(probe?!backPending.get():backPending.compareAndSet(false,true));
             if(probe){if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;}
             if(accepted)main.postDelayed(()->{
                 try{
-                    if(!cleaned&&allowed()&&config.longBackWindow()&&backendReady&&dropAvailable())Wire.back(SystemUiHost.this,pkg,taskId,backToken);
+                    if(!cleaned&&allowed()&&WindowHostPolicy.slotConfigured(config.longBackWindow(),backendReady,dropAvailable()))Wire.back(SystemUiHost.this,pkg,taskId,backToken);
                     else Wire.cancelBack(backToken);
                 }catch(RuntimeException failure){
                     Wire.cancelBack(backToken);android.util.Log.w("NativeComplements","BACK_DISPATCH_FAILED",failure);
@@ -192,7 +192,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private int hintStage;
     private int hintRevision;
     private void showSwipeHint(int stage){
-        if(stage==0||cleaned||!allowed()||!config.longBackWindow()||!backendReady||!dropAvailable()){
+        if(stage==0||cleaned||!allowed()||!WindowHostPolicy.slotConfigured(config.longBackWindow(),backendReady,dropAvailable())){
             if(swipeHint!=null)remove(swipeHint);swipeHint=null;hintStage=0;hintRevision++;return;
         }
         if(stage==2&&hintStage!=2){
@@ -217,7 +217,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private WindowControls controls,miniControls;
     private void hideControls(){if(controls!=null)controls.hide();if(miniControls!=null)miniControls.hide();}
     private boolean normalOccupied;
-    private boolean dropAvailable(){return "idle".equals(backendState)||"recovery".equals(backendState)||"active".equals(backendState)&&!normalOccupied;}
+    private boolean dropAvailable(){return WindowHostPolicy.defaultSlot(backendState,normalOccupied);}
     private volatile HostExtras extras;
     private WindowQuickHost quick;
     private View menuContent;
@@ -331,7 +331,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(extras!=null)extras.edgeEnvironment(screenshotVisible||systemFocus,keyboard);
     }
     private boolean allowed() {
-        if(config==null||!settingsReady||!config.enabled()||!backendReady||cleaned||screenshotVisible||systemFocus||!getSystemService(android.os.PowerManager.class).isInteractive())return false;
+        if(config==null||!settingsReady||!WindowHostPolicy.cornerConfigured(config.enabled(),backendReady,cleaned,screenshotVisible,systemFocus)
+            ||!getSystemService(android.os.PowerManager.class).isInteractive())return false;
         KeyguardManager kg=getSystemService(KeyguardManager.class);
         return !Rules.blocked(kg==null||kg.isKeyguardLocked(),
             getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE,config.landscapeOff(),
@@ -388,7 +389,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     void publish(boolean force){
         int[] rects=new int[8];int count=0;
         boolean enabled=allowed()&&panel==null;
-        boolean dropEnabled=enabled&&config.longBackWindow()&&backendReady&&dropAvailable();
+        boolean dropEnabled=enabled&&WindowHostPolicy.slotConfigured(config.longBackWindow(),backendReady,dropAvailable());
         if(!dropEnabled)showSwipeHint(0);
         if(enabled)for(View v:new View[]{left,right})if(v!=null&&v.isAttachedToWindow()&&v.isLaidOut()){
             int[] location=new int[2];v.getLocationOnScreen(location);
@@ -525,8 +526,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(request!=null)Wire.send(this,"CANCEL_OPEN",request.pkg(),-1,request.token(),false);
     }
     boolean notificationWindowReady(){
-        return ready()&&config.enabled()&&config.notificationWindow()&&backendReady&&!"recovery".equals(backendState)
-            &&getSystemService(android.os.PowerManager.class).isInteractive()&&!getSystemService(KeyguardManager.class).isKeyguardLocked();
+        if(!ready()||!WindowHostPolicy.notificationConfigured(config.enabled(),config.notificationWindow(),backendReady,backendState))return false;
+        // Preserve the native short circuit: do not ask Keyguard while the screen is off.
+        if(!getSystemService(android.os.PowerManager.class).isInteractive())return false;
+        return !getSystemService(KeyguardManager.class).isKeyguardLocked();
     }
     String notificationForegroundPackage(){
         try{
@@ -569,7 +572,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void floatCurrent(int attempt){floatCurrent(attempt,false);}
     private void floatCurrent(int attempt,boolean quiet){
-        if(!ready()||!config.enabled()||!backendReady||!dropAvailable()||getSystemService(KeyguardManager.class).isKeyguardLocked()){
+        if(!ready()||!WindowHostPolicy.slotConfigured(config.enabled(),backendReady,dropAvailable())||getSystemService(KeyguardManager.class).isKeyguardLocked()){
             Toast.makeText(this,"请先启用小窗控制，并留出默认小窗位置",Toast.LENGTH_SHORT).show();return;
         }
         try{
@@ -577,8 +580,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             if(tasks.isEmpty()||tasks.get(0).topActivity==null)return;
             var task=tasks.get(0);String pkg=task.topActivity.getPackageName();
             if(Wire.PKG.equals(pkg)&&attempt<20){main.postDelayed(()->floatCurrent(attempt+1,quiet),32);return;}
-            if(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task)!=0||Wire.PKG.equals(pkg)
-                ||"com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg)||LauncherGuard.PACKAGE.equals(pkg)||!Wire.allowedPackage(pkg)){
+            if(!WindowHostPolicy.currentTarget(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task),Wire.PKG.equals(pkg),
+                "com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg),LauncherGuard.PACKAGE.equals(pkg),Wire.allowedPackage(pkg))){
                 if(!quiet)Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
             }
             if(activeTask>0&&task.taskId==activeTask){if(!quiet)Toast.makeText(this,"当前应用已经是小窗",Toast.LENGTH_SHORT).show();return;}

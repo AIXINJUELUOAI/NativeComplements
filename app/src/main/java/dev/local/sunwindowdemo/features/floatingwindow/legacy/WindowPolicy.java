@@ -2,20 +2,19 @@ package dev.local.sunwindowdemo;
 
 /** Shared, framework-independent geometry and orientation decisions. */
 final class WindowPolicy {
-    static boolean nativeForeground(Object before,Object target,String beforePackage,String targetPackage,
-            int beforeUser,int targetUser,Object beforeDisplay,Object targetDisplay,int mode,boolean owned){
-        return before!=null&&before==target&&beforePackage!=null&&beforePackage.equals(targetPackage)
-            &&beforeUser==targetUser&&beforeDisplay!=null&&beforeDisplay==targetDisplay&&mode==1&&!owned;
+    static boolean nativeForeground(boolean sameTask,String beforePackage,String targetPackage,
+            int beforeUser,int targetUser,boolean sameDisplay,int mode,boolean owned){
+        return sameTask&&beforePackage!=null&&beforePackage.equals(targetPackage)
+            &&beforeUser==targetUser&&sameDisplay&&mode==1&&!owned;
     }
     /** The start targets the exact fullscreen task that a focused floating window was covering before the start. */
-    static boolean coveredFullscreen(Object fullscreen,Object focused,Object target,Object beforeDisplay,Object targetDisplay){
-        return fullscreen!=null&&fullscreen!=focused&&fullscreen==target
-            &&beforeDisplay!=null&&beforeDisplay==targetDisplay;
+    static boolean coveredFullscreen(boolean coveredTarget,boolean sameDisplay){
+        return coveredTarget&&sameDisplay;
     }
     /** Background touch gate behind a normal window: during its entry/transition (capped), then a short grace
      * while SystemUI re-shows the outside-dismiss overlays. Times share one monotonic clock. */
-    static boolean startsTouchGuard(Object owner,Object previous,boolean guarded,boolean reported){
-        return guarded&&(!reported||owner!=previous);
+    static boolean startsTouchGuard(boolean sameOwner,boolean guarded,boolean reported){
+        return guarded&&(!reported||!sameOwner);
     }
     static boolean backgroundTouchGuard(boolean shown,boolean entering,boolean reported,long since,long graceUntil,long now,long max){
         if(!shown)return false;
@@ -43,9 +42,9 @@ final class WindowPolicy {
             boolean sameRotation,boolean dependentChanges,boolean snapshot){
         return liveMini&&!busy&&changeMode==6&&sameGeometry&&sameRotation&&!dependentChanges&&!snapshot;
     }
-    static boolean ownedLaunch(int targetUid,int ownerUid,int targetUser,int ownerUser,Object requestDisplay,Object targetDisplay){
+    static boolean ownedLaunch(int targetUid,int ownerUid,int targetUser,int ownerUser,boolean targetDisplayPresent,boolean compatibleDisplay){
         return ownerUid>=10000&&targetUid==ownerUid&&targetUser==ownerUser
-            &&targetDisplay!=null&&(requestDisplay==null||requestDisplay==targetDisplay);
+            &&targetDisplayPresent&&compatibleDisplay;
     }
     static boolean sameWindowCaller(int callingUid,int realCallingUid,int ownerUid,String callingPackage,String ownerPackage){
         return ownerUid>=10000&&callingUid==ownerUid&&(realCallingUid<0||realCallingUid==ownerUid)
@@ -73,7 +72,7 @@ final class WindowPolicy {
         if(!Float.isFinite(scale)||scale<=0||!Float.isFinite(offset))return raw;
         return (raw-offset)/scale;
     }
-    static boolean sameLiveTask(Object task,Object owned,int id,int expectedId,int user,int expectedUser){
-        return task!=null&&task==owned&&id==expectedId&&user==expectedUser;
+    static boolean sameLiveTask(boolean sameTask,int id,int expectedId,int user,int expectedUser){
+        return sameTask&&id==expectedId&&user==expectedUser;
     }
 }
