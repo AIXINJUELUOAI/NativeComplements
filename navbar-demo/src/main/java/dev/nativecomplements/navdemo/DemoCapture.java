@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class DemoCapture {
     private static final Uri PROVIDER = Uri.parse("content://dev.nativecomplements.navdemo.data");
     private static final long INTERVAL = 1000;
+    static final int MAX_IMAGE = 800 * 1024;
     private final Constructor<?> builder;
     private final Method crop, build, capture, hardwareBuffer, bitmap, secure, hdr, securePolicy, protectedPolicy;
     private final HandlerThread thread;
@@ -154,13 +155,18 @@ final class DemoCapture {
             before = snapshot();
             long captureStarted = SystemClock.elapsedRealtime();
             Rect fullRegion = structureRegion(before);
-            int[] fullPixels;
-            Bitmap frame = captureBitmap(before, fullRegion);
+            int navRows = navRows(before);
+            Rect captureRegion = new Rect(fullRegion.left, fullRegion.top, fullRegion.right, fullRegion.bottom + navRows);
+            int[] captured;
+            Bitmap frame = captureBitmap(before, captureRegion);
             try {
-                fullPixels = new int[frame.getWidth() * frame.getHeight()];
-                frame.getPixels(fullPixels, 0, frame.getWidth(), 0, 0, frame.getWidth(), frame.getHeight());
-                for (int pixel : fullPixels) if ((pixel >>> 24) != 255) reject("nonopaque single-frame capture");
+                captured = new int[frame.getWidth() * frame.getHeight()];
+                frame.getPixels(captured, 0, frame.getWidth(), 0, 0, frame.getWidth(), frame.getHeight());
+                for (int pixel : captured) if ((pixel >>> 24) != 255) reject("nonopaque single-frame capture");
             } finally { frame.recycle(); }
+            int roiLength = fullRegion.width() * fullRegion.height();
+            int[] fullPixels = java.util.Arrays.copyOf(captured, roiLength);
+            int[] navPixels = java.util.Arrays.copyOfRange(captured, roiLength, captured.length);
             int[] pixels = bottomStrip(fullPixels, before.local.width(), fullRegion.height(), before.local.height());
             capturedAt = SystemClock.elapsedRealtime();
             captureMs = capturedAt - captureStarted;
@@ -172,7 +178,7 @@ final class DemoCapture {
             String initial = result.getString("decision", "UNKNOWN");
             boolean recognized = "EXTEND".equals(initial) || "NATIVE".equals(initial);
             if (!recognized) result.putString("reviewTrigger", "none");
-            review(result, before, fullPixels, fullRegion, recognized);
+            review(result, before, fullPixels, fullRegion, navPixels, navRows, recognized);
             if (!before.same(snapshot())) reject("window changed before result delivery");
             result.putBoolean("valid", recognized);
             metadata(result, before, started, captureGeneration, capturedAt, captureMs, classifyMs);
@@ -185,10 +191,10 @@ final class DemoCapture {
         }
     }
 
-    private record Snapshot(Object window, SurfaceControl surface, ComponentName component, Rect frame,
-                            Rect bounds, Rect padding, Rect screen, Rect local, float density, int rotation) {
+    private record Snapshot(Object window, Object focus, SurfaceControl surface, ComponentName component, Rect frame,
+                            Rect bounds, Rect padding, Rect screen, Rect local, float density, int rotation, String source) {
         boolean same(Snapshot other) {
-            return window == other.window && surface == other.surface && component.equals(other.component)
+            return window == other.window && focus == other.focus && surface == other.surface && component.equals(other.component)
                     && frame.equals(other.frame) && bounds.equals(other.bounds) && padding.equals(other.padding)
                     && screen.equals(other.screen) && local.equals(other.local)
                     && density == other.density && rotation == other.rotation;
@@ -203,11 +209,24 @@ final class DemoCapture {
         synchronized (lock) {
             Object display = call(field(wm, "mRoot"), "getDefaultDisplay");
             if (((Number) call(display, "getDisplayId")).intValue() != 0) reject("not display zero");
-            Object window = field(display, "mCurrentFocus");
-            if (window == null || field(window, "mActivityRecord") == null) reject("no focused activity");
-            Object activity = field(window, "mActivityRecord");
+            Object focus = field(display, "mCurrentFocus");
+            if (focus == null || field(focus, "mActivityRecord") == null) reject("no focused activity");
+            Object activity = field(focus, "mActivityRecord");
             if (activity != field(display, "mFocusedApp")) reject("focus mismatch");
             if (Boolean.TRUE.equals(call(activity, "inTransition"))) reject("activity transition in progress");
+            // A dialog/bottom sheet/popup of the same activity takes focus but is drawn in its own window.
+            // Then the activity layer (main window + its attached windows) is captured, so the bottom shows
+            // exactly what the user sees there; geometry still comes from the main window.
+            WindowManager.LayoutParams focusAttrs = (WindowManager.LayoutParams) field(focus, "mAttrs");
+            boolean attached = focusAttrs.type != WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+            if (attached) {
+                int t = focusAttrs.type;
+                boolean app = t >= WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW && t <= WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
+                boolean sub = t >= WindowManager.LayoutParams.FIRST_SUB_WINDOW && t <= WindowManager.LayoutParams.LAST_SUB_WINDOW;
+                if ((!app && !sub) || (focusAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0) reject("ineligible focused window type=" + t);
+            }
+            Object window = attached ? call(activity, "findMainWindow") : focus;
+            if (window == null) reject("no main window behind focused dialog");
             WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) field(window, "mAttrs");
             if (attrs.type != WindowManager.LayoutParams.TYPE_BASE_APPLICATION
                     || (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0
@@ -252,14 +271,22 @@ final class DemoCapture {
             if (height < 3 || !frame.contains(screen) || !bounds.contains(screen)
                     || screen.bottom > bounds.bottom - nav.bottom) reject("crop intersects navigation or leaves window");
             Rect padding = new Rect((Rect) field(attrs, "surfaceInsets"));
+            if (attached) {
+                // Activity layer origin is the activity bounds; require a fullscreen activity so the main
+                // window frame sits at its screen position inside that layer.
+                Rect activityBounds = new Rect((Rect) call(activity, "getBounds"));
+                if (!activityBounds.equals(bounds)) reject("activity layer not fullscreen");
+                padding = new Rect(frame.left - bounds.left, frame.top - bounds.top, 0, 0);
+            }
             if (padding.left < 0 || padding.top < 0 || padding.right < 0 || padding.bottom < 0) reject("invalid surface padding");
             Rect local = new Rect(screen);
             local.offset(padding.left - frame.left, padding.top - frame.top);
             if (local.left < padding.left || local.top < padding.top
                     || local.right > padding.left + frame.width() || local.bottom > padding.top + frame.height()) reject("invalid surface-local crop");
-            SurfaceControl surface = (SurfaceControl) call(window, "getSurfaceControl");
+            SurfaceControl surface = (SurfaceControl) call(attached ? activity : window, "getSurfaceControl");
             if (surface == null || !surface.isValid()) reject("surface unavailable");
-            return new Snapshot(window, surface, component, frame, bounds, padding, screen, local, density, rotation);
+            return new Snapshot(window, focus, surface, component, frame, bounds, padding, screen, local, density, rotation,
+                    attached ? "attached:" + focusAttrs.type : "main");
         }
     }
 
@@ -321,6 +348,11 @@ final class DemoCapture {
         return region;
     }
 
+    /** App-layer rows inside the navigation area (the window may stop at the boundary: zero rows). */
+    private static int navRows(Snapshot s) {
+        return Math.max(0, Math.min(s.frame.bottom, s.bounds.bottom) - s.screen.bottom);
+    }
+
     static int[] bottomStrip(int[] pixels, int width, int height, int stripHeight) {
         if (pixels == null || width <= 0 || height <= 0 || stripHeight <= 0 || stripHeight > height
                 || (long) width * height != pixels.length) throw new IllegalArgumentException("invalid single-frame geometry");
@@ -329,7 +361,7 @@ final class DemoCapture {
         return strip;
     }
 
-    private void review(Bundle result, Snapshot expected, int[] pixels, Rect region, boolean recognized) {
+    private void review(Bundle result, Snapshot expected, int[] pixels, Rect region, int[] nav, int navRows, boolean recognized) {
         result.putString("initialDecision", result.getString("initialDecision", result.getString("decision", "UNKNOWN")));
         result.putLong("reviewCacheAgeMs", 0);
         result.putLong("reviewMs", 0);
@@ -342,8 +374,9 @@ final class DemoCapture {
         result.putString("reviewCrop", "surface=" + region);
         result.putInt("reviewHeightDp", Math.round(region.height() / expected.density));
         result.putString("reviewMatchScope", "same_capture_bitmap; 1Hz observation may delay window events up to 1s");
+        result.putInt("navRows", navRows);
         try {
-            result.putAll(DemoStructure.analyze(pixels, region.width(), region.height(), expected.density));
+            result.putAll(DemoLayout.analyze(pixels, region.width(), region.height(), expected.density, nav, region.width(), navRows));
             result.putString("reviewStatus", "INCONCLUSIVE".equals(result.getString("reviewDecision", "INCONCLUSIVE"))
                     ? "inconclusive" : "fresh");
             applyReview(result);
@@ -386,8 +419,9 @@ final class DemoCapture {
             byte[] currentHash = hash(pixels(expected));
             if (!expected.same(snapshot())) reject("window changed while checking strip");
             // App content only, ending above navigation even when the app draws edge-to-edge.
-            Rect content = new Rect(expected.frame.left, expected.frame.top, expected.frame.right, expected.screen.bottom);
-            content.offset(expected.padding.left - expected.frame.left, expected.padding.top - expected.frame.top);
+            Rect roi = structureRegion(expected);
+            int navRows = navRows(expected);
+            Rect content = new Rect(roi.left, roi.top, roi.right, roi.bottom + navRows);
             if (SystemClock.elapsedRealtime() - requestAt > 10_000) reject("request deadline before screenshot");
             image = captureBitmap(expected, content);
             long screenshotAt = SystemClock.elapsedRealtime(), wallTime = System.currentTimeMillis();
@@ -400,17 +434,21 @@ final class DemoCapture {
             output.putLong("screenshotWallTime", wallTime);
             output.putInt("sourceWidth", image.getWidth());
             output.putInt("sourceHeight", image.getHeight());
-            if (image.getWidth() > 600) {
-                int height = Math.max(1, (int) ((long) image.getHeight() * 600 / image.getWidth()));
-                scaled = Bitmap.createScaledBitmap(image, 600, height, true);
-            } else scaled = image;
-            byte[] bytes = null;
-            for (int quality : new int[]{85, 70, 55, 40, 25}) {
+            output.putInt("roiHeight", roi.height());
+            output.putInt("navRows", navRows);
+            scaled = image;
+            // Lossless first so offline replay sees the exact pixels the classifier saw.
+            byte[] bytes = null; String format = "png";
+            ByteArrayOutputStream png = new ByteArrayOutputStream();
+            if (scaled.compress(Bitmap.CompressFormat.PNG, 100, png) && png.size() <= MAX_IMAGE) bytes = png.toByteArray();
+            for (int quality : new int[]{95, 90, 80, 70}) {
+                if (bytes != null) break;
                 ByteArrayOutputStream stream = new ByteArrayOutputStream();
                 if (!scaled.compress(Bitmap.CompressFormat.JPEG, quality, stream)) reject("JPEG compression failed");
-                if (stream.size() <= 350 * 1024) { bytes = stream.toByteArray(); break; }
+                if (stream.size() <= MAX_IMAGE) { bytes = stream.toByteArray(); format = "jpg"; }
             }
-            if (bytes == null) reject("JPEG exceeds 350 KiB Binder limit");
+            if (bytes == null) reject("image exceeds Binder limit");
+            output.putString("format", format);
             if (!expected.same(snapshot())) reject("window changed before screenshot delivery");
             output.putInt("width", scaled.getWidth());
             output.putInt("height", scaled.getHeight());
@@ -478,6 +516,7 @@ final class DemoCapture {
         result.putInt("height", snapshot == null ? 0 : snapshot.local.height());
         result.putFloat("density", snapshot == null ? 0 : snapshot.density);
         result.putString("crop", snapshot == null ? "" : "screen=" + snapshot.screen + "; surface=" + snapshot.local);
+        if (snapshot != null) result.putString("source", snapshot.source);
     }
 
     private void publish(Bundle result) {

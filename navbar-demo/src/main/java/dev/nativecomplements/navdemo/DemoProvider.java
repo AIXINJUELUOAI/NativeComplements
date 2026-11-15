@@ -14,9 +14,9 @@ public final class DemoProvider extends ContentProvider {
     private final LinkedHashMap<Long, Bundle> history = new LinkedHashMap<>();
     private Bundle latest = new Bundle(), pending, screenshotState = new Bundle();
     private long leaseUntil, request, generation;
-    private static final Set<String> TEXT = Set.of("component", "decision", "reason", "algorithm", "crop", "frame", "bounds", "source", "colorSpace", "initialDecision", "reviewTrigger", "reviewStatus", "reviewDecision", "reviewReason", "reviewCrop", "structureAlgorithm", "reviewMatchScope");
+    private static final Set<String> TEXT = Set.of("component", "decision", "reason", "algorithm", "crop", "frame", "bounds", "source", "colorSpace", "initialDecision", "reviewTrigger", "reviewStatus", "reviewDecision", "reviewReason", "reviewCrop", "structureAlgorithm", "reviewMatchScope", "layoutFeatures");
     private static final Set<String> LONGS = Set.of("id", "capturedAt", "elapsedMs", "captureMs", "classifyMs", "generation", "reviewAt", "reviewMs", "reviewCacheAgeMs");
-    private static final Set<String> INTS = Set.of("width", "height", "segments", "navHeight", "rotation", "displayId", "analyzedPixels", "reviewHeightDp", "structureOffsetDp");
+    private static final Set<String> INTS = Set.of("width", "height", "segments", "navHeight", "rotation", "displayId", "analyzedPixels", "reviewHeightDp", "structureOffsetDp", "navRows");
     @Override public boolean onCreate() { return true; }
     @Override public synchronized Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
@@ -77,18 +77,20 @@ public final class DemoProvider extends ContentProvider {
                 Bundle annotation = original.deepCopy();
                 annotation.putString("expected", expected);
                 annotation.putLong("annotatedAt", SystemClock.elapsedRealtime());
-                if (!"UNKNOWN".equals(expected)) {
-                    annotation.putBoolean("matches", expected.equals(original.getString("decision")));
+                if (!"UNKNOWN".equals(expected)) annotation.putBoolean("matches", expected.equals(original.getString("decision")));
+                // Every label gets the exact analysed region when possible; a busy or stale capture
+                // still records the label so nothing the user tapped is lost.
+                if (pending != null || SystemClock.elapsedRealtime() - original.getLong("capturedAt") > 3000) {
+                    if ("UNKNOWN".equals(expected)) return error(pending != null ? "上一张截图尚未完成" : "样本已过期，请重新点击待定");
+                    annotation.putString("screenshotStatus", pending != null ? "skipped_busy" : "skipped_stale");
                     return log("annotation", annotation);
                 }
-                if (pending != null) return error("上一张待定截图尚未完成");
-                if (SystemClock.elapsedRealtime() - original.getLong("capturedAt") > 3000) return error("样本已过期，请重新点击待定");
                 String token = java.util.UUID.randomUUID().toString();
                 annotation.putString("screenshotToken", token);
                 annotation.putString("screenshotStatus", "requested");
                 Bundle logged = log("annotation", annotation);
                 if (logged.containsKey("error")) return logged;
-                pending = new Bundle(); pending.putBundle("sample", original.deepCopy());
+                pending = new Bundle(); pending.putBundle("sample", original.deepCopy()); pending.putString("expected", expected);
                 pending.putString("token", token); pending.putLong("generation", generation);
                 pending.putLong("requestAt", SystemClock.elapsedRealtime());
                 screenshotState = new Bundle(); screenshotState.putString("token", token); screenshotState.putString("status", "requested");
@@ -116,7 +118,7 @@ public final class DemoProvider extends ContentProvider {
         }
         String token = pending.getString("token");
         Bundle record = pending.getBundle("sample").deepCopy();
-        record.putString("expected", "UNKNOWN");
+        record.putString("expected", pending.getString("expected", "UNKNOWN"));
         record.putString("screenshotToken", token); record.putLong("requestAt", pending.getLong("requestAt"));
         record.putLong("screenshotAt", data.getLong("screenshotAt")); record.putLong("screenshotWallTime", data.getLong("screenshotWallTime"));
         record.putBoolean("bottomStripMatched", data.getBoolean("contentMatched"));
@@ -131,11 +133,13 @@ public final class DemoProvider extends ContentProvider {
             try {
                 android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inJustDecodeBounds = true;
                 android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, options);
-                if (bytes.length > 350 * 1024 || options.outWidth <= 0 || options.outWidth > 600 || options.outHeight <= 0 || options.outHeight > 4000
-                        || !"image/jpeg".equals(options.outMimeType)) throw new IOException("截图格式无效");
-                record.putString("image", "pending/" + token + ".jpg");
+                String format = "png".equals(data.getString("format")) ? "png" : "jpg";
+                if (bytes.length > DemoCapture.MAX_IMAGE || options.outWidth <= 0 || options.outWidth > 4000 || options.outHeight <= 0 || options.outHeight > 4000
+                        || !("png".equals(format) ? "image/png" : "image/jpeg").equals(options.outMimeType)) throw new IOException("截图格式无效");
+                record.putString("image", "pending/" + token + "." + format);
+                record.putInt("roiHeight", data.getInt("roiHeight")); record.putInt("navRows", data.getInt("navRows"));
                 record.putString("status", status); record.putString("screenshotReason", reason);
-                DemoStore.saveScreenshot(getContext(), token, bytes, record);
+                DemoStore.saveScreenshot(getContext(), token, format, bytes, record);
             } catch (IOException failure) { status = "failed"; reason = failure.getMessage(); record.remove("image"); }
         } else { status = "failed"; if (reason.isEmpty()) reason = "no_image"; }
         record.putString("status", status); record.putString("screenshotReason", reason);

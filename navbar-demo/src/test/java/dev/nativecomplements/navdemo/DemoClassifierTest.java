@@ -30,7 +30,7 @@ public class DemoClassifierTest {
             assertEquals("EXTEND", result.getString("decision"));
             assertEquals(1, result.getDouble("dominantRatio"), 0);
             assertEquals(360, result.getInt("analyzedPixels"));
-            assertTrue(result.getString("algorithm").contains("v4"));
+            assertTrue(result.getString("algorithm").contains("v5"));
             assertFalse(result.containsKey("edgeRatio"));
         }
     }

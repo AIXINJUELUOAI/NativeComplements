@@ -75,7 +75,7 @@ public class DemoProviderTest {
             if ("annotation".equals(json.getString("type"))) assertFalse(json.has("matches"));
         }
         Bundle metadata=request.getBundle("sample"); metadata.putString("screenshotToken",request.getString("token"));
-        DemoStore.saveScreenshot(RuntimeEnvironment.getApplication(),request.getString("token"),new byte[]{1,2,3},metadata);
+        DemoStore.saveScreenshot(RuntimeEnvironment.getApplication(),request.getString("token"),"jpg",new byte[]{1,2,3},metadata);
         java.io.ByteArrayOutputStream zipped=new java.io.ByteArrayOutputStream(); DemoStore.exportZip(RuntimeEnvironment.getApplication(),zipped);
         java.util.Set<String> names=new java.util.HashSet<>();
         try (java.util.zip.ZipInputStream input=new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(zipped.toByteArray()))) {

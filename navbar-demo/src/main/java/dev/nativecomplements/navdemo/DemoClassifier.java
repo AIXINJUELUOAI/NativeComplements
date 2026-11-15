@@ -6,9 +6,9 @@ import android.os.Bundle;
 public final class DemoClassifier {
     private DemoClassifier() {}
     // Experimental RGB approximation, not perceptual color difference or exact clustering.
-    private static final String ALGORITHM = "rgb-dominant-v4;input=ceil24dp+-1px;band=upper-ceil12dp;"
+    private static final String ALGORITHM = "rgb-dominant-v5;input=ceil24dp+-1px;band=upper-ceil12dp;"
             + "strideXY=2px;binRGB=16;topBins=8;candidate=first-real-pixel;"
-            + "neighbor=maxChannel<=24;EXTEND>=0.75;otherwise=NATIVE;review=all-valid-single-frame;edgeVeto=none";
+            + "neighbor=maxChannel<=24;EXTEND>=0.75;otherwise=NATIVE;review=layout-v6-decides;edgeVeto=none";
 
     public static Bundle analyze(int[] pixels, int width, int height, float density) {
         if (pixels == null || width <= 0 || height < 2 || !Float.isFinite(density) || density <= 0

@@ -6,7 +6,7 @@ import org.json.JSONObject;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
-/** Private local diagnostics. Images are saved only for explicit pending-review requests. */
+/** Private local diagnostics. Images are the analysed region, saved only when the user labels a sample. */
 public final class DemoStore {
     private static final long LIMIT = 4 * 1024 * 1024;
     private static File file(Context c, String name) { return new File(c.getFilesDir(), name); }
@@ -34,16 +34,17 @@ public final class DemoStore {
             if (source.exists()) try (InputStream input = new FileInputStream(source)) { input.transferTo(output); }
         }
     }
-    static synchronized void saveScreenshot(Context c, String token, byte[] bytes, Bundle metadata) throws IOException {
-        if (!token.matches("[a-f0-9-]{36}") || bytes == null || bytes.length == 0 || bytes.length > 350 * 1024)
+    static synchronized void saveScreenshot(Context c, String token, String format, byte[] bytes, Bundle metadata) throws IOException {
+        if (!token.matches("[a-f0-9-]{36}") || !("png".equals(format) || "jpg".equals(format))
+                || bytes == null || bytes.length == 0 || bytes.length > DemoCapture.MAX_IMAGE)
             throw new IOException("截图参数无效");
         File directory = file(c, "pending-images");
         if (!directory.isDirectory() && !directory.mkdir()) throw new IOException("无法创建截图目录");
         File[] existing = directory.listFiles();
-        if (existing == null || existing.length >= 200) throw new IOException("待定截图已满，请先导出并清空记录");
-        File image = new File(directory, token + ".jpg");
+        if (existing == null || existing.length >= 800) throw new IOException("标注截图已满（400张），请先导出并清空记录");
+        File image = new File(directory, token + "." + format);
         File sidecar = new File(directory, token + ".json");
-        File imageTemp = new File(directory, token + ".jpg.tmp"), jsonTemp = new File(directory, token + ".json.tmp");
+        File imageTemp = new File(directory, token + "." + format + ".tmp"), jsonTemp = new File(directory, token + ".json.tmp");
         if (image.exists() || sidecar.exists()) throw new IOException("截图编号重复");
         try {
             try (OutputStream out = new FileOutputStream(imageTemp)) { out.write(bytes); }
@@ -80,9 +81,10 @@ public final class DemoStore {
         if (images != null) {
             java.util.Arrays.sort(images, java.util.Comparator.comparing(File::getName));
             for (File image : images) {
-                if (!image.isFile() || !image.getName().matches("[a-f0-9-]{36}\\.(jpg|json)")) continue;
+                if (!image.isFile() || !image.getName().matches("[a-f0-9-]{36}\\.(jpg|png|json)")) continue;
                 String stem = image.getName().substring(0, 36);
-                if (!new File(image.getParentFile(), stem + ".jpg").isFile() || !new File(image.getParentFile(), stem + ".json").isFile())
+                boolean picture = new File(image.getParentFile(), stem + ".jpg").isFile() || new File(image.getParentFile(), stem + ".png").isFile();
+                if (!picture || !new File(image.getParentFile(), stem + ".json").isFile())
                     throw new IOException("待定截图与样本记录不完整，请保留本地数据排查");
                 zip.putNextEntry(new java.util.zip.ZipEntry("pending/" + image.getName()));
                 try (InputStream input = new FileInputStream(image)) { input.transferTo(zip); }

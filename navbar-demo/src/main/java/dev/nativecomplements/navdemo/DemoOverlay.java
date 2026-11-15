@@ -155,9 +155,9 @@ public final class DemoOverlay extends Service {
                     if (pendingToken != null && shot != null && pendingToken.equals(shot.getString("token"))
                             && !"requested".equals(shot.getString("status"))) {
                         String state = shot.getString("status", "failed");
-                        Toast.makeText(this, "saved".equals(state) ? "待定截图已保存"
-                                : "content_changed".equals(state) ? "截图已保存，画面有变化，已标记"
-                                : "待定已记录，截图失败：" + shot.getString("reason", ""), Toast.LENGTH_LONG).show();
+                        Toast.makeText(this, "saved".equals(state) ? "已记录，截图已保存"
+                                : "content_changed".equals(state) ? "已记录，截图时画面有变化"
+                                : "已记录，截图失败：" + shot.getString("reason", ""), Toast.LENGTH_LONG).show();
                         pendingToken = null;
                     }
                     render();
@@ -177,7 +177,7 @@ public final class DemoOverlay extends Service {
         if (summary == null) return;
         if (pendingToken != null && SystemClock.elapsedRealtime() - pendingStarted > 12000) {
             pendingToken = null;
-            Toast.makeText(this, "截图未完成，可重新标注待定", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "截图未完成，标注已记录", Toast.LENGTH_SHORT).show();
         }
         if (pressing) return; // Keep the visible verdict and ID together until pointer-up.
         String decision = expected(latest, true);
@@ -224,7 +224,7 @@ public final class DemoOverlay extends Service {
                 annotating = false;
                 pendingToken = failure == null ? requestedToken : null;
                 pendingStarted = SystemClock.elapsedRealtime();
-                Toast.makeText(this, failure == null ? (pendingToken == null ? "已记录" : "待定已记录，正在截图，请稍候") : "记录失败，请重试", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, failure == null ? (pendingToken == null ? "已记录" : "已记录，正在截图") : "记录失败，请重试", Toast.LENGTH_SHORT).show();
                 if (failure != null) android.util.Log.w("NavbarDemo", "Annotation failed: " + failure);
                 render();
             });
