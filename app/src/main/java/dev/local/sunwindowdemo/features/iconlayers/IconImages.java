@@ -134,6 +134,31 @@ public final class IconImages {
         return new BitmapDrawable(context.getResources(),pixels);
     }
 
+    /** Opt-in cover/menu fallback only; do not change desktop or notification conversion policy. */
+    static Bitmap forcedMonochrome(Bitmap source){return forcedMonochrome(source,false);}
+    static Bitmap forcedMonochrome(Bitmap source,boolean foreground){
+        Bitmap mask=monochrome(source,false);
+        int w=source.getWidth(),h=source.getHeight(),n=w*h;
+        if(mask!=null){
+            int visible=0;for(int y=0;y<h;y++)for(int x=0;x<w;x++)if(Color.alpha(mask.getPixel(x,y))>24)visible++;
+            if(visible<n*.65f)return mask;
+            mask.recycle();
+        }
+        int[] pixels=new int[n];source.getPixels(pixels,0,w,0,0,w,h);
+        int low=255,high=0,visible=0;
+        for(int pixel:pixels)if(Color.alpha(pixel)>24){int l=luminance(pixel);low=Math.min(low,l);high=Math.max(high,l);visible++;}
+        if(visible==0||(foreground&&visible>n*.85f&&high-low<16))return null;
+        int edge=luminance(borderColor(pixels,w,h));boolean lightBackground=edge>=(low+high)/2;
+        // ponytail: photos have no recoverable semantic foreground; preserve tonal detail, not a fabricated cutout.
+        for(int i=0;i<n;i++){
+            int a=Color.alpha(pixels[i]),l=luminance(pixels[i]);
+            float contrast=high-low<16?1f:(lightBackground?(high-l):(l-low))/(float)(high-low);
+            pixels[i]=Color.argb(Math.round(a*(.12f+.88f*contrast)),255,255,255);
+        }
+        Bitmap result=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);result.setPixels(pixels,0,w,0,0,w,h);return result;
+    }
+    private static int luminance(int pixel){return (Color.red(pixel)*54+Color.green(pixel)*183+Color.blue(pixel)*19)>>8;}
+
     /** Preserve source canvas for adaptive icons; normalize only the notification version. */
     public static Bitmap monochrome(Bitmap source, boolean normalize) {
         int w=source.getWidth(),h=source.getHeight(),n=w*h;int[] pixels=new int[n];source.getPixels(pixels,0,w,0,0,w,h);

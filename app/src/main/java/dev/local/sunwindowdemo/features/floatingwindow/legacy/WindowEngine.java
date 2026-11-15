@@ -2835,6 +2835,8 @@ final class WindowEngine {
         }
         if(s.placement==null)return;
         updatePriorityState(s);
+        if(s.decoration!=null)s.decoration.updateBacking(s.task,s.placement.width(),s.placement.height(),
+            !s.prioritySuspended&&!s.parked&&!s.screenSuspended);
         if(s.prioritySuspended){
             if(s.cover!=null){s.cover.ownerAlpha(s.priorityHideTask?0:1);s.cover.step(false,false);}
             if(s.decoration!=null)s.decoration.hide(s.task);

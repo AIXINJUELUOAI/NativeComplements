@@ -9,7 +9,9 @@ final class TaskDecoration {
     private float dimAmount=Config.DEFAULT_WINDOW_DIM/100f;
     void dimAmount(int percent){dimAmount=Rules.clamp(percent,0,100)/100f;}
     private final FrameworkAccess a;
-    private SurfaceControl bar,dim;
+    private SurfaceControl bar,dim,backing,backingParent;
+    private int backingWidth,backingHeight;
+    private boolean backingShown;
     private boolean drawn,dimReady,dimEnabled=true;
     void enableDim(){dimEnabled=true;}
     void transferDimTo(TaskDecoration next,Object task)throws Exception{
@@ -55,6 +57,31 @@ final class TaskDecoration {
         a.call(builder,"setParent",new Class<?>[]{SurfaceControl.class},a.field(parent,"mSurfaceControl"));
         a.call(builder,"setColorLayer");a.call(builder,"setHidden",new Class<?>[]{boolean.class},true);
         return (SurfaceControl)a.call(builder,"build");
+    }
+    /** Fill only transparent app pixels. The task owns crop, corners, alpha, transform and visibility. */
+    void updateBacking(Object task,int width,int height,boolean enabled)throws Exception{
+        if(!enabled){
+            if(backing!=null&&backingShown){tx(a.transaction(task),"hide",new Class<?>[]{SurfaceControl.class},backing);backingShown=false;}
+            return;
+        }
+        SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl");
+        if(surface==null||!surface.isValid()||width<=0||height<=0){removeBacking(a.transaction(task));return;}
+        Object t=a.transaction(task);
+        if(backing!=null&&(backingParent!=surface||!backing.isValid()))removeBacking(t);
+        if(backing==null){
+            backing=layer(task,"NativeComplements-task-backing");backingParent=surface;
+            tx(t,"setLayer",new Class<?>[]{SurfaceControl.class,int.class},backing,Integer.MIN_VALUE);
+            tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},backing,new float[]{1,1,1});
+        }
+        if(backingWidth!=width||backingHeight!=height){
+            tx(t,"setWindowCrop",new Class<?>[]{SurfaceControl.class,int.class,int.class},backing,width,height);
+            backingWidth=width;backingHeight=height;
+        }
+        if(!backingShown){tx(t,"show",new Class<?>[]{SurfaceControl.class},backing);backingShown=true;}
+    }
+    private void removeBacking(Object t)throws Exception{
+        if(backing!=null){tx(t,"remove",new Class<?>[]{SurfaceControl.class},backing);backing.release();}
+        backing=null;backingParent=null;backingWidth=backingHeight=0;backingShown=false;
     }
     /** Reapply native sibling ordering after Shell playback; never invent a topmost Z. */
     void order(Object task,Object parent,Object t) throws Exception {
@@ -123,16 +150,20 @@ final class TaskDecoration {
         if(dim!=null)tx(t,"hide",new Class<?>[]{SurfaceControl.class},dim);
     }
     void remove(Object task) throws Exception {
+        removeBacking(a.transaction(task));
         if(bar!=null){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},bar);bar.release();bar=null;color=0;}
         if(dim!=null){tx(a.transaction(task),"remove",new Class<?>[]{SurfaceControl.class},dim);dim.release();dim=null;}
     }
     void dispose(){
-        if(bar==null&&dim==null)return;
+        if(bar==null&&dim==null&&backing==null)return;
         try(SurfaceControl.Transaction t=new SurfaceControl.Transaction()){
+            if(backing!=null)tx(t,"remove",new Class<?>[]{SurfaceControl.class},backing);
             if(bar!=null)tx(t,"remove",new Class<?>[]{SurfaceControl.class},bar);
             if(dim!=null)tx(t,"remove",new Class<?>[]{SurfaceControl.class},dim);
             t.apply();
         }catch(Exception ignored){}finally{
+            if(backing!=null){backing.release();backing=null;}
+            backingParent=null;backingWidth=backingHeight=0;backingShown=false;
             if(bar!=null){bar.release();bar=null;color=0;}
             if(dim!=null){dim.release();dim=null;}
         }

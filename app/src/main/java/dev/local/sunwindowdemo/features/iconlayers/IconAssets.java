@@ -117,32 +117,50 @@ public final class IconAssets {
         }
         boolean themed=config.getBoolean("systemThemed");
         boolean cover=themed&&config.getBoolean("coverMonet"),window=themed&&config.getBoolean("windowMonet");
-        Map<String,Bitmap> activityMonos=cover||window?activityMonos(c,stale):Map.of();
+        Map<String,Bitmap> activityMonos=cover||window?activityMonos(c,config.getStringArrayList("targets"),stale):Map.of();
         if(stale.getAsBoolean())return false;
         coverMonet=cover;windowMonet=window;
         snapshot=new Snapshot(Map.copyOf(entries),activityMonos,generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));ready=true;return true;
     }
-    /** Activity artwork can declare monochrome even when the application's icon does not. Worker only. */
-    static Map<String,Bitmap> activityMonos(Context c,BooleanSupplier stale){
-        Map<String,Bitmap> result=new HashMap<>();long bytes=0;
-        try{
-            var launcher=c.getSystemService(android.content.pm.LauncherApps.class);
-            if(launcher==null)return Map.of();
-            int density=c.getResources().getDisplayMetrics().densityDpi;
-            for(var activity:launcher.getActivityList(null,android.os.Process.myUserHandle())){
-                if(stale.getAsBoolean())return Map.of();
-                String pkg=activity.getComponentName().getPackageName();if(result.containsKey(pkg))continue;
-                try{
-                    Drawable original=activity.getIcon(density);
-                    if(!(original instanceof AdaptiveIconDrawable adaptive)||adaptive.getMonochrome()==null)continue;
-                    Bitmap mono=IconImages.render(adaptive.getMonochrome(),256);
-                    // ponytail: bound host memory; apps past this limit retain their original artwork.
-                    if(bytes+mono.getAllocationByteCount()>32L*1024*1024){mono.recycle();continue;}
-                    bytes+=mono.getAllocationByteCount();result.put(pkg,mono);
-                }catch(RuntimeException unavailable){android.util.Log.w("NcIconAssets","activity mono unavailable: "+pkg);}
-            }
+    /** Native mono first; missing layers are converted once for the two opted-in Monet surfaces. Worker only. */
+    static Map<String,Bitmap> activityMonos(Context c,List<String> targets,BooleanSupplier stale){
+        Map<String,Bitmap> result=new HashMap<>();Set<String> packages=new HashSet<>(targets==null?List.of():targets);long bytes=0;
+        List<android.content.pm.LauncherActivityInfo> activities=List.of();
+        try{var launcher=c.getSystemService(android.content.pm.LauncherApps.class);
+            if(launcher!=null)activities=launcher.getActivityList(null,android.os.Process.myUserHandle());
         }catch(RuntimeException unavailable){android.util.Log.w("NcIconAssets","activity icons unavailable",unavailable);}
+        int density=c.getResources().getDisplayMetrics().densityDpi;
+        for(var activity:activities){
+            if(stale.getAsBoolean())return Map.of();
+            String pkg=activity.getComponentName().getPackageName();packages.add(pkg);if(result.containsKey(pkg))continue;
+            try{
+                Bitmap mono=surfaceMono(activity.getIcon(density));if(mono==null)continue;
+                // ponytail: 32MiB holds 512 cached 128px masks; raise only if installed-app counts exceed this ceiling.
+                if(bytes+mono.getAllocationByteCount()>32L*1024*1024){mono.recycle();continue;}
+                bytes+=mono.getAllocationByteCount();result.put(pkg,mono);
+            }catch(RuntimeException unavailable){android.util.Log.w("NcIconAssets","activity mono unavailable: "+pkg);}
+        }
+        for(String pkg:packages){
+            if(stale.getAsBoolean())return Map.of();if(result.containsKey(pkg))continue;
+            try{
+                Bitmap mono=surfaceMono(c.getPackageManager().getApplicationIcon(pkg));if(mono==null)continue;
+                if(bytes+mono.getAllocationByteCount()>32L*1024*1024){mono.recycle();continue;}
+                bytes+=mono.getAllocationByteCount();result.put(pkg,mono);
+            }catch(android.content.pm.PackageManager.NameNotFoundException|RuntimeException unavailable){android.util.Log.w("NcIconAssets","application mono unavailable: "+pkg);}
+        }
         return Map.copyOf(result);
+    }
+    private static Bitmap surfaceMono(Drawable original){
+        if(original==null)return null;
+        // Only the shared activity/fallback cache uses 128px; direct native/module artwork stays untouched.
+        int side=128;
+        if(original instanceof AdaptiveIconDrawable adaptive){
+            if(adaptive.getMonochrome()!=null)return IconImages.render(adaptive.getMonochrome(),side);
+            Drawable foreground=adaptive.getForeground();
+            if(foreground!=null){Bitmap pixels=IconImages.render(foreground,side);
+                Bitmap mono=IconImages.forcedMonochrome(pixels,true);pixels.recycle();if(mono!=null)return mono;}
+        }
+        Bitmap pixels=IconImages.render(original,side),mono=IconImages.forcedMonochrome(pixels);pixels.recycle();return mono;
     }
     static Snapshot snapshot(){return snapshot;}
 
@@ -169,7 +187,7 @@ public final class IconAssets {
     public static Drawable window(Context c,String pkg,Drawable original){return windowMonet?themed(c,pkg,original):null;}
     /**
      * Same monochrome source precedence as the desktop (module artwork first, then the app's own
-     * monochrome layer) and the launcher's themed colours. Apps without any monochrome stay original.
+     * monochrome layer) and the launcher's themed colours. Missing layers use the worker-converted cache.
      */
     static Drawable themed(Context c,String pkg,Drawable original){
         Snapshot current=snapshot;Entry entry=current.entries.get(pkg);Drawable mono=null;
