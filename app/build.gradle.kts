@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 128
-        versionName = "0.9.38"
+        versionCode = 129
+        versionName = "0.9.39"
     }
     signingConfigs {
         create("demoUpdate") {
@@ -53,6 +53,8 @@ android {
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 dependencies {
     compileOnly(files("libs/libxposed-api-101.0.1.jar"))
+    // Hidden framework classes used only in system_server (source: libs/hidden-stubs-src).
+    compileOnly(files("libs/hidden-stubs.jar"))
     testRuntimeOnly(files("libs/libxposed-api-101.0.1.jar"))
     implementation(platform("androidx.compose:compose-bom:2025.10.01"))
     implementation("androidx.activity:activity-compose:1.11.0")

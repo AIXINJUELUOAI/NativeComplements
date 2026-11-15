@@ -3,6 +3,9 @@ package dev.local.sunwindowdemo.features.navbar
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +24,7 @@ import androidx.core.graphics.drawable.toBitmap
 import dev.local.sunwindowdemo.LaunchableApp
 import dev.local.sunwindowdemo.core.ui.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -69,6 +73,20 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     }
     var query by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<NavbarActivity?>(null) }
+    var confirmClear by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val exportLearned = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.use {
+                        it.write(NavbarStore.exportLearned(context).toByteArray(Charsets.UTF_8))
+                    }
+                }
+            }
+            Toast.makeText(context, if (result.isSuccess) "学习结果已导出" else "导出失败", Toast.LENGTH_SHORT).show()
+        }
+    }
     val activityIndex by produceState<List<NavbarActivity>?>(null, installed) {
         value = null
         value = withContext(Dispatchers.IO) {
@@ -97,6 +115,9 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 ToggleRow("横屏导航条透明", "移除手势导航条背后的系统阴影", settings.getBoolean("landscape_clear", true)) {
                     NavbarStore.setLandscapeClear(context, it)
                 }
+                SettingRow("导出学习结果", "自动模式在页面稳定后记下的判断，可分享或合并进内置规则",
+                    onClick = { exportLearned.launch("navbar-learned-${System.currentTimeMillis() / 1000}.json") })
+                SettingRow("清除学习结果", onClick = { confirmClear = true })
             }
             Hint("竖屏按应用或 Activity 选择模式，横屏可保持导航条透明。推荐作用域不等于已授权：请在 LSPosed 中确认系统框架、SystemUI、Pixel 桌面及需要适配的推荐应用作用域，变更后手动重启生效；规则由本页总开关统一控制。")
             GroupTitle("逐应用设置")
@@ -138,6 +159,14 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     selected?.let { activity ->
         NavbarActivitySheet(activity.packageName, activity.name, settings) { selected = null }
     }
+    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
+        title = { Text("清除学习结果？") },
+        text = { Text("已记下的页面判断会全部删除，重启后自动模式从头学习。") },
+        confirmButton = { TextButton(onClick = {
+            NavbarStore.clearLearned(context); confirmClear = false
+            Toast.makeText(context, "已清除", Toast.LENGTH_SHORT).show()
+        }) { Text("清除") } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

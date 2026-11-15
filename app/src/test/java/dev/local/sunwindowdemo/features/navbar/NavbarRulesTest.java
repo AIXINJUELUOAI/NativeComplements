@@ -95,4 +95,26 @@ public class NavbarRulesTest {
         snapshot.putInt("default_mode", 0);   // retired preference is ignored
         assertEquals(NavbarStore.AUTO, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
     }
+    @Test public void learnedRulesAreFixedOnlyForTheirVersionAndSeedOtherwise() {
+        Bundle snapshot = new Bundle();
+        snapshot.putBoolean("enabled", true);
+        snapshot.putString("templates", """
+            {"packages":{"app":{"enabled":true,"rules":{
+            "app.Home":{"mode":2,"source":"学习规则","base_only":true,"learned":true,"versionCode":7,"samples":5,"agreement":1.0}}}}}
+            """);
+        snapshot.putString("learned", "{\"other/other.Page\":1}");
+        NavbarRules rules = new NavbarRules(snapshot);
+        assertEquals(NavbarStore.FLOATING, rules.resolve("app", "app.Home", 7).mode());
+        assertEquals("学习规则", rules.resolve("app", "app.Home", 7).source());
+        assertEquals(NavbarStore.AUTO, rules.resolve("app", "app.Home", 8).mode());
+        assertEquals(Integer.valueOf(NavbarStore.FLOATING), rules.seed("app", "app.Home"));
+        assertEquals(Integer.valueOf(NavbarStore.COLOR), rules.seed("other", "other.Page"));
+        assertNull(rules.seed("other", "other.Unknown"));
+    }
+    @Test public void learnedVotesNeedThreeAndNinetyPercent() {
+        assertEquals(-2, NavbarStore.learnedMode(1, 1));
+        assertEquals(NavbarStore.COLOR, NavbarStore.learnedMode(9, 1));
+        assertEquals(NavbarStore.FLOATING, NavbarStore.learnedMode(0, 3));
+        assertEquals(-1, NavbarStore.learnedMode(6, 4));
+    }
 }

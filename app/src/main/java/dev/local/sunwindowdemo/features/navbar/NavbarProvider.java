@@ -12,6 +12,13 @@ public final class NavbarProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
     @Override public Bundle call(String method, String packageName, Bundle extras) {
         int uid = Binder.getCallingUid();
+        if ("learn".equals(method)) {
+            // Votes come only from the system_server classifier.
+            if (uid != 1000) throw new SecurityException("navbar learner");
+            if (extras != null) NavbarStore.learn(getContext(), extras.getString("component"),
+                    extras.getLong("version", -1), extras.getInt("mode", -1));
+            return Bundle.EMPTY;
+        }
         if ("system".equals(method) || "status".equals(method)) {
             try {
                 if (uid != 1000 && uid != getContext().getApplicationInfo().uid

@@ -88,9 +88,12 @@ whitelist = {pkg for pkg, app in templates["packages"].items()
 assert {"com.openai.chatgpt", "com.coolapk.market", "com.android.settings", "com.android.chrome",
         "org.telegram.messenger", "dev.nativecomplements.module"} <= whitelist
 assert not any(pkg.startswith("com.google.android.") for pkg in templates["packages"])  # prefix rule in code
-assert templates["packages"]["com.max.xiaoheihe"]["rules"] == {
-    "com.max.xiaoheihe.module.story.StoryActivity": {"mode": 2, "source": "内置规则", "base_only": True}}
+assert templates["packages"]["com.max.xiaoheihe"]["rules"]["com.max.xiaoheihe.module.story.StoryActivity"] == {
+    "mode": 2, "source": "内置规则", "base_only": True}
+learned = [rule for app in templates["packages"].values() for rule in app["rules"].values() if rule.get("learned")]
+assert all(rule["mode"] in (1, 2) and rule["source"] == "学习规则" and isinstance(rule["versionCode"], int)
+           and rule["samples"] >= 3 and rule["agreement"] >= 0.9 for rule in learned)
 assert all(app["enabled"] and "translucent_rules" not in app for app in templates["packages"].values())
 assert all(word not in json.dumps(templates, ensure_ascii=False) for word in ("ColorOS", "HyperOS", "HyperNavBar"))
-print(f"PASS: {count} exact public API37 methods; {len(whitelist)} whitelist applications plus com.google.android.*, "
+print(f"PASS: {count} exact public API37 methods; {len(whitelist)} whitelist applications plus com.google.android.*, {len(learned)} learned rules, "
       "everything else AUTO; device behavior awaits verification")

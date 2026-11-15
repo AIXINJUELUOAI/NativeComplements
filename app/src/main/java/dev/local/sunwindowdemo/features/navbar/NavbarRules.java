@@ -12,6 +12,8 @@ public final class NavbarRules {
         }
     }
     private final JSONObject packages;
+    /** This device's learned pages: "package/Activity" -> COLOR or FLOATING (mixed pages are absent). */
+    private final JSONObject learned;
     private final Bundle settings;
     private final java.util.concurrent.ConcurrentHashMap<String, Choice> resolved = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -21,6 +23,26 @@ public final class NavbarRules {
         try { parsed = new JSONObject(snapshot.getString("templates", "{}")).optJSONObject("packages"); }
         catch (org.json.JSONException invalid) { parsed = null; }
         packages = parsed == null ? new JSONObject() : parsed;
+        JSONObject local;
+        try { local = new JSONObject(snapshot.getString("learned", "{}")); }
+        catch (org.json.JSONException invalid) { local = null; }
+        learned = local == null ? new JSONObject() : local;
+    }
+
+    /**
+     * Initial AUTO mode for a page without an in-memory decision: a bundled learned rule (any app version),
+     * else this device's learned result. null = unknown, start with the native layout.
+     */
+    public Integer seed(String packageName, String activity) {
+        JSONObject app = packages.optJSONObject(packageName);
+        JSONObject rules = app == null ? null : app.optJSONObject("rules");
+        JSONObject rule = rules == null ? null : rules.optJSONObject(activity);
+        if (rule != null && rule.optBoolean("learned")) {
+            int mode = rule.optInt("mode", -1);
+            if (mode == NavbarStore.COLOR || mode == NavbarStore.FLOATING) return mode;
+        }
+        int mode = learned.optInt(packageName + "/" + activity, -1);
+        return mode == NavbarStore.COLOR || mode == NavbarStore.FLOATING ? mode : null;
     }
 
     public Choice resolve(String packageName, String activity, long version) {
@@ -56,6 +78,8 @@ public final class NavbarRules {
             if (rules != null) {
                 String match = bestMatch(rules, activity);
                 JSONObject rule = match == null ? null : rules.optJSONObject(match);
+                // A learned rule is fixed only for the app version it was learned on; otherwise it seeds AUTO.
+                if (rule != null && rule.optBoolean("learned") && version != rule.optLong("versionCode", -2)) rule = null;
                 if (rule != null && (isBaseApplication || !rule.optBoolean("base_only", true)))
                     return new Choice(valid(rule.optInt("mode", 0)),
                         rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));

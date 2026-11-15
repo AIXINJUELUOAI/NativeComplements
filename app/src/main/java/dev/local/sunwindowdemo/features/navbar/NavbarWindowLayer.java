@@ -13,7 +13,12 @@ final class NavbarWindowLayer implements AutoCloseable {
     private final Constructor<?> builder;
     private final Method name, parent, hidden, colorLayer, build, sameSurface;
     private final Method color, alpha, position, crop, layer, show, hide, reparent;
+    /** Optional: buffer layer that stretches the app row above the boundary down over the navigation area. */
+    private final Method setBuffer, setScale;
     private SurfaceControl owner, child;
+    private boolean bufferChild;
+    private int[] shownRow;
+    private static volatile boolean stretchBroken;
 
     /** Resolve every hidden signature before allocating any surface. Fail closed if unavailable. */
     NavbarWindowLayer() throws ReflectiveOperationException {
@@ -38,6 +43,13 @@ final class NavbarWindowLayer implements AutoCloseable {
         show = method(t, "show", SurfaceControl.class);
         hide = method(t, "hide", SurfaceControl.class);
         reparent = method(t, "reparent", SurfaceControl.class, SurfaceControl.class);
+        Method buffer = null, scaleMethod = null;
+        try {
+            buffer = method(t, "setBuffer", SurfaceControl.class, android.hardware.HardwareBuffer.class);
+            scaleMethod = method(t, "setScale", SurfaceControl.class, float.class, float.class);
+        } catch (ReflectiveOperationException unavailable) { buffer = null; scaleMethod = null; }
+        setBuffer = buffer;
+        setScale = scaleMethod;
     }
 
     private static Method method(Class<?> type, String name, Class<?>... args)
@@ -49,14 +61,19 @@ final class NavbarWindowLayer implements AutoCloseable {
 
     /** crop is the actual navigation rectangle in parent-surface coordinates, not display space. */
     void update(SurfaceControl nextParent, Rect rectangle, int argb)
+            throws ReflectiveOperationException { update(nextParent, rectangle, argb, null); }
+
+    /** row: opaque app pixels just above the boundary (any width), stretched to the rectangle; null = solid. */
+    void update(SurfaceControl nextParent, Rect rectangle, int argb, int[] row)
             throws ReflectiveOperationException {
+        boolean stretch = row != null && row.length > 0 && setBuffer != null && !stretchBroken;
         if (nextParent == null || !nextParent.isValid() || rectangle == null
                 || rectangle.isEmpty() || rectangle.left < 0 || rectangle.top < 0
                 || (argb >>> 24) == 0) {
             clear();
             return;
         }
-        if (child != null && (!valid() || !((Boolean) sameSurface.invoke(owner, nextParent)))) {
+        if (child != null && (!valid() || !((Boolean) sameSurface.invoke(owner, nextParent)) || bufferChild != stretch)) {
             clear();
         }
         if (child == null) {
@@ -64,9 +81,11 @@ final class NavbarWindowLayer implements AutoCloseable {
             name.invoke(b, "NativeComplements-navbar");
             parent.invoke(b, nextParent);
             hidden.invoke(b, true);
-            colorLayer.invoke(b);
+            if (!stretch) colorLayer.invoke(b);
             child = (SurfaceControl) build.invoke(b);
             owner = nextParent;
+            bufferChild = stretch;
+            shownRow = null;
             if (child == null || !child.isValid()) {
                 clear();
                 throw new IllegalStateException("Invalid navbar color surface");
@@ -74,22 +93,55 @@ final class NavbarWindowLayer implements AutoCloseable {
         }
         // Refresh the borrowed wrapper without rebuilding a child of the same native surface.
         owner = nextParent;
+        android.hardware.HardwareBuffer pending = null;
         try (SurfaceControl.Transaction tx = new SurfaceControl.Transaction()) {
-            color.invoke(tx, child, new float[]{((argb >> 16) & 255) / 255f,
-                    ((argb >> 8) & 255) / 255f, (argb & 255) / 255f});
-            alpha.invoke(tx, child, (argb >>> 24) / 255f);
+            if (stretch) {
+                if (shownRow == null || !java.util.Arrays.equals(shownRow, row)) {
+                    pending = hardware(row);
+                    setBuffer.invoke(tx, child, pending);
+                    shownRow = row.clone();
+                }
+                alpha.invoke(tx, child, 1f);
+                // Buffer is row.length x 1: scale it to the navigation rectangle (bilinear horizontally).
+                setScale.invoke(tx, child, rectangle.width() / (float) row.length, (float) rectangle.height());
+            } else {
+                color.invoke(tx, child, new float[]{((argb >> 16) & 255) / 255f,
+                        ((argb >> 8) & 255) / 255f, (argb & 255) / 255f});
+                alpha.invoke(tx, child, (argb >>> 24) / 255f);
+                // Crop starts at (0,0); using rectangle here would apply left/top twice.
+                crop.invoke(tx, child, rectangle.width(), rectangle.height());
+            }
             position.invoke(tx, child, (float) rectangle.left, (float) rectangle.top);
-            // Crop starts at (0,0); using rectangle here would apply left/top twice.
-            crop.invoke(tx, child, rectangle.width(), rectangle.height());
             layer.invoke(tx, child, COLOR_LAYER);
             show.invoke(tx, child);
             tx.apply();
         } catch (ReflectiveOperationException | RuntimeException failure) {
+            if (stretch) {
+                // A device without a usable hardware row buffer keeps the solid fill from now on.
+                stretchBroken = true;
+                NavbarTrace.w("Stretched navigation fill unavailable; using solid colour", failure);
+            }
             try { clear(); }
             catch (ReflectiveOperationException | RuntimeException cleanup) {
                 failure.addSuppressed(cleanup);
             }
             throw failure;
+        } finally {
+            if (pending != null) pending.close();
+        }
+    }
+
+    /** row.length x 1 GPU buffer; the transaction keeps its own reference, so the caller closes this one. */
+    private static android.hardware.HardwareBuffer hardware(int[] row) {
+        android.graphics.Bitmap cpu = android.graphics.Bitmap.createBitmap(row, row.length, 1, android.graphics.Bitmap.Config.ARGB_8888);
+        android.graphics.Bitmap gpu = null;
+        try {
+            gpu = cpu.copy(android.graphics.Bitmap.Config.HARDWARE, false);
+            if (gpu == null) throw new IllegalStateException("hardware bitmap unavailable");
+            return gpu.getHardwareBuffer();
+        } finally {
+            cpu.recycle();
+            if (gpu != null) gpu.recycle();
         }
     }
 
@@ -116,6 +168,7 @@ final class NavbarWindowLayer implements AutoCloseable {
         child.release();
         child = null;
         owner = null;
+        shownRow = null;
     }
 
     @Override public void close() throws ReflectiveOperationException { clear(); }

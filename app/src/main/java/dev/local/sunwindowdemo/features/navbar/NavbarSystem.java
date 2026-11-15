@@ -50,6 +50,7 @@ final class NavbarSystem {
     private final java.util.concurrent.ExecutorService statusWriter = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long lastFailure;
     private volatile String lastRuntime = "";
+    private String loggedRuntime = "";
     private String runtimePage = "";
     private volatile long statusPausedUntil;
     private volatile String pendingRuntime = "";
@@ -80,12 +81,35 @@ final class NavbarSystem {
     private final java.util.concurrent.ConcurrentHashMap<String, Integer> autoCache = new java.util.concurrent.ConcurrentHashMap<>();
     private Object autoWindow;
     /** Last content thumbnail of the tracked window; a large change followed by a quiet frame is a refresh. */
-    private int[] autoThumb;
+    private int[] autoThumb, autoReference;
+    /**
+     * Some windows (Douyin: SurfaceView/video children) return an all-black image for any partial source
+     * crop, while a crop of the whole window is correct. Every capture therefore takes the whole window at a
+     * reduced scale and cuts regions in software. One 1/8 capture per tick serves the refresh thumbnail and
+     * the colour row; the classifier takes one 1/2 capture per refresh.
+     */
+    private record Lowres(int[] px, int w, int h, float f) {}
+    private static final float TICK_SCALE = 1 / 8f, CLASSIFY_SCALE = 1 / 2f;
+    private Lowres tickLow;
+    /** Startup: the first STARTUP_MS of a window (splash, open-screen ad, loading) is neither learned nor allowed to override a known page. */
+    private static final long STARTUP_MS = 1500;
+    private long autoSince;
+    private boolean autoSeeded, autoStartupRecheck;
+    private NavbarSampling sampling;
+    private boolean samplingTried;
+    /** Fill history for automatic flicker marks. */
+    private long fillChangedAt, fillPrevChangedAt;
+    private String fillState = "", fillPrevState = "";
+    private boolean tickLowTried;
+    /** Colour row just above the navigation area from this tick's capture, for the stretched fill. */
+    private volatile int[] stretchRow;
+    private volatile int stretchColor;
     private boolean autoDirty;
     private long autoQuietUntil, autoThumbNanos;
     private int autoPending = -1, autoThumbs;
     private final Method sourceSize, sourceAt, sourceType, sourceVisible;
     private final Method capture, build, crop, scale;
+    private final Method securePolicy, protectedPolicy;
     private final Method broadcast;
     private final Constructor<?> captureBuilder;
 
@@ -103,6 +127,9 @@ final class NavbarSystem {
         captureBuilder = builder.getConstructor(SurfaceControl.class);
         crop = builder.getMethod("setSourceCrop", Rect.class);
         scale = builder.getMethod("setFrameScale", float.class, float.class);
+        // Same as navbar-demo: protected/secure layers throw instead of returning a silently redacted black image.
+        securePolicy = optional(builder, "setSecureContentPolicy");
+        protectedPolicy = optional(builder, "setProtectedContentPolicy");
         build = builder.getMethod("build");
         capture = captureClass.getMethod("captureLayers", args);
         broadcast = Context.class.getMethod("sendBroadcastAsUser", Intent.class, UserHandle.class, String.class, Bundle.class);
@@ -132,13 +159,13 @@ final class NavbarSystem {
                 backend.layerPreflight = new NavbarWindowLayer();
                 backend.windowLayersAvailable = true;
             } catch (ReflectiveOperationException | RuntimeException failure) {
-                android.util.Log.w("NativeNavbar", "Window layer preflight failed; retaining host fallback", failure);
+                NavbarTrace.w("Window layer preflight failed; retaining host fallback", failure);
             }
             Method removed = window.getDeclaredMethod("removeImmediately");
             module.hook(removed).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 try { if (backend.lock != null) synchronized (backend.lock) { backend.clearLayer(chain.getThisObject()); } }
                 catch (ReflectiveOperationException | RuntimeException failure) {
-                    android.util.Log.w("NativeNavbar", "Window layer cleanup pending", failure);
+                    NavbarTrace.w("Window layer cleanup pending", failure);
                 }
                 return chain.proceed();
             });
@@ -163,8 +190,9 @@ final class NavbarSystem {
                 });
             }
             backend.installTransparentLayout(module, loader, policy, window);
-            android.util.Log.i("NativeNavbar", "SYSTEM_HOOK_READY");
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) { android.util.Log.e("NativeNavbar", "System preflight failed", error); }
+            NavbarTrace.enableRing();
+            NavbarTrace.i("SYSTEM_HOOK_READY");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) { NavbarTrace.w("System preflight failed", error); }
     }
 
     /** Server-side layout only: never mutates the application's persistent LayoutParams/Decor. */
@@ -214,10 +242,10 @@ final class NavbarSystem {
                 }
                 return result;
             }));
-            android.util.Log.i("NativeNavbar", "TRANSPARENT_LAYOUT_READY");
+            NavbarTrace.i("TRANSPARENT_LAYOUT_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             installed.forEach(XposedInterface.HookHandle::unhook);
-            android.util.Log.w("NativeNavbar", "Transparent server layout unavailable", error);
+            NavbarTrace.w("Transparent server layout unavailable", error);
         }
     }
 
@@ -284,7 +312,7 @@ final class NavbarSystem {
             }, packages, null, worker, Context.RECEIVER_NOT_EXPORTED);
             reload();
         } catch (ReflectiveOperationException | RuntimeException error) {
-            android.util.Log.w("NativeNavbar", "System connection pending", error);
+            NavbarTrace.w("System connection pending", error);
             worker.postDelayed(this::connect, 5000);
         }
     }
@@ -297,7 +325,7 @@ final class NavbarSystem {
             if (settings == null) settings = HostSnapshot.open(context, "navbar");
             HostSnapshot.Result read = settings.read(() ->
                     context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "system", null, null));
-            if (read.report()) android.util.Log.i("NativeNavbar", read.summary());
+            if (read.report()) NavbarTrace.i(read.summary());
             Bundle config = read.config();
             if (config == null) throw new IllegalStateException("Missing navbar settings");
             if (!read.live()) worker.postDelayed(retryReload, settings.retryDelay(5000));
@@ -325,7 +353,7 @@ final class NavbarSystem {
             enabled = false;
             // Provider failures are already reported once per state change by HostSnapshot.
             if (settings == null || settings.reachable())
-                android.util.Log.w("NativeNavbar", "Settings unavailable; restoring native handling", failure);
+                NavbarTrace.w("Settings unavailable; restoring native handling", failure);
             worker.postDelayed(retryReload, settings == null ? 5000 : settings.retryDelay(5000));
         } finally { Binder.restoreCallingIdentity(identity); }
         if (previousWindow != null) {
@@ -369,6 +397,7 @@ final class NavbarSystem {
         // Until the classifier has seen this window it keeps the native layout with sampled color.
         Integer mode = autoModes.get(window);
         if (mode == null) mode = autoCache.get(component.flattenToShortString());
+        if (mode == null) mode = rules.seed(pkg, component.getClassName());
         return new NavbarRules.Choice(mode == null ? NavbarStore.COLOR : mode, null, AUTO_SOURCE, 0);
     }
 
@@ -390,46 +419,76 @@ final class NavbarSystem {
         if (density <= 0 || navTop <= 0 || width < 64) return false;
         long now = SystemClock.uptimeMillis();
         if (window != autoWindow) {
-            autoWindow = window; autoThumb = null; autoDirty = true; autoPending = -1; autoQuietUntil = 0;
+            autoWindow = window; autoThumb = null; autoReference = null; autoDirty = true; autoPending = -1; autoQuietUntil = 0;
+            autoSince = now; autoStartupRecheck = true;
+            ComponentName name = ComponentName.unflattenFromString(component);
+            autoSeeded = autoModes.get(window) == null && name != null
+                    && (autoCache.containsKey(component) || rules.seed(name.getPackageName(), name.getClassName()) != null);
+            NavbarTrace.i("AUTO window " + component + " mode=" + label(mode));
         }
         long t0 = System.nanoTime();
-        int[] thumb = thumbnail(surface, width, navTop);
+        Lowres low = low(surface, frame);
+        int[] thumb = low == null ? null : rows(low, 0, Math.min(low.h(), (int) (navTop * low.f())));
         autoThumbNanos += System.nanoTime() - t0;
         if (++autoThumbs >= 64) {
-            android.util.Log.i("NativeNavbar", "AUTO thumb avg="
+            NavbarTrace.i("AUTO thumb avg="
                     + String.format(java.util.Locale.ROOT, "%.2f", autoThumbNanos / 1e6 / autoThumbs) + "ms");
             autoThumbs = 0; autoThumbNanos = 0;
         }
-        if (thumb == null) return false;
+        if (thumb == null) { autoLog("AUTO thumb unavailable " + component); return false; }
         int[] previousThumb = autoThumb;
         autoThumb = thumb;
-        if (now < autoQuietUntil) { autoDirty = false; return false; }
-        if (previousThumb != null && previousThumb.length == thumb.length) {
-            double change = changed(previousThumb, thumb);
-            if (change > 0.25) { autoDirty = true; return false; }   // still moving: wait for the quiet frame
-            if (change > 0.08) return false;
-        } else if (previousThumb != null) { autoDirty = true; return false; }
-        if (!autoDirty) return false;
+        if (now < autoQuietUntil) { autoDirty = false; autoReference = thumb; return false; }
+        boolean startup = now - autoSince < STARTUP_MS;
+        if (!startup && autoStartupRecheck) { autoStartupRecheck = false; autoDirty = true; }
+        // Only a quiet frame is judged; a refresh is a settled frame that differs from the last judged one,
+        // so slow or dark-on-dark transitions are caught however gradually they animate.
+        if (previousThumb == null || previousThumb.length != thumb.length || changed(previousThumb, thumb) > 0.08) return false;
+        if (!autoDirty) {
+            double change = autoReference == null || autoReference.length != thumb.length ? 1 : changed(autoReference, thumb);
+            if (change <= 0.25) return false;
+            NavbarTrace.i("AUTO refresh " + component
+                    + " change=" + String.format(java.util.Locale.ROOT, "%.2f", change));
+            autoDirty = true;
+        }
 
         long t1 = System.nanoTime();
         boolean floating = mode == NavbarStore.FLOATING;
         int bottom = floating ? frame.height() : navTop;
         int top = Math.max(0, bottom - (int) Math.ceil(320 * density));
         int navRows = floating ? 0 : Math.max(0, Math.min(frame.height(), navTop + navHeight) - navTop);
-        int[] roi = pixels(surface, new Rect(0, top, width, bottom));
-        int[] nav = navRows == 0 ? new int[0] : pixels(surface, new Rect(0, navTop, width, navTop + navRows));
-        if (roi == null || nav == null) return false;
-        Bundle verdict = NavbarLayout.analyze(roi, width, bottom - top, density, nav, width, navRows);
+        Lowres half = capture(surface, frame, CLASSIFY_SCALE);
+        if (half == null || !opaque(half.px())) {
+            autoLog("AUTO pixels unavailable " + component + (half == null ? " capture" : " nonopaque"));
+            return false;
+        }
+        float hd = density * half.f();
+        int hBottom = Math.min(half.h(), Math.round(bottom * half.f()));
+        int hTop = Math.max(0, hBottom - (int) Math.ceil(320 * hd));
+        int hNavTop = Math.round(navTop * half.f());
+        int hNavRows = floating ? 0 : Math.max(0, Math.min(half.h(), Math.round((navTop + navRows) * half.f())) - hNavTop);
+        int[] roi = rows(half, hTop, hBottom);
+        int[] nav = hNavRows == 0 ? new int[0] : rows(half, hNavTop, hNavTop + hNavRows);
+        Bundle verdict = NavbarLayout.analyze(roi, half.w(), hBottom - hTop, hd, nav, half.w(), hNavRows);
         String decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
         int next = "EXTEND".equals(decision) ? NavbarStore.COLOR : "NATIVE".equals(decision) ? NavbarStore.FLOATING : -1;
         long ms = (System.nanoTime() - t1) / 1_000_000;
         Integer current = autoModes.get(window);
-        if (next < 0) { autoDirty = false; autoPending = -1; return false; }
+        NavbarTrace.i("AUTO check " + component + " mode=" + label(mode) + " -> " + decision
+                + " reason=" + verdict.getString("reviewReason") + " pending=" + autoPending + " ms=" + ms);
+        if (next < 0) { autoDirty = false; autoPending = -1; autoReference = thumb; return false; }
+        if (!startup) learn(component, next);
+        if (startup && autoSeeded && next != mode) {
+            // A known page keeps its learned mode while splash/ads/loading frames are on screen.
+            autoDirty = false; autoPending = -1; autoReference = thumb;
+            NavbarTrace.i("AUTO startup keep " + component + " " + label(mode) + " (saw " + label(next) + ")");
+            return false;
+        }
         if (next == mode) {
-            autoDirty = false; autoPending = -1;
+            autoDirty = false; autoPending = -1; autoReference = thumb;
             if (current == null) {
                 autoModes.put(window, next); autoCache.put(component, next);
-                android.util.Log.i("NativeNavbar", "AUTO " + component + " = " + label(next)
+                NavbarTrace.i("AUTO " + component + " = " + label(next)
                         + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
             }
             return false;
@@ -438,11 +497,11 @@ final class NavbarSystem {
             autoPending = next;        // stay dirty: confirm on the next quiet tick
             return false;
         }
-        autoDirty = false; autoPending = -1; autoQuietUntil = now + 600;
+        autoDirty = false; autoPending = -1; autoQuietUntil = now + 600; autoReference = thumb;
         autoModes.put(window, next);
         if (autoCache.size() > 256) autoCache.clear();
         autoCache.put(component, next);
-        android.util.Log.i("NativeNavbar", "AUTO " + component + " " + label(mode) + " -> " + label(next)
+        NavbarTrace.i("AUTO " + component + " " + label(mode) + " -> " + label(next)
                 + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
         synchronized (lock) {
             NavbarReflect.call(window, "notifyInsetsChanged");
@@ -451,29 +510,103 @@ final class NavbarSystem {
         return true;
     }
 
+    private long autoLogAt;
+    /** At most one repeated failure line per 2s. */
+    private void autoLog(String message) {
+        long now = SystemClock.uptimeMillis();
+        if (now - autoLogAt < 2000) return;
+        autoLogAt = now;
+        NavbarTrace.i(message);
+    }
+
+    /** One stable vote per classification, persisted by the module (never during startup). */
+    private void learn(String component, int mode) {
+        ComponentName name = ComponentName.unflattenFromString(component);
+        if (name == null || context == null) return;
+        Long version = versions.get(name.getPackageName());
+        String key = name.getPackageName() + "/" + name.getClassName();
+        long code = version == null ? -1 : version;
+        statusWriter.execute(() -> {
+            try {
+                Bundle vote = new Bundle();
+                vote.putString("component", key);
+                vote.putLong("version", code);
+                vote.putInt("mode", mode);
+                context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "learn", null, vote);
+            } catch (RuntimeException unavailable) { /* module stopped: the vote is simply lost */ }
+        });
+    }
+
+    /** Marks fill changes that revert within a short time: active gaps, mode ping-pong and layer rebuilds. */
+    private void watchFill(boolean active, int mode, boolean windowOwned) {
+        String state = (active ? "on" : "off") + "/" + label(mode) + "/" + (windowOwned ? "layer" : "host");
+        if (state.equals(fillState)) return;
+        long now = SystemClock.uptimeMillis();
+        if (state.equals(fillPrevState) && now - fillPrevChangedAt < 600)
+            NavbarTrace.i("FLICKER " + fillPrevState + " -> " + fillState + " -> " + state
+                    + " in " + (now - fillPrevChangedAt) + "ms · " + runtimePage);
+        NavbarTrace.i("FILL " + state + " · " + runtimePage);
+        fillPrevState = fillState; fillPrevChangedAt = fillChangedAt;
+        fillState = state; fillChangedAt = now;
+    }
+
+    private void follow(Rect area) {
+        if (!samplingTried) {
+            samplingTried = true;
+            try { sampling = new NavbarSampling(); } catch (LinkageError unavailable) { sampling = null; }
+        }
+        if (sampling != null) sampling.follow(area, worker::post);
+    }
+
     private static String label(int mode) { return mode == NavbarStore.FLOATING ? "floating" : "extend"; }
 
-    /** Fraction of thumbnail pixels whose largest channel moved by more than 32. */
+    /** Fraction of thumbnail pixels whose largest channel moved by more than 16 (dark pages differ by ~30). */
     static double changed(int[] a, int[] b) {
         int moved = 0;
         for (int i = 0; i < a.length; i++) {
             int x = a[i], y = b[i];
             int d = Math.max(Math.abs(((x >> 16) & 255) - ((y >> 16) & 255)),
                     Math.max(Math.abs(((x >> 8) & 255) - ((y >> 8) & 255)), Math.abs((x & 255) - (y & 255))));
-            if (d > 32) moved++;
+            if (d > 16) moved++;
         }
         return a.length == 0 ? 0 : moved / (double) a.length;
     }
 
-    /** 1/16 scale capture of the content above the navigation area, about 7k pixels on a phone. */
-    private int[] thumbnail(SurfaceControl surface, int width, int navTop) {
+    private static Method optional(Class<?> type, String name) {
+        try { return type.getMethod(name, int.class); } catch (NoSuchMethodException missing) { return null; }
+    }
+
+    private Object captureArgs(SurfaceControl surface) throws ReflectiveOperationException {
+        Object builder = captureBuilder.newInstance(surface);
+        if (securePolicy != null) securePolicy.invoke(builder, 2);
+        if (protectedPolicy != null) protectedPolicy.invoke(builder, 2);
+        return builder;
+    }
+
+    private long captureLogAt;
+    private void captureFailed(String where, Throwable failure) {
+        long now = SystemClock.uptimeMillis();
+        if (now - captureLogAt < 3000) return;
+        captureLogAt = now;
+        Throwable cause = failure instanceof java.lang.reflect.InvocationTargetException && failure.getCause() != null
+                ? failure.getCause() : failure;
+        NavbarTrace.i("CAPTURE " + where + " failed: " + cause);
+    }
+
+    /** This tick's 1/8 whole-window capture, taken at most once per tick. */
+    private Lowres low(SurfaceControl surface, Rect frame) {
+        if (!tickLowTried) { tickLowTried = true; tickLow = capture(surface, frame, TICK_SCALE); }
+        return tickLow;
+    }
+
+    private Lowres capture(SurfaceControl surface, Rect frame, float factor) {
         HardwareBuffer hardware = null;
         Bitmap bitmap = null, software = null;
         try {
-            if (surface == null || !surface.isValid()) return null;
-            Object builder = captureBuilder.newInstance(surface);
-            crop.invoke(builder, new Rect(0, 0, width, navTop));
-            scale.invoke(builder, 1 / 16f, 1 / 16f);
+            if (surface == null || !surface.isValid() || frame.isEmpty()) return null;
+            Object builder = captureArgs(surface);
+            crop.invoke(builder, new Rect(0, 0, frame.width(), frame.height()));
+            scale.invoke(builder, factor, factor);
             Object buffer = capture.invoke(null, build.invoke(builder));
             if (buffer == null) return null;
             hardware = (HardwareBuffer) NavbarReflect.call(buffer, "getHardwareBuffer");
@@ -485,8 +618,9 @@ final class NavbarSystem {
             int w = software.getWidth(), h = software.getHeight();
             int[] out = new int[w * h];
             software.getPixels(out, 0, w, 0, 0, w, h);
-            return out;
+            return new Lowres(out, w, h, w / (float) frame.width());
         } catch (ReflectiveOperationException | RuntimeException failure) {
+            captureFailed("window@" + factor, failure);
             return null;
         } finally {
             if (software != null) software.recycle();
@@ -495,34 +629,17 @@ final class NavbarSystem {
         }
     }
 
-    /** Opaque app-layer pixels of a window-local rectangle, or null when unavailable or protected. */
-    private int[] pixels(SurfaceControl surface, Rect rect) {
-        HardwareBuffer hardware = null;
-        Bitmap bitmap = null, software = null;
-        try {
-            if (surface == null || !surface.isValid() || rect.isEmpty()) return null;
-            Object builder = captureBuilder.newInstance(surface);
-            crop.invoke(builder, rect);
-            scale.invoke(builder, 1f, 1f);
-            Object buffer = capture.invoke(null, build.invoke(builder));
-            if (buffer == null) return null;
-            hardware = (HardwareBuffer) NavbarReflect.call(buffer, "getHardwareBuffer");
-            if ((Boolean) NavbarReflect.call(buffer, "containsSecureLayers")) return null;
-            bitmap = (Bitmap) NavbarReflect.call(buffer, "asBitmap");
-            if (bitmap == null) return null;
-            software = bitmap.copy(Bitmap.Config.ARGB_8888, false);
-            if (software == null || software.getWidth() != rect.width() || software.getHeight() != rect.height()) return null;
-            int[] out = new int[rect.width() * rect.height()];
-            software.getPixels(out, 0, rect.width(), 0, 0, rect.width(), rect.height());
-            for (int pixel : out) if ((pixel >>> 24) != 255) return null;
-            return out;
-        } catch (ReflectiveOperationException | RuntimeException failure) {
-            return null;
-        } finally {
-            if (software != null) software.recycle();
-            if (bitmap != null) bitmap.recycle();
-            if (hardware != null) hardware.close();
-        }
+    private static int[] rows(Lowres image, int from, int to) {
+        from = Math.max(0, from); to = Math.min(image.h(), to);
+        if (to <= from) return new int[0];
+        int[] out = new int[(to - from) * image.w()];
+        System.arraycopy(image.px(), from * image.w(), out, 0, out.length);
+        return out;
+    }
+
+    private static boolean opaque(int[] pixels) {
+        for (int pixel : pixels) if ((pixel >>> 24) != 255) return false;
+        return true;
     }
 
     private boolean eligible(Object window, Object display, Object raw) throws ReflectiveOperationException {
@@ -642,6 +759,8 @@ final class NavbarSystem {
 
     private void tick() {
         boolean adapting = false;
+        tickLow = null;
+        tickLowTried = false;
         waitingFirstFrame = false;
         runtimePage = "";
         try {
@@ -710,6 +829,12 @@ final class NavbarSystem {
                     .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), landscape);
             frameNavHeight = nav.bottom;
             if (nav.bottom <= 0) { runtime("当前窗口没有底部导航区域"); publish(false, 0, 0); return; }
+            if (!landscape && AUTO_SOURCE.equals(selected.source())) {
+                int boundary = bounds.bottom - nav.bottom;
+                android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
+                int span = config == null ? 0 : (int) Math.ceil(320 * config.densityDpi / 160f);
+                follow(span <= 0 ? null : new Rect(bounds.left, Math.max(bounds.top, boundary - span), bounds.right, boundary));
+            } else follow(null);
             if (landscape) {
                 adapting = false;
                 runtime("横屏导航条透明");
@@ -739,7 +864,8 @@ final class NavbarSystem {
                 publish(true, cached, NavbarStore.COLOR);
             }
             int color = selected.color() == null
-                    ? sample(surface, frame.width(), navigationTop(frame, bounds, nav.bottom)) : selected.color();
+                    ? sample(low(surface, frame), navigationTop(frame, bounds, nav.bottom)) : selected.color();
+            if (selected.color() != null) stretchRow = null;
             boolean current;
             synchronized (lock) {
                 Object display = NavbarReflect.call(window, "getDisplayContent");
@@ -774,12 +900,12 @@ final class NavbarSystem {
             // Only a value seen on two consecutive samples is remembered for the next visit.
             if (stableSamples >= 2) cache.put(key, color);
             lastGood = new Frame(window, color, NavbarStore.COLOR, nav.bottom, SystemClock.uptimeMillis());
-            runtime("取色中 · " + selected.source());
+            runtime("取色中 #" + Integer.toHexString(color) + " · " + selected.source());
             publish(true, color, NavbarStore.COLOR);
         } catch (ReflectiveOperationException | RuntimeException failure) {
             if (SystemClock.uptimeMillis() - lastFailure > 10_000) {
                 lastFailure = SystemClock.uptimeMillis();
-                android.util.Log.w("NativeNavbar", "System frame unavailable", failure);
+                NavbarTrace.w("System frame unavailable", failure);
             }
             runtime("系统接口异常 · " + failure.getClass().getSimpleName());
             publish(false, 0, 0);
@@ -807,6 +933,7 @@ final class NavbarSystem {
      */
     private void runtime(String message) {
         if (!runtimePage.isEmpty()) message += " · " + runtimePage;
+        if (!message.equals(loggedRuntime)) { loggedRuntime = message; NavbarTrace.i("STATE " + message); }
         if (message.equals(lastRuntime)) return;
         if (SystemClock.uptimeMillis() < statusPausedUntil || settings != null && !settings.reachable()) return;
         pendingRuntime = message;
@@ -860,49 +987,24 @@ final class NavbarSystem {
         }
     }
 
-    /** Application-layer strip only: never sample the host background or dump a stale view tree. */
-    private int sample(SurfaceControl surface, int width, int navigationTop) {
-        HardwareBuffer hardware = null;
-        Bitmap bitmap = null, software = null;
-        try {
-            if (surface == null || !surface.isValid() || width < 24 || navigationTop < 12) return 0;
-            Object builder = captureBuilder.newInstance(surface);
-            crop.invoke(builder, new Rect(0, navigationTop - 12, width, navigationTop - 2));
-            // Preserve actual edge pixels: downscaling the entire strip mixes unrelated content.
-            scale.invoke(builder, 1f, 1f);
-            Object buffer = capture.invoke(null, build.invoke(builder));
-            if (buffer == null) return 0;
-            hardware = (HardwareBuffer) NavbarReflect.call(buffer, "getHardwareBuffer");
-            if ((Boolean) NavbarReflect.call(buffer, "containsSecureLayers")) return 0;
-            bitmap = (Bitmap) NavbarReflect.call(buffer, "asBitmap");
-            if (bitmap == null) return 0;
-            software = bitmap.copy(Bitmap.Config.ARGB_8888, false);
-            if (software == null) return 0;
-            int w = software.getWidth(), h = software.getHeight();
-            if (w != width || h != 10) return 0;
-            int[] sides = new int[200];
-            software.getPixels(sides, 0, 10, 2, 0, 10, 10);
-            software.getPixels(sides, 100, 10, w - 12, 0, 10, 10);
-            int picked = NavbarColors.background(sides, 25);
-            if (picked != 0) return picked;
-            // Compatibility policy: a second low-variance bottom strip, not a guessed black/white.
-            int step = Math.max(1, w * 3 / 500);
-            int[] line = new int[((w + step - 1) / step) * 3];
-            int index = 0;
-            for (int y = h - 3; y < h; y++)
-                for (int x = 0; x < w; x += step) line[index++] = software.getPixel(x, y);
-            return NavbarColors.background(line, 25);
-        } catch (ReflectiveOperationException | RuntimeException failure) {
-            if (SystemClock.uptimeMillis() - lastFailure > 10_000) {
-                lastFailure = SystemClock.uptimeMillis();
-                android.util.Log.w("NativeNavbar", "Color sample unavailable", failure);
-            }
-            return 0;
-        } finally {
-            if (software != null) software.recycle();
-            if (bitmap != null) bitmap.recycle();
-            if (hardware != null) hardware.close();
-        }
+    /**
+     * The 1/8 row lying wholly above the navigation boundary (average of the last ~8 app rows). Its dominant
+     * colour feeds the host fallback; the row itself is stretched down over the navigation area.
+     */
+    private int sample(Lowres low, int navigationTop) {
+        stretchRow = null;
+        if (low == null || navigationTop < 16) return 0;
+        int y = (int) Math.floor(navigationTop * low.f()) - 1;
+        if (y < 0 || y >= low.h()) return 0;
+        int[] row = rows(low, y, y + 1);
+        if (!opaque(row)) return 0;
+        stretchRow = row;
+        int picked = NavbarColors.background(row, 25);
+        if (picked != 0) return stretchColor = picked;
+        long r = 0, g = 0, b = 0;
+        for (int c : row) { r += (c >> 16) & 255; g += (c >> 8) & 255; b += c & 255; }
+        int n = row.length;
+        return stretchColor = 0xff000000 | (int) (r / n) << 16 | (int) (g / n) << 8 | (int) (b / n);
     }
 
     /** A newer frame replaces an older one still queued for the same host, so a slow queue never replays stale colors. */
@@ -964,7 +1066,8 @@ final class NavbarSystem {
                 layerPreflight = null;
                 windowLayers.put(window, layer);
             }
-            layer.update(parent, rectangle, color);
+            int[] row = stretchRow;
+            layer.update(parent, rectangle, color, row != null && stretchColor == color ? row : null);
             layerBounds.put(window, new LayerGeometry(new Rect(frame), new Rect(bounds),
                     new Rect((Rect) NavbarReflect.field(attrs, "surfaceInsets")), frameNavHeight));
             return layer.valid();
@@ -976,9 +1079,11 @@ final class NavbarSystem {
         boolean windowOwned = false;
         try { windowOwned = updateWindowLayer(active, color, mode); }
         catch (ReflectiveOperationException | RuntimeException failure) {
-            android.util.Log.w("NativeNavbar", "Window color layer unavailable; using host fallback", failure);
+            NavbarTrace.w("Window color layer unavailable; using host fallback", failure);
         }
         if (!active) { stability.reset(); lastGood = null; }
+        watchFill(active, mode, windowOwned);
+        if (!active) follow(null);
         int height = active ? frameNavHeight : 0;
         long now = SystemClock.uptimeMillis();
         if (publishedActive == active && publishedColor == color && publishedMode == mode
@@ -998,7 +1103,7 @@ final class NavbarSystem {
                 broadcast.invoke(context, new Intent(intent).setPackage(host), android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE",
                         frameOptions());
             } catch (ReflectiveOperationException failure) {
-                android.util.Log.w("NativeNavbar", "Navigation host frame delivery failed", failure);
+                NavbarTrace.w("Navigation host frame delivery failed", failure);
             }
         }
     }
