@@ -40,7 +40,8 @@ public class ConfigMigrationTest {
 
     @Test public void freshEmptyInstallDefaultsOffAndStaysOffAfterOtherSettingsAppear(){
         assertMigrated(false);
-        assertEquals(Map.of("longBackWindow",false),prefs.getAll());
+        assertEquals(Map.of("longBackWindow",false,"enabled",false),prefs.getAll());
+        assertFalse(new Config(context).enabled());
         assertTrue(prefs.edit().putBoolean("enabled",true).commit());
         assertMigrated(false);
     }
@@ -56,7 +57,22 @@ public class ConfigMigrationTest {
     @Test public void explicitFalseSurvivesLegacyPreferencesAndUpgrade()throws Exception {
         installTimes(100,200);
         assertTrue(prefs.edit().putBoolean("longBackWindow",false).putString("apps","com.example.old").commit());
-        Map<String,?> before=prefs.getAll();assertMigrated(false);assertEquals(before,prefs.getAll());
+        assertMigrated(false);assertTrue(new Config(context).enabled());
+        assertEquals(Map.of("longBackWindow",false,"apps","com.example.old","enabled",true),prefs.getAll());
+    }
+    @Test public void enabledMigrationPreservesExplicitValuesAndLegacyEvidence()throws Exception{
+        for(boolean enabled:new boolean[]{false,true}){
+            assertTrue(prefs.edit().clear().putBoolean("enabled",enabled).commit());
+            assertEquals(enabled,new Config(context).enabled());assertEquals(enabled,prefs.getBoolean("enabled",!enabled));
+        }
+        assertTrue(prefs.edit().clear().putBoolean("keyboard",false).commit());assertTrue(new Config(context).enabled());
+        assertTrue(prefs.edit().clear().commit());installTimes(100,200);assertTrue(new Config(context).enabled());
+        assertTrue(prefs.edit().clear().commit());installTimes(0,0);assertFalse(new Config(context).enabled());
+        assertTrue(prefs.edit().clear().commit());installTimes(200,100);assertFalse(new Config(context).enabled());
+    }
+    @Test public void foreignHostWithoutSnapshotDoesNotMigrateManagerSettings(){
+        Context host=new ContextWrapper(context){@Override public String getPackageName(){return "com.android.systemui";}};
+        new Config(host);assertTrue(prefs.getAll().isEmpty());
     }
     @Test public void hostSnapshotIsReadOnlyAndMissingKeyDefaultsOff()throws Exception {
         installTimes(100,200);

@@ -29,7 +29,13 @@ class WindowPreferenceStore(private val context: Context) {
         autoMinimizeOnOpen = config.autoMinimizeOnOpen(), endOnClose = config.endOnClose(), keepEdgeAwake = config.keepEdgeAwake(),
         hideRecents = config.hideRecents(), doubleClose = config.doubleClose(), notificationWindow = config.notificationWindow(), landscapeShareWindow = config.landscapeShareWindow(),
     )
+    internal fun enable(decision: FreeformEnablePolicy.Decision) {
+        require(decision == FreeformEnablePolicy.Decision.ALLOWED) { "Freeform capability check required" }
+        preferences.edit().putBoolean("enabled", true).apply()
+        ConfigProvider.changed(context)
+    }
     fun boolean(key: String, value: Boolean) {
+        require(key != "enabled" || !value) { "Use the checked enable path" }
         require(key in setOf("enabled", "longBackWindow", "hideTopHint", "showHeat", "menuBlur", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "autoMinimizeOnOpen", "endOnClose", "keepEdgeAwake"))
         preferences.edit().putBoolean(key, value).apply()
         ConfigProvider.changed(context)

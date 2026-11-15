@@ -49,9 +49,17 @@ public final class SunWindowModule extends XposedModule {
         note("SYSTEM_SERVER_START eligible=" + eligible + " attempted=" + attempted);
         if (!eligible || attempted) return;
         attempted = true;
-        installUndimSuggestion(p.getClassLoader());
-        dev.local.sunwindowdemo.features.edgetouch.EdgeInputFilter.install(this,p.getClassLoader(),this::note);
-        dev.local.sunwindowdemo.features.motion.MotionAccess.install(this,p.getClassLoader(),this::note);
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
+            installUndimSuggestion(p.getClassLoader());
+            dev.local.sunwindowdemo.features.edgetouch.EdgeInputFilter.install(this,p.getClassLoader(),this::note);
+            dev.local.sunwindowdemo.features.motion.MotionAccess.install(this,p.getClassLoader(),this::note);
+        }
+        String owner=dev.local.sunwindowdemo.core.WindowBackendOwnership.claim(Wire.PKG);
+        if(!Wire.PKG.equals(owner)){
+            try{WindowBackendConflict.install(this,p.getClassLoader(),owner,this::note);}
+            catch(Exception unavailable){note("WINDOW_CONFLICT_STATUS_UNAVAILABLE "+FrameworkAccess.reason(unavailable));}
+            return;
+        }
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         try {
             FrameworkAccess a = new FrameworkAccess(p.getClassLoader());
@@ -325,6 +333,7 @@ public final class SunWindowModule extends XposedModule {
                         return result;
                     }finally{engine.activityStartResult(ticket,success);}
                 }));
+            engine.preflightReady();
             note("HOOKS_READY count="+handles.size()+" version="+BuildConfig.VERSION_NAME+"; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }

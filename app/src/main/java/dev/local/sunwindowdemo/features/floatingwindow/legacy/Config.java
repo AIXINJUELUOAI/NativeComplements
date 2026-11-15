@@ -15,15 +15,19 @@ public final class Config {
     static volatile SharedPreferences hostPreferences;
     public Config(Context c) {
         prefs = hostPreferences!=null?hostPreferences:c.getSharedPreferences("corner", Context.MODE_PRIVATE);
-        if(hostPreferences==null)synchronized(Config.class){
-            if(!prefs.contains("longBackWindow")){
-                // Existing corner settings preserve the previously always-on gesture.
+        if(hostPreferences==null&&dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.packageName().equals(c.getPackageName()))synchronized(Config.class){
+            if(!prefs.contains("enabled")||!prefs.contains("longBackWindow")){
+                // Sample before either migration writes a key; a fresh migration is not legacy evidence.
                 boolean existing=!prefs.getAll().isEmpty();
                 if(!existing)try{
-                    var info=c.getPackageManager().getPackageInfo(c.getPackageName(),0);
-                    existing=info.lastUpdateTime>info.firstInstallTime;
-                }catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
-                if(!prefs.edit().putBoolean("longBackWindow",existing).commit())throw new IllegalStateException("gesture migration failed");
+                    var info=c.getPackageManager().getPackageInfo(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.packageName(),0);
+                    existing=info.firstInstallTime>0&&info.lastUpdateTime>info.firstInstallTime;
+                }catch(android.content.pm.PackageManager.NameNotFoundException|RuntimeException ignored){}
+                var edit=prefs.edit();
+                if(!prefs.contains("enabled"))edit.putBoolean("enabled",existing);
+                // Existing settings/upgrade retain the formerly always-on gesture. Unknown/fresh stays off.
+                if(!prefs.contains("longBackWindow"))edit.putBoolean("longBackWindow",existing);
+                if(!edit.commit())throw new IllegalStateException("window settings migration failed");
             }
         }
     }

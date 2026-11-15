@@ -260,6 +260,8 @@ final class WindowEngine {
     private volatile boolean refreshQueued;
     private String last = "后端正在初始化";
     private boolean attached;
+    private volatile boolean hooksReady;
+    void preflightReady(){hooksReady=true;}
 
     static final class Session {
         Session returnTo;
@@ -419,7 +421,11 @@ final class WindowEngine {
                 if(next!=hideRecents){hideRecents=next;saveHistory();notifyRecents();}
             }
             // Heartbeats republish recents history only when it changed; explicit queries always publish.
-            if ("STATUS".equals(op)) { pushHistory(false);report("STATUS"); return; }
+            if ("STATUS".equals(op)) {
+                pushHistory(false);
+                String requestId=i.getIntExtra("protocol",0)==Wire.PROTOCOL?i.getStringExtra("requestId"):null;
+                report("STATUS",requestId);return;
+            }
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
             if ("OTP_INPUT".equals(op)) {
                 if(suggestionInput!=null)suggestionInput.start(i);
@@ -3401,7 +3407,29 @@ final class WindowEngine {
             out.putExtra("systemOverlay",system||priority);
         }catch(Exception e){out.putExtra("environmentError",FrameworkAccess.reason(e));}}
     }
-    private void report(String event) {
+    private boolean capabilityKnown,capabilityMultiWindow,capabilityFreeform;
+    private static boolean validCapabilityRequest(String event,String requestId){
+        return "STATUS".equals(event)&&requestId!=null&&!requestId.isEmpty()&&requestId.length()<=128;
+    }
+    /** Only a correlated STATUS probes current ATM flags; heartbeat cache is never an enable verdict. */
+    void fillCapabilities(Intent out,String event,String requestId){
+        boolean fresh=validCapabilityRequest(event,requestId);
+        if(fresh){
+            capabilityKnown=capabilityMultiWindow=capabilityFreeform=false;
+            if(lock!=null&&atm!=null&&a!=null)try{synchronized(lock){
+                Object multi=a.field(atm,"mSupportsMultiWindow"),freeform=a.field(atm,"mSupportsFreeformWindowManagement");
+                if(multi instanceof Boolean m&&freeform instanceof Boolean f){
+                    capabilityMultiWindow=m;capabilityFreeform=f;capabilityKnown=true;
+                }
+            }}catch(Exception|LinkageError error){log.accept("WINDOW_CAPABILITY_UNAVAILABLE "+FrameworkAccess.reason(error));}
+            out.putExtra("requestId",requestId);
+        }
+        out.putExtra("capabilitiesKnown",capabilityKnown)
+            .putExtra("supportsMultiWindow",capabilityMultiWindow).putExtra("supportsFreeform",capabilityFreeform)
+            .putExtra("preflightReady",attached&&hooksReady).putExtra("ownershipConflict",false);
+    }
+    private void report(String event){report(event,null);}
+    private void report(String event,String requestId) {
         if (context == null) return;
         Session s = active;
         String state = s == null ? journal.getBaseFile().exists() ? "recovery" : "idle" : s.restoring ? "recovery" : "active";
@@ -3411,6 +3439,7 @@ final class WindowEngine {
             .addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY).putExtra("event", event)
             .putExtra("state", state).putExtra("report", report).putExtra("protocol",Wire.PROTOCOL)
             .putExtra("hasJournal",journal.getBaseFile().exists()).putExtra("endedTaskId",endedTaskId);
+        fillCapabilities(result,event,requestId);
         result.putExtra("sequence",++frameSequence);
         result.putExtra("hostConnected",uiReady&&uiLease!=null&&uiLease.isBinderAlive()&&SystemClock.elapsedRealtime()-uiSeen<3000);
         result.putExtra("lastTouch",uiTouch);

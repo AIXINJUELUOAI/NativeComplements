@@ -106,6 +106,11 @@ final class Wire {
         context.sendBroadcast(i, null, BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
     static void send(Context c, String op) { send(c, op, PKG, -1, null, false); }
+    static void requestStatus(Context context,String requestId){
+        if(requestId==null||requestId.isEmpty()||requestId.length()>128)throw new IllegalArgumentException("status request id");
+        sendRequest(context,new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL)
+            .putExtra("op","STATUS").putExtra("package",PKG).putExtra("requestId",requestId));
+    }
     static boolean prepareBack(int task,String pkg,String token,BackVisual.Pose pose,android.view.SurfaceControl leash){
         IBinder sink=endpoint;if(sink==null)return false;
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();

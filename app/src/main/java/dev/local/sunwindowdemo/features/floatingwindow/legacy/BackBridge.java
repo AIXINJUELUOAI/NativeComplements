@@ -41,23 +41,27 @@ public final class BackBridge extends XposedModule {
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object result=chain.proceed();Application app=(Application)chain.getArg(0);
                     if(PACKAGE.equals(app.getPackageName()))main.post(()->{
+                        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
                         try{dev.local.sunwindowdemo.features.shade.LandscapeShade.connect(app);}
                         catch(RuntimeException unavailable){note("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
                         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}
                         catch(RuntimeException unavailable){note("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
                         dev.local.sunwindowdemo.features.shade.SignalDisplay.connect(app);
                         dev.local.sunwindowdemo.RotationSuggestion.connect(app);
+                        }
                         try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}
                     });
                     return result;
                 });
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
         dev.local.sunwindowdemo.features.shade.LandscapeShade.install(this,p.getDefaultClassLoader(),this::note);
         dev.local.sunwindowdemo.features.shade.StatusBarOffset.install(this,p.getDefaultClassLoader(),this::note);
         dev.local.sunwindowdemo.features.shade.SignalDisplay.install(this,p.getDefaultClassLoader(),this::note);
         dev.local.sunwindowdemo.RotationSuggestion.install(this,p.getDefaultClassLoader(),this::note);
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         installSuggestionNotifications(p.getDefaultClassLoader());
+        }
         WindowTools.install(this,p.getDefaultClassLoader(),this::note);
         NotificationWindow.install(this,p.getDefaultClassLoader(),this::note);
         installBackFinish(p.getDefaultClassLoader());

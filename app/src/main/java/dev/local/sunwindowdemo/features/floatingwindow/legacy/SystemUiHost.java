@@ -243,7 +243,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }};
     private void receiveFrame(Intent i){
         if(cleaned||controls==null)return;
-        backendReady=true;backendState=i.getStringExtra("state");normalOccupied=i.getBooleanExtra("normalOccupied",true);
+        backendState=i.getStringExtra("state");
+        backendReady=!"conflict".equals(backendState)&&!i.getBooleanExtra("ownershipConflict",false);
+        normalOccupied=i.getBooleanExtra("normalOccupied",true);
+        if(!backendReady){
+            cancelOpenWait();hideFan();hidePanel();hideControls();removeHot();
+            // No owner environment is available: fail closed for shared overlays and edge admission.
+            foreground="";systemFocus=true;keyboard=true;updateOverlayPriority();publish(false);return;
+        }
         updateOpenWait(i);
         if(i.hasExtra("foreground")){foreground=i.getStringExtra("foreground");keyboard=i.getBooleanExtra("imeVisible",false);systemFocus=i.getBooleanExtra("systemOverlay",false);
             systemOverlayTitle=i.getStringExtra("systemOverlayTitle");
@@ -286,10 +293,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         Config.hostPreferences=getSharedPreferences(Config.HOST_PREFERENCES,Context.MODE_PRIVATE);
         config=new Config(this);wm=getSystemService(WindowManager.class);
         controls=new WindowControls(this);miniControls=new WindowControls(this);
-        try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
-        edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
+            try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
+            edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
+        }
         quick=new WindowQuickHost(this,()->{hidePanel();hideFan();},()->{hidePanel();hideFan();floatCurrent(0,true);});
-        try{barrage=new BarrageHost(this);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())
+            try{barrage=new BarrageHost(this);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
         Wire.send(this,"STATUS");

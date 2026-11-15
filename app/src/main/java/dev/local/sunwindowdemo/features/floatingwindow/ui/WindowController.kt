@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import java.util.UUID
 import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.runtime.getValue
@@ -35,6 +37,13 @@ class WindowController(private val activity: Activity) {
     private var catalogGeneration = 0
     private val iconsReloaded = Runnable { handler.post { if (!destroyed) loadCatalog() } }
     private var recovery: Intent? = null
+    var enablePrompt by mutableStateOf<String?>(null); private set
+    var enableChecking by mutableStateOf(false); private set
+    private var enableRequest: String? = null
+    private var enableRequestedAt = 0L
+    private val enableTimeout = Runnable {
+        if (enableRequest != null) finishEnable(FreeformEnablePolicy.Decision.BACKEND_UNKNOWN)
+    }
     private val change = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> preferences = store.read() }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -48,6 +57,7 @@ class WindowController(private val activity: Activity) {
                 report = if (compatible) intent.getStringExtra("report") ?: "后端已连接" else "请重启手机，使系统后端与当前模块版本一致。",
                 lastTouch = intent.getStringExtra("lastTouch") ?: "尚未收到角落触摸",
             )
+            acceptEnableStatus(intent, sentFromUid)
             if (!compatible) return
             recovery = Intent(intent)
             Wire.notification(context, runtime.state == "active" || runtime.state == "recovery")
@@ -88,10 +98,75 @@ class WindowController(private val activity: Activity) {
     private val missing = Runnable {
         if (!runtime.received) runtime = runtime.copy(report = "尚未收到系统后端回应。请在 LSPosed 启用模块，勾选系统框架、系统界面和 Pixel 启动器，然后重启手机。")
     }
-    fun boolean(key: String, value: Boolean) = store.boolean(key, value)
+    fun boolean(key: String, value: Boolean) {
+        if (key == "enabled") setEnabled(value) else store.boolean(key, value)
+    }
     fun number(key: String, value: Int) = store.number(key, value)
     fun blocked(packages: Set<String>) = store.blocked(packages)
-    fun toggleControl() = store.boolean("enabled", !preferences.enabled)
+    fun toggleControl() = setEnabled(!preferences.enabled && !enableChecking)
+    fun dismissEnablePrompt() { enablePrompt = null }
+    private fun globalFreeform(): Int? = try {
+        Settings.Global.getInt(activity.contentResolver, "enable_freeform_support")
+    } catch (_: Settings.SettingNotFoundException) { null }
+      catch (_: SecurityException) { null }
+    private fun cancelEnable() {
+        enableRequest = null
+        enableChecking = false
+        handler.removeCallbacks(enableTimeout)
+    }
+    private fun setEnabled(value: Boolean) {
+        if (destroyed) return
+        cancelEnable()
+        enablePrompt = null
+        if (!value) {
+            store.boolean("enabled", false)
+            preferences = store.read()
+            return
+        }
+        val setting = globalFreeform()
+        if (setting != 1) {
+            finishEnable(FreeformEnablePolicy.evaluate(setting, null))
+            return
+        }
+        enableRequest = UUID.randomUUID().toString()
+        enableRequestedAt = SystemClock.elapsedRealtime()
+        enableChecking = true
+        handler.postDelayed(enableTimeout, 2000)
+        runCatching { Wire.requestStatus(activity, enableRequest) }
+            .onFailure { finishEnable(FreeformEnablePolicy.Decision.BACKEND_UNKNOWN) }
+    }
+    private fun acceptEnableStatus(intent: Intent, senderUid: Int) {
+        if (!FreeformEnablePolicy.matchesStatus(senderUid, intent.getIntExtra("protocol", 0),
+                intent.getStringExtra("event"), enableRequest, intent.getStringExtra("requestId"),
+                enableRequestedAt, SystemClock.elapsedRealtime(), 2000)) return
+        val extras = intent.extras
+        val keys = listOf("capabilitiesKnown", "supportsMultiWindow", "supportsFreeform", "preflightReady", "ownershipConflict")
+        @Suppress("DEPRECATION")
+        val capability = if (extras != null && keys.all { extras.get(it) is Boolean })
+            FreeformEnablePolicy.Capability(intent.getBooleanExtra(keys[0], false),
+                intent.getBooleanExtra(keys[1], false), intent.getBooleanExtra(keys[2], false),
+                intent.getBooleanExtra(keys[3], false), intent.getBooleanExtra(keys[4], true)) else null
+        finishEnable(FreeformEnablePolicy.evaluate(globalFreeform(), capability))
+    }
+    private fun finishEnable(decision: FreeformEnablePolicy.Decision) {
+        cancelEnable()
+        if (decision == FreeformEnablePolicy.Decision.ALLOWED) {
+            store.enable(decision)
+            preferences = store.read()
+            return
+        }
+        val reason = when (decision) {
+            FreeformEnablePolicy.Decision.SETTING_REQUIRED -> "系统尚未开启 Freeform。可由你手动使用 ADB 执行："
+            FreeformEnablePolicy.Decision.SETTING_UNKNOWN -> "无法读取系统 Freeform 设置，暂不启用。请检查系统设置；需要时可由你手动使用 ADB 执行："
+            FreeformEnablePolicy.Decision.RUNTIME_UNAVAILABLE -> "系统设置已为 1，但运行时多窗口或 Freeform 能力尚未生效，或此发行版限制了该能力。暂不启用；重启不保证解决。"
+            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "检测到其他小窗版本或宿主已取得本次启动的接管权，暂不启用。请在 LSPosed 中只保留一个小窗版本启用并重启手机，再检查。关闭管理页开关不会在当前启动中转交接管权。"
+            FreeformEnablePolicy.Decision.PREFLIGHT_FAILED -> "系统后端的精确接口预检尚未就绪，暂不启用。请检查模块后端与当前系统组件的适配。"
+            else -> "尚未收到本次检查的可信完整系统能力回应，或检查已超时，暂不启用。请检查模块作用域与后端状态后重试。"
+        }
+        enablePrompt = reason + if (decision == FreeformEnablePolicy.Decision.SETTING_REQUIRED ||
+                decision == FreeformEnablePolicy.Decision.SETTING_UNKNOWN)
+            "\n\nadb shell settings put global enable_freeform_support 1\n\n本模块不会自动修改设置。执行后重新尝试；值为 1 仍需通过运行时能力检查。" else ""
+    }
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")
     fun notifications() {
@@ -123,6 +198,7 @@ class WindowController(private val activity: Activity) {
     private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     fun close() {
         destroyed = true
+        cancelEnable()
         IconAssets.removeOnReload(iconsReloaded)
         handler.removeCallbacksAndMessages(null)
         activity.unregisterReceiver(receiver)

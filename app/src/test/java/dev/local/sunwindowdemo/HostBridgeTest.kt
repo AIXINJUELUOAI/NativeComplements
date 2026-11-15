@@ -62,8 +62,15 @@ class HostBridgeTest {
         val signal = shadowOf(context.applicationContext as android.app.Application).broadcastIntents.last()
         assertEquals(ConfigProvider.CHANGED, signal.action)
         assertEquals("com.android.systemui", signal.`package`)
-        store.boolean("enabled", true)
+        assertThrows(IllegalArgumentException::class.java) { store.boolean("enabled", true) }
+        assertThrows(IllegalArgumentException::class.java) { store.enable(FreeformEnablePolicy.Decision.BACKEND_UNKNOWN) }
+        assertFalse(WindowPreferenceStore(context).read().enabled)
+        val allowed = FreeformEnablePolicy.evaluate(1, FreeformEnablePolicy.Capability(true, true, true, true, false))
+        store.enable(allowed)
         assertTrue(WindowPreferenceStore(context).read().enabled)
+        val enabledSignal = shadowOf(context.applicationContext as android.app.Application).broadcastIntents.last()
+        assertEquals(ConfigProvider.CHANGED, enabledSignal.action)
+        assertEquals("com.android.systemui", enabledSignal.`package`)
         store.boolean("doubleClose", true)
         assertTrue(WindowPreferenceStore(context).read().doubleClose)
         store.boolean("doubleClose", false)

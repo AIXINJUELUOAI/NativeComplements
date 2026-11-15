@@ -26,7 +26,8 @@ public final class LauncherGuard extends XposedModule {
     @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&(PACKAGE.equals(p.getProcessName())||p.getProcessName().startsWith(PACKAGE+":"));}
     @Override public synchronized void onPackageLoaded(PackageLoadedParam p){
         if(!eligible||attempted||!PACKAGE.equals(p.getPackageName()))return;attempted=true;
-        LauncherRotationSuggestion.install(this,p.getDefaultClassLoader(),this::note);
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())
+            LauncherRotationSuggestion.install(this,p.getDefaultClassLoader(),this::note);
         List<XposedInterface.HookHandle> handles=new ArrayList<>();
         try{
             ClassLoader loader=p.getDefaultClassLoader();
@@ -69,7 +70,7 @@ public final class LauncherGuard extends XposedModule {
     }
     private void connect(Context service){
         disconnect();context=service.getApplicationContext();
-        LauncherRotationSuggestion.connect(context);
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())LauncherRotationSuggestion.connect(context);
         BackVisual.publish(context);
         receiver=new BroadcastReceiver(){public void onReceive(Context c,Intent intent){
             if(!STATE.equals(intent.getAction()))return;

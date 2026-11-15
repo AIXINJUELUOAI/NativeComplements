@@ -231,6 +231,8 @@ public class PanelInteractionTest {
         var constructor=SystemUiHost.class.getDeclaredConstructor(Context.class);constructor.setAccessible(true);
         SystemUiHost host=constructor.newInstance(context);
         org.robolectric.util.ReflectionHelpers.setField(host,"settingsReady",true);
+        // This scenario starts with an explicitly enabled installation, not a fresh-install gate.
+        context.getSharedPreferences("corner",Context.MODE_PRIVATE).edit().putBoolean("enabled",true).commit();
         org.robolectric.util.ReflectionHelpers.setField(host,"config",new dev.local.sunwindowdemo.Config(context));
         org.robolectric.util.ReflectionHelpers.setField(host,"wm",context.getSystemService(WindowManager.class));
         String token=Wire.token();android.content.Intent waiting=new android.content.Intent().putExtra("waitingOpen",true).putExtra("waitingToken",token).putExtra("waitingPackage","example.alpha");
