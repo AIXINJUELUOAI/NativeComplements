@@ -68,8 +68,8 @@ public final class HostSnapshot {
     /** system_server 使用 /data/system 下的独立目录（设备保护存储）；其他宿主使用自身的设备保护 files 目录。 */
     public static File directory(Context context) {
         if (android.os.Process.myUid() == android.os.Process.SYSTEM_UID)
-            return new File(android.os.Environment.getDataDirectory(), "system/nativecomplements");
-        return new File(context.createDeviceProtectedStorageContext().getFilesDir(), "nativecomplements");
+            return new File(android.os.Environment.getDataDirectory(), "system/"+ModuleIdentity.CURRENT.hostStorageName());
+        return new File(context.createDeviceProtectedStorageContext().getFilesDir(), ModuleIdentity.CURRENT.hostStorageName());
     }
 
     /** reader 在调用线程上执行且不持有本对象的锁；调用方负责在 Binder 安全的工作线程上调用。 */

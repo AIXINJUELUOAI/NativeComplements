@@ -283,7 +283,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final Runnable iconsReloaded=()->main.post(()->{if(!cleaned)loadApps();});
     private void initialize() {
         cleaned=false;connected=true;live=this;
-        Config.hostPreferences=getSharedPreferences("nativecomplements_corner",Context.MODE_PRIVATE);
+        Config.hostPreferences=getSharedPreferences(Config.HOST_PREFERENCES,Context.MODE_PRIVATE);
         config=new Config(this);wm=getSystemService(WindowManager.class);
         controls=new WindowControls(this);miniControls=new WindowControls(this);
         try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}

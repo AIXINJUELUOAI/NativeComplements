@@ -21,8 +21,8 @@ import org.json.*;
 final class WindowEngine {
     final FrameworkAccess a;
     private final Consumer<String> log;
-    private final AtomicFile journal = new AtomicFile(new File("/data/system/sunwindow-demo5.json"));
-    private final WindowOrientation orientations=new WindowOrientation(new File("/data/system/nativecomplements-window-orientation.json"));
+    private final AtomicFile journal = new AtomicFile(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.systemFile("sunwindow-demo5.json"));
+    private final WindowOrientation orientations=new WindowOrientation(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.systemFile("nativecomplements-window-orientation.json"));
     private final java.util.concurrent.atomic.AtomicBoolean orientationSaveQueued=new java.util.concurrent.atomic.AtomicBoolean();
     private boolean launchRoutingReady;
     void launchRoutingReady(){launchRoutingReady=true;}
@@ -98,7 +98,7 @@ final class WindowEngine {
     private long frameSequence;
     static final String HISTORY=Wire.PKG+".HISTORY",HISTORY_QUERY=Wire.PKG+".HISTORY_QUERY";
     private final WindowHistory history=new WindowHistory();
-    private final AtomicFile historyFile=new AtomicFile(new File("/data/system/sunwindow-hidden-tasks.json"));
+    private final AtomicFile historyFile=new AtomicFile(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.systemFile("sunwindow-hidden-tasks.json"));
     private final java.util.Map<Integer,Long> fullscreenSeen=new java.util.HashMap<>();
     private final PathInterpolator modeCurve=new PathInterpolator(.2f,0,0,1);
     private final Binder controlChannel=new Binder(){

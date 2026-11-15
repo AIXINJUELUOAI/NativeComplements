@@ -10,6 +10,7 @@ import java.util.Set;
 public final class Config {
     static final int MAX_TARGETS=12;
     static final int DEFAULT_WINDOW_DIM=20;
+    public static final String HOST_PREFERENCES=dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.hostPreferences();
     final SharedPreferences prefs;
     static volatile SharedPreferences hostPreferences;
     public Config(Context c) {

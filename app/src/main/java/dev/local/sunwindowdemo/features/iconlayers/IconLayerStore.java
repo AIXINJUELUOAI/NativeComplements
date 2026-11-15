@@ -12,9 +12,9 @@ public final class IconLayerStore {
     public static final String TARGET = "dev.local.nativecomplements.lab";
     public static final String LAUNCHER = "com.google.android.apps.nexuslauncher";
     public static final String SYSTEM_UI = "com.android.systemui";
-    public static final String REFRESH = "dev.nativecomplements.module.ICON_LAYERS_REFRESH";
-    public static final String CONTROL = "dev.nativecomplements.module.CONTROL";
-    public static final Uri URI = Uri.parse("content://dev.nativecomplements.module.iconlayers/config");
+    public static final String REFRESH = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.action("ICON_LAYERS_REFRESH");
+    public static final String CONTROL = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.controlPermission();
+    public static final Uri URI = Uri.parse("content://"+dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.authority("iconlayers")+"/config");
 
     public static SharedPreferences prefs(Context c) {
         return c.createDeviceProtectedStorageContext().getSharedPreferences("icon_layers", 0);
