@@ -4,16 +4,20 @@
 
 **同源独立小窗版正在实施，不是可用/全部解耦/LOS 兼容公告。** 已 push：`3afdb01` 的纯 WindowPresentation + Android 执行分界；`58f39f9` 的真实 Freeform correlated STATUS gate（不自动改设置）与 single Properties owner 隔离；`bd3aafb` 的独立 [LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>)。owner 门控用于避免重复接管，不等于任意 OEM 原生小窗均可安全共存。
 
-### 未 commit、已落工作区的产品边界
+### `a6da12a` 已 commit 并 push 的产品边界
+
+推送 main 的 receipt 已确认 `bd3aafb..a6da12a`。
 
 - [构建配置](<../../app/build.gradle.kts>) 已有 `full` / `window` productFlavors，主包保留 `dev.nativecomplements.module`，window 为 `dev.nativecomplements.window`；同源同一 [WindowEngine](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java>)，未复制状态机。
-- C1 [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>) / [AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>) 已分出接管规则与 native 读取。C2 controls / group / navigation / recovery / input 待后续，不把一条接管/呈现链当整个引擎解耦。
+- C1 [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>) / [AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>) 已分出接管规则与 native 读取。不把一条接管/呈现链当整个引擎解耦，新增冻结项与剩余闭环见下。
 - 多功能导航已从 main 移到 [full ModuleApp](<../../app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)；[Page](<../../app/src/main/java/dev/local/sunwindowdemo/navigation/Page.kt>) 仍共享，[window ModuleApp](<../../app/src/window/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>) 为新窄入口。
 - main 注册表已移到 [full java_init.list](<../../app/src/full/resources/META-INF/xposed/java_init.list>)（7 entry）；[window java_init.list](<../../app/src/window/resources/META-INF/xposed/java_init.list>) 为 4 entry：SunWindowModule、LauncherGuard、BackBridge，加 [LauncherThemeModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeModule.java>)。[scope.list](<../../app/src/main/resources/META-INF/xposed/scope.list>) 仍在 main，仍是原三系统作用域。
-- [HostExtras](<../../app/src/main/java/dev/local/sunwindowdemo/HostExtras.java>) 与 [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>) / [window ProductFeatures](<../../app/src/window/java/dev/local/sunwindowdemo/ProductFeatures.java>) 是真实源集隔离非小窗实现，不是隐藏 UI 或仅靠常量等 R8 猜测删除。尚须完整 release R8/产物核验，不把源码集隔离写作已交付瘦身证明。
+- [HostExtras](<../../app/src/main/java/dev/local/sunwindowdemo/HostExtras.java>) 与 [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>) / [window ProductFeatures](<../../app/src/window/java/dev/local/sunwindowdemo/ProductFeatures.java>) 是真实源集隔离非小窗实现，不是隐藏 UI 或仅靠常量等 R8 猜测删除。该阶段完整 release/R8 与产物边界核验已通过，但不等于整轮最终交付或设备可用。
 - window 的 [WindowIconProvider](<../../app/src/window/java/dev/local/sunwindowdemo/features/iconlayers/WindowIconProvider.java>) 只保留 native mono / Monet 窄桥接；主题状态由独立 reporter 链提供，不带 drawer、图标库或生成入口。它不承诺与 full 的导入素材/强转生成图标能力等价。
 
-已 push 阶段的单测证据为 **345 pass**；当前工作区完整双单测 **full 353 / window 348 均 0 失败**，双 release/R8、原签名/身份/scope/入口/快捷方式及禁止非小窗 Hook 的 DEX 核验通过；仍为阶段产物，未做设备回归。没有新增设备可用性或 LOS 兼容结论。主题报告或 IPC 失效时可能保留旧主题状态与图标快照；沿用既有快照语义，不保证任意主题故障均立即关闭。后续 LOS 贡献先等我们完成 refactor，再由贡献者 fork / adapt / test PR，我们 review + 现设备回归后才决定 merge，详见 [当前总览](<README.md>)。
+`a6da12a` 阶段完整双单测 **full 353 / window 348 均 0 失败**，双 release/R8、原签名/身份/scope/入口/快捷方式及禁止非小窗 Hook 的 DEX 核验通过；345 pass 为更早历史证据。仍为阶段产物，未做设备回归。
+
+`004aa43` 已 commit 并 push C2 WindowControl、C3a LongBackGesture及 OpenWaitState，完整双单测 full 368 / window 363 零失败，基线/主机及归档接口检查通过。仍剩5闭环：导航 native ticket / pure WindowNavigation 与 Policy Object 签名改 facts、recovery boot/retry、tick lease/screen schedule、Host 不同入口 admission、BackBridge C3b handoff generation/idle/timeout。复用已有 Geometry/Rules/CornerGesture/GestureGate/History/LaunchCoverFlow；native AtomicFile/Parcel/WM/Binder 留适配侧不算业务未解耦。没有新增设备可用性或 LOS 兼容结论。主题报告或 IPC 失效时可能保留旧主题状态与图标快照；沿用既有快照语义，不保证任意主题故障均立即关闭。后续 LOS 贡献先等我们完成 refactor，再由贡献者 fork / adapt / test PR，我们 review + 现设备回归后才决定 merge，详见 [当前总览](<README.md>)。
 
 ## 138 历史审计（以下正文）
 

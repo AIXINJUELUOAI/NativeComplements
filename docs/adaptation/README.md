@@ -10,16 +10,32 @@
 - `58f39f9`：启用前使用真实 Freeform 能力与 correlated STATUS 请求/响应门控，不自动修改系统设置；以 single Properties owner 隔离重复接管，保留主包身份和恢复含义。这不是任意 OEM 原生小窗的通用共存协议。
 - `bd3aafb`：[LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>) 独立，不再把系统主题状态上报绑定到抽屉莫奈安装。
 
-### 已落工作区、尚未 commit 的边界
+### `a6da12a` 已提交并 push 的边界
 
 - C1 接管规则已落 [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>) 与 [AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>)；共用同一 [WindowEngine](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java>)，不是复制引擎。
 - Gradle 增加 `full` / `window` productFlavors；[full ModuleApp](<../../app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>) 从 main 迁出，[Page](<../../app/src/main/java/dev/local/sunwindowdemo/navigation/Page.kt>) 仍共享，[window ModuleApp](<../../app/src/window/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>) 是窄小窗入口。
 - 注册表改为 [full java_init.list](<../../app/src/full/resources/META-INF/xposed/java_init.list>) 与 [window java_init.list](<../../app/src/window/resources/META-INF/xposed/java_init.list>)；window 为 4 entry（3 个小窗入口 + [LauncherThemeModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeModule.java>)），[scope.list](<../../app/src/main/resources/META-INF/xposed/scope.list>) 仍在 main、保留原三个系统作用域。
 - [HostExtras](<../../app/src/main/java/dev/local/sunwindowdemo/HostExtras.java>) 契约配合 [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>) / [window ProductFeatures](<../../app/src/window/java/dev/local/sunwindowdemo/ProductFeatures.java>) 真实源集隔离非小窗宿主实现，不只是隐藏页面或加运行时布尔量。window 的 [WindowIconProvider](<../../app/src/window/java/dev/local/sunwindowdemo/features/iconlayers/WindowIconProvider.java>) 是 native mono / Monet 的窄桥接，不带抽屉、图标库或生成入口；不是 full 图标能力等价品。
 
-### 验证边界与后续
+推送 receipt 已确认 `bd3aafb..a6da12a` 到 main。该阶段完整单测 **full 353 / window 348，均 0 失败**，双 release/R8 及 APK 原签名、身份、三系统 scope、四/七入口、快捷方式与禁止非小窗 Hook 的 DEX 边界核验通过；345 pass 是更早阶段证据。未操作设备，生成包仍是阶段检查产物。
 
-已 push 阶段的单测证据为 **345 pass**；当前工作区双 flavor 完整单测为 **full 353 / window 348，均 0 失败**。双 release/R8 构建及最终 APK 的原签名、身份、三系统 scope、四/七入口、快捷方式与禁止非小窗 Hook 的 DEX 边界核验已通过；未操作设备，生成包是阶段检查产物而非整轮最终交付。C2 controls / group / navigation / recovery / input 仍待后续，不能据呈现、C1 或打包边界声称全部解耦。编译、单测、R8、当前设备回归和目标系统验证必须分开记录。
+### `004aa43` 已提交并 push 的规则状态边界
+
+- C2 [WindowControl](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowControl.java>)：控制路由、形态/分组与几何规则，6 组测试。
+- C3a [LongBackGesture](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LongBackGesture.java>)：长返回识别状态，5 组测试；原生接纳/取消仍在适配侧。
+- [OpenWaitState](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/OpenWaitState.java>)：等待请求与取消 token 归属，4 组测试。
+
+推送 receipt：`a6da12a..004aa43` 到 main。完整双全测 **full 368 / window 363，均零失败**；基线/全部主机规则与归档接口检查通过。此阶段未重新发布 APK；之后未提交改动不得沿用该结果。
+
+### 仍剩 5 个闭环
+
+1. 导航 native ticket 与纯 [WindowNavigation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowNavigation.java>) 分界，以及 [WindowPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowPolicy.java>) 的 Object 签名改 facts。
+2. recovery 的 boot/retry 决策。
+3. tick 的 lease/screen 调度。
+4. Host 不同入口的 admission。
+5. BackBridge C3b 的 handoff generation/idle/timeout。
+
+复用已有 Geometry、Rules、CornerGesture、GestureGate、History、LaunchCoverFlow，不重复重写；native AtomicFile、Parcel、WM、Binder 留在适配侧，不据此判为业务未解耦。上述未闭环前不称全部解耦、独立版可用或 LOS 兼容；编译、单测、R8、当前设备回归和目标系统验证分开记录。
 
 未来 LOS 贡献顺序：**先由我们完成 refactor → 贡献者再 fork / adapt / test 并提交 PR → 我们 review 并做现设备回归 → 最后决定 merge**。不在当前未冻结边界上承诺适配完成，不凭 ROM 名或 Freeform 开关宣称兼容。
 
