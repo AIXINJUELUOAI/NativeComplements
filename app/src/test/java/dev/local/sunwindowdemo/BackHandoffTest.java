@@ -141,7 +141,7 @@ public class BackHandoffTest {
     private boolean commit(SystemUiHost host,String token)throws Exception {
         Parcel data=Parcel.obtain(),reply=Parcel.obtain();
         try{
-            data.writeInterfaceToken("dev.nativecomplements.module.backLong.v1");data.writeInt(42);data.writeString("example.app");data.writeString(token);
+            data.writeInterfaceToken(BackBridge.CHANNEL);data.writeInt(42);data.writeString("example.app");data.writeString(token);
             assertTrue(((Binder)get(host,"dropChannel")).transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0));
             reply.readException();return reply.readBoolean();
         }finally{data.recycle();reply.recycle();}

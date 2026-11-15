@@ -219,22 +219,17 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void hideControls(){if(controls!=null)controls.hide();if(miniControls!=null)miniControls.hide();}
     private boolean normalOccupied;
     private boolean dropAvailable(){return "idle".equals(backendState)||"recovery".equals(backendState)||"active".equals(backendState)&&!normalOccupied;}
-    private SuggestionHost suggestions;
+    private volatile HostExtras extras;
     private WindowQuickHost quick;
-    private BarrageHost barrage;
     private View menuContent;
     private int suggestionImeTop=Integer.MAX_VALUE;
     void suggestionNotification(android.service.notification.NotificationListenerService source,android.service.notification.StatusBarNotification notification){
-        main.post(()->{if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);});
+        main.post(()->{if(extras!=null)extras.notification(source,notification);});
     }
-    void suggestionNotificationRemoved(android.service.notification.StatusBarNotification notification){main.post(()->{if(suggestions!=null)suggestions.notificationRemoved(notification.getKey());if(barrage!=null)barrage.notificationRemoved(notification);});}
-    boolean rotationSuggestion(Runnable click,Runnable restore){
-        if(suggestions==null){RotationDiagnostics.update("host","建议宿主未初始化");return false;}
-        return suggestions.rotationSuggestion(click,restore);
-    }
-    void publishRotationSettings(){if(suggestions!=null)suggestions.publishRotationSettings();}
-    private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
-    boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
+    void suggestionNotificationRemoved(android.service.notification.StatusBarNotification notification){main.post(()->{if(extras!=null)extras.notificationRemoved(notification);});}
+    boolean rotationSuggestion(Runnable click,Runnable restore){return extras!=null&&extras.rotationSuggestion(click,restore);}
+    void publishRotationSettings(){if(extras!=null)extras.publishRotationSettings();}
+    boolean blocksEdgeTouch(float x,float y){return extras!=null&&extras.blocksEdgeTouch(x,y);}
     private volatile boolean backendReady;
     private volatile String backendState="";
     private final BroadcastReceiver backendReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
@@ -293,13 +288,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         Config.hostPreferences=getSharedPreferences(Config.HOST_PREFERENCES,Context.MODE_PRIVATE);
         config=new Config(this);wm=getSystemService(WindowManager.class);
         controls=new WindowControls(this);miniControls=new WindowControls(this);
-        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
-            try{suggestions=new SuggestionHost(getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
-            edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(getApplicationContext());
-        }
+        extras=ProductFeatures.hostExtras(this);
+        extras.startCompanions();
         quick=new WindowQuickHost(this,()->{hidePanel();hideFan();},()->{hidePanel();hideFan();floatCurrent(0,true);});
-        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())
-            try{barrage=new BarrageHost(this);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}
+        extras.startBarrage();
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
         Wire.send(this,"STATUS");
@@ -334,11 +326,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             int next=screenshotVisible||systemFocus?p.flags|mask:p.flags&~mask;
             if(next!=p.flags){p.flags=next;try{wm.updateViewLayout(overlay,p);}catch(RuntimeException ignored){}}
         }
-        if(barrage!=null)barrage.environment(foreground,BarrageHost.shouldSuspend(systemFocus,systemOverlayTitle,keyboard,panel!=null,openWait!=null));
-        if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panel!=null||openWait!=null,suggestionImeTop);
+        if(extras!=null)extras.environment(foreground,systemFocus,systemOverlayTitle,keyboard,screenshotVisible,panel!=null,openWait!=null,suggestionImeTop);
         if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);
         if(miniControls!=null)miniControls.systemOverlay(screenshotVisible||systemFocus);
-        if(edgeTouch!=null)edgeTouch.setEnvironment(screenshotVisible||systemFocus,keyboard);
+        if(extras!=null)extras.edgeEnvironment(screenshotVisible||systemFocus,keyboard);
     }
     private boolean allowed() {
         if(config==null||!settingsReady||!config.enabled()||!backendReady||cleaned||screenshotVisible||systemFocus||!getSystemService(android.os.PowerManager.class).isInteractive())return false;
@@ -412,10 +403,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         int primaryLength=handles.length;handles=java.util.Arrays.copyOf(handles,primaryLength+miniHandles.length);
         System.arraycopy(miniHandles,0,handles,primaryLength,miniHandles.length);
         rects=java.util.Arrays.copyOf(rects,count);
-        if(edgeTouch!=null){
+        if(extras!=null){
             int[] protectedAreas=java.util.Arrays.copyOf(rects,count+handles.length);
             System.arraycopy(handles,0,protectedAreas,count,handles.length);
-            edgeTouch.setProtectedRects(protectedAreas);
+            extras.protectedRects(protectedAreas);
         }
         enabled=(enabled&&count>0)||handles.length>0;
         android.graphics.Rect bounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();
@@ -607,5 +598,5 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     @Override public void onConfigurationChanged(Configuration c){cancelOpenWait();hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(barrage!=null){barrage.close();barrage=null;}if(quick!=null){quick.close();quick=null;}if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
+    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(extras!=null)extras.closeBarrage();if(quick!=null){quick.close();quick=null;}if(extras!=null)extras.close();settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
 }

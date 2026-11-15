@@ -1,6 +1,16 @@
 # 系统功能接入与适配边界（非小窗主体）
 
-> 审计基线：`main` / `930a22c`，versionCode 138（0.9.48-fixes-test2）。本页记录现有实现，不新增功能、不改变 Hook、不开启任何设备能力。本页作者仅阅读源码与检查脚本，并检查本页本地链接，未构建或访问设备；本轮归档/基线检查执行结果由 Lead 汇总。小窗服务端、视口、转场与安全窗口主体由小窗专项文档负责；这里说明它们与其他功能共享的入口和状态依赖。
+## 当前实施状态：0.10.0 / code139
+
+已 push：`3afdb01` 呈现规则/Android 执行分界；`58f39f9` 真实 Freeform correlated STATUS gate + single Properties owner 隔离；`bd3aafb` 独立 [LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>)，主题上报不再依附抽屉莫奈。其他功能重构与 Alive 仍暂缓。
+
+未 commit 工作区已落 C1 admission、同 Engine 的 full/window flavors、[HostExtras](<../../app/src/main/java/dev/local/sunwindowdemo/HostExtras.java>) + [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>) / [window ProductFeatures](<../../app/src/window/java/dev/local/sunwindowdemo/ProductFeatures.java>) 真实源集隔离非小窗实现。full 保留 [7 entry](<../../app/src/full/resources/META-INF/xposed/java_init.list>)，window 是 [4 entry](<../../app/src/window/resources/META-INF/xposed/java_init.list>)（3 window + LauncherThemeModule），main 三系统 scope 不变；不是删页面或只加常量。window [WindowIconProvider](<../../app/src/window/java/dev/local/sunwindowdemo/features/iconlayers/WindowIconProvider.java>) 仅为 native mono / Monet 窄桥接，不带 drawer、图标库或生成入口，不应套用下文 full 历史素材政策。
+
+已 push 阶段单测证据为 345 pass；当前工作区完整双单测 full 353 / window 348 均 0 失败，双 release/R8、原签名/身份/scope/入口/快捷方式及禁止非小窗 Hook 的 DEX 核验通过；仍为阶段产物，未做设备回归。C2 controls / group / navigation / recovery / input 后续再做；不称全部解耦、独立版可用或 LOS 兼容。未来我们完成 refactor 后，LOS 贡献者再 fork / adapt / test PR，经我们 review + 现设备回归后决定 merge。详见 [当前总览](<README.md>)。
+
+## 138 历史审计（以下正文）
+
+> 审计基线：`main` / `930a22c`，versionCode 138（0.9.48-fixes-test2）。以下保留当时源码审计、共享依赖与证据缺口，含“当前/未拆分”等表述均按历史阅读，不代表现状态。源码链接已迁移到现路径、去除不可靠行锚，仅是定位参考，不是旧 snapshot 的精确函数内容。本页原审计仅阅读源码与检查脚本，未构建或访问设备；当时归档/基线检查由 Lead 汇总。小窗主体见专项文档。
 
 ## 1. 如何理解“支持”
 
@@ -17,23 +27,23 @@
 
 ## 2. 安装入口总图与共享状态
 
-正式入口由 [java_init.list](<../../app/src/main/resources/META-INF/xposed/java_init.list>) 列出的七个类构成。作用域由 [scope.list](<../../app/src/main/resources/META-INF/xposed/scope.list>) 与 [module.prop](<../../app/src/main/resources/META-INF/xposed/module.prop>) 固定为 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`，API101、`staticScope=true`。静态范围是否限制选择或清理旧授权是框架实现，不由本模块直接写 LSPosed 数据库。
+正式入口由 [java_init.list](<../../app/src/full/resources/META-INF/xposed/java_init.list>) 列出的七个类构成。作用域由 [scope.list](<../../app/src/main/resources/META-INF/xposed/scope.list>) 与 [module.prop](<../../app/src/main/resources/META-INF/xposed/module.prop>) 固定为 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`，API101、`staticScope=true`。静态范围是否限制选择或清理旧授权是框架实现，不由本模块直接写 LSPosed 数据库。
 
 | 入口 | 精确进程/生命周期门控 | 本页负责的委托 |
 |---|---|---|
-| [SunWindowModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java#L9-L54>) | `isSystemServer()`；`onSystemServerStarting` 只尝试一次 | 亮屏建议 `installUndimSuggestion`、`EdgeInputFilter.install`、`MotionAccess.install` 在小窗 `FrameworkAccess` 大块安装前独立尝试 |
-| [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L35-L109>) | 仅 SystemUI 主进程/包；安装一次 | Application 创建后连接 shade/offset/signal/rotation/host；独立安装输入 admission、通知观察、录屏适配；随后安装长返回与截图优先级 |
-| [LauncherGuard](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LauncherGuard.java#L26-L68>) | Pixel 包主进程及 `包名:` 子进程被允许；包匹配、一次尝试 | Launcher 旋转建议先独立安装；触摸服务 guard 成功后安装 BackVisual、独立可选 RecentsFilter |
-| [CallBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingModule.java#L35-L102>) | system_server，独立于小窗入口 | Telecom 来电过滤 |
-| [IconLayerModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java#L41-L98>) | Pixel Launcher **主进程**/包，一次安装 | 桌面素材、抽屉莫奈、可选 FloatingIconView 动画素材 |
-| [SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java#L24-L39>) | SystemUI **主进程**/包，一次安装 | 通知图标、原生应用 splash |
+| [SunWindowModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>) | `isSystemServer()`；`onSystemServerStarting` 只尝试一次 | 亮屏建议 `installUndimSuggestion`、`EdgeInputFilter.install`、`MotionAccess.install` 在小窗 `FrameworkAccess` 大块安装前独立尝试 |
+| [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>) | 仅 SystemUI 主进程/包；安装一次 | Application 创建后连接 shade/offset/signal/rotation/host；独立安装输入 admission、通知观察、录屏适配；随后安装长返回与截图优先级 |
+| [LauncherGuard](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LauncherGuard.java>) | Pixel 包主进程及 `包名:` 子进程被允许；包匹配、一次尝试 | Launcher 旋转建议先独立安装；触摸服务 guard 成功后安装 BackVisual、独立可选 RecentsFilter |
+| [CallBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingModule.java>) | system_server，独立于小窗入口 | Telecom 来电过滤 |
+| [IconLayerModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java>) | Pixel Launcher **主进程**/包，一次安装 | 桌面素材、抽屉莫奈、可选 FloatingIconView 动画素材 |
+| [SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>) | SystemUI **主进程**/包，一次安装 | 通知图标、原生应用 splash |
 | [NavbarModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/navbar/NavbarModule.java>) | SystemUI 或 Pixel Launcher **主进程**/包；非 server | 两个精确导航 owner 后端，不存在普通应用或 system_server 导航 Hook |
 
 ### 独立开关不等于零宿主依赖
 
 - shade、状态栏位置/缩放、signal 可由 Application 创建回调连接，不需要小窗后端先连接成功。导航有自己的 Application 回调、配置线程和 Provider。
-- 弹幕、快捷建议、边缘防误触 UI 由 [SystemUiHost.initialize](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java#L284-L306>) 创建。它们不受小窗总开关控制，但**仍依赖共享 SystemUiHost 能启动**。其前台包、IME、系统面板/截图环境来自 [updateOverlayPriority](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java#L321-L331>)；这是共享环境观察，不是各功能自行 Hook 所有窗口。
-- `BackBridge.connect` 在主线程启动宿主并以 3 秒重试；独立安装成功、宿主连接成功、配置可读、真正命中是不同状态。[连接实现](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L250-L271>)
+- 弹幕、快捷建议、边缘防误触 UI 由 [SystemUiHost.initialize](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>) 创建。它们不受小窗总开关控制，但**仍依赖共享 SystemUiHost 能启动**。其前台包、IME、系统面板/截图环境来自 [updateOverlayPriority](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)；这是共享环境观察，不是各功能自行 Hook 所有窗口。
+- `BackBridge.connect` 在主线程启动宿主并以 3 秒重试；独立安装成功、宿主连接成功、配置可读、真正命中是不同状态。[连接实现](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)
 - [HostSnapshot](<../../app/src/main/java/dev/local/sunwindowdemo/core/HostSnapshot.java>) 是多功能宿主最后完整配置的复用点；不是统一业务规则引擎。导航有意不使用其持久旧值：配置读失败发布关闭、5 秒重试，避免失联时残留沉浸。
 - `PROTECTIVE` 是 libxposed 回调异常模式，不等于业务状态自动回滚、已修改字段自动恢复或全部 Hook 可动态卸载。下面按真实局部实现注明差异。
 
@@ -56,18 +66,18 @@
 
 ### 4.1 Launcher 素材、缓存与动画
 
-[IconLayerModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java#L45-L136>) 的基础 Hook：
+[IconLayerModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java>) 的基础 Hook：
 
 - `com.android.launcher3.icons.IconProvider.getIcon(PackageItemInfo,ApplicationInfo,int): Drawable` after；`LauncherActivityInfo.getIcon(int)` / `getBadgedIcon(int)` after。当前用户才替换，缺素材走原生。
 - `Application.attach(Context)` after 连接配置、素材 worker。基础安装失败撤销该列表 handles。
 - 可选 `FloatingIconView.setIcon(Drawable,Drawable,Supplier,int,boolean)`：从 `mIconLoadResult.itemInfo/isThemed` 识别当前用户目标，native-themed 不强替换；通过原生 setIcon 接收独立 adaptive 背景/前景，检查 `mClipIconView.mBackground/mForeground`；可选入口失败不停止基础素材路径。
-- [原生刷新](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java#L225-L263>) 不是新 Hook：`LauncherAppState.INSTANCE.get(Context)`→`iconCache/model`，在 `BaseIconCache.workerHandler` 调 `removeIconsForPkg(UserHandle,String)`、model callbacks `onPackageChanged(String,UserHandle)`；main 清 `FloatingIconView.sIconLoadResult`。失败报告“请重启桌面”，不能宣称一定热恢复。
+- [原生刷新](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java>) 不是新 Hook：`LauncherAppState.INSTANCE.get(Context)`→`iconCache/model`，在 `BaseIconCache.workerHandler` 调 `removeIconsForPkg(UserHandle,String)`、model callbacks `onPackageChanged(String,UserHandle)`；main 清 `FloatingIconView.sIconLoadResult`。失败报告“请重启桌面”，不能宣称一定热恢复。
 
-[IconAssets](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconAssets.java#L14-L87>) 是各宿主独立静态实例的只读渲染快照，专用线程读取/解码/发布，热路径不做 Binder 或磁盘；素材发布、壁纸/配置、包、解锁变化触发失效/重读。`started(pkg)` 仅队列化 opt-in 算法素材生成，真正 Provider 生成在后台；它由小窗服务端已有 resume 观察调用，并不意味着对普通 app 安装 Hook。批量导入/生成的磁盘发布锁是 `IconPolicy.class`，不是 WM 锁。
+[IconAssets](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconAssets.java>) 是各宿主独立静态实例的只读渲染快照，专用线程读取/解码/发布，热路径不做 Binder 或磁盘；素材发布、壁纸/配置、包、解锁变化触发失效/重读。`started(pkg)` 仅队列化 opt-in 算法素材生成，真正 Provider 生成在后台；它由小窗服务端已有 resume 观察调用，并不意味着对普通 app 安装 Hook。批量导入/生成的磁盘发布锁是 `IconPolicy.class`，不是 WM 锁。
 
 ### 4.2 抽屉莫奈：仅原生绑定作用域
 
-[DrawerMonet.install](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/DrawerMonet.java#L40-L126>) 精确六处 Hook：
+[DrawerMonet.install](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/DrawerMonet.java>) 精确六处 Hook：
 
 | 入口 | 读/改与原生语义 |
 |---|---|
@@ -83,13 +93,13 @@
 
 ### 4.3 SystemUI 通知与原生应用 splash
 
-[SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java#L24-L99>)：`Application.attach(Context)` 连接失败直接停止该入口；通知与 splash 安装各自 `try/catch`，并无统一动态卸载管理器。
+[SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>)：`Application.attach(Context)` 连接失败直接停止该入口；通知与 splash 安装各自 `try/catch`，并无统一动态卸载管理器。
 
 - `StatusBarIconView.getIcon(StatusBarIcon)`：读 `mNotification/mShowsConversation/mOriginalStatusBarIconSize`；仅当前用户非 conversation 的 app 标识图标替换，以原生参考 canvas 尺寸归一；素材缺失走 native。素材刷新经 main 调 `updateDrawable(boolean)`，弱引用跟踪 view。
 - `SplashscreenContentDrawer$SplashViewBuilder.build(): SplashScreenView`：读 `mActivityInfo/mSuggestType/this$0`、outer `mTmpAttrs`。跳过 type3/4、跨用户/缺 owner。只在本次 native build 临时替换 `mSplashScreenIcon/mIconBgColor`，finally 原样恢复临时 attrs；图标获取只读宿主快照，不在 build 内加载包/解码/Binder。
 - 小窗 TaskCover 与 AppCatalog 的图标调用属于小窗展示，不另加系统图标 Hook；共用 [IconAssets](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconAssets.java>) 的 `cover/window` 策略。三个莫奈开关独立，均受 Launcher 上报的系统 themed 开关门控。模块 mono 优先、原生 monochrome 次之，缺两者时后台转换真实前景/完整图标；128px/32MiB 生成缓存有界，照片保留明暗；素材/direct-native 不因此降分辨率。这不是语义抠图或任意 app 主题注入。
 
-权限/共享边界：[IconLayerProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerProvider.java#L15-L55>) 对自身/同用户 Launcher/同用户 SystemUI/system UID授权完整图标快照及只读素材；`started` 仅 system UID；`report` 仅 Launcher；文件只能读已发布且被引用的路径。**“Launcher 仅得单布尔”专指 ShadeProvider 的 drawer 接口，不是 IconLayerProvider 全部接口**。[ShadeProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeProvider.java#L13-L36>) 的 `drawer` 仅自身/真实 Launcher UID，且只回 drawerMonet；普通 read 不给 Launcher。
+权限/共享边界：[IconLayerProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerProvider.java>) 对自身/同用户 Launcher/同用户 SystemUI/system UID授权完整图标快照及只读素材；`started` 仅 system UID；`report` 仅 Launcher；文件只能读已发布且被引用的路径。**“Launcher 仅得单布尔”专指 ShadeProvider 的 drawer 接口，不是 IconLayerProvider 全部接口**。[ShadeProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeProvider.java>) 的 `drawer` 仅自身/真实 Launcher UID，且只回 drawerMonet；普通 read 不给 Launcher。
 
 证据：[verify_icon_target.py](<../../tests/verify_icon_target.py>)（current SystemUI 图标/splash/scale，部分来自库存，scale 再读 hash 固定归档）、[verify_drawer_monet.py](<../../tests/verify_drawer_monet.py>)（QPR2 Launcher 原生绑定/主题位/素材调用链）、[verify_monet_targets.py](<../../tests/verify_monet_targets.py>)（QPR2 themed lookup/theme state，不能自动推出 current 全链）、[verify_test4_target.py](<../../tests/verify_test4_target.py>)（两构建 FloatingIconView 形状）。局部测试示例：[DrawerMonetTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/iconlayers/DrawerMonetTest.java>)、[IconAssetsTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/iconlayers/IconAssetsTest.java>)、[MonetSurfaceTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/iconlayers/MonetSurfaceTest.java>)、[IconImagesTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/iconlayers/IconImagesTest.java>)。
 
@@ -100,12 +110,12 @@
 [LandscapeShade](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/LandscapeShade.java>) 默认 off；条件为横屏且 `screenWidthDp>=600`，不改 DPI、不强开 Scene。
 
 - legacy：Hook `SplitShadeStateControllerImpl.shouldUseSplitNotificationShade(Resources): boolean` after，仅满足条件时将结果 true；Hook `NotificationPanelViewController.updateResources():void` after 和其全部构造，记住弱 owner，配置边沿 main 调原生 update。核实 panel 的 `mSplitShadeStateController/mResources`；若可读 `SceneContainerFlag.isEnabled()` 且 true 就拒装，缺 getter 仅接受已核实 legacy 形状，不写 flag。
-- ART：`updateResources` 必须 deopt 成功；[CALLERS/CONSTRUCTORS 清单](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/LandscapeShade.java#L121-L165>) 是完整现有 caller 选择。QS 和 NotificationsQSContainer 的 `updateResources()` 必须成功；后九个 media/lockscreen/stack/interactor/binder/remote-input caller 是逐项可选；构造 deopt 仅记录跳过。不是遍历所有 SystemUI 方法。
-- [ComposeShadeLayout](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ComposeShadeLayout.java#L22-L75>)：按字段 `legacyUseSplitShade` 或 `legacyUseSplitShade$delegate` 精确选择 legacy map emitter 或 Hydrated `ShadeConfigRepository$onActivated$2$1$1.emit(Object,Continuation)`；Hook emitter 和 interactor（legacy）/repository（Hydrated）构造设置 ThreadLocal；`Resources.getBoolean(int)` 仅在该作用域改宿主资源 `config_use_split_notification_shade` / `config_isFullWidthShade`，其余资源返回 native。保存 `ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1`，main 仅调用其 `onConfigChanged(Configuration)` 让原生流刷新。不写 readonly StateFlow/MutableState，不改磁贴列数。
+- ART：`updateResources` 必须 deopt 成功；[CALLERS/CONSTRUCTORS 清单](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/LandscapeShade.java>) 是完整现有 caller 选择。QS 和 NotificationsQSContainer 的 `updateResources()` 必须成功；后九个 media/lockscreen/stack/interactor/binder/remote-input caller 是逐项可选；构造 deopt 仅记录跳过。不是遍历所有 SystemUI 方法。
+- [ComposeShadeLayout](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ComposeShadeLayout.java>)：按字段 `legacyUseSplitShade` 或 `legacyUseSplitShade$delegate` 精确选择 legacy map emitter 或 Hydrated `ShadeConfigRepository$onActivated$2$1$1.emit(Object,Continuation)`；Hook emitter 和 interactor（legacy）/repository（Hydrated）构造设置 ThreadLocal；`Resources.getBoolean(int)` 仅在该作用域改宿主资源 `config_use_split_notification_shade` / `config_isFullWidthShade`，其余资源返回 native。保存 `ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1`，main 仅调用其 `onConfigChanged(Configuration)` 让原生流刷新。不写 readonly StateFlow/MutableState，不改磁贴列数。
 - 缺 legacy 方法进入精确 Hydrated 路径；Hydrated 仍缺成员则整体拒装。必需 deopt/Hook 失败撤销已装 handles、关闭；运行期 Compose/panel 刷新失败先关闭并尝试恢复原生，日志可能要求手动重启 SystemUI，不能说任何部分失败都无残留。
 - 配置 worker 读 HostSnapshot；主线程发起刷新。CHANGED 广播核验实际模块 UID。独立 Provider 仅自身/SystemUI full read。
 
-证据：[verify_target.py](<../../tests/verify_target.py#L200-L214>) 的 legacy 库存、[verify_test4_target.py](<../../tests/verify_test4_target.py#L109-L112>) 的两构建 repository/emitter 字段与签名；不代表任意 Scene 版本。局部规则/资源作用域测试：[ShadeTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/shade/ShadeTest.java>)。
+证据：[verify_target.py](<../../tests/verify_target.py>) 的 legacy 库存、[verify_test4_target.py](<../../tests/verify_test4_target.py>) 的两构建 repository/emitter 字段与签名；不代表任意 Scene 版本。局部规则/资源作用域测试：[ShadeTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/shade/ShadeTest.java>)。
 
 ### 5.2 状态栏内容位置与图标比例
 
@@ -113,7 +123,7 @@
 
 [StatusIconScale](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/StatusIconScale.java>) 可选 Hook `StatusBarIconView.onDraw(Canvas)`，读 `mNotification/mBundleEntry/mSlot/mIconScale`；仅通知及固定 system slot allowlist，不处理 BundleEntry/其他图标。80–120% 乘在 native scale 上，受当前可视范围限制；finally 恢复 `mIconScale`，100%原生无改。关闭/改值 main invalidate。安装前解析字段，缺失只跳过 scale；非完整独立 Hook 管理器。
 
-证据：[verify_icon_target.py](<../../tests/verify_icon_target.py#L30-L42>)；[StatusIconScaleTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/shade/StatusIconScaleTest.java>)、[StatusIconScaleStoreTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/shade/StatusIconScaleStoreTest.java>)。不宣称 Compose 图标全部经过此 View draw。
+证据：[verify_icon_target.py](<../../tests/verify_icon_target.py>)；[StatusIconScaleTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/shade/StatusIconScaleTest.java>)、[StatusIconScaleStoreTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/shade/StatusIconScaleStoreTest.java>)。不宣称 Compose 图标全部经过此 View draw。
 
 ### 5.3 信号显示：只改 presentation
 
@@ -130,7 +140,7 @@
 
 ## 6. 电话拦截：原生 Telecom 决策之后追加拒绝
 
-[CallBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingModule.java#L40-L102>) 独立 system_server 入口。预解析所有成员后才装：`CallsManager` 全构造 after 取 context；`CallsManager.onCallFilteringComplete(Call,CallFilteringResult,boolean):void` before/after。先读原结果 `shouldAllowCall:boolean`，**只有 native allow** 才判断；原 native block/ignore、screening 原因/response不覆盖。
+[CallBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingModule.java>) 独立 system_server 入口。预解析所有成员后才装：`CallsManager` 全构造 after 取 context；`CallsManager.onCallFilteringComplete(Call,CallFilteringResult,boolean):void` before/after。先读原结果 `shouldAllowCall:boolean`，**只有 native allow** 才判断；原 native block/ignore、screening 原因/response不覆盖。
 
 关键读取：Call 的 `isIncoming/isSelfManaged/isEmergencyCall/isInECBM/hasProperty(int)/getState/getAssociatedUser/getTargetPhoneAccount/getHandle/getHandlePresentation`；registrar 的 `getPhoneAccountUnchecked(PhoneAccountHandle)`、`getSubscriptionIdForPhoneAccount(PhoneAccountHandle):int`。按真实 PhoneAccount→active subscription→slot0/1，不轮询响铃猜 SIM；排除 emergency/ECBM/emergency SMS/self-managed/其他用户/非SIM、无法确定的状态。规则与重复来电窗口在 [CallBlockingRules](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingRules.java>)。
 
@@ -144,7 +154,7 @@
 
 ## 7. 弹幕通知：观察已投递消息，不抢通知投递
 
-唯一通知观察 Hook 共享 [BackBridge.installSuggestionNotifications](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L228-L247>)：
+唯一通知观察 Hook 共享 [BackBridge.installSuggestionNotifications](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)：
 
 - `com.android.systemui.statusbar.NotificationListener.onNotificationPosted(StatusBarNotification,RankingMap):void` after；`onNotificationRemoved(StatusBarNotification,RankingMap,int):void` after。
 - 核验其为 NotificationListenerService；缺入口撤销本 pair、原通知完全保留。连接宿主后转给弹幕/快捷建议，不 Hook 普通应用通知发送、不做投递前 NMS 拦截。
@@ -157,7 +167,7 @@
 
 ## 8. 边缘防误触：系统输入过滤 + 宿主租约/透明窗回退
 
-[EdgeInputFilter](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilter.java#L35-L90>) 的 system_server 三个 Hook：`InputManagerService.start():void` after建 host；`setInputFilter(IInputFilter):void` after同步；`filterInputEvent(InputEvent,int):boolean` 检查/筛选。预解析 `mNative/mInputFilterLock/mInputFilter/mContext`，native `setInputFilterEnabled(boolean)`、`injectInputEvent(InputEvent,boolean,int,int,int,int):int`，`MotionEvent.split(int)`、InputEvent.getDisplayId。
+[EdgeInputFilter](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilter.java>) 的 system_server 三个 Hook：`InputManagerService.start():void` after建 host；`setInputFilter(IInputFilter):void` after同步；`filterInputEvent(InputEvent,int):boolean` 检查/筛选。预解析 `mNative/mInputFilterLock/mInputFilter/mContext`，native `setInputFilterEnabled(boolean)`、`injectInputEvent(InputEvent,boolean,int,int,int,int):int`，`MotionEvent.split(int)`、InputEvent.getDisplayId。
 
 [EdgeInputPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputPolicy.java>) 按每根手指 DOWN决定整条流，支持 mixed pointer；全部保留走 native，全部拒绝回收event返回false；部分保留split。`mInputFilterLock` 下若已有 accessibility filter，交原生处理新event；否则用原有policy flags注入 native filtered事件，并正确回收。不能替换/清空无障碍 filter。注入异常/非零结果永久禁用该 host本功能、清区域/流，排main同步，不重复破坏系统输入。
 
@@ -165,25 +175,25 @@
 
 权限：[EdgeTouchProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeTouchProvider.java>) 仅自身/SystemUI实际UID只读。安装失败撤销server handles，UI仍可独立尝试fallback；宿主初始化失败移窗/不可用。
 
-证据：[verify_test4_target.py](<../../tests/verify_test4_target.py#L115-L125>) 两归档真实输入成员；[EdgeInputFilterTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilterTest.java>)、[EdgeInputPolicyTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputPolicyTest.java>)。输入锁、事件ownership/回收、已有过滤器链、租约丢失必须真机验证，JVM不能证明 InputDispatcher注入行为。
+证据：[verify_test4_target.py](<../../tests/verify_test4_target.py>) 两归档真实输入成员；[EdgeInputFilterTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilterTest.java>)、[EdgeInputPolicyTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputPolicyTest.java>)。输入锁、事件ownership/回收、已有过滤器链、租约丢失必须真机验证，JVM不能证明 InputDispatcher注入行为。
 
 ## 9. 加速度传感器控制：UID政策，不 Hook 应用传感器
 
-[MotionAccess](<../../app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionAccess.java#L32-L68>) Hook `ActivityRecord.setState(ActivityRecord.State,String):void` after；只有 RESUMED 且 `isFocusedActivityOnDisplay():boolean` 时读取 `getUid/getPid():int`与时间，**只投递 worker**，同 UID 页面切换不刷新首屏期限。此 optional安装在小窗 FrameworkAccess 大块之前，失败不停止小窗。
+[MotionAccess](<../../app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionAccess.java>) Hook `ActivityRecord.setState(ActivityRecord.State,String):void` after；只有 RESUMED 且 `isFocusedActivityOnDisplay():boolean` 时读取 `getUid/getPid():int`与时间，**只投递 worker**，同 UID 页面切换不刷新首屏期限。此 optional安装在小窗 FrameworkAccess 大块之前，失败不停止小窗。
 
 worker等待 `sys.boot_completed`，取 ActivityThread系统context；专用 [SensorCommand](<../../app/src/main/java/dev/local/sunwindowdemo/features/motion/SensorCommand.java>) 通过 `ServiceManager.getService("sensorservice")`→`IBinder.shellCommand(FileDescriptor,FileDescriptor,FileDescriptor,String[],ShellCallback,ResultReceiver):void`，不是启动shell进程。先只读get-uid-state探测，再按规则 `set-uid-state package idle --user 0` / `reset-uid-state package --user 0`，1500ms结果等待只在后台；clear identity finally恢复。**当前命令用户固定0，不据此声称多用户独立支持；SensorService“UID idle”能力的实际传感器覆盖由原生实现决定，不是逐个加速度事件过滤。**
 
 [MotionPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionPolicy.java>) 是可复用规则层；共享UID最强规则优先，排除system/persistent与模块/SystemUI/Launcher；重核package↔UID防复用，跟踪可能已应用但超时的命令，期限到期/关闭恢复，失败5秒重试。配置worker+HostSnapshot，若无可用完整配置则释放限制。后台commands/Provider均不进WM锁。[MotionProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionProvider.java>) read仅自身/1000，backend仅1000。
 
-证据：[verify_target.py](<../../tests/verify_target.py#L167-L184>) 包含foreground与shellCommand库存签名，**不验证 SensorService命令实现/返回码在任意发行版相同**；[MotionSettingsTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/motion/MotionSettingsTest.java>)。
+证据：[verify_target.py](<../../tests/verify_target.py>) 包含foreground与shellCommand库存签名，**不验证 SensorService命令实现/返回码在任意发行版相同**；[MotionSettingsTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/motion/MotionSettingsTest.java>)。
 
 ## 10. 快捷建议、旋转按钮与公共输入/Launcher桥接
 
 ### 10.1 快捷建议主要使用平台回调
 
-[SuggestionHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionHost.java#L106-L168>) 默认display overlay WindowContext、main管理可见窗与超时；worker读独立快照，关闭恢复旋转/释放wake lock。核心输入不是新的global Hook：ClipboardManager监听；CameraManager torch callback；AudioManager audio device callback；[SuggestionSmsReceiver](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionSmsReceiver.java>) 接收标准SMS_RECEIVED（需用户RECEIVE_SMS），只把命中OTP的≤4096字符内容以共享身份定向SystemUI，不拦截原短信存储、不日志记录正文；host接收验证对应发送UID。OTP/链接/地址识别在 [SuggestionRules](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionRules.java>)，音效独立 [SuggestionTones](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionTones.java>)。
+[SuggestionHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionHost.java>) 默认display overlay WindowContext、main管理可见窗与超时；worker读独立快照，关闭恢复旋转/释放wake lock。核心输入不是新的global Hook：ClipboardManager监听；CameraManager torch callback；AudioManager audio device callback；[SuggestionSmsReceiver](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionSmsReceiver.java>) 接收标准SMS_RECEIVED（需用户RECEIVE_SMS），只把命中OTP的≤4096字符内容以共享身份定向SystemUI，不拦截原短信存储、不日志记录正文；host接收验证对应发送UID。OTP/链接/地址识别在 [SuggestionRules](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionRules.java>)，音效独立 [SuggestionTones](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionTones.java>)。
 
-通知OTP隐藏共享第7节的after通知观察，只对默认短信包/同用户、能匹配已显示内容时取消；不确定保留原通知。亮屏建议来自 [SunWindowModule.installUndimSuggestion](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java#L13-L46>)：Hook `PowerManagerService.userActivityNoUpdateLocked(PowerGroup,long,int,int,int):boolean`，先读默认PowerGroup的dim/wake状态，native result true后才post main；1.5秒时效、互动且未锁屏才向SystemUI发共享身份AWAKE。**Locked回调只读状态，不在Power锁内做Provider/窗体工作**。安装失效只禁该建议源。
+通知OTP隐藏共享第7节的after通知观察，只对默认短信包/同用户、能匹配已显示内容时取消；不确定保留原通知。亮屏建议来自 [SunWindowModule.installUndimSuggestion](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>)：Hook `PowerManagerService.userActivityNoUpdateLocked(PowerGroup,long,int,int,int):boolean`，先读默认PowerGroup的dim/wake状态，native result true后才post main；1.5秒时效、互动且未锁屏才向SystemUI发共享身份AWAKE。**Locked回调只读状态，不在Power锁内做Provider/窗体工作**。安装失效只禁该建议源。
 
 [SuggestionProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionProvider.java>) 仅自身/SystemUI实际UID；read配置，rotation_status仅允许固定短字符串键，不是任意偏好写接口。局部测试：[SuggestionRulesTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/suggestions/SuggestionRulesTest.java>)、[SuggestionTonesTest](<../../app/src/test/java/dev/local/sunwindowdemo/features/suggestions/SuggestionTonesTest.kt>)。本页未发现涵盖完整PowerGroup建议源的专用归档预检，不能把运行时自检当外部构建验证。
 
@@ -203,17 +213,17 @@ worker等待 `sys.boot_completed`，取 ActivityThread系统context；专用 [Se
 
 | 安装块 | 精确主要 Hook/依赖 | 边界与失败策略 |
 |---|---|---|
-| BackPanel 长返回 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L64-L109>)：`BackPanelController.onMotionEvent(MotionEvent)/onViewAttached()/onDestroy()`；`EdgeBackGestureHandler.dispatchToBackAnimation(MotionEvent)`；callback.cancelBack，allow/log/rejected booleans；native输入adapter `invoke(Object)` deopt必需 | 只延长已被native接受的back流、匹配owner/downTime，commit前将物理UP替为CANCEL；主线程/lease/generation门控。安装四handle块失败撤销该块，不撤销此前独立功能 |
-| SystemUI InputMonitor admission | [安装实现](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L164-L226>)：DisplayBackGestureHandlerImpl.onInputEvent真实字段类型（接口时已核实lambda20）→`invoke(Object):Object`；owner.f$0、mDisplayBackGestureHandlers、cancelGesture(MotionEvent)、Unit.INSTANCE、InputMonitorCompat.mInputMonitor.pilferPointers() | 默认display；宿主决定corner stream，达到阈值才pilfer；对防误触流cancel，保留外层finishInputEvent。异常atomic active=false回native，不影响edge server filter |
-| Launcher 角落stream guard | [LauncherGuard](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LauncherGuard.java#L29-L94>)：`TouchInteractionHandler.onInputEvent(InputEvent):void`、`TouchInteractionService.onCreate()/onDestroy()` | GestureGate只吞明确已拥有的finger stream，其他来源/显示器原生；广播核验SystemUI实际UID、几何与lease；服务销毁清门控。三handle安装失败撤销本块 |
-| 预览交接 | [BackVisual](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackVisual.java#L34-L78>)：`LauncherBackAnimationController.applyTransform(RectF,float)` after、`onCancelFinished()`；mBackTarget taskId/leash/mStartRect | 只新鲜匹配task与有效surface，Binder仅SystemUI可读/认领；认领短时隐藏该leash，恢复原生depth；可选失败局部撤销，不全局改返回动画 |
+| BackPanel 长返回 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)：`BackPanelController.onMotionEvent(MotionEvent)/onViewAttached()/onDestroy()`；`EdgeBackGestureHandler.dispatchToBackAnimation(MotionEvent)`；callback.cancelBack，allow/log/rejected booleans；native输入adapter `invoke(Object)` deopt必需 | 只延长已被native接受的back流、匹配owner/downTime，commit前将物理UP替为CANCEL；主线程/lease/generation门控。安装四handle块失败撤销该块，不撤销此前独立功能 |
+| SystemUI InputMonitor admission | [安装实现](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)：DisplayBackGestureHandlerImpl.onInputEvent真实字段类型（接口时已核实lambda20）→`invoke(Object):Object`；owner.f$0、mDisplayBackGestureHandlers、cancelGesture(MotionEvent)、Unit.INSTANCE、InputMonitorCompat.mInputMonitor.pilferPointers() | 默认display；宿主决定corner stream，达到阈值才pilfer；对防误触流cancel，保留外层finishInputEvent。异常atomic active=false回native，不影响edge server filter |
+| Launcher 角落stream guard | [LauncherGuard](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LauncherGuard.java>)：`TouchInteractionHandler.onInputEvent(InputEvent):void`、`TouchInteractionService.onCreate()/onDestroy()` | GestureGate只吞明确已拥有的finger stream，其他来源/显示器原生；广播核验SystemUI实际UID、几何与lease；服务销毁清门控。三handle安装失败撤销本块 |
+| 预览交接 | [BackVisual](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackVisual.java>)：`LauncherBackAnimationController.applyTransform(RectF,float)` after、`onCancelFinished()`；mBackTarget taskId/leash/mStartRect | 只新鲜匹配task与有效surface，Binder仅SystemUI可读/认领；认领短时隐藏该leash，恢复原生depth；可选失败局部撤销，不全局改返回动画 |
 | 历史任务卡 | [RecentsFilter](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/RecentsFilter.java>)：`RecentsView.applyLoadPlan(List,int)`、GroupTask.getTasks/containsTask(int)、reloadIfNeeded/mAppliedTaskListChangeId | 仅来自UID1000且协议匹配的owned hiddenTaskIds，单任务组过滤；保留原生running-task stub，多任务组不整体删；main刷新，安装异常只禁recents |
-| Shell finish与截图优先级 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L113-L158>) `Transitions.onFinish(IBinder,WindowContainerTransaction)`；读取known/mix/ActiveTransition start/finish/merged/info；[截图实现](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java#L280-L320>) `ScreenshotController.handleScreenshot` 唯一三参数且首参ScreenshotData、`ScreenshotWindow.removeWindow()` | finish仅匹配正在settling owned task，合并在native最后transaction；截图只观察实际decor attach，向自有宿主报告优先级。截图Hook有自身rollback，仅在长返回块成功后尝试；非全局安全窗口层级修改 |
+| Shell finish与截图优先级 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>) `Transitions.onFinish(IBinder,WindowContainerTransaction)`；读取known/mix/ActiveTransition start/finish/merged/info；[截图实现](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>) `ScreenshotController.handleScreenshot` 唯一三参数且首参ScreenshotData、`ScreenshotWindow.removeWindow()` | finish仅匹配正在settling owned task，合并在native最后transaction；截图只观察实际decor attach，向自有宿主报告优先级。截图Hook有自身rollback，仅在长返回块成功后尝试；非全局安全窗口层级修改 |
 | 快捷录屏/截图执行 | [WindowTools](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowTools.java>)：Hook `QSFactoryImpl.createTile(String):QSTile` after取factory；调用 `QSTileImpl.setTileSpec(String)/click(Expandable)` 与native screenrecord tile；截图按需 `InputManager.injectInputEvent(InputEvent,int)` SYSRQ down/up | 原生执行，不自建录屏会话或截图服务；optional失败返回false，录屏factory未观察到时不可用；从SystemUI UI调用，无后台WM锁内操作 |
 
 [GestureGate](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/GestureGate.java>)、原生输入admission与小窗owned-task规则是不同层次。发行版已有Freeform/厂商小窗必须识别**任务、会话和触摸流所有权**；不能为避免冲突全局禁Freeform、截断全部Launcher输入或修改其他来源任务。现有过滤/视觉交接也不是第三方小窗兼容保证。
 
-证据：[verify_target.py](<../../tests/verify_target.py>) 的部分录屏/输入/back-finish库存；[verify_test4_target.py](<../../tests/verify_test4_target.py#L85-L108>) 的current/QPR2 adapter差异、字段与调用形状。部分机制是读字段推导路径、部分deopt仅best effort，仍需实际ART/callback/gesture证据。
+证据：[verify_target.py](<../../tests/verify_target.py>) 的部分录屏/输入/back-finish库存；[verify_test4_target.py](<../../tests/verify_test4_target.py>) 的current/QPR2 adapter差异、字段与调用形状。部分机制是读字段推导路径、部分deopt仅best effort，仍需实际ART/callback/gesture证据。
 
 ## 11. 逻辑与系统执行分离：现状与后续审查单位
 

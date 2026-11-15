@@ -33,7 +33,7 @@ fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit, onLogs: () -> Unit 
     }
     Column(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Image(icon, contentDescription = null, modifier = Modifier.size(72.dp))
-        Text("类原生补全计划", Modifier.padding(top = 16.dp), style = MaterialTheme.typography.headlineSmall)
+        Text(context.getString(R.string.app_name), Modifier.padding(top = 16.dp), style = MaterialTheme.typography.headlineSmall)
         Text("版本 ${BuildConfig.VERSION_NAME}",
             Modifier.clickable { versionTaps++; if (versionTaps >= 7) toolsVisible = true }.padding(12.dp),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

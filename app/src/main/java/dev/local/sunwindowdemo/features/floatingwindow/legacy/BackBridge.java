@@ -41,27 +41,16 @@ public final class BackBridge extends XposedModule {
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object result=chain.proceed();Application app=(Application)chain.getArg(0);
                     if(PACKAGE.equals(app.getPackageName()))main.post(()->{
-                        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
-                        try{dev.local.sunwindowdemo.features.shade.LandscapeShade.connect(app);}
-                        catch(RuntimeException unavailable){note("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
-                        try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}
-                        catch(RuntimeException unavailable){note("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
-                        dev.local.sunwindowdemo.features.shade.SignalDisplay.connect(app);
-                        dev.local.sunwindowdemo.RotationSuggestion.connect(app);
-                        }
+                        ProductFeatures.connectSystemUi(app,this::note);
                         try{connect(app);}catch(Exception e){note("HOST_FAILED "+e);}
                     });
                     return result;
                 });
         }catch(Exception e){note("HOST_BOOT_HOOK_FAILED "+e);}
-        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
-        dev.local.sunwindowdemo.features.shade.LandscapeShade.install(this,p.getDefaultClassLoader(),this::note);
-        dev.local.sunwindowdemo.features.shade.StatusBarOffset.install(this,p.getDefaultClassLoader(),this::note);
-        dev.local.sunwindowdemo.features.shade.SignalDisplay.install(this,p.getDefaultClassLoader(),this::note);
-        dev.local.sunwindowdemo.RotationSuggestion.install(this,p.getDefaultClassLoader(),this::note);
+        ProductFeatures.installSystemUi(this,p.getDefaultClassLoader(),this::note);
+        // The native monitor also owns corner admission, not only the optional edge blocker.
         installEdgeTouchAdmission(p.getDefaultClassLoader());
-        installSuggestionNotifications(p.getDefaultClassLoader());
-        }
+        ProductFeatures.installNotifications(this,p.getDefaultClassLoader(),this::note);
         WindowTools.install(this,p.getDefaultClassLoader(),this::note);
         NotificationWindow.install(this,p.getDefaultClassLoader(),this::note);
         installBackFinish(p.getDefaultClassLoader());
@@ -228,26 +217,6 @@ public final class BackBridge extends XposedModule {
             note("CORNER_INPUT_READY native monitor; pilfer only after diagonal threshold");
             note("EDGE_BACK_ADMISSION_READY");
         }catch(Throwable failure){note("EDGE_BACK_ADMISSION_UNAVAILABLE "+failure.getClass().getSimpleName());}
-    }
-    private void installSuggestionNotifications(ClassLoader loader){
-        List<XposedInterface.HookHandle> installed=new ArrayList<>();
-        try{
-            Class<?> listener=Class.forName("com.android.systemui.statusbar.NotificationListener",false,loader);
-            if(!android.service.notification.NotificationListenerService.class.isAssignableFrom(listener))throw new NoSuchMethodException("notification service");
-            Method posted=listener.getDeclaredMethod("onNotificationPosted",android.service.notification.StatusBarNotification.class,android.service.notification.NotificationListenerService.RankingMap.class);
-            Method removed=listener.getDeclaredMethod("onNotificationRemoved",android.service.notification.StatusBarNotification.class,android.service.notification.NotificationListenerService.RankingMap.class,int.class);
-            if(posted.getReturnType()!=void.class||removed.getReturnType()!=void.class)throw new NoSuchMethodException("notification callbacks");
-            installed.add(hook(posted).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object result=chain.proceed();SystemUiHost host=SystemUiHost.live;
-                if(host!=null)host.suggestionNotification((android.service.notification.NotificationListenerService)chain.getThisObject(),(android.service.notification.StatusBarNotification)chain.getArg(0));return result;
-            }));
-            installed.add(hook(removed).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object result=chain.proceed();SystemUiHost host=SystemUiHost.live;
-                android.service.notification.StatusBarNotification notification=(android.service.notification.StatusBarNotification)chain.getArg(0);
-                if(host!=null&&notification!=null)host.suggestionNotificationRemoved(notification);return result;
-            }));
-            note("SUGGESTIONS_NOTIFICATIONS_READY");
-        }catch(Throwable unavailable){for(XposedInterface.HookHandle h:installed)try{h.unhook();}catch(Throwable ignored){}note("SUGGESTIONS_NOTIFICATIONS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
     }
     private synchronized void cancelStroke(Object owner){Stroke s=strokes.remove(owner);if(s!=null)preview(s,0);}
     private Runnable reconnect;

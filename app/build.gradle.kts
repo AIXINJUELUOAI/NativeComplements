@@ -14,6 +14,20 @@ android {
         versionCode = 139
         versionName = "0.10.0"
     }
+    flavorDimensions += "product"
+    productFlavors {
+        create("full") {
+            dimension = "product"
+            proguardFile("proguard-rules.pro")
+        }
+        create("window") {
+            dimension = "product"
+            applicationId = "dev.nativecomplements.window"
+            proguardFile("proguard-window.pro")
+            resValue("string", "app_name", "类原生小窗")
+            resValue("string", "description", "同源独立小窗 · 系统任务与原生手势")
+        }
+    }
     signingConfigs {
         create("demoUpdate") {
             storeFile = rootProject.file(".local/demo.keystore")
@@ -27,7 +41,7 @@ android {
             // Experimental R8 build: preserve module semantics, optimize dependencies only.
             isMinifyEnabled = true
             isShrinkResources = false
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             signingConfig = signingConfigs.getByName("demoUpdate")
         }
         getByName("debug") { signingConfig = signingConfigs.getByName("demoUpdate") }

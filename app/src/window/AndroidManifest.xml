@@ -1,0 +1,18 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" tools:node="remove" />
+    <uses-permission android:name="android.permission.RECEIVE_SMS" tools:node="remove" />
+    <uses-feature android:name="android.hardware.telephony" tools:node="remove" />
+    <application>
+        <provider android:name=".features.iconlayers.IconLayerProvider" tools:node="remove" />
+        <provider android:name=".features.iconlayers.WindowIconProvider" android:authorities="${applicationId}.iconlayers" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.callblocking.CallBlockingProvider" tools:node="remove" />
+        <provider android:name=".features.motion.MotionProvider" tools:node="remove" />
+        <provider android:name=".features.edgetouch.EdgeTouchProvider" tools:node="remove" />
+        <provider android:name=".features.shade.ShadeProvider" tools:node="remove" />
+        <provider android:name=".features.barrage.BarrageProvider" tools:node="remove" />
+        <provider android:name=".features.suggestions.SuggestionProvider" tools:node="remove" />
+        <provider android:name=".features.navbar.NavbarProvider" tools:node="remove" />
+        <receiver android:name=".features.suggestions.SuggestionSmsReceiver" tools:node="remove" />
+    </application>
+</manifest>

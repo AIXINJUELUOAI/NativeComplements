@@ -34,7 +34,7 @@ REQUIRED = {
 
 # Verify the delivered APK includes the restored runtime and the integrated navigation host.
 RUNTIME_METHODS = {
-    "WindowEngine": {"blockBackgroundTouch", "trackTouchGuard", "clientOwner", "ownerInsets", "idle", "mayAllowResize", "visibleFullscreen"},
+    "WindowEngine": {"blockBackgroundTouch", "trackTouchGuard", "clientOwner", "ownerInsets", "idle", "mayAllowResize", "visibleFullscreen", "endClosedApplications"},
     "WindowPolicy": {"backgroundTouchGuard", "startsTouchGuard", "coveredFullscreen"},
     "BackBridge": {"connect", "cancelNativeUp", "abort"},
     "Config": {"longBackWindow"},
@@ -62,9 +62,12 @@ REMOVED_NAVBAR_CLASSES = {
 REMOVED_NAVBAR_OWNERS = {PREFIX + "features/navbar/" + name + ";" for name in REMOVED_NAVBAR_CLASSES}
 
 
-def check(apk):
-    runtime = {PREFIX + owner + ";": methods for owner, methods in RUNTIME_METHODS.items()}
-    dex.TARGETS = {owner for owner, _ in REQUIRED} | set(runtime)
+def check(apk, window=False):
+    excluded = {"features/navbar/", "features/edgetouch/", "features/shade/"}
+    shared = lambda owner: not any(owner.startswith(prefix) for prefix in excluded) and owner not in {"features/iconlayers/IconOverrides", "features/iconlayers/IconPolicy", "features/iconlayers/IconImages"}
+    required = {key: value for key, value in REQUIRED.items() if not window or shared(key[0][len(PREFIX):])}
+    runtime = {PREFIX + owner + ";": methods for owner, methods in RUNTIME_METHODS.items() if not window or shared(owner)}
+    dex.TARGETS = {owner for owner, _ in required} | set(runtime)
     found = set()
     runtime_found = set()
     with zipfile.ZipFile(apk) as archive:
@@ -85,7 +88,7 @@ def check(apk):
                     runtime_found.add(owner)
                 for method in cls["methods"]:
                     key = owner, method["name"]
-                    if key not in REQUIRED:
+                    if key not in required:
                         continue
                     strings = set()
                     for ins in data.instructions(owner, method["name"], method["descriptor"]):
@@ -93,16 +96,16 @@ def check(apk):
                             strings.add(data.strings[ins["units"][1]])
                         elif ins["opcode"] == "1b":
                             strings.add(data.strings[ins["units"][1] | ins["units"][2] << 16])
-                    missing = REQUIRED[key] - strings
+                    missing = required[key] - strings
                     if missing:
                         raise RuntimeError(f"Host ABI name rewritten/removed in {key}: {sorted(missing)}")
                     found.add(key)
-    if found != set(REQUIRED):
-        raise RuntimeError(f"Missing hook methods: {set(REQUIRED) - found}")
+    if found != set(required):
+        raise RuntimeError(f"Missing hook methods: {set(required) - found}")
     if runtime_found != set(runtime):
         raise RuntimeError(f"Missing integrated runtime classes: {set(runtime) - runtime_found}")
     print("PASS: final DEX retains Kotlin/Compose host-loader reflection names at all checked hooks")
-    print("PASS: final DEX includes restored window optimizations, icon cleanup and immersive navigation host; removed navigation runtime absent")
+    print("PASS: final DEX includes expected " + ("standalone window" if window else "full window, icon and immersive") + " runtime; removed navigation runtime absent")
 
 if __name__ == "__main__":
     check(Path(sys.argv[1]))

@@ -119,7 +119,7 @@ public class ConfigMigrationTest {
     private boolean backCommit(SystemUiHost host,String token)throws Exception{
         android.os.Parcel data=android.os.Parcel.obtain(),reply=android.os.Parcel.obtain();
         try{
-            data.writeInterfaceToken("dev.nativecomplements.module.backLong.v1");
+            data.writeInterfaceToken(BackBridge.CHANNEL);
             data.writeInt(42);data.writeString("example.app");data.writeString(token);
             assertTrue(((android.os.Binder)field(SystemUiHost.class,"dropChannel").get(host))
                 .transact(android.os.IBinder.FIRST_CALL_TRANSACTION,data,reply,0));

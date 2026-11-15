@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <permission android:name="dev.nativecomplements.module.CONTROL" android:protectionLevel="signature" />
-    <uses-permission android:name="dev.nativecomplements.module.CONTROL" />
+    <permission android:name="${applicationId}.CONTROL" android:protectionLevel="signature" />
+    <uses-permission android:name="${applicationId}.CONTROL" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -14,23 +14,23 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-        <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="dev.nativecomplements.module.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
-        <activity android:name=".WindowShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="dev.nativecomplements.module.shortcut">
+        <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="${applicationId}.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
+        <activity android:name=".WindowShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="${applicationId}.shortcut">
             <intent-filter><action android:name="android.intent.action.CREATE_SHORTCUT" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
         </activity>
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
         <provider android:name=".features.diagnostics.DiagnosticsProvider" android:authorities="${applicationId}.diagnostics" android:exported="true" android:grantUriPermissions="false" />
-        <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="dev.nativecomplements.module.callblocking" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.motion.MotionProvider" android:authorities="dev.nativecomplements.module.motion" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="dev.nativecomplements.module.iconlayers" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="dev.nativecomplements.module.edgetouch" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.shade.ShadeProvider" android:authorities="dev.nativecomplements.module.shade" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".features.barrage.BarrageProvider" android:authorities="dev.nativecomplements.module.barrage" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="${applicationId}.callblocking" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.motion.MotionProvider" android:authorities="${applicationId}.motion" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="${applicationId}.iconlayers" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="${applicationId}.edgetouch" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.shade.ShadeProvider" android:authorities="${applicationId}.shade" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.barrage.BarrageProvider" android:authorities="${applicationId}.barrage" android:exported="true" android:directBootAware="true" />
         <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
         </receiver>
-        <provider android:name=".features.suggestions.SuggestionProvider" android:authorities="dev.nativecomplements.module.suggestions" android:exported="true" android:directBootAware="true" />
-        <provider android:name=".ConfigProvider" android:authorities="dev.nativecomplements.module.settings" android:exported="true" />
-        <provider android:name=".features.navbar.NavbarProvider" android:authorities="dev.nativecomplements.module.navbar" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.suggestions.SuggestionProvider" android:authorities="${applicationId}.suggestions" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".ConfigProvider" android:authorities="${applicationId}.settings" android:exported="true" />
+        <provider android:name=".features.navbar.NavbarProvider" android:authorities="${applicationId}.navbar" android:exported="true" android:directBootAware="true" />
     </application>
 </manifest>

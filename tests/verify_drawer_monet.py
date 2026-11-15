@@ -125,8 +125,9 @@ assert 'main.post(() -> {' in drawer or 'main.post(() -> { userEnabled = next; a
 assert 'standard.invoke(view, view.getTag())' in drawer
 assert 'IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED' in drawer
 assert 'getDeclaredMethod("onBindViewHolder"' not in drawer, "avoid obfuscated bridge/overload hook"
-for page in ["home/HomeScreen.kt", "navigation/ModuleApp.kt"]:
-    assert '"外观与控制"' in (src / page).read_text(encoding="utf-8")
+assert '"外观与控制"' in (src / "home/HomeScreen.kt").read_text(encoding="utf-8")
+assert '"外观与控制"' in (src / "navigation/Page.kt").read_text(encoding="utf-8")
+assert 'Page.Shade' in (ROOT / "app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt").read_text(encoding="utf-8")
 # Optional current-device APK catches ABI drift beyond the pinned research archive.
 # Run: python tests/verify_drawer_monet.py verification/NexusLauncher-drawer-live.apk
 import sys

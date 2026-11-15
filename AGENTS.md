@@ -1,7 +1,7 @@
 # NativeComplements
 
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
-- 当前用户授权第一轮实现小窗解耦并同源独立小窗版，其他功能重构与Alive暂缓。按可验证小阶段测试后提交并推送main，每次记录提交号/检查/推送结果，不强推、不把本地提交称已同步；后续功能版本统一0.10.0。以“平台事件输入 → 共用规则状态 → 平台执行与恢复”为拆分方向，保留当前系统行为/主包兼容，隔离独立版身份与恢复记录并防止重复接管；主/独立共用Freeform启用校验，不自动改设置。发行版差异需结合Android/组件ABI与原生语义验证，不凭ROM名或Freeform开关宣称兼容。已有 [接入索引](<docs/adaptation/README.md>) 是138现状基线，实施后需更新已完成边界，不伪称文档等于解耦。
+- 当前用户授权第一轮实现小窗解耦并同源独立小窗版，其他功能重构与Alive暂缓。按可验证小阶段测试后提交并推送main，每次记录提交号/检查/推送结果，不强推、不把本地提交称已同步；后续功能版本统一0.10.0。以“平台事件输入 → 共用规则状态 → 平台执行与恢复”为拆分方向，保留当前系统行为/主包兼容，隔离独立版身份与恢复记录并防止重复接管；主/独立共用Freeform启用校验，不自动改设置。发行版差异需结合Android/组件ABI与原生语义验证，不凭ROM名或Freeform开关宣称兼容。[接入索引](<docs/adaptation/README.md>) 保留138/930a22c历史审计，页首当前为0.10.0/code139实施中：已push 3afdb01呈现规则/Android执行、58f39f9真实Freeform correlated STATUS gate与single Properties owner隔离、bd3aafb独立LauncherThemeReporter；未commit C1 admission、full/window flavors与HostExtras/ProductFeatures真实源集隔离不得写作已同步。C2 controls/group/navigation/recovery/input仍待后续，不伪称全部解耦、独立版可用或LOS兼容；LOS贡献先等我们refactor完成，再fork/adapt/test PR，经我们review和现设备回归后才merge。
 - 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制、图标适配与外观和控制（含小白条沉浸、通知／控制中心横屏双栏），不创建其他功能的占位页面或接口。
 - 管理页面共用 SettingsPage 标题栏和系统安全区，页面内部不重复创建标题与 Scaffold。开发者工具仅从“关于”连续点击版本号七次后显示，日常页面不展示后端连接及实验信息。
 - 正式功能集中在 app Gradle 模块。管理界面位于 home、navigation、core/ui 和 features/floatingwindow/ui。用户另授权 navbar-demo 独立观察 APK（dev.nativecomplements.navdemo，独立 system 作用域），仅采样/人工标注，不改导航、页面或 Insets；实验前关闭“小白条沉浸”并由用户重启。Demo 0.1.6（layout-v6）每次捕获一张导航上方最多320dp应用图连同窗口内导航区域行；应用层导航区域非纯色即判悬浮（应用已自行绘制），3–6个窄、等距、对称且上方2dp平静、不与上方列重复的底部导航项判延伸（底栏内淡纹理>8%视为半透明模糊判悬浮），否则底部≥32dp空白或有边界/等距排列且不与上方重复的底栏判延伸，内容被边界截断、与上方重复或无法确认判悬浮；12–24dp主色占比仅记录。离线原型与样本集在 verification/navbar-demo-live/layout-v5（proto.py 与 DemoLayout.java 保持同步）。每次肯定/否定/待定都保存该分析区域（PNG优先，≤800KiB，最多400张）及样本JSON，忙碌或过期时仍记录标注但不截图；日志与截图仅本地、可ZIP导出/清空，不上传；构建签名检查用 python tests/package_navbar_demo.py，额外归档接口核验用 python tests/verify_navbar_demo_target.py。
@@ -9,12 +9,13 @@
 - applicationId 自 0.6.0 起为 dev.nativecomplements.module（模块名“类原生补全计划”）；它与三个系统作用域、签名权限和 corner 偏好键是覆盖升级兼容点。使用 SystemUI 宿主与协议16，不依赖无障碍。静态作用域仅保留 system、SystemUI 与 Pixel 桌面三个系统作用域（staticScope=true）；小白条沉浸使用 SystemUI 原生导航栏与已核实 Pixel 桌面 Taskbar 两条系统宿主路径，不依赖普通应用授权，无普通应用侧或system_server导航Hook。模块不直接改设备LSPosed数据库，静态范围的选择限制/旧授权清理由框架实现，不跨分支保证。
 - .local/demo.keystore 是现有覆盖升级签名，仅本地保存。不要提交签名、设备数据或本机配置。
 - JDK17+、SDK android-37.0、Gradle8.14.4。本机可用 Android Studio JBR，跨目录构建通过环境变量配置路径。
-- 构建：gradlew.bat --no-daemon --console=plain :app:assembleRelease。按变更运行必要的针对性检查，不把构建成功表述为真机效果保证。
+- app 使用 `full` / `window` 两个 productFlavors，同一Engine；主导航位于 [full ModuleApp](<app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)，独立入口位于 [window ModuleApp](<app/src/window/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)，[Page](<app/src/main/java/dev/local/sunwindowdemo/navigation/Page.kt>) 共享；注册表分别为 [full java_init.list](<app/src/full/resources/META-INF/xposed/java_init.list>)（7 entry）与 [window java_init.list](<app/src/window/resources/META-INF/xposed/java_init.list>)（3 window + LauncherThemeModule），[scope.list](<app/src/main/resources/META-INF/xposed/scope.list>) 仍在 main 保留三个系统作用域。window 的窄 [WindowIconProvider](<app/src/window/java/dev/local/sunwindowdemo/features/iconlayers/WindowIconProvider.java>) 仅native mono/Monet，不带drawer、图标库或生成入口；不把full素材政策套到window。
+- 双flavor单测：`gradlew.bat --no-daemon --console=plain :app:testFullDebugUnitTest :app:testWindowDebugUnitTest`；双release/R8：`gradlew.bat --no-daemon --console=plain :app:assembleFullRelease :app:assembleWindowRelease`。按变更运行必要的针对性检查，不把构建成功表述为真机效果保证。已push阶段有345 pass历史单测证据；当前工作区完整双单测full353/window348均0失败，双release/R8及最终APK原签名/身份/scope/入口/快捷方式/禁止非小窗Hook的DEX核验通过；生成包仍为阶段检查产物，不提前写整轮交付完成或真机兼容。
 - 基线及主机检查：python tests/verify_runtime.py；归档目标签名检查：python tests/verify_target.py。
-- 最终打包：python tests/package_release.py，仅交付 APK，不创建源码ZIP、逐轮备份或额外报告。生成物放 deliverables/、verification/ 或 build/，不提交 Git。
+- 最终打包：`python tests/package_release.py`（[双APK打包入口](<tests/package_release.py>)），按full/window两产物核验签名、身份、入口、scope及R8边界，不以双variant编译代替完整打包检查；仅交付full/window双APK，不创建源码ZIP、逐轮备份或额外报告。生成物放 deliverables/、verification/ 或 build/，不提交 Git。
 - 不自动安装、重启或更改设备的 LSPosed 配置。
-- 一律在 main 上开发，不新建长期分支；同一时间只允许一个会话修改本仓库。交付版本打 tag。
-- 开工前工作区必须干净：有未提交改动先 `git add -A && git commit -m "wip: 开工前快照 <主题>"`；收工或交付前再提交一次。
+- 一律在 main 上开发，不新建长期分支；默认同一时间只允许一个会话修改本仓库。用户明确授权共享多人写入时，按分配scope独占写入，不跨scope覆盖，集成任务统一收口与提交。交付版本打 tag。
+- 非共享任务按授权保留开工快照、收工提交；共享多人写入时不得为清空工作区执行全库 `git add -A` 或提交他人未完成工作，遵从用户本轮scope和Git禁令，由集成任务核对后处理。
 - 遗留的并行 worktree 和分支只读保留、不再新增；其中有效改动必须合回 main 才算交付。公共 Hook 入口、首页导航、共享配置和版本号仍由集成任务统一修改。
 - 保留用户未提交工作，不执行 reset 或强制推送。测试签名和原始基线不清理。
 - 小窗已移除180秒期限，配置由UID检查的Provider同步到SystemUI，另提供仅可写快捷项列表的管理接口；启动健康计数和全套动态Hook卸载尚未实现。

@@ -75,12 +75,12 @@ public class IconImagesTest {
     @Test public void customProviderReadsOnlyPublishedImageIds()throws Exception{
         String id=upload(IconImages.solid(Color.BLUE,16));
         IconLayerProvider provider=Robolectric.buildContentProvider(IconLayerProvider.class).create().get();
-        Uri uri=Uri.parse("content://dev.nativecomplements.module.iconlayers/custom/"+id+".png");
+        Uri uri=IconLayerStore.URI.buildUpon().path("custom/"+id+".png").build();
         assertThrows(FileNotFoundException.class,()->provider.openFile(uri,"r"));
         IconPolicy p=new IconPolicy();p.background=id;IconPolicy.save(c,PKG,p);
         try(var file=provider.openFile(uri,"r")){assertTrue(file.getStatSize()>0);}
         assertThrows(SecurityException.class,()->provider.openFile(uri,"w"));
-        assertThrows(FileNotFoundException.class,()->provider.openFile(Uri.parse("content://dev.nativecomplements.module.iconlayers/custom/../../outside.png"),"r"));
+        assertThrows(FileNotFoundException.class,()->provider.openFile(IconLayerStore.URI.buildUpon().path("custom/../../outside.png").build(),"r"));
     }
     @Test public void customImagesAreContentAddressedAndFailedImportsPreservePolicies()throws Exception{
         String first=upload(IconImages.solid(Color.BLUE,16));assertEquals(first,upload(IconImages.solid(Color.BLUE,16)));
@@ -154,7 +154,11 @@ public class IconImagesTest {
         IconPolicy p=new IconPolicy();p.color=IconPolicy.MANUAL;
         p.background=upload(IconImages.solid(Color.MAGENTA,32));p.foreground=upload(IconImages.solid(Color.GREEN,32));IconPolicy.save(c,PKG,p);
         config.putString("policies",IconLayerStore.prefs(c).getString("policies","{}"));
-        Robolectric.buildContentProvider(IconLayerProvider.class).create();
+        // This shared rendering fixture exercises imported pixels even when the window manifest
+        // intentionally installs its native-only provider. Bind the fixture to this variant's URI.
+        IconLayerProvider assets=new IconLayerProvider();ProviderInfo info=new ProviderInfo();
+        info.authority=IconLayerStore.URI.getAuthority();assets.attachInfo(c,info);
+        org.robolectric.shadows.ShadowContentResolver.registerProviderInternal(info.authority,assets);
         assertTrue(IconAssets.load(c,config,()->false));
         IconAssets.Entry first=IconAssets.snapshot().entries().get(PKG);assertNotNull(first);
         Shadows.shadowOf(c.getPackageManager()).setApplicationIcon(PKG,new AdaptiveIconDrawable(new ColorDrawable(Color.BLUE),new ColorDrawable(Color.RED)));

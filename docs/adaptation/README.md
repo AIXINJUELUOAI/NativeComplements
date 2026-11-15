@@ -1,12 +1,33 @@
 # 跨系统接入与小窗拆分索引
 
-## 范围与当前状态
+## 当前状态：0.10.0 / code139 实施中
 
-本轮以 `main` 提交 `930a22c`（标签 `v0.9.48-fixes-test2`，versionCode 138）为运行基线，只整理源码与适配边界，不改变 Hook、配置、协议或 APK。当前版本以 [构建配置](<../../app/build.gradle.kts#L6-L16>) 为准。
+当前第一轮小窗解耦与同源独立小窗版正在实施，版本为 `0.10.0` / versionCode `139`，以 [构建配置](<../../app/build.gradle.kts>) 为准。**不是全部解耦完成、独立版可用或 LOS 兼容声明。** Alive 与其他功能重构仍暂缓。
+
+### 已提交并 push 的边界
+
+- `3afdb01`：呈现规则提取为纯 [WindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowPresentation.java>)，原生对象、锁与事务保留在 [AndroidWindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowPresentation.java>) 执行侧；并非整个引擎平台无关。
+- `58f39f9`：启用前使用真实 Freeform 能力与 correlated STATUS 请求/响应门控，不自动修改系统设置；以 single Properties owner 隔离重复接管，保留主包身份和恢复含义。这不是任意 OEM 原生小窗的通用共存协议。
+- `bd3aafb`：[LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>) 独立，不再把系统主题状态上报绑定到抽屉莫奈安装。
+
+### 已落工作区、尚未 commit 的边界
+
+- C1 接管规则已落 [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>) 与 [AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>)；共用同一 [WindowEngine](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java>)，不是复制引擎。
+- Gradle 增加 `full` / `window` productFlavors；[full ModuleApp](<../../app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>) 从 main 迁出，[Page](<../../app/src/main/java/dev/local/sunwindowdemo/navigation/Page.kt>) 仍共享，[window ModuleApp](<../../app/src/window/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>) 是窄小窗入口。
+- 注册表改为 [full java_init.list](<../../app/src/full/resources/META-INF/xposed/java_init.list>) 与 [window java_init.list](<../../app/src/window/resources/META-INF/xposed/java_init.list>)；window 为 4 entry（3 个小窗入口 + [LauncherThemeModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeModule.java>)），[scope.list](<../../app/src/main/resources/META-INF/xposed/scope.list>) 仍在 main、保留原三个系统作用域。
+- [HostExtras](<../../app/src/main/java/dev/local/sunwindowdemo/HostExtras.java>) 契约配合 [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>) / [window ProductFeatures](<../../app/src/window/java/dev/local/sunwindowdemo/ProductFeatures.java>) 真实源集隔离非小窗宿主实现，不只是隐藏页面或加运行时布尔量。window 的 [WindowIconProvider](<../../app/src/window/java/dev/local/sunwindowdemo/features/iconlayers/WindowIconProvider.java>) 是 native mono / Monet 的窄桥接，不带抽屉、图标库或生成入口；不是 full 图标能力等价品。
+
+### 验证边界与后续
+
+已 push 阶段的单测证据为 **345 pass**；当前工作区双 flavor 完整单测为 **full 353 / window 348，均 0 失败**。双 release/R8 构建及最终 APK 的原签名、身份、三系统 scope、四/七入口、快捷方式与禁止非小窗 Hook 的 DEX 边界核验已通过；未操作设备，生成包是阶段检查产物而非整轮最终交付。C2 controls / group / navigation / recovery / input 仍待后续，不能据呈现、C1 或打包边界声称全部解耦。编译、单测、R8、当前设备回归和目标系统验证必须分开记录。
+
+未来 LOS 贡献顺序：**先由我们完成 refactor → 贡献者再 fork / adapt / test 并提交 PR → 我们 review 并做现设备回归 → 最后决定 merge**。不在当前未冻结边界上承诺适配完成，不凭 ROM 名或 Freeform 开关宣称兼容。
+
+## 138 历史审计的范围与读法
+
+以下审计、原 PR 路线与历史检查结论保留自 `main` 提交 `930a22c`（标签 `v0.9.48-fixes-test2`，versionCode 138）；它们不是当前实施状态。各专项页也在页首区分当前进展与历史正文。**源码链接已迁移到现路径，仅供定位参考，不是 138 snapshot 的精确函数内容或行号证据**；移除可能因迁移（含 full 导航行数减少 7 行）或后续提取失准的源码行锚，旧内容请按历史提交核对。
 
 设计讨论来源：[Issue #3：针对小窗的一些个人建议](https://github.com/AIXINJUELUOAI/NativeComplements/issues/3)。采纳其“功能逻辑与具体 Hook/执行分离”的方向，不据此承诺 LineageOS、MIUI 或任意发行版已兼容，也不默认禁用系统内置小窗。
-
-**已完成的是现状审计，不是解耦重构或独立版实现。** Alive、新功能、独立 flavor 和启用 Freeform 前置校验暂停。未来功能版本按维护者要求进入 `0.10.0`，本轮不更改版本号。
 
 ## 阅读顺序
 
@@ -27,7 +48,7 @@
 5. **只操作模块明确拥有的任务和输入流。** 系统自带小窗、PiP、权限确认、锁屏、IME 等不是可随意屏蔽的对象。先核对所有权及冲突策略，不全局关闭 Freeform。
 6. **打包边界与系统适配边界分开。** 独立小窗可复用同一套核心；单改 applicationId、删首页入口或只加构建常量，均不等于独立版已完成。
 
-## 最小 PR 顺序
+## 138 原建议：最小 PR 顺序
 
 | 阶段 | 改动边界 | 验收条件 |
 |---|---|---|
@@ -60,9 +81,9 @@ python -X utf8 tests/verify_navbar_target.py
 - 文档检查只保证本轮 Markdown 的相对文件链接、源码行号范围和关键入口可解析，不证明描述语义或 Hook 兼容。
 - [基线检查](<../../tests/verify_runtime.py>) 维护原始 Demo8.2 摘要及已登记差异，不得改基线掩盖重构。
 - [归档接口检查](<../../tests/verify_target.py>) 与 [导航宿主检查](<../../tests/verify_navbar_target.py>) 依赖本地归档，缺归档不是通过；精确签名通过也不代替线程、时序及真机验收。
-- 最近运行基线：138 全量单测 311 项，307 通过，4 项失败均在既有 [SurfaceFrameTest](<../../app/src/test/java/dev/local/sunwindowdemo/SurfaceFrameTest.java>)；本轮不修它们，不宣称全量绿。新背板/莫奈针对性测试与原签名 release 检查已通过。用户对 137 其余修复的正面反馈也不等于所有系统/场景验证。
+- 138 历史运行基线（不代表当前结果）：全量单测 311 项，307 通过，4 项失败均在既有 [SurfaceFrameTest](<../../app/src/test/java/dev/local/sunwindowdemo/SurfaceFrameTest.java>)；本轮不修它们，不宣称全量绿。新背板/莫奈针对性测试与原签名 release 检查已通过。用户对 137 其余修复的正面反馈也不等于所有系统/场景验证。
 
-### 本轮 Lead 复核结果
+### 138 文档审计当轮 Lead 复核结果（历史）
 
 - 五份接入文档的本地链接与源码行号检查通过；人工核对进程入口、通信授权、运行逻辑未改及各子审计关键结论。
 - Demo8.2 基线与主机规则检查通过；原基线摘要、差异登记未改。

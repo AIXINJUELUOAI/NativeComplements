@@ -37,7 +37,7 @@ final class WindowEngine {
         TaskCleanupGuard guard=new TaskCleanupGuard(log);
         if(guard.install(module,loader))cleanup=guard;
     }
-    private SuggestionInput suggestionInput;
+    private Consumer<Intent> suggestionInput;
     private boolean visibleResumeReady;
     void visibleResumeReady(){visibleResumeReady=true;}
     private IBinder frameSink;
@@ -336,8 +336,7 @@ final class WindowEngine {
                 try{dev.local.sunwindowdemo.features.iconlayers.IconAssets.connect(context);}
                 catch(RuntimeException unavailable){log.accept("ICON_ASSETS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
                 audio=WindowAudio.create(context,handler,log);
-                try{suggestionInput=new SuggestionInput(a,context,root,lock,handler);log.accept("SUGGESTIONS_INPUT_READY");}
-                catch(Exception unavailable){log.accept("SUGGESTIONS_INPUT_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
+                suggestionInput=ProductFeatures.createInput(a,context,root,lock,handler,log);
                 try{frames=(Choreographer)Choreographer.class.getDeclaredMethod("getSfInstance").invoke(null);}
                 catch(Exception e){frames=Choreographer.getInstance();log.accept("SF_CLOCK_FALLBACK "+e.getClass().getSimpleName());}
             });
@@ -428,7 +427,7 @@ final class WindowEngine {
             }
             if(i.getIntExtra("protocol",0)!=Wire.PROTOCOL) throw new IllegalStateException("请重启加载 0.2.0 后端");
             if ("OTP_INPUT".equals(op)) {
-                if(suggestionInput!=null)suggestionInput.start(i);
+                if(suggestionInput!=null)suggestionInput.accept(i);
                 else{ResultReceiver receiver=i.getParcelableExtra("inputReply",ResultReceiver.class);if(receiver!=null)receiver.send(0,null);}
                 return;
             }
@@ -1736,45 +1735,10 @@ final class WindowEngine {
     private Session snapshot(int taskId,String pkg,String token)throws Exception{return snapshot(taskId,pkg,token,false);}
     private Session snapshot(int taskId, String pkg, String token,boolean linked) throws Exception {
         Object task = taskId < 0 ? a.focused.invoke(root) : find(taskId);
-        if (task == null) throw new IllegalStateException("目标任务不存在");
-        Session s = new Session(); s.task = task; s.taskId = (Integer) a.field(task, "mTaskId");
-        s.userId = (Integer) a.field(task, "mUserId"); s.pkg = pkg; s.token = token;
-        ComponentName component = (ComponentName) a.field(task, "realActivity");
-        if (component == null || !pkg.equals(component.getPackageName())) throw new IllegalStateException("应用身份不匹配");
-        s.component = component.flattenToString();
-        Object top=a.call(task,"topRunningActivity");
-        if(top!=null)s.uid=a.integer(top,"getUid");
-        Intent base=(Intent)a.call(task,"getBaseIntent");
-        s.baseId=base==null?null:base.getIdentifier();
-        if(Wire.PKG.equals(pkg)&&!token.equals(s.baseId)) throw new IllegalStateException("诊断任务标识不匹配");
-        Point crop=(Point)a.field(task,"mLastSurfaceSize");s.crop=new Point(crop.x,crop.y);
-        if(s.crop.x<0||s.crop.y<0) throw new IllegalStateException("原始裁剪不可用");
-        validate(task,linked);
-        boolean inherited=linked&&a.integer(task,"getWindowingMode")==5&&!a.bool(task,"isAlwaysOnTop");
-        if (!inherited&&(a.integer(task, "getWindowingMode") != 1 || a.bool(task, "isAlwaysOnTop")||!a.bool(task,"isFocusable")))
-            throw new IllegalStateException("只接管普通全屏或直接关联的 freeform 任务");
-        Object requested = a.windowConfig(task, true);
-        s.originalConfig=new Configuration(a.config(task,true));
-        s.mode = a.integer(requested, "getWindowingMode");
-        s.topState = (Integer) a.field(requested, "mAlwaysOnTop");
-        s.bounds = new Rect((Rect) a.call(requested, "getBounds"));
-        if(inherited){
-            // A new task can inherit freeform from its source before we observe it.
-            // Its exit must return to the display's natural fullscreen configuration.
-            s.originalConfig=new Configuration();
-            Object original=a.field(s.originalConfig,"windowConfiguration");
-            a.call(original,"setWindowingMode",new Class<?>[]{int.class},1);
-            a.call(original,"setAlwaysOnTop",new Class<?>[]{int.class},2);
-            s.mode=1;s.topState=2;s.bounds.setEmpty();
-        }
-        if ((s.mode != 0 && s.mode != 1) || !s.bounds.isEmpty() || (s.topState != 0 && s.topState != 2))
-            throw new IllegalStateException("原请求配置不是标准全屏");
-        s.alwaysOnTop = false; s.parent = a.call(task, "getParent");
         BackPreparation prepared=backPreparation;
-        s.forceTranslucent=prepared!=null&&prepared.task==task&&prepared.token.equals(token)
-            ?prepared.mask.originalTranslucent():a.bool(task,"isForceTranslucent");s.restoreTranslucent=true;
-        Rect display = (Rect) a.call(a.call(task, "getDisplayContent"), "getBounds");
-        s.logicalShort = Math.min(display.width(), display.height());
+        TaskVisibilityGuard mask=prepared!=null&&prepared.task==task&&prepared.token.equals(token)?prepared.mask:null;
+        Session s=new AndroidWindowAdmission(a,atm,resizeCandidate).snapshot(task,pkg,token,linked,mask);
+        Object top=s.orientationActivity;
         s.landscape=initialLandscape(top,pkg,s.userId);
         s.orientationActivity=top;
         s.orientationRequest=top==null?-1:a.integer(top,"getRequestedOrientation");
@@ -1784,8 +1748,8 @@ final class WindowEngine {
     }
 
     private void validate(Object task) throws Exception {validate(task,false);}
-    private static final class EntryNotReady extends IllegalStateException {
-        EntryNotReady(){super("等待当前任务转场结束后再试");}
+    static final class EntryNotReady extends IllegalStateException {
+        EntryNotReady(){super(WindowAdmission.Rejection.WAIT.message);}
     }
     /** Only before lease/journal/task mutation; superseded requests never retry. */
     private boolean waitStart(Intent request){
@@ -1800,24 +1764,7 @@ final class WindowEngine {
         return true;
     }
     private void validate(Object task,boolean allowTransition) throws Exception {
-        if(a.bool(task,"isForceOpaque"))throw new IllegalStateException("系统已强制此任务遮挡底层，不接管");
-        if (!(Boolean) a.field(atm, "mSupportsMultiWindow") || !(Boolean) a.field(atm, "mSupportsFreeformWindowManagement"))
-            throw new IllegalStateException("ROM 未启用原生 freeform；此版保持预检，不全局强开");
-        if (!a.bool(task, "isRootTask") || !a.bool(task, "isLeafTask") || !a.bool(task, "isAttached")
-                || !a.tda.isInstance(a.call(task, "getParent"))) throw new IllegalStateException("任务层级不受首版支持");
-        Object display = a.call(task, "getDisplayContent");
-        if (display == null || (Integer) a.field(display, "mDisplayId") != 0 || (Integer) a.field(task, "mUserId") != 0)
-            throw new IllegalStateException("首版只测试主用户、内置屏幕");
-        if(a.integer(task,"getActivityType")!=1)throw new IllegalStateException("只接管普通应用任务");
-        if(a.entryBusy(task,allowTransition))throw new EntryNotReady();
-        Object area = a.call(task, "getDisplayArea");
-        Object previous=resizeCandidate.get();resizeCandidate.set(task);
-        try{
-            if (!(Boolean) a.call(task, "supportsFreeformInDisplayArea", new Class<?>[]{a.tda}, area)
-                || !(Boolean) a.call(area, "isValidWindowingMode", new Class<?>[]{int.class, a.activity, a.task}, 5, null, task)
-                || !a.bool(task, "isOverrideBoundsAllowed") || !a.bool(task,"isOverrideWindowingModeAllowed"))
-                throw new IllegalStateException("当前任务不支持可调整的 freeform");
-        }finally{if(previous==null)resizeCandidate.remove();else resizeCandidate.set(previous);}
+        new AndroidWindowAdmission(a,atm,resizeCandidate).validate(task,allowTransition);
     }
 
     private boolean identity(Object task, Session s) throws Exception {

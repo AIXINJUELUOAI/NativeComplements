@@ -1,6 +1,14 @@
 # 小窗：Hook、系统适配边界与决策／执行现状
 
-## 1. 审计范围与读法
+## 当前实施状态：0.10.0 / code139
+
+`3afdb01` 已 push 纯 [WindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowPresentation.java>) 与 [AndroidWindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowPresentation.java>) 原生执行边界；`58f39f9` 已 push 真实 Freeform correlated STATUS gate（不改设置）和 single Properties owner 隔离；`bd3aafb` 已 push 独立 LauncherThemeReporter。C1 [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>) / [AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>) 与 full/window flavor 已落工作区但未 commit，两产品仍共用同一 Engine。window [注册表](<../../app/src/window/resources/META-INF/xposed/java_init.list>) 为 3 个小窗入口 + LauncherThemeModule，main 三系统 scope 保留；非小窗实现正通过 HostExtras / 产品源集隔离。
+
+已 push 阶段单测证据为 345 pass；当前工作区完整双单测 full 353 / window 348 均 0 失败，双 release/R8、原签名/身份/scope/入口/快捷方式及禁止非小窗 Hook 的 DEX 核验通过；仍为阶段产物，未做设备回归。**C2 controls / group / navigation / recovery / input 仍待后续，不是全链已解耦、独立版可用或 LOS 已兼容。** LOS 贡献需等我们 refactor 完成再 fork / adapt / test PR，经我们 review + 现设备回归后决定 merge；详见 [当前总览](<README.md>)。
+
+## 1. 138 历史审计范围与读法
+
+以下保留 `930a22c` / 138 的历史审计（含当时“未增加抽象/未拆分”等结论），不是当前实现状态。源码链接是现路径参考；旧函数内容已有变化，不是旧 snapshot 的精确内容，已移除不可靠源码行锚。
 
 本页为 `main` 提交 `930a22c`（versionCode 138，0.9.48-fixes-test2）的**现状审计**，不新增功能、不表示其他 Android 发行版已经兼容。入口清单见 [java_init.list] 与 [scope.list]：小窗在 system_server、SystemUI、Pixel Launcher 三处协作，不在普通应用内安装 Hook，不依赖无障碍。Java 包仍为 `dev.local.sunwindowdemo`。
 
@@ -204,7 +212,7 @@
 5. **系统优先级**：外部安装／确认、同 task 权限、键盘、锁屏／熄屏、截图浮层；保留原生安全 UI，不用提高自有层或吞安全输入“修复”。
 6. **静态与真机结论分开**：归档脚本、host/Robolectric、构建、设备采样各记结果与构建身份。可选能力缺失要描述真实降级，核心能力／身份不明则不接管，不能借测试通过声称其他 ROM／版本全面兼容。
 
-[java_init.list]: <../../app/src/main/resources/META-INF/xposed/java_init.list>
+[java_init.list]: <../../app/src/full/resources/META-INF/xposed/java_init.list>
 [scope.list]: <../../app/src/main/resources/META-INF/xposed/scope.list>
 [SunWindowModule]: <../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>
 [FrameworkAccess]: <../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/FrameworkAccess.java>
