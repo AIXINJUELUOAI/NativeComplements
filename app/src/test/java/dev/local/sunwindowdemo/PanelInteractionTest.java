@@ -240,7 +240,15 @@ public class PanelInteractionTest {
             invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},waiting);
             View overlay=(View)field(host,"openWait");assertNotNull(overlay);
             invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},waiting);assertSame(overlay,field(host,"openWait"));
+            invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},new android.content.Intent());assertSame(overlay,field(host,"openWait"));
+            context.getSharedPreferences("corner",Context.MODE_PRIVATE).edit().putBoolean("enabled",false).commit();
+            android.content.Intent other=new android.content.Intent(waiting).putExtra("waitingToken",Wire.token());
+            invoke(host,"updateOpenWait",new Class<?>[]{android.content.Intent.class},other);assertSame(overlay,field(host,"openWait"));
+            context.getSharedPreferences("corner",Context.MODE_PRIVATE).edit().putBoolean("enabled",true).commit();
+            long before=org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents().stream().filter(i->"CANCEL_OPEN".equals(i.getStringExtra("op"))).count();
             overlay.performClick();assertNull(field(host,"openWait"));
+            invoke(host,"cancelOpenWait",new Class<?>[]{});
+            assertEquals(before+1,org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents().stream().filter(i->"CANCEL_OPEN".equals(i.getStringExtra("op"))).count());
             var sent=org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents();
             android.content.Intent cancel=sent.stream().filter(i->"CANCEL_OPEN".equals(i.getStringExtra("op"))).reduce((a,b)->b).orElseThrow();
             assertEquals(token,cancel.getStringExtra("token"));assertEquals("example.alpha",cancel.getStringExtra("package"));

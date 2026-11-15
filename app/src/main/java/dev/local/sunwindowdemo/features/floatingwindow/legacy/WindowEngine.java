@@ -1283,7 +1283,7 @@ final class WindowEngine {
     /** The white handle owns the preview; native content stays masked until the final geometry is drawn. */
     private boolean entryGesture(Session s,Intent i,String op)throws Exception{
         if(s.cover==null||!s.cover.canRetarget()||s.placement==null)return false;
-        if(!java.util.Set.of("RESIZE","END_RESIZE","RELEASE","NORMAL","MINI","FULL","CLOSE").contains(op==null?"":op))return false;
+        if(!WindowControl.entryRequest(op))return false;
         synchronized(lock){
             boolean starting=!s.coverFollowing;
             s.entryControl=null;s.entering=false;s.entryStarted=true;s.opacity=1;s.barAlpha=1;
@@ -1291,10 +1291,7 @@ final class WindowEngine {
             Geometry.Placement p=s.placement;
             if("RESIZE".equals(op)||"END_RESIZE".equals(op)){
                 float scale=i.getFloatExtra("scale",p.scale());
-                if(!Float.isFinite(scale))throw new IllegalArgumentException("scale");
-                scale=GestureMath.clampScale(scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
-                float cx=p.x()+p.width()*p.scale()/2,cy=p.y()+p.height()*p.scale()/2;
-                s.placement=new Geometry.Placement(p.width(),p.height(),scale,cx-p.width()*scale/2,cy-p.height()*scale/2);
+                s.placement=WindowControl.resize(p,scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
             }
             s.cover.gesturePose(visualBounds(s.placement),coverRadius(s,s.placement));
             renderFrame(s);
@@ -1303,10 +1300,8 @@ final class WindowEngine {
                 log.accept("ENTRY_GESTURE_BEGIN task="+s.taskId);
             }
             if("RESIZE".equals(op)){frameReport("ENTRY_GESTURE");return true;}
-            String target=switch(op){
-                case "FULL"->"full";case "MINI"->"mini";case "CLOSE"->"closed";case "NORMAL"->"normal";
-                default->GestureMath.release(s.placement.scale(),s.defaultScale,s.landscape,s.displayW>s.displayH);
-            };
+            String target=WindowControl.form(op);
+            if(target==null)target=GestureMath.release(s.placement.scale(),s.defaultScale,s.landscape,s.displayW>s.displayH);
             s.resizing=false;
             if("full".equals(target)||"closed".equals(target)){
                 s.coverFollowing=false;s.cover.finishGesture(visualBounds(s.placement),coverRadius(s,s.placement));
@@ -1323,33 +1318,25 @@ final class WindowEngine {
         String op=i.getStringExtra("op");
         if(entryInputPending(s)){
             if(entryGesture(s,i,op))return;
-            if(java.util.Set.of("RESIZE","END_RESIZE","RELEASE","NORMAL","MINI","FULL","CLOSE").contains(op==null?"":op)){
+            if(WindowControl.entryRequest(op)){
                 // A cover already revealing cannot be revived; retain only the final request.
                 s.entryControl=new Intent(i);return;
             }
         }
-        if("CLOSE".equals(op)||"FULL".equals(op)){
+        if(WindowControl.cancelsLaunch(op)){
             openGeneration++;cancelStart(op);trace.stop();
         }
-        if(s.closing)return;
-        if(s.fullTransition&&!"CLOSE".equals(op))return;
-        if("MUTE".equals(op)){
-            if(!"mini".equals(s.frame)||s.transitioning||s.entering)return;
+        WindowControl.Route route=WindowControl.route(op,controlFacts(s));
+        if(route==WindowControl.Route.IGNORE)return;
+        if(route==WindowControl.Route.MUTE){
             if(audio==null||!audio.setMuted(s.uid,!audio.isMuted(s.uid)))note("MUTE_FAILED：应用静音暂不可用");
             else report("MUTE");
             return;
         }
-        if("RESTORE_MINI".equals(op)){
-            if("mini".equals(s.frame)&&s.edgeHidden&&!s.transitioning)restoreMini(s);
-            return;
-        }
-        if("MINI_SIZE".equals(op)){
-            if(!"mini".equals(s.frame)||s.edgeHidden||s.transitioning||s.entering)return;
-            resizeMini(s);return;
-        }
-        if(op!=null&&op.startsWith("EDGE_")){edgeControl(s,i,op);return;}
-        if("MINI_DRAG".equals(op)||"MINI_DRAG_CANCEL".equals(op)){
-            if(!"mini".equals(s.frame)||s.edgeHidden||s.entering)return;
+        if(route==WindowControl.Route.RESTORE_MINI){restoreMini(s);return;}
+        if(route==WindowControl.Route.MINI_SIZE){resizeMini(s);return;}
+        if(route==WindowControl.Route.EDGE){edgeControl(s,i,op);return;}
+        if(route==WindowControl.Route.MINI_DRAG){
             synchronized(lock){
                 if("MINI_DRAG_CANCEL".equals(op))endMiniDrag(s,true);
                 else{
@@ -1357,10 +1344,8 @@ final class WindowEngine {
                     if(s.miniDragBase==null){s.miniDragBase=p;s.miniDragOpacity=s.opacity;}
                     Geometry.Placement base=s.miniDragBase;
                     float progress=i.getFloatExtra("scale",0),cx=i.getFloatExtra("x",p.x()+p.width()*p.scale()/2),cy=i.getFloatExtra("y",p.y()+p.height()*p.scale()/2);
-                    if(!Float.isFinite(progress)||!Float.isFinite(cx)||!Float.isFinite(cy))return;
-                    float scale=base.scale()*MiniMagnet.scaleFactor(progress);
-                    s.placement=new Geometry.Placement(base.width(),base.height(),scale,cx-base.width()*scale/2,cy-base.height()*scale/2);
-                    s.opacity=s.miniDragOpacity*MiniMagnet.alphaFactor(progress);
+                    WindowControl.Drag drag=WindowControl.drag(base,s.miniDragOpacity,progress,cx,cy);if(drag==null)return;
+                    s.placement=drag.placement();s.opacity=drag.opacity();
                 }
                 renderFrame(s);
             }
@@ -1368,22 +1353,18 @@ final class WindowEngine {
         }
         s.resizing="RESIZE".equals(op);
         s.animationRev++;s.transitioning=false;s.radiusFactor=1;
-        if("CLOSE".equals(op)){s.miniDragBase=null;changeForm(s,"closed");return;}
+        if("CLOSE".equals(op))s.miniDragBase=null;
         if("DOCK".equals(op))endMiniDrag(s,false);
-        if("FULL".equals(op)){changeForm(s,"full");return;}
-        if("MINI".equals(op)||"NORMAL".equals(op)){changeForm(s,"MINI".equals(op)?"mini":"normal");return;}
+        String form=WindowControl.form(op);if(form!=null){changeForm(s,form);return;}
         Geometry.Placement p=s.placement;
         if(p==null)return;
         synchronized(lock){
             if("RESIZE".equals(op)||"END_RESIZE".equals(op)) {
                 s.barAlpha=1;
                 float scale=i.getFloatExtra("scale",p.scale());
-                if(!Float.isFinite(scale))throw new IllegalArgumentException("scale");
-                scale=GestureMath.clampScale(scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
-                float cx=p.x()+p.width()*p.scale()/2,cy=p.y()+p.height()*p.scale()/2;
-                s.placement=new Geometry.Placement(p.width(),p.height(),scale,cx-p.width()*scale/2,cy-p.height()*scale/2);
+                s.placement=WindowControl.resize(p,scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
                 if("END_RESIZE".equals(op)){
-                    String target=GestureMath.release(scale,s.defaultScale,s.landscape,s.displayW>s.displayH);
+                    String target=GestureMath.release(s.placement.scale(),s.defaultScale,s.landscape,s.displayW>s.displayH);
                     changeForm(s,target);
                     return;
                 }
@@ -1396,14 +1377,9 @@ final class WindowEngine {
                 if(!Float.isFinite(x)||!Float.isFinite(y))throw new IllegalArgumentException("position");
                 Rect safe=s.miniBounds==null?safeArea(a.call(s.task,"getDisplayContent"),false):new Rect(s.miniBounds);
                 float margin=s.placementMargin;
-                if("DOCK".equals(op)){
-                    int side=Geometry.hideSide(p,x,s.displayW);
-                    if(side!=0){hideMini(s,p,side,y,safe,margin);return;}
-                    x=x+p.width()*p.scale()/2<safe.centerX()?safe.left+margin:safe.right-margin-p.width()*p.scale();
-                }
-                x=Math.max(safe.left,Math.min(x,safe.right-p.width()*p.scale()));
-                y=Math.max(safe.top,Math.min(y,safe.bottom-p.height()*p.scale()));
-                Geometry.Placement destination=new Geometry.Placement(p.width(),p.height(),p.scale(),x,y);
+                WindowControl.Dock moved=WindowControl.move(p,x,y,controlSafe(safe,margin),"DOCK".equals(op),s.displayW);
+                if(moved.hiddenSide()!=0){hideMini(s,p,moved.hiddenSide(),y,safe,margin);return;}
+                Geometry.Placement destination=moved.placement();
                 if("DOCK".equals(op)){s.miniPlacement=destination;animate(s,p,destination,false,0,0);return;}
                 s.placement=destination;
             }
@@ -1414,18 +1390,24 @@ final class WindowEngine {
 
     private void endMiniDrag(Session s,boolean cancel){
         Geometry.Placement base=s.miniDragBase,current=s.placement;if(base==null||current==null)return;
-        float cx=current.x()+current.width()*current.scale()/2,cy=current.y()+current.height()*current.scale()/2;
-        s.placement=cancel?base:new Geometry.Placement(base.width(),base.height(),base.scale(),cx-base.width()*base.scale()/2,cy-base.height()*base.scale()/2);
+        s.placement=WindowControl.endDrag(base,current,cancel);
         s.opacity=s.miniDragOpacity;s.miniDragBase=null;
     }
 
+    private static WindowControl.Facts controlFacts(Session s){
+        return new WindowControl.Facts(s.frame,s.closing,s.fullTransition,s.transitioning,s.entering,s.edgeHidden);
+    }
+    private static WindowControl.Safe controlSafe(Rect safe,float margin){return new WindowControl.Safe(safe.left,safe.top,safe.right,safe.bottom,margin);}
     private void edgeControl(Session s,Intent i,String op)throws Exception{
-        if(!"mini".equals(s.frame)||!s.edgeHidden||s.entering||s.transitioning)return;
+        if(WindowControl.route(op,controlFacts(s))!=WindowControl.Route.EDGE)return;
         synchronized(lock){
             Geometry.Placement p=s.placement;if(p==null||s.miniPlacement==null)return;
             if("EDGE_DRAG_CANCEL".equals(op)){
-                if(s.edgeDragBase!=null){s.placement=s.edgeDragBase;s.miniPlacement=s.edgeDragMini;s.edgeSide=s.edgeDragSide;}
-                s.edgeDragBase=null;s.edgeBarDragging=false;renderFrame(s);frameReport(op);return;
+                WindowControl.Edge current=new WindowControl.Edge(s.placement,s.miniPlacement,s.edgeSide,s.edgeHidden,s.edgeBarDragging,s.edgeBarCenterX,s.edgeBarCenterY);
+                WindowControl.Edge base=s.edgeDragBase==null?null:new WindowControl.Edge(s.edgeDragBase,s.edgeDragMini,s.edgeDragSide,s.edgeHidden,false,0,0);
+                WindowControl.Edge cancelled=WindowControl.cancelEdge(current,base);
+                s.placement=cancelled.placement();s.miniPlacement=cancelled.mini();s.edgeSide=cancelled.side();
+                s.edgeDragBase=null;s.edgeBarDragging=cancelled.barDragging();renderFrame(s);frameReport(op);return;
             }
             if(s.edgeDragBase==null){s.edgeDragBase=p;s.edgeDragMini=s.miniPlacement;s.edgeDragSide=s.edgeSide;}
             float x=i.getFloatExtra("x",p.x()),y=i.getFloatExtra("y",p.y());
@@ -1435,21 +1417,15 @@ final class WindowEngine {
             if("EDGE_BAR_DRAG".equals(op)){
                 s.edgeBarDragging=true;s.edgeBarCenterX=x;s.edgeBarCenterY=y;
             }else if("EDGE_BAR_DOCK".equals(op)){
-                int side=x<s.displayW/2f?-1:1;
-                Geometry.Placement visible=s.miniPlacement;
-                float vy=Math.max(safe.top+margin,Math.min(y-visible.height()*visible.scale()/2,safe.bottom-margin-visible.height()*visible.scale()));
-                s.miniPlacement=new Geometry.Placement(visible.width(),visible.height(),visible.scale(),side<0?safe.left+margin:safe.right-margin-visible.width()*visible.scale(),vy);
-                s.edgeSide=side;s.placement=Geometry.offscreen(s.miniPlacement,side,0,s.displayW,margin);
-                s.edgeDragBase=null;s.edgeBarDragging=false;
+                WindowControl.Edge docked=WindowControl.edgeBarDock(s.miniPlacement,x,y,controlSafe(safe,margin),s.displayW);
+                s.miniPlacement=docked.mini();s.edgeSide=docked.side();s.placement=docked.placement();
+                s.edgeDragBase=null;s.edgeBarDragging=docked.barDragging();
             }else{
-                y=Math.max(safe.top,Math.min(y,safe.bottom-p.height()*p.scale()));
-                Geometry.Placement destination=new Geometry.Placement(p.width(),p.height(),p.scale(),x,y);
+                if("EDGE_DOCK".equals(op)){s.edgeDragBase=null;s.edgeBarDragging=false;s.animationRev++;}
+                WindowControl.Dock moved=WindowControl.edgeMove(p,x,y,controlSafe(safe,margin),"EDGE_DOCK".equals(op),s.displayW);
+                Geometry.Placement destination=moved.placement();
                 if("EDGE_DOCK".equals(op)){
-                    s.edgeDragBase=null;s.edgeBarDragging=false;s.animationRev++;
-                    int side=Geometry.hideSide(destination,x,s.displayW);
-                    if(side!=0){hideMini(s,p,side,y,safe,margin);return;}
-                    x=x+p.width()*p.scale()/2<safe.centerX()?safe.left+margin:safe.right-margin-p.width()*p.scale();
-                    destination=new Geometry.Placement(p.width(),p.height(),p.scale(),x,y);
+                    if(moved.hiddenSide()!=0){hideMini(s,p,moved.hiddenSide(),destination.y(),safe,margin);return;}
                     s.edgeHidden=false;s.miniPlacement=destination;animate(s,p,destination,false,0,0);return;
                 }
                 s.placement=destination;
@@ -1578,11 +1554,12 @@ final class WindowEngine {
     // A destination replaces its occupant; the source never swaps the other slot.
     private void settleNewDefault(Session previous,Session next)throws Exception{
         if(previous==null||previous==next||previous.token.equals(next.token))return;
-        if("mini".equals(previous.frame)){
+        WindowControl.Previous decision=WindowControl.previous(true,true,false,previous.frame,autoMinimizeOnOpen,
+            !"mini".equals(previous.frame)&&pinned!=null&&pinned!=previous&&live(pinned)&&"mini".equals(pinned.frame));
+        if(decision==WindowControl.Previous.RETAIN_MINI){
             previous.parked=false;previous.opacity=1;pinned=previous;renderFrame(previous);return;
         }
-        if(WindowPolicy.autoMini(autoMinimizeOnOpen,previous!=next,previous.token.equals(next.token),previous.frame,
-            pinned!=null&&pinned!=previous&&live(pinned)&&"mini".equals(pinned.frame))){
+        if(decision==WindowControl.Previous.MINIMIZE){
             if(pinned!=null&&pinned!=previous)finishGroup(pinned,false,"清理失效迷你窗");
             endCover(previous);
             previous.parked=false;previous.opacity=1;previous.entering=false;previous.closing=false;
@@ -1590,11 +1567,11 @@ final class WindowEngine {
         }else finishGroup(previous,false,"替换默认窗");
     }
     private Session occupySlot(Session s,String target){
-        if("normal".equals(target)&&s==pinned){
-            Session displaced=active;active=s;pinned=null;return displaced;
-        }
-        if("mini".equals(target)&&s==active){Session displaced=pinned;pinned=null;return displaced;}
-        return null;
+        return switch(WindowControl.slot(target,s==active,s==pinned)){
+            case EXPAND_PINNED -> {Session displaced=active;active=s;pinned=null;yield displaced;}
+            case MINIMIZE_ACTIVE -> {Session displaced=pinned;pinned=null;yield displaced;}
+            case KEEP -> null;
+        };
     }
     private void state(Session s,String target) throws Exception {
         if(s.entering)return;
@@ -1611,19 +1588,14 @@ final class WindowEngine {
         float margin=s.placementMargin;
         Geometry.Placement end=normalForIme(s);
         if("mini".equals(target)) {
-            end=s.miniPlacement==null
-                ?Geometry.miniTopRight(start,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge)
-                :Geometry.resizeMini(s.miniPlacement,s.defaultScale,safe.left,safe.top,safe.right,safe.bottom,margin,s.miniLarge);
+            end=WindowControl.miniTarget(start,s.miniPlacement,s.defaultScale,controlSafe(safe,margin),s.miniLarge);
             s.miniPlacement=end;
         }
         // Change focus after the surface morph; avoid starting a competing native transition first.
         animate(s,start,end,false,startBar,"mini".equals(target)?0:1);
     }
     private void hideMini(Session s,Geometry.Placement start,int side,float y,Rect safe,float margin)throws Exception{
-        float height=start.height()*start.scale(),width=start.width()*start.scale();
-        y=Math.max(safe.top+margin,Math.min(y,safe.bottom-margin-height));
-        s.miniPlacement=new Geometry.Placement(start.width(),start.height(),start.scale(),
-            side<0?safe.left+margin:safe.right-margin-width,y);
+        s.miniPlacement=WindowControl.hiddenMini(start,side,y,controlSafe(safe,margin));
         s.edgeHidden=true;s.edgeSide=side;
         animate(s,start,Geometry.offscreen(s.miniPlacement,side,0,s.displayW,margin),false,0,0);
         log.accept("MINI_EDGE_HIDE task="+s.taskId+" side="+side);

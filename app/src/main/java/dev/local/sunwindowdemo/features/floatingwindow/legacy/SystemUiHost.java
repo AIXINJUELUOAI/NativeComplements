@@ -187,8 +187,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private View panel;
     private View openWait;
     private ImageView openWaitIcon;
-    private String openWaitToken,openWaitPackage;
-    private String cancelledOpenWaitToken;
+    private final OpenWaitState openWaitState=new OpenWaitState();
     private TextView swipeHint;
     private int hintStage;
     private int hintRevision;
@@ -315,7 +314,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
                 if(!connected||cleaned||generation!=catalogGeneration)return;all=apps;
                 if(menuContent!=null)AppList.updateApps(menuContent,apps);
                 if(fan!=null)fan.updateApps(apps);
-                if(openWaitIcon!=null)for(AppCatalog.App app:apps)if(app.pkg.equals(openWaitPackage)){openWaitIcon.setImageDrawable(app.icon);break;}
+                if(openWaitIcon!=null)for(AppCatalog.App app:apps)if(app.pkg.equals(openWaitState.packageName())){openWaitIcon.setImageDrawable(app.icon);break;}
                 refresh();
             });
         },"corner-app-catalog").start();
@@ -480,13 +479,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void updateOpenWait(Intent frame){
         if(!frame.hasExtra("waitingOpen"))return;
         String token=frame.getStringExtra("waitingToken"),pkg=frame.getStringExtra("waitingPackage");
-        if(!frame.getBooleanExtra("waitingOpen",false)||!Wire.validToken(token)||!Wire.allowedPackage(pkg)){
-            hideOpenWait();return;
-        }
-        if(!ready()||!config.enabled()||!getSystemService(android.os.PowerManager.class).isInteractive()
-            ||getSystemService(KeyguardManager.class).isKeyguardLocked())return;
-        if(token.equals(openWaitToken)||token.equals(cancelledOpenWaitToken))return;
-        hideOpenWait();openWaitToken=token;openWaitPackage=pkg;
+        boolean waiting=frame.getBooleanExtra("waitingOpen",false);
+        boolean valid=Wire.validToken(token)&&Wire.allowedPackage(pkg);
+        boolean permitted=waiting&&valid&&ready()&&config.enabled()&&getSystemService(android.os.PowerManager.class).isInteractive()
+            &&!getSystemService(KeyguardManager.class).isKeyguardLocked();
+        OpenWaitState.Change change=openWaitState.update(true,waiting,valid,permitted,token,pkg);
+        if(change==OpenWaitState.Change.KEEP)return;
+        removeOpenWait();
+        if(change==OpenWaitState.Change.HIDE)return;
         FrameLayout outside=new FrameLayout(this){
             @Override public boolean dispatchKeyEvent(KeyEvent event){
                 if(event.getKeyCode()==KeyEvent.KEYCODE_BACK){if(event.getAction()==KeyEvent.ACTION_UP)cancelOpenWait();return true;}
@@ -513,16 +513,16 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         params.setTitle("NativeComplements-opening");params.windowAnimations=0;openWait=outside;
         try{wm.addView(outside,params);updateOverlayPriority();}
         catch(RuntimeException failure){hideOpenWait();}
-        main.postDelayed(()->{if(token.equals(openWaitToken))cancelOpenWait();},13000);
+        main.postDelayed(()->{if(openWaitState.timeoutMatches(token))cancelOpenWait();},13000);
     }
-    private void hideOpenWait(){
+    private void removeOpenWait(){
         if(openWait!=null){remove(openWait);openWait=null;}
-        openWaitIcon=null;
-        openWaitToken=null;openWaitPackage=null;updateOverlayPriority();
+        openWaitIcon=null;updateOverlayPriority();
     }
+    private void hideOpenWait(){openWaitState.hide();removeOpenWait();}
     private void cancelOpenWait(){
-        String token=openWaitToken,pkg=openWaitPackage;if(token!=null)cancelledOpenWaitToken=token;hideOpenWait();
-        if(token!=null)Wire.send(this,"CANCEL_OPEN",pkg,-1,token,false);
+        OpenWaitState.Request request=openWaitState.cancel();removeOpenWait();
+        if(request!=null)Wire.send(this,"CANCEL_OPEN",request.pkg(),-1,request.token(),false);
     }
     boolean notificationWindowReady(){
         return ready()&&config.enabled()&&config.notificationWindow()&&backendReady&&!"recovery".equals(backendState)
