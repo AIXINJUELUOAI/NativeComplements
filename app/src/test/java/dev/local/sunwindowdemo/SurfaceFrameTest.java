@@ -37,6 +37,7 @@ public class SurfaceFrameTest {
         TaskCover cover=allocate(TaskCover.class);
         set(cover,"from",new RectF(screen));set(cover,"to",new RectF(small));
         set(cover,"radiusFrom",96f);set(cover,"radiusTo",48f);
+        set(cover,"decorationBounds",new RectF(small));set(cover,"drawnRadius",48f);
         cover.exit();
         assertEquals(48,ReflectionHelpers.<Float>getField(cover,"radiusFrom"),0);
     }
@@ -56,6 +57,14 @@ public class SurfaceFrameTest {
         return access;
     }
     public static void assignLayers(Object parent,SurfaceControl.Transaction transaction){}
+    /** Unsafe fixtures must reproduce the constructor's owned container and sentinel clocks. */
+    private static TaskCover coverFixture()throws Exception{
+        TaskCover cover=allocate(TaskCover.class);
+        set(cover,"root",ReflectionHelpers.callConstructor(SurfaceControl.class));
+        set(cover,"motionAt",-1L);set(cover,"gestureAt",-1L);set(cover,"decorationAt",-1L);set(cover,"frameClock",-1L);
+        set(cover,"presentationVisible",true);set(cover,"exitAlpha",1f);set(cover,"exitCoverAlpha",1f);
+        return cover;
+    }
     @After public void reset(){requiredLock=null;lastApplied=null;}
 
     @Test public void pendingIconSnapshotDoesNotReadOrUploadApplicationOriginal()throws Exception{
@@ -156,7 +165,7 @@ public class SurfaceFrameTest {
         decoration.dimAmount(40);
         SurfaceControl bar=ReflectionHelpers.callConstructor(SurfaceControl.class),dim=ReflectionHelpers.callConstructor(SurfaceControl.class);
         set(decoration,"bar",bar);set(decoration,"dim",dim);
-        TaskCover cover=allocate(TaskCover.class);
+        TaskCover cover=coverFixture();
         set(cover,"iconDrawn",true); // This fixture exercises decoration surfaces, not bitmap uploads.
         set(cover,"a",access);set(cover,"task",task);set(cover,"parent",parent);
         set(cover,"background",ReflectionHelpers.callConstructor(SurfaceControl.class));set(cover,"icon",ReflectionHelpers.callConstructor(SurfaceControl.class));
@@ -184,7 +193,7 @@ public class SurfaceFrameTest {
     @Test @LooperMode(LooperMode.Mode.PAUSED)
     public void coveredPresentationIsReusedOnlyWhileOpaqueAndRefreshedBeforeReveal()throws Exception{
         FrameworkAccess access=access();Task task=new Task(),parent=new Task();
-        TaskCover cover=allocate(TaskCover.class);
+        TaskCover cover=coverFixture();
         set(cover,"a",access);set(cover,"task",task);set(cover,"parent",parent);set(cover,"iconDrawn",true);
         set(cover,"background",ReflectionHelpers.callConstructor(SurfaceControl.class));
         set(cover,"icon",ReflectionHelpers.callConstructor(SurfaceControl.class));
@@ -230,7 +239,7 @@ public class SurfaceFrameTest {
     @Test @LooperMode(LooperMode.Mode.PAUSED)
     public void linkedHandoffRetainsOpaqueSurfacesAndMovesTheMaskToTheNewTask()throws Exception{
         FrameworkAccess access=access();Task first=new Task(),second=new Task(),parent=new Task();
-        TaskCover cover=allocate(TaskCover.class);
+        TaskCover cover=coverFixture();
         SurfaceControl background=ReflectionHelpers.callConstructor(SurfaceControl.class);
         SurfaceControl icon=ReflectionHelpers.callConstructor(SurfaceControl.class);
         set(cover,"a",access);set(cover,"task",first);set(cover,"parent",parent);set(cover,"iconDrawn",true);
@@ -247,7 +256,11 @@ public class SurfaceFrameTest {
         assertFalse(old.holding());assertTrue(cover.mask.holding());assertSame(second,cover.mask.task);
         assertEquals(0,((TransactionShadow)Shadow.extract(first.pending)).alpha.get(first.mSurfaceControl),0);
         assertEquals(0,lastApplied.alpha.get(second.mSurfaceControl),0);
-        assertEquals(1,lastApplied.alpha.get(background),0);assertEquals(1,lastApplied.alpha.get(icon),0);
+        SurfaceControl root=ReflectionHelpers.getField(cover,"root");
+        assertEquals(1,lastApplied.alpha.get(root),0);
+        assertTrue(lastApplied.shown.contains(root));assertTrue(lastApplied.shown.contains(background));assertTrue(lastApplied.shown.contains(icon));
+        assertEquals(Integer.valueOf(0),lastApplied.layers.get(background));assertEquals(Integer.valueOf(1),lastApplied.layers.get(icon));
+        assertSame(second.mSurfaceControl,lastApplied.relativeTo.get(root));
         assertEquals(48,lastApplied.radii.get(background),0);
         assertTrue(cover.canRetarget());assertFalse(cover.reusesPresentation(pose));
         cover.close();assertFalse(cover.mask.holding());
@@ -275,6 +288,7 @@ public class SurfaceFrameTest {
         @Implementation protected void __constructor__(){checkLock();}
         @Implementation protected void apply(){checkLock();lastApplied=this;}
         @Implementation protected void close(){checkLock();}
+        @Implementation protected SurfaceControl.Transaction setLayer(SurfaceControl s,int layer){layers.put(s,layer);return real;}
         @Implementation protected SurfaceControl.Transaction setRelativeLayer(SurfaceControl s,SurfaceControl relative,int layer){layers.put(s,layer);relativeTo.put(s,relative);return real;}
         @Implementation protected SurfaceControl.Transaction reparent(SurfaceControl s,SurfaceControl parent){parents.put(s,parent);return real;}
         @Implementation protected SurfaceControl.Transaction setPosition(SurfaceControl s,float x,float y){return real;}
