@@ -88,6 +88,7 @@ fun ModuleApp(
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
             Page.Shade -> ShadeScreen(bottomInset)
+            Page.Alive -> dev.local.sunwindowdemo.features.alive.AliveScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
@@ -104,7 +105,7 @@ fun ModuleApp(
                         onCalls = { navigate(Page.Calls) }, onEdgeTouch = { navigate(Page.EdgeTouch) },
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onBarrage = { navigate(Page.Barrage) },
-                        onShade = { navigate(Page.Shade) },
+                        onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
                     )
                     Page.Window -> WindowScreen(controller.preferences, navigate, controller::toggleControl,
                         enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,

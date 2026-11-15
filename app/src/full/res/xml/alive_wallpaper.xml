@@ -1,0 +1,3 @@
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/alive_wallpaper_description"
+    android:supportsAmbientMode="false" />

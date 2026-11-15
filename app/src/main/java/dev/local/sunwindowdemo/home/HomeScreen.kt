@@ -21,6 +21,7 @@ fun HomeScreen(
     onIcons: () -> Unit = {},
     onBarrage: () -> Unit = {},
     onShade: () -> Unit = {},
+    onAlive: (() -> Unit)? = null,
 ) {
     Text("版本 ${BuildConfig.VERSION_NAME}", Modifier.padding(start = 16.dp, bottom = 20.dp),
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
@@ -33,6 +34,7 @@ fun HomeScreen(
         FeatureRow("加速度传感器控制", "shake", onMotion)
         FeatureRow("边缘防误触", "edge", onEdgeTouch)
         FeatureRow("外观与控制", "window", onShade)
+        onAlive?.let { FeatureRow("Alive 壁纸", "window", it) }
     }
     Spacer(Modifier.height(16.dp))
     SettingsGroup {

@@ -6,7 +6,8 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 GUIDE = ROOT / "docs/adaptation"
 EXPECTED = ("README.md", "architecture.md", "floating-window.md", "system-features.md", "standalone-window.md",
-            "appearance-boundary.md", "icon-boundary.md", "notification-boundary.md", "system-policy-boundary.md", "shared-boundary.md")
+            "appearance-boundary.md", "icon-boundary.md", "notification-boundary.md", "system-policy-boundary.md", "shared-boundary.md",
+            "alive-assets.md", "alive-platform.md", "alive-renderer.md")
 LINK = re.compile(r"\[[^\]\n]*\]\((?:<([^>]+)>|([^\s)]+))\)")
 LINE = re.compile(r"L([1-9]\d*)(?:-L([1-9]\d*))?")
 REFERENCE = re.compile(r"^\s*\[[^\]\n]+\]:\s*(?:<([^>]+)>|(\S+))", re.MULTILINE)
