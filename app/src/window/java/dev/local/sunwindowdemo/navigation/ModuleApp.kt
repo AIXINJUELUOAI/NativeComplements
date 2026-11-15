@@ -27,7 +27,7 @@ fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit
             when (page) {
                 Page.Home, Page.Window -> {
                     WindowScreen(controller.preferences, navigate, controller::toggleControl,
-                        controller.enablePrompt, controller.enableChecking, controller::dismissEnablePrompt)
+                        controller.enablePrompt, controller.enableChecking, controller::dismissEnablePrompt, controller::confirmEnablePrompt)
                     WindowMonetSettings()
                     SettingsGroup {
                         SettingRow("关于", onClick = { navigate(Page.About) })

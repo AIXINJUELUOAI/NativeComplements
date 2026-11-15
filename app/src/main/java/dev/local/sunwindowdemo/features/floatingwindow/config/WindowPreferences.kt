@@ -29,8 +29,8 @@ class WindowPreferenceStore(private val context: Context) {
         autoMinimizeOnOpen = config.autoMinimizeOnOpen(), endOnClose = config.endOnClose(), keepEdgeAwake = config.keepEdgeAwake(),
         hideRecents = config.hideRecents(), doubleClose = config.doubleClose(), notificationWindow = config.notificationWindow(), landscapeShareWindow = config.landscapeShareWindow(),
     )
-    internal fun enable(decision: FreeformEnablePolicy.Decision) {
-        require(decision == FreeformEnablePolicy.Decision.ALLOWED) { "Freeform capability check required" }
+    /** A user choice, not a claim that runtime compatibility has been verified. */
+    internal fun enable() {
         preferences.edit().putBoolean("enabled", true).apply()
         ConfigProvider.changed(context)
     }

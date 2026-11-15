@@ -105,6 +105,12 @@ class WindowController(private val activity: Activity) {
     fun blocked(packages: Set<String>) = store.blocked(packages)
     fun toggleControl() = setEnabled(!preferences.enabled && !enableChecking)
     fun dismissEnablePrompt() { enablePrompt = null }
+    fun confirmEnablePrompt() {
+        if (destroyed || enablePrompt == null) return
+        enablePrompt = null
+        store.enable()
+        preferences = store.read()
+    }
     private fun globalFreeform(): Int? = try {
         Settings.Global.getInt(activity.contentResolver, "enable_freeform_support")
     } catch (_: Settings.SettingNotFoundException) { null }
@@ -151,21 +157,21 @@ class WindowController(private val activity: Activity) {
     private fun finishEnable(decision: FreeformEnablePolicy.Decision) {
         cancelEnable()
         if (decision == FreeformEnablePolicy.Decision.ALLOWED) {
-            store.enable(decision)
+            store.enable()
             preferences = store.read()
             return
         }
         val reason = when (decision) {
-            FreeformEnablePolicy.Decision.SETTING_REQUIRED -> "系统尚未开启 Freeform。可由你手动使用 ADB 执行："
-            FreeformEnablePolicy.Decision.SETTING_UNKNOWN -> "无法读取系统 Freeform 设置，暂不启用。请检查系统设置；需要时可由你手动使用 ADB 执行："
-            FreeformEnablePolicy.Decision.RUNTIME_UNAVAILABLE -> "系统设置已为 1，但运行时多窗口或 Freeform 能力尚未生效，或此发行版限制了该能力。暂不启用；重启不保证解决。"
-            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "检测到其他小窗版本或宿主已取得本次启动的接管权，暂不启用。请在 LSPosed 中只保留一个小窗版本启用并重启手机，再检查。关闭管理页开关不会在当前启动中转交接管权。"
-            FreeformEnablePolicy.Decision.PREFLIGHT_FAILED -> "系统后端的精确接口预检尚未就绪，暂不启用。请检查模块后端与当前系统组件的适配。"
-            else -> "尚未收到本次检查的可信完整系统能力回应，或检查已超时，暂不启用。请检查模块作用域与后端状态后重试。"
+            FreeformEnablePolicy.Decision.SETTING_REQUIRED -> "未检测到系统 Freeform 开关已开启，但这不一定代表小窗不可用。可以继续开启并尝试；若无法使用，再按需手动执行："
+            FreeformEnablePolicy.Decision.SETTING_UNKNOWN -> "未能读取系统 Freeform 设置，这不代表小窗一定不可用。可以继续开启并尝试；若无法使用，再按需手动执行："
+            FreeformEnablePolicy.Decision.RUNTIME_UNAVAILABLE -> "本次未检测到运行时多窗口或 Freeform 能力。可以继续开启并尝试，但不保证当前系统可用，重启也不保证解决。"
+            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "检测到其他小窗版本或宿主已取得本次启动的接管权。可以保存开启，但不会强抢接管权；建议在 LSPosed 中只保留一个小窗版本并重启。关闭管理页开关不会在当前启动中转交接管权。"
+            FreeformEnablePolicy.Decision.PREFLIGHT_FAILED -> "系统后端的接口预检尚未就绪。可以保存开启，但实际操作仍由后端安全检查决定，不会强行调用不兼容接口。"
+            else -> "尚未收到本次可信完整的系统能力回应，或检查已超时。可以继续开启并尝试；如无反应，再检查模块作用域、后端状态和是否需要重启。"
         }
         enablePrompt = reason + if (decision == FreeformEnablePolicy.Decision.SETTING_REQUIRED ||
                 decision == FreeformEnablePolicy.Decision.SETTING_UNKNOWN)
-            "\n\nadb shell settings put global enable_freeform_support 1\n\n本模块不会自动修改设置。执行后重新尝试；值为 1 仍需通过运行时能力检查。" else ""
+            "\n\nadb shell settings put global enable_freeform_support 1\n\n本模块不会自动修改设置。此检查仅作提醒，可选择继续开启；设置值也不等于实际兼容性保证。" else ""
     }
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")

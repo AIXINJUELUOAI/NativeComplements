@@ -1,6 +1,6 @@
 package dev.local.sunwindowdemo;
 
-/** Manager-side enable decision. No Android objects, settings writes, or diagnostic-text parsing. */
+/** Manager-side enable diagnostics, advisory after user confirmation. No settings writes or text parsing. */
 public final class FreeformEnablePolicy {
     private FreeformEnablePolicy() {}
     public enum Decision { ALLOWED, SETTING_REQUIRED, SETTING_UNKNOWN, BACKEND_UNKNOWN, PREFLIGHT_FAILED, RUNTIME_UNAVAILABLE, OWNERSHIP_CONFLICT }

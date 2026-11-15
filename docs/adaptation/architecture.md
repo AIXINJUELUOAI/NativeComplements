@@ -43,7 +43,7 @@
 - [ConfigProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/ConfigProvider.java>) 仅授权本包实际 UID 和 SystemUI 实际 UID，提供 `read` 与窄 `targets` 写入操作；当前不能拿它给任意第三方/独立包读设置。
 - Provider 会在导出前触发旧配置迁移。[copy](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/ConfigProvider.java>) 在宿主 worker 完整写入，失败抛错，不应把未完成复制的配置发布为 ready。
 - [SystemUiHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>) 交互期间每 750ms 发送 STATUS，它同时供小窗、弹幕和建议使用；熄屏停止。当前它不只是“小窗是否开启”的心跳。
-- 当前 [toggleControl](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/ui/WindowController.kt>) 直接持久化 enabled，尚无用户新提议的“开总开关前实际 Freeform 能力校验”。STATUS 的协议兼容与宿主连接不等于全部运行能力。
+- 当前 [toggleControl](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/ui/WindowController.kt>) 会读取 Freeform 设置并按 correlated STATUS 检查能力，但按用户最新要求仅作提示：检查异常也可明确“继续开启”，取消不保存；确认开启只表示用户选择，不把未知能力伪装成已验证。不开系统设置、不强抢接管权、不删后端任务安全预检。STATUS 的协议兼容与宿主连接仍不等于全部运行能力。
 
 ### 命令与数据边界
 

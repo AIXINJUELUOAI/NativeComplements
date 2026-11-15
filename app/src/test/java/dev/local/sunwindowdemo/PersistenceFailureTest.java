@@ -126,10 +126,10 @@ public class PersistenceFailureTest {
                 Shadows.shadowOf(listener).addActiveNotification(sbn);
                 host.notification(listener,sbn);drain(host);
                 assertEquals(1,writes.get());assertEquals(1,((java.util.Map<?,?>)ReflectionHelpers.getField(host,"playing")).size());
-                assertEquals(1,listener.getActiveNotifications().length);assertTrue(((java.util.Set<?>)ReflectionHelpers.getField(host,"ignoredRemovals")).isEmpty());
+                assertEquals(1,listener.getActiveNotifications().length);assertTrue(((java.util.Set<?>)ReflectionHelpers.getField(ReflectionHelpers.getField(host,"state"),"ignoredRemovals")).isEmpty());
                 saved.set(true);host.notification(listener,sbn);drain(host);
                 assertEquals(2,writes.get());assertEquals(0,listener.getActiveNotifications().length);
-                assertEquals(1,((java.util.Set<?>)ReflectionHelpers.getField(host,"ignoredRemovals")).size());
+                assertEquals(1,((java.util.Set<?>)ReflectionHelpers.getField(ReflectionHelpers.getField(host,"state"),"ignoredRemovals")).size());
             }finally{host.close();}
         }
     }

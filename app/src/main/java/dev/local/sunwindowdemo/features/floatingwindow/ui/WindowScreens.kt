@@ -13,15 +13,17 @@ import dev.local.sunwindowdemo.navigation.Page
 
 @Composable
 fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: () -> Unit,
-                 enablePrompt: String? = null, enableChecking: Boolean = false, dismissEnablePrompt: () -> Unit = {}) {
+                 enablePrompt: String? = null, enableChecking: Boolean = false, dismissEnablePrompt: () -> Unit = {},
+                 confirmEnablePrompt: () -> Unit = {}) {
     SettingsGroup {
-        ToggleRow("启用小窗", if (enableChecking) "正在核验系统 Freeform 能力…再次点击可取消" else "开启前核验系统设置、运行时能力与接管冲突", value = p.enabled) { toggleControl() }
+        ToggleRow("启用小窗", if (enableChecking) "正在核验系统 Freeform 能力…再次点击可取消" else "检查结果仅作提醒，可继续开启；不自动修改系统设置", value = p.enabled) { toggleControl() }
     }
     if (enablePrompt != null) AlertDialog(
         onDismissRequest = dismissEnablePrompt,
-        title = { Text("暂不能启用小窗") },
+        title = { Text("开启前提醒") },
         text = { SelectionContainer { Text(enablePrompt) } },
-        confirmButton = { TextButton(onClick = dismissEnablePrompt) { Text("知道了") } },
+        confirmButton = { TextButton(onClick = confirmEnablePrompt) { Text("继续开启") } },
+        dismissButton = { TextButton(onClick = dismissEnablePrompt) { Text("取消") } },
     )
     GroupTitle("小窗设置")
     SettingsGroup {

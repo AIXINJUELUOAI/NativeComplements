@@ -63,10 +63,9 @@ class HostBridgeTest {
         assertEquals(ConfigProvider.CHANGED, signal.action)
         assertEquals("com.android.systemui", signal.`package`)
         assertThrows(IllegalArgumentException::class.java) { store.boolean("enabled", true) }
-        assertThrows(IllegalArgumentException::class.java) { store.enable(FreeformEnablePolicy.Decision.BACKEND_UNKNOWN) }
+        // The controller owns explicit confirmation; persistence does not fake a verified capability.
         assertFalse(WindowPreferenceStore(context).read().enabled)
-        val allowed = FreeformEnablePolicy.evaluate(1, FreeformEnablePolicy.Capability(true, true, true, true, false))
-        store.enable(allowed)
+        store.enable()
         assertTrue(WindowPreferenceStore(context).read().enabled)
         val enabledSignal = shadowOf(context.applicationContext as android.app.Application).broadcastIntents.last()
         assertEquals(ConfigProvider.CHANGED, enabledSignal.action)

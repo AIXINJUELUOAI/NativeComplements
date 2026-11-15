@@ -109,7 +109,7 @@ fun ModuleApp(
                     )
                     Page.Window -> WindowScreen(controller.preferences, navigate, controller::toggleControl,
                         enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
-                        dismissEnablePrompt = controller::dismissEnablePrompt)
+                        dismissEnablePrompt = controller::dismissEnablePrompt, confirmEnablePrompt = controller::confirmEnablePrompt)
                     Page.Suggestions -> SuggestionScreen(controller)
                     Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean, controller::number)

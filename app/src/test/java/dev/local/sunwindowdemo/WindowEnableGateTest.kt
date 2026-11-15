@@ -37,6 +37,8 @@ class WindowEnableGateTest {
             .apply { isAccessible = true }.invoke(controller, intent, uid)
     }
     @Test fun checksEveryEnableAndIgnoresUntrustedStaleAndCancelledReplies() {
+        controller.confirmEnablePrompt() // No pending warning is not an enable action.
+        assertFalse(controller.preferences.enabled)
         controller.boolean("enabled", true)
         assertFalse(controller.preferences.enabled)
         assertTrue(controller.enableChecking)
@@ -56,27 +58,45 @@ class WindowEnableGateTest {
         controller.toggleControl()
         assertFalse(controller.preferences.enabled)
     }
-    @Test fun missingCapabilityTimeoutAndSettingChangedDuringRequestAllRefuseEnable() {
+    @Test fun missingCapabilityTimeoutAndSettingChangesWarnUntilUserConfirms() {
         controller.toggleControl()
         reply(complete = false)
         assertFalse(controller.preferences.enabled)
         assertNotNull(controller.enablePrompt)
         controller.dismissEnablePrompt()
+        controller.confirmEnablePrompt()
+        assertFalse(controller.preferences.enabled)
         controller.toggleControl()
         shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofMillis(2001))
         assertFalse(controller.enableChecking)
         assertFalse(controller.preferences.enabled)
+        assertNotNull(controller.enablePrompt)
+        controller.confirmEnablePrompt()
+        assertTrue(controller.preferences.enabled)
+        controller.toggleControl()
         controller.toggleControl()
         Settings.Global.putInt(activity.contentResolver, "enable_freeform_support", 0)
         reply()
         assertFalse(controller.preferences.enabled)
         assertTrue(controller.enablePrompt!!.contains("adb shell settings put global enable_freeform_support 1"))
+        controller.confirmEnablePrompt()
+        assertTrue(controller.preferences.enabled)
+        assertNull(controller.enablePrompt)
+        assertEquals(0, Settings.Global.getInt(activity.contentResolver, "enable_freeform_support"))
+        controller.toggleControl()
+        Settings.Global.putString(activity.contentResolver, "enable_freeform_support", null)
+        controller.toggleControl()
+        assertFalse(controller.preferences.enabled)
+        assertNotNull(controller.enablePrompt)
+        controller.confirmEnablePrompt()
+        assertTrue(controller.preferences.enabled)
+        assertNull(Settings.Global.getString(activity.contentResolver, "enable_freeform_support"))
     }
     @Test fun runtimeFalseAndConflictDoNotClaimSettingWriteOrRestartWillFixIt() {
         controller.toggleControl()
         reply(freeform = false)
         assertFalse(controller.preferences.enabled)
-        assertTrue(controller.enablePrompt!!.contains("重启不保证解决"))
+        assertTrue(controller.enablePrompt!!.contains("重启也不保证解决"))
         assertEquals(1, Settings.Global.getInt(activity.contentResolver, "enable_freeform_support"))
         controller.toggleControl()
         reply(conflict = true, known = false)
@@ -84,12 +104,14 @@ class WindowEnableGateTest {
         assertTrue(controller.enablePrompt!!.contains("接管"))
         assertTrue(controller.enablePrompt!!.contains("LSPosed"))
         assertTrue(controller.enablePrompt!!.contains("重启"))
+        controller.confirmEnablePrompt()
+        assertTrue(controller.preferences.enabled) // Diagnostics do not replace backend ownership enforcement.
+        assertEquals(1, Settings.Global.getInt(activity.contentResolver, "enable_freeform_support"))
     }
-    @Test fun genericStoreCannotBypassEnableCheckAndDisableNeverNeedsCapability() {
+    @Test fun genericStoreKeepsExplicitEnableAndDisableNeverNeedsCapability() {
         val store = WindowPreferenceStore(activity)
         assertThrows(IllegalArgumentException::class.java) { store.boolean("enabled", true) }
-        assertThrows(IllegalArgumentException::class.java) { store.enable(FreeformEnablePolicy.Decision.BACKEND_UNKNOWN) }
-        store.enable(FreeformEnablePolicy.Decision.ALLOWED)
+        store.enable()
         assertTrue(store.read().enabled)
         Settings.Global.putInt(activity.contentResolver, "enable_freeform_support", 0)
         controller.boolean("enabled", false)
