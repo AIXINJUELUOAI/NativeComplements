@@ -24,6 +24,50 @@ import org.robolectric.shadows.ShadowBinder
 class HostBridgeTest {
     private val context get() = ApplicationProvider.getApplicationContext<Context>()
 
+    @Test fun delegatedEnvironmentIsReadOnlyBoundedAndExpiresClosed() {
+        val constructor = SystemUiHost::class.java.getDeclaredConstructor(Context::class.java).apply { isAccessible = true }
+        val host = constructor.newInstance(context)
+        var foreground: String? = null
+        var blocked = false
+        val extras = java.lang.reflect.Proxy.newProxyInstance(HostExtras::class.java.classLoader, arrayOf(HostExtras::class.java)) { _, method, args ->
+            if (method.name == "environment") { foreground = args[0] as String; blocked = args[1] as Boolean }
+            if (method.returnType == Boolean::class.javaPrimitiveType) false else null
+        }
+        fun field(name: String, value: Any) { SystemUiHost::class.java.getDeclaredField(name).apply { isAccessible = true }.set(host, value) }
+        field("extras", extras)
+        field("wm", context.getSystemService(android.view.WindowManager::class.java))
+        field("delegatedToStandalone", true)
+        shadowOf(context.getSystemService(android.os.PowerManager::class.java)).setIsInteractive(true)
+        shadowOf(context.getSystemService(android.app.KeyguardManager::class.java)).setKeyguardLocked(false)
+        val update = SystemUiHost::class.java.getDeclaredMethod("updateCompanionEnvironment").apply { isAccessible = true }
+        val key = "dev.nativecomplements.window.companion.environment.v1"
+        val snapshot = org.json.JSONObject().put("at", android.os.SystemClock.elapsedRealtime())
+            .put("foreground", "example.owner").put("title", "").put("system", false).put("keyboard", false)
+            .put("screenshot", false).put("panel", false).put("waiting", false).put("imeTop", Int.MAX_VALUE).put("rects", org.json.JSONArray())
+        try {
+            System.setProperty(key, snapshot.toString()); update.invoke(host)
+            assertEquals("example.owner", foreground); assertFalse(blocked)
+            snapshot.put("at", android.os.SystemClock.elapsedRealtime() - 2501)
+            System.setProperty(key, snapshot.toString()); update.invoke(host)
+            assertEquals("", foreground); assertTrue(blocked)
+            System.setProperty(key, "x".repeat(8193)); update.invoke(host)
+            assertTrue(blocked)
+            assertFalse(SystemUiHost::class.java.getDeclaredField("backendReady").apply { isAccessible = true }.getBoolean(host))
+        } finally { System.clearProperty(key) }
+    }
+
+    @Test fun backendChoiceUsesOwnPackageManagerMarkerWithoutChangingWindowSettings() {
+        val full = dev.local.sunwindowdemo.core.ModuleIdentity.FULL_PACKAGE
+        val window = dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE
+        val before = WindowPreferenceStore(context).preferences.all.toMap()
+        assertEquals("", dev.local.sunwindowdemo.core.WindowBackendSelection.read(context))
+        dev.local.sunwindowdemo.core.WindowBackendSelection.save(context, window)
+        assertEquals(window, dev.local.sunwindowdemo.core.WindowBackendSelection.read(context))
+        dev.local.sunwindowdemo.core.WindowBackendSelection.save(context, full)
+        assertEquals(full, dev.local.sunwindowdemo.core.WindowBackendSelection.read(context))
+        assertEquals(before, WindowPreferenceStore(context).preferences.all)
+    }
+
     @Test fun hostSnapshotPreservesExistingOrderAndClearsRemovedSettings() {
         val old = context.getSharedPreferences("host-test", 0)
         old.edit().putString("apps", "com.old.app").putBoolean("enabled", true).putInt("radius", 230).commit()

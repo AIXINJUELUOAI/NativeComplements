@@ -15,12 +15,42 @@ public final class SunWindowModule extends XposedModule {
         if (!eligible || attempted) return;
         attempted = true;
         ProductFeatures.installServer(this,p.getClassLoader(),this::note);
-        String owner=dev.local.sunwindowdemo.core.WindowBackendOwnership.claim(Wire.PKG);
-        if(!Wire.PKG.equals(owner)){
-            try{WindowBackendConflict.install(this,p.getClassLoader(),owner,this::note);}
-            catch(Exception unavailable){note("WINDOW_CONFLICT_STATUS_UNAVAILABLE "+FrameworkAccess.reason(unavailable));}
-            return;
+        XposedInterface.HookHandle startup=null;
+        try{
+            ClassLoader loader=p.getClassLoader();
+            Class<?> wms=Class.forName("com.android.server.wm.WindowManagerService",false,loader);
+            java.lang.reflect.Method main=wms.getDeclaredMethod("main",android.content.Context.class,
+                Class.forName("com.android.server.input.InputManagerService",false,loader),boolean.class,
+                Class.forName("com.android.server.policy.WindowManagerPolicy",false,loader),
+                Class.forName("com.android.server.wm.ActivityTaskManagerService",false,loader));
+            if(!java.lang.reflect.Modifier.isStatic(main.getModifiers())||main.getReturnType()!=wms)throw new NoSuchMethodException("WMS startup");
+            final boolean[] selected={false};
+            startup=hook(main).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                if(!selected[0]){selected[0]=true;
+                    try{
+                        String choice=dev.local.sunwindowdemo.core.WindowBackendOwnership.select(
+                            dev.local.sunwindowdemo.core.WindowBackendSelection.readSystem(loader));
+                        String owner=!choice.isEmpty()&&!Wire.PKG.equals(choice)?choice:
+                            dev.local.sunwindowdemo.core.WindowBackendOwnership.claim(Wire.PKG);
+                        boolean delegated=dev.local.sunwindowdemo.core.ModuleIdentity.FULL_PACKAGE.equals(Wire.PKG)
+                            &&dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE.equals(choice);
+                        note("WINDOW_BACKEND_SELECTED choice="+(choice.isEmpty()?"legacy-auto":choice)+" owner="+owner);
+                        if(!Wire.PKG.equals(owner))WindowBackendConflict.install(this,loader,owner,delegated,this::note);
+                        else installBackend(p);
+                    }catch(Throwable unavailable){note("WINDOW_STARTUP_UNAVAILABLE "+FrameworkAccess.reason(unavailable));}
+                }
+                return chain.proceed();
+            });
+            java.lang.reflect.Method caller=Class.forName("com.android.server.SystemServer",false,loader)
+                .getDeclaredMethod("startOtherServices",Class.forName("com.android.server.utils.TimingsTraceAndSlog",false,loader));
+            if(!deoptimize(caller))throw new IllegalStateException("WMS caller deoptimize");
+            note("WINDOW_STARTUP_READY");
+        }catch(Throwable unavailable){
+            if(startup!=null)try{startup.unhook();}catch(Throwable ignored){}
+            note("WINDOW_STARTUP_UNAVAILABLE "+FrameworkAccess.reason(unavailable));
         }
+    }
+    private void installBackend(SystemServerStartingParam p){
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
         try {
             FrameworkAccess a = new FrameworkAccess(p.getClassLoader());

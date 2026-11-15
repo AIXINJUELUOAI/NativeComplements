@@ -39,6 +39,17 @@ public class WindowBackendOwnershipTest {
             } finally { if(original==null)shared.remove(key);else shared.setProperty(key,original); }
         }
     }
+    @Test public void explicitSelectionIsFrozenAndDoesNotClaimOrTransferAnOwner() {
+        Properties shared=new Properties();
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.select(shared,ModuleIdentity.WINDOW_PACKAGE));
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.select(shared,ModuleIdentity.FULL_PACKAGE));
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claim(shared,ModuleIdentity.WINDOW_PACKAGE));
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claim(shared,ModuleIdentity.FULL_PACKAGE));
+        Properties automatic=new Properties();
+        assertEquals("",WindowBackendOwnership.select(automatic,""));
+        assertEquals("",WindowBackendOwnership.select(automatic,ModuleIdentity.WINDOW_PACKAGE));
+        assertEquals(ModuleIdentity.FULL_PACKAGE,WindowBackendOwnership.claim(automatic,ModuleIdentity.FULL_PACKAGE));
+    }
     @Test public void unknownProductCannotAcquireOwnership() {
         Properties shared=new Properties();
         try{WindowBackendOwnership.claim(shared,"other.module");fail();}catch(IllegalArgumentException expected){}

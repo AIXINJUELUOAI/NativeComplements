@@ -14,6 +14,7 @@ import java.nio.ByteBuffer;
 
 /** All EGL, animation, native handles and textures belong to one bounded worker. */
 public final class AliveRenderer implements AutoCloseable {
+    private static final int LOCK_TEXTURE=0,HOME_TEXTURE=6;
     private final Context context;
     private final HandlerThread thread=new HandlerThread("AliveGL");
     private final Handler handler;
@@ -26,7 +27,7 @@ public final class AliveRenderer implements AutoCloseable {
     private int width,height,photo,mask,decorator,mode=1,seed=-1;
     private boolean seedAnimate;
     private float aspect;
-    private boolean visible,framePosted,failed;
+    private boolean visible,framePosted,failed,firstFrame,endpointPending;
     private volatile boolean closed;
     private volatile String error="";
     private String reportedError;
@@ -51,12 +52,16 @@ public final class AliveRenderer implements AutoCloseable {
         post(()->{
             if(mode==next){
                 if(!animate){
+                    if(scene!=0&&(textures.active()||motion.transitionActive()||frameMotion.active()))
+                        android.util.Log.i("NativeComplements","ALIVE_RENDER force-endpoint mode="+next);
+                    endpointPending=true;
                     seed=-1;seedAnimate=false;
                     if(scene!=0){textures.change(next,false);frameMotion.finish();motion.finish();sample.clear();schedule();}
                 }
                 return;
             }
-            int previous=mode;mode=next;sample.clear();
+            int previous=mode;mode=next;sample.clear();endpointPending=true;
+            android.util.Log.i("NativeComplements","ALIVE_RENDER mode="+previous+"->"+next+" animate="+animate+" scene="+(scene!=0)+" visible="+visible);
             if(scene==0){if(next==0){seed=-1;seedAnimate=false;}else if(previous==0&&animate){seed=0;seedAnimate=true;}}
             if(scene!=0){
                 textures.change(next,animate);frameMotion.change(next,motion);if(!animate)frameMotion.finish();
@@ -64,9 +69,16 @@ public final class AliveRenderer implements AutoCloseable {
             }
         });
     }
-    public void visible(boolean value){post(()->{
-        if(visible==value)return;visible=value;
-        if(!value)release();else if(!failed)start();
+    public void visible(boolean value){visible(value,false);}
+    /** A bounded sleep interruption may retain an existing scene, but must never draw or init hidden. */
+    public void visible(boolean value,boolean retainScene){post(()->{
+        boolean changed=visible!=value;visible=value;
+        if(!value){
+            if(retainScene&&scene!=0){stopFrames();sample.clear();if(changed)android.util.Log.i("NativeComplements","ALIVE_RENDER hidden-retained mode="+mode);}
+            else release();
+        }else if(!failed){
+            if(scene==0)start();else if(changed){endpointPending=true;schedule();}
+        }
     });}
     public void reload(){post(()->{release();failed=false;if(visible)start();});}
     public void detach(){post(()->{release();surface=null;});}
@@ -111,10 +123,11 @@ public final class AliveRenderer implements AutoCloseable {
             try{decorator=upload(decor);}finally{decor.recycle();}
         }
         int initial=seed>=0?seed:mode;boolean animate=seedAnimate;seed=-1;seedAnimate=false;
-        scene=NativeScene.create(width,height,initial,style,2,6);
+        // Photo styles animate geometry/masks; never silently opt into an unrelated glass filter.
+        scene=NativeScene.create(width,height,initial,style,LOCK_TEXTURE,HOME_TEXTURE);
         if(scene==0)throw new IOException("Native photo scene creation failed");
-        motion=new SceneMotion(width,height,initial,-1,2,6,false);
-        textures=new TextureMotion(width,height,initial,2,6);
+        motion=new SceneMotion(width,height,initial,-1,LOCK_TEXTURE,HOME_TEXTURE,false);
+        textures=new TextureMotion(width,height,initial,LOCK_TEXTURE,HOME_TEXTURE);
         PhotoStyle spec=PhotoStyle.get(style);frameMotion=new FrameMotion(width,height,initial,false,spec);
         if(initial!=mode){textures.change(mode,animate);frameMotion.change(mode,motion);motion.change(mode);
             if(!animate){frameMotion.finish();motion.finish();}}
@@ -123,7 +136,8 @@ public final class AliveRenderer implements AutoCloseable {
         NativeScene.texture(scene,0,mask,spec.size,spec.size);
         NativeScene.tint(scene,0xff264552);
         masks=new MaskFrames(context,handler,()->{if(visible&&scene!=0)render(frameTime);},spec);
-        choreographer=Choreographer.getInstance();
+        choreographer=Choreographer.getInstance();firstFrame=true;endpointPending=true;
+        android.util.Log.i("NativeComplements","ALIVE_RENDER init initial="+initial+" target="+mode+" animate="+animate+" size="+width+"x"+height);
     }
     private static void textureParameters(){
         GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D,GLES30.GL_TEXTURE_MIN_FILTER,GLES30.GL_LINEAR);
@@ -158,11 +172,18 @@ public final class AliveRenderer implements AutoCloseable {
                 ||!NativeScene.render(scene,photo,decorator,aspect,sample.base))throw new IOException("Invalid native photo packet");
             if(!EGL14.eglSwapBuffers(display,window))throw new IOException("EGL swap failed");
             reportError("");sample.clear();
-            if(textures.active()||motion.transitionActive()||frameMotion.active()||resumedSample)schedule();
+            if(firstFrame){android.util.Log.i("NativeComplements","ALIVE_RENDER first-frame mode="+mode);firstFrame=false;}
+            boolean active=textures.active()||motion.transitionActive()||frameMotion.active();
+            if(!active&&!resumedSample&&endpointPending){android.util.Log.i("NativeComplements","ALIVE_RENDER endpoint mode="+mode+" ratios="+motion.values[0]+","+motion.values[1]+","+motion.values[2]+" textures=0/6");endpointPending=false;}
+            if(active||resumedSample)schedule();
         }catch(Exception|LinkageError failure){fail(failure);}
     }
-    private void release(){
+    private void stopFrames(){
         if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(draw);
+    }
+    private void release(){
+        if(scene!=0||display!=EGL14.EGL_NO_DISPLAY)android.util.Log.i("NativeComplements","ALIVE_RENDER release mode="+mode+" visible="+visible);
+        stopFrames();
         sample.clear();if(textures!=null){textures.close();textures=null;}
         if(frameMotion!=null){frameMotion.close();frameMotion=null;}if(motion!=null){motion.close();motion=null;}
         if(masks!=null){masks.close();masks=null;}

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <receiver android:name=".core.WindowBackendSelection" android:enabled="false" android:exported="false" />
         <service android:name=".features.alive.AliveWallpaperService" android:label="Alive 壁纸" android:permission="android.permission.BIND_WALLPAPER" android:exported="true">
             <intent-filter><action android:name="android.service.wallpaper.WallpaperService" /></intent-filter>
             <meta-data android:name="android.service.wallpaper" android:resource="@xml/alive_wallpaper" />

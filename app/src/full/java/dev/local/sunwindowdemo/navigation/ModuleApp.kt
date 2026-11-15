@@ -107,9 +107,12 @@ fun ModuleApp(
                         onIcons = { navigate(Page.IconLayers) }, onBarrage = { navigate(Page.Barrage) },
                         onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
                     )
-                    Page.Window -> WindowScreen(controller.preferences, navigate, controller::toggleControl,
-                        enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
-                        dismissEnablePrompt = controller::dismissEnablePrompt, confirmEnablePrompt = controller::confirmEnablePrompt)
+                    Page.Window -> {
+                        WindowBackendScreen()
+                        WindowScreen(controller.preferences, navigate, controller::toggleControl,
+                            enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
+                            dismissEnablePrompt = controller::dismissEnablePrompt, confirmEnablePrompt = controller::confirmEnablePrompt)
+                    }
                     Page.Suggestions -> SuggestionScreen(controller)
                     Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean, controller::number)

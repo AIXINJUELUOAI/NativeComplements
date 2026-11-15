@@ -85,6 +85,8 @@ def main():
                         owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
                         found |= owners & alive_types
                 assert found == alive_types, "Alive JNI/renderer/service missing after R8"
+            assert any(b'dev.local.sunwindowdemo.core.WindowBackendSelection' in archive.read(name)
+                       for name in archive.namelist() if name.endswith('.dex')), "R8 must preserve the fixed full PM marker name in both products"
             if standalone:
                 for name in archive.namelist():
                     if not name.endswith(".dex"): continue
@@ -102,12 +104,16 @@ def main():
         assert package + ".CONTROL" in manifest and package + ".settings" in manifest
         assert package + ".iconlayers" in manifest and package + ".diagnostics" in manifest
         if standalone:
+            assert "WindowBackendSelection" not in manifest, "Only full exposes the pending backend choice marker"
             assert "dev.nativecomplements.module." not in manifest, "Standalone manifest aliases full-product identity"
             for feature in ("CallBlockingProvider", "MotionProvider", "EdgeTouchProvider", "ShadeProvider", "BarrageProvider", "SuggestionProvider", "NavbarProvider", "SuggestionSmsReceiver", "IconLayerProvider"):
                 assert feature not in manifest, (product, feature)
             assert "WindowIconProvider" in manifest
             assert "AliveWallpaperService" not in manifest and "AliveAmbientWallpaperService" not in manifest, "Alive must not enter the standalone window product"
         else:
+            marker = next((block for block in re.split(r'(?m)^\s*E:', manifest)
+                           if block.lstrip().startswith('receiver') and 'WindowBackendSelection' in block), '')
+            assert re.search(r'enabled[^\n]*=false', marker) and re.search(r'exported[^\n]*=false', marker), "Missing private disabled backend marker"
             assert "AliveWallpaperService" in manifest and "android.permission.BIND_WALLPAPER" in manifest
             assert "android.permission.AMBIENT_WALLPAPER" not in manifest
             assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest

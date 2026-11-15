@@ -78,6 +78,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private boolean polling;
     private final Runnable poll=new Runnable(){public void run(){
         if(cleaned||!getSystemService(android.os.PowerManager.class).isInteractive()){polling=false;return;}
+        if(delegatedToStandalone)updateCompanionEnvironment();
         Wire.send(SystemUiHost.this,"STATUS");main.postDelayed(this,750);
     }};
     private void resumePoll(){if(cleaned||polling)return;polling=true;main.post(poll);}
@@ -231,6 +232,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     boolean blocksEdgeTouch(float x,float y){return extras!=null&&extras.blocksEdgeTouch(x,y);}
     private volatile boolean backendReady;
     private volatile String backendState="";
+    // ponytail: one SystemUI process, bounded strings only across product ClassLoaders; never a control channel.
+    private static final String COMPANION_ENVIRONMENT="dev.nativecomplements.window.companion.environment.v1";
+    private boolean delegatedToStandalone;
+    private long ownerEnvironmentAt;
     private final BroadcastReceiver backendReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
         if(getSentFromUid()!=1000||i.getIntExtra("protocol",0)!=Wire.PROTOCOL)return;
         Wire.acceptBackend(i);receiveFrame(i);
@@ -240,6 +245,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         backendState=i.getStringExtra("state");
         backendReady=!"conflict".equals(backendState)&&!i.getBooleanExtra("ownershipConflict",false);
         normalOccupied=i.getBooleanExtra("normalOccupied",true);
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())
+            delegatedToStandalone=!backendReady&&i.getBooleanExtra("delegatedToStandalone",false)
+                &&dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE.equals(i.getStringExtra("backendOwner"));
+        if(dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
+            if(!backendReady||i.hasExtra("environmentError"))ownerEnvironmentAt=0;
+            else if(i.hasExtra("foreground"))ownerEnvironmentAt=android.os.SystemClock.elapsedRealtime();
+        }
         if(!backendReady){
             cancelOpenWait();hideFan();hidePanel();hideControls();removeHot();
             // No owner environment is available: fail closed for shared overlays and edge admission.
@@ -325,10 +337,63 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             int next=screenshotVisible||systemFocus?p.flags|mask:p.flags&~mask;
             if(next!=p.flags){p.flags=next;try{wm.updateViewLayout(overlay,p);}catch(RuntimeException ignored){}}
         }
-        if(extras!=null)extras.environment(foreground,systemFocus,systemOverlayTitle,keyboard,screenshotVisible,panel!=null,openWait!=null,suggestionImeTop);
+        updateCompanionEnvironment();
         if(controls!=null)controls.systemOverlay(screenshotVisible||systemFocus);
         if(miniControls!=null)miniControls.systemOverlay(screenshotVisible||systemFocus);
-        if(extras!=null)extras.edgeEnvironment(screenshotVisible||systemFocus,keyboard);
+    }
+    private void updateCompanionEnvironment(){
+        if(extras==null)return;
+        if(!delegatedToStandalone){
+            extras.environment(foreground,systemFocus,systemOverlayTitle,keyboard,screenshotVisible,panel!=null,openWait!=null,suggestionImeTop);
+            extras.edgeEnvironment(screenshotVisible||systemFocus,keyboard);
+            return;
+        }
+        try{
+            boolean awake=getSystemService(android.os.PowerManager.class).isInteractive();
+            KeyguardManager keyguard=getSystemService(KeyguardManager.class);
+            if(!awake||keyguard==null||keyguard.isKeyguardLocked())throw new IllegalStateException("screen blocked");
+            String encoded=System.getProperty(COMPANION_ENVIRONMENT,"");
+            if(encoded.length()>8192)throw new IllegalArgumentException("environment size");
+            org.json.JSONObject snapshot=new org.json.JSONObject(encoded);
+            long age=android.os.SystemClock.elapsedRealtime()-snapshot.getLong("at");
+            if(age<0||age>2500)throw new IllegalStateException("stale owner environment");
+            org.json.JSONArray values=snapshot.getJSONArray("rects");
+            if(values.length()>256||values.length()%4!=0)throw new IllegalArgumentException("protected rectangles");
+            android.graphics.Rect bounds=wm.getCurrentWindowMetrics().getBounds();
+            int[] rectangles=new int[values.length()];
+            for(int n=0;n<rectangles.length;n+=4){
+                android.graphics.Rect rect=new android.graphics.Rect(values.getInt(n),values.getInt(n+1),values.getInt(n+2),values.getInt(n+3));
+                if(rect.isEmpty()||!bounds.contains(rect))throw new IllegalArgumentException("protected rectangle bounds");
+                rectangles[n]=rect.left;rectangles[n+1]=rect.top;rectangles[n+2]=rect.right;rectangles[n+3]=rect.bottom;
+            }
+            boolean blocked=snapshot.getBoolean("system")||screenshotVisible;
+            extras.environment(snapshot.getString("foreground"),blocked,snapshot.getString("title"),snapshot.getBoolean("keyboard"),
+                screenshotVisible||snapshot.getBoolean("screenshot"),snapshot.getBoolean("panel"),snapshot.getBoolean("waiting"),snapshot.getInt("imeTop"));
+            extras.edgeEnvironment(blocked||snapshot.getBoolean("screenshot")||snapshot.getBoolean("panel")||snapshot.getBoolean("waiting"),snapshot.getBoolean("keyboard"));
+            extras.protectedRects(rectangles);
+        }catch(Exception unavailable){
+            extras.environment("",true,"",true,true,false,false,Integer.MAX_VALUE);
+            extras.edgeEnvironment(true,true);extras.protectedRects(new int[0]);
+        }
+    }
+    private void shareCompanionEnvironment(int[] rectangles){
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())return;
+        try{
+            if(cleaned||!backendReady||ownerEnvironmentAt==0||!getSystemService(android.os.PowerManager.class).isInteractive()){
+                System.clearProperty(COMPANION_ENVIRONMENT);return;
+            }
+            android.graphics.Rect bounds=wm.getCurrentWindowMetrics().getBounds();
+            org.json.JSONArray clipped=new org.json.JSONArray();
+            for(int n=0;n+3<rectangles.length&&clipped.length()<256;n+=4){
+                android.graphics.Rect rect=new android.graphics.Rect(rectangles[n],rectangles[n+1],rectangles[n+2],rectangles[n+3]);
+                if(rect.intersect(bounds)){clipped.put(rect.left);clipped.put(rect.top);clipped.put(rect.right);clipped.put(rect.bottom);}
+            }
+            org.json.JSONObject snapshot=new org.json.JSONObject().put("at",ownerEnvironmentAt).put("foreground",foreground==null?"":foreground)
+                .put("system",systemFocus).put("title",systemOverlayTitle==null?"":systemOverlayTitle).put("keyboard",keyboard)
+                .put("screenshot",screenshotVisible).put("panel",panel!=null).put("waiting",openWait!=null).put("imeTop",suggestionImeTop).put("rects",clipped);
+            String encoded=snapshot.toString();
+            if(encoded.length()<=8192)System.setProperty(COMPANION_ENVIRONMENT,encoded);else System.clearProperty(COMPANION_ENVIRONMENT);
+        }catch(Exception unavailable){System.clearProperty(COMPANION_ENVIRONMENT);}
     }
     private boolean allowed() {
         if(config==null||!settingsReady||!WindowHostPolicy.cornerConfigured(config.enabled(),backendReady,cleaned,screenshotVisible,systemFocus)
@@ -406,7 +471,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(extras!=null){
             int[] protectedAreas=java.util.Arrays.copyOf(rects,count+handles.length);
             System.arraycopy(handles,0,protectedAreas,count,handles.length);
-            extras.protectedRects(protectedAreas);
+            if(!delegatedToStandalone)extras.protectedRects(protectedAreas);
+            shareCompanionEnvironment(protectedAreas);
+            if(delegatedToStandalone)updateCompanionEnvironment();
         }
         enabled=(enabled&&count>0)||handles.length>0;
         android.graphics.Rect bounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();

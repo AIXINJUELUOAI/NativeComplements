@@ -24,5 +24,24 @@ public class AlivePhaseTest {
         assertFalse(AlivePhase.drawable(false,true,false,true,AlivePhase.DisplayState.DOZE));
         assertTrue(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.DOZE));
         assertFalse(AlivePhase.drawable(true,false,false,true,AlivePhase.DisplayState.DOZE_SUSPEND));
+        AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
+        sleep.begin(100);
+        assertTrue(sleep.active(100+AlivePhase.SLEEP_WINDOW_MS-1));
+        sleep.begin(800); // Repeated screen/ambient signals do not extend the same episode.
+        assertEquals(100, sleep.remaining(1800));
+        assertFalse(sleep.active(100+AlivePhase.SLEEP_WINDOW_MS));
+        assertTrue(AlivePhase.drawable(true,true,false,false,AlivePhase.DisplayState.ON,true));
+        assertFalse(AlivePhase.drawable(false,true,false,false,AlivePhase.DisplayState.ON,true));
+        assertFalse(AlivePhase.drawable(true,false,false,false,AlivePhase.DisplayState.ON,true));
+        assertFalse(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.OFF,true));
+        assertFalse(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.UNKNOWN,true));
+        sleep.end();sleep.begin(2000); // Zero-duration/suspend/end cannot be rearmed by duplicate sleep.
+        assertFalse(sleep.active(2000));
+        sleep.wake();sleep.begin(3000);
+        assertTrue(sleep.active(3000));
+        assertTrue(AlivePhase.drawable(true,true,false,false,AlivePhase.DisplayState.ON,sleep.active(3000)));
+        assertFalse(AlivePhase.drawable(true,false,false,false,AlivePhase.DisplayState.ON,sleep.active(3100)));
+        assertTrue(AlivePhase.drawable(true,true,false,false,AlivePhase.DisplayState.ON,sleep.active(3426)));
+        sleep.wake();assertFalse(sleep.active(3500));
     }
 }

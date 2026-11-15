@@ -4,6 +4,12 @@
 
 第一轮小窗规则/状态与原生执行分界、同源 full/window 隔离已完成代码闭环，运行代码已 push 至 `a0f3a7b`。最新边界与集中测试/推送证据见[最新进度](<README.md#最新进度恢复与生命周期闭环>)；不是任意平台可替换接口或设备/LOS 兼容声明。下方只保留 138 历史架构审计，不用当前阶段结论改写历史。
 
+## code143 启动选择增补
+
+双包先到先claim不等于UI开关选择：即使full.enabled=false也可能持有owner，导致window开启仍冲突。现主版新增[后端启动选择](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendSelection.java>)，仅主user后台同步写自身PM非导出、无filter receiver state；DEFAULT维持legacy-auto，ENABLED选window，DISABLED选full。两包使用同一固定组件字符串（不受独立包R8类名压缩影响），固定user0带disabled/directBoot-aware/unaware读取后一次冻结。两包均须升级，选择仅完整重启生效，不切换Xposed开关或迁移双方journal。
+
+[小窗入口](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>)保持ProductFeatures早装，仅后端同步安装延至已核WMS五参main before；deopt真实SystemServer.startOtherServices caller，失败不影响原生启动、无selectedEngine回抢。chosen包才claim并安装42hook，systemReady after仍attach；不宣称所有target在main前绝无调用，前期owned sessions为空走native。full委托后不创建小窗Engine/控制能力，同SystemUI有界环境快照只供伙伴展示和边缘保护，不借foreignBinder执行OTP/后台唤醒等主版Engine动作；过期/异常暂停。
+
 ## 138 历史审计（以下正文）
 
 审计基线 `930a22c` / 138；以下保留当时的架构、未实现项与约束，不作为当前实施结论。源码链接已迁移到现路径并移除不可靠行锚，仅供定位，不是旧 snapshot 的精确函数内容；含“目前/当前”的历史表述均按 138 阅读。
