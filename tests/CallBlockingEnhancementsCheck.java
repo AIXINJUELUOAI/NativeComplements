@@ -25,21 +25,19 @@ public final class CallBlockingEnhancementsCheck {
         check(!CallBlockingRules.normalizeNumber("+1 212345678").equals(CallBlockingRules.normalizeNumber("+86 212345678")));
         check(CallBlockingRules.normalizeNumber("0033123456789").equals("+33123456789"));
         var repeats=new CallBlockingRules.Repeats();
-        Object first=new Object();
-        check(!repeats.observe(first,1,"+86 138-0013-8000",100));
-        check(!repeats.observe(first,1,"13800138000",200));
-        check(!repeats.observe(new Object(),2,"13800138000",300));
-        Object second=new Object();
-        check(repeats.observe(second,1,"008613800138000",180100));
-        check(repeats.observe(second,1,"13800138000",400000)); // callback is stable, not a new call
-        check(!repeats.observe(new Object(),1,"13800138000",360101));
-        check(!repeats.observe(new Object(),1,"",400000));
-        check(!repeats.observe(new Object(),1,"",400001));
-        check(!repeats.observe(new Object(),-1,"13800138000",400002));
-        check(!repeats.observe(new Object(),1,"13900139000",400003));
-        check(!repeats.observe(new Object(),1,"+1212345678",400004));
-        check(!repeats.observe(new Object(),1,"+86212345678",400005));
-        check(!repeats.observe(new Object(),1,"212345678",400006));
+        // Each observation is a distinct call; native callback deduplication belongs to the adapter.
+        check(!repeats.observe(1,"+86 138-0013-8000",100));
+        check(!repeats.observe(2,"13800138000",300));
+        check(repeats.observe(1,"008613800138000",180100));
+        check(!repeats.observe(1,"13800138000",360101));
+        check(!repeats.observe(1,"",400000));
+        check(!repeats.observe(1,"",400001));
+        check(!repeats.observe(-1,"13800138000",400002));
+        check(!repeats.observe(1,"13900139000",400003));
+        check(!repeats.observe(1,"+1212345678",400004));
+        check(!repeats.observe(1,"+86212345678",400005));
+        check(!repeats.observe(1,"212345678",400006));
+        check(!repeats.observe(1,"13900139000",10)); // elapsed rollback invalidates future history
         System.out.println("Call blocking enhancements: PASS");
     }
 }

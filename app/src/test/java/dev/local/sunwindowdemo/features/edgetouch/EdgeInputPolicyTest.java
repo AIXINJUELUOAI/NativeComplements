@@ -23,7 +23,7 @@ public class EdgeInputPolicyTest {
     }
     private int accept(int action,float... xs){
         MotionEvent event=event(action,xs);
-        try{return policy.accepted(event,0);}finally{event.recycle();}
+        try{return EdgeInputFilter.accepted(policy,event,0);}finally{event.recycle();}
     }
     private MotionEvent split(MotionEvent event,int accepted){
         return org.robolectric.util.ReflectionHelpers.callInstanceMethod(event,"split",
@@ -49,7 +49,7 @@ public class EdgeInputPolicyTest {
         assertEquals(1,accept(MotionEvent.ACTION_DOWN,200));
         assertEquals(1,accept(MotionEvent.ACTION_POINTER_DOWN|(1<<8),200,5));
         MotionEvent source=event(MotionEvent.ACTION_POINTER_DOWN|(1<<8),200,5);
-        MotionEvent kept=split(source,policy.accepted(source,0));
+        MotionEvent kept=split(source,EdgeInputFilter.accepted(policy,source,0));
         assertEquals(1,kept.getPointerCount());assertEquals(MotionEvent.ACTION_MOVE,kept.getActionMasked());
         source.recycle();kept.recycle();
         assertEquals(1,accept(MotionEvent.ACTION_POINTER_UP|(1<<8),200,100));
@@ -59,7 +59,7 @@ public class EdgeInputPolicyTest {
         policy.regions(new int[]{0,0,20,1000});
         assertEquals(0,accept(MotionEvent.ACTION_DOWN,5));
         MotionEvent source=event(MotionEvent.ACTION_POINTER_DOWN|(1<<8),5,200);
-        MotionEvent kept=split(source,policy.accepted(source,0));
+        MotionEvent kept=split(source,EdgeInputFilter.accepted(policy,source,0));
         assertEquals(1,kept.getPointerId(0));assertEquals(MotionEvent.ACTION_DOWN,kept.getActionMasked());
         source.recycle();kept.recycle();
         accept(MotionEvent.ACTION_CANCEL,5,200);assertFalse(policy.holding());
@@ -67,8 +67,8 @@ public class EdgeInputPolicyTest {
     @Test public void otherDisplaysAndMouseRemainNative(){
         policy.regions(new int[]{0,0,20,1000});
         MotionEvent event=event(MotionEvent.ACTION_DOWN,5);
-        assertEquals(1,policy.accepted(event,1));
-        event.setSource(InputDevice.SOURCE_MOUSE);assertEquals(1,policy.accepted(event,0));event.recycle();
+        assertEquals(1,EdgeInputFilter.accepted(policy,event,1));
+        event.setSource(InputDevice.SOURCE_MOUSE);assertEquals(1,EdgeInputFilter.accepted(policy,event,0));event.recycle();
     }
     private boolean inside(int[] boxes,int x,int y){
         for(int i=0;i<boxes.length;i+=4)if(x>=boxes[i]&&x<boxes[i+2]&&y>=boxes[i+1]&&y<boxes[i+3])return true;

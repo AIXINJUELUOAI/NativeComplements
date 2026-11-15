@@ -24,6 +24,8 @@ public final class CallBlockingModule extends XposedModule {
     private record Contacts(Set<String> numbers,long expires,int uid){}
     private volatile Contacts contacts=new Contacts(null,0,-1);
     private final CallBlockingRules.Repeats repeats=new CallBlockingRules.Repeats();
+    // Preserve the previous weak-key equals/hashCode semantics; native Call keys stay in Telecom's adapter.
+    private final Map<Object,Boolean> repeatCalls=new WeakHashMap<>();
     private Method managerContext,registrar,account,subscription,incoming,selfManaged,emergency,ecbm,
         hasProperty,target,handle,state,user,builderFrom,allow,reject,addLog,notification,audio,silence,
         blockReason,appName,component,response,build,emergencySms,presentation;
@@ -210,7 +212,7 @@ public final class CallBlockingModule extends XposedModule {
                 boolean identifiable=numberUri!=null&&"tel".equals(numberUri.getScheme())
                     &&(Integer)presentation.invoke(call)==android.telecom.TelecomManager.PRESENTATION_ALLOWED;
                 String recognized=identifiable?CallBlockingRules.normalizeNumber(number):"";
-                boolean repeated=repeats.observe(call,sub,recognized,SystemClock.elapsedRealtime());
+                boolean repeated=repeat(call,sub,recognized,SystemClock.elapsedRealtime());
                 String prefix=slot==0||snapshot.getBoolean("sim2_follow_sim1")?"sim1_":"sim2_";
                 Contacts book=contacts;
                 boolean ready=book.numbers!=null&&SystemClock.elapsedRealtime()<book.expires&&book.uid>=0
@@ -230,6 +232,16 @@ public final class CallBlockingModule extends XposedModule {
         }finally{Binder.restoreCallingIdentity(identity);}
     }
     private record Decision(Bundle entry){}
+
+    private boolean repeat(Object call,int subscriptionId,String number,long now){
+        synchronized(repeatCalls){
+            Boolean previous=repeatCalls.get(call);
+            if(previous!=null)return previous;
+            boolean repeated=repeats.observe(subscriptionId,number,now);
+            repeatCalls.put(call,repeated);
+            return repeated;
+        }
+    }
 
     private void record(Bundle entry){
         long identity=Binder.clearCallingIdentity();

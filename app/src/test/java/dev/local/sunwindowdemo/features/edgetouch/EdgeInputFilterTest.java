@@ -59,13 +59,13 @@ public class EdgeInputFilterTest {
         EdgeInputPolicy policy=ReflectionHelpers.getField(host,"policy");
         int[] rectangles={0,0,20,1000};policy.regions(rectangles);ReflectionHelpers.setField(host,"regions",rectangles);
         MotionEvent event=finger(MotionEvent.ACTION_DOWN);
-        assertEquals(0,policy.accepted(event,0));event.recycle();sync(host);
+        assertEquals(0,EdgeInputFilter.accepted(policy,event,0));event.recycle();sync(host);
         ReflectionHelpers.setField(host,"seen",SystemClock.uptimeMillis()-3000);
         ReflectionHelpers.<Runnable>getField(host,"expire").run();
         assertEquals(0,ReflectionHelpers.<int[]>getField(host,"regions").length);
         assertTrue(manager.mNative.enabled);
         event=finger(MotionEvent.ACTION_UP);
-        assertEquals(0,policy.accepted(event,0));event.recycle();sync(host);
+        assertEquals(0,EdgeInputFilter.accepted(policy,event,0));event.recycle();sync(host);
         assertFalse(manager.mNative.enabled);
     }
     @Test public void failedBackendStaysDisabledAndLeavesNativeAccessibilityAvailable()throws Exception{

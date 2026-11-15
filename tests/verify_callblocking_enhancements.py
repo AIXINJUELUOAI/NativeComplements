@@ -23,7 +23,9 @@ with tempfile.TemporaryDirectory(prefix="callblocking-check-") as output:
         classpath = os.pathsep.join([str(android), str(root / "app/libs/libxposed-api-101.0.1.jar")])
         subprocess.run([javac, "-encoding", "UTF-8", "-cp", classpath, "-d", output,
                         str(stub), *map(str, source.glob("*.java")),
-                        *map(str, (source.parent / "diagnostics").glob("*.java"))], check=True)
+                        *map(str, (source.parent / "diagnostics").glob("*.java")),
+                        str(source.parent.parent / "core/HostSnapshot.java"),
+                        str(source.parent.parent / "core/ModuleIdentity.java")], check=True)
         print("Call blocking Android Java compilation: PASS")
 
 # Integration invariants that can be checked without Android or the Xposed runtime.
@@ -34,7 +36,14 @@ decide = module.split("private Decision decide(", 1)[1].split("private record De
 assert "getContentResolver" not in decide, "No synchronous provider/contacts I/O under Telecom lock"
 assert "nativeAllows.getBoolean(original)?decide" in module
 assert 'presentation.invoke(call)==android.telecom.TelecomManager.PRESENTATION_ALLOWED' in decide
-assert 'repeats.observe(call,sub,recognized' in decide
+assert 'repeat(call,sub,recognized,SystemClock.elapsedRealtime())' in decide
+repeat = module.split('private boolean repeat(', 1)[1].split('private void record(', 1)[0]
+assert 'Map<Object,Boolean> repeatCalls=new WeakHashMap<>()' in module
+assert 'synchronized(repeatCalls)' in repeat
+assert repeat.index('repeatCalls.get(call)') < repeat.index('if(previous!=null)return previous;') < repeat.index('repeats.observe(subscriptionId,number,now)') < repeat.index('repeatCalls.put(call,repeated)')
+rules = (source / 'CallBlockingRules.java').read_text(encoding='utf-8')
+assert 'observe(int subscriptionId, String number, long now)' in rules
+assert 'WeakHashMap' not in rules and 'Object call' not in rules
 assert 'READ_CONTACTS,-1,book.uid' in decide
 assert 'Binder.clearCallingIdentity()' in provider and 'Binder.restoreCallingIdentity(identity)' in provider
 assert 'checkSelfPermission(android.Manifest.permission.READ_CONTACTS)' in provider

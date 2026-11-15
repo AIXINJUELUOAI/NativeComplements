@@ -26,6 +26,13 @@ public class MotionSettingsTest {
         MotionStore.mode(context,"example.allowed",2);assertEquals(0,MotionStore.read(context).getStringArray("packages").length);
         MotionStore.all(context,1);assertEquals(1,MotionStore.read(context).getInt("default_mode"));
         MotionStore.all(context,0);assertEquals(0,MotionStore.read(context).getInt("default_mode"));
+        MotionPolicy.Targets selected=MotionPolicy.targets(java.util.List.of(
+            new MotionPolicy.App(10001,"example.first",false),new MotionPolicy.App(10001,"example.shared",false),
+            new MotionPolicy.App(10002,"example.persistent",true),new MotionPolicy.App(10002,"example.sameuid",false),
+            new MotionPolicy.App(10003,"com.android.systemui",false),new MotionPolicy.App(9999,"example.system",false)),
+            MotionPolicy.FIRST_SCREEN,java.util.Map.of("example.shared",MotionPolicy.ALWAYS));
+        assertEquals(java.util.Map.of(10001,MotionPolicy.ALWAYS),selected.rules());
+        assertEquals(java.util.Map.of(10001,"example.shared"),selected.packages());
     }
     @Test public void sensorQueryAcceptsNativeByteCountsButWritesStillRequireSuccess(){
         assertTrue(SensorCommand.succeeded("get-uid-state",7));assertTrue(SensorCommand.succeeded("get-uid-state",5));

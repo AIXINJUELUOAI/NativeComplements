@@ -2,6 +2,7 @@ package dev.local.sunwindowdemo.features.edgetouch;
 
 import android.content.*;
 import android.os.*;
+import android.view.InputDevice;
 import android.view.InputEvent;
 import android.view.MotionEvent;
 import io.github.libxposed.api.*;
@@ -60,7 +61,7 @@ public final class EdgeInputFilter {
             hooks.add(module.hook(incoming).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 EdgeInputFilter h=host.get();InputEvent input=(InputEvent)chain.getArg(0);
                 if(h==null||h.service!=chain.getThisObject()||!h.active||!(input instanceof MotionEvent event))return chain.proceed();
-                int accepted=h.policy.accepted(event,(Integer)display.invoke(event)),all=0;
+                int accepted=accepted(h.policy,event,(Integer)display.invoke(event)),all=0;
                 for(int i=0;i<event.getPointerCount();i++)all|=1<<event.getPointerId(i);
                 try{
                     if(accepted==all)return chain.proceed();
@@ -88,6 +89,30 @@ public final class EdgeInputFilter {
             for(XposedInterface.HookHandle hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
             log.accept("EDGE_INPUT_UNAVAILABLE "+error);
         }
+    }
+
+    /** Snapshot only the action's required native facts; non-touch/default-display input never enters policy. */
+    static int accepted(EdgeInputPolicy policy,MotionEvent event,int display){
+        int all=0;
+        for(int i=0;i<event.getPointerCount();i++)all|=1<<event.getPointerId(i);
+        if(display!=0||!event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN))return all;
+        long stream=((long)event.getDeviceId()<<32)|(display&0xffffffffL);
+        int action=event.getActionMasked(),changed=0;
+        EdgeInputPolicy.Action kind=switch(action){
+            case MotionEvent.ACTION_DOWN -> EdgeInputPolicy.Action.DOWN;
+            case MotionEvent.ACTION_POINTER_DOWN -> EdgeInputPolicy.Action.POINTER_DOWN;
+            case MotionEvent.ACTION_POINTER_UP -> EdgeInputPolicy.Action.POINTER_UP;
+            case MotionEvent.ACTION_UP -> EdgeInputPolicy.Action.UP;
+            case MotionEvent.ACTION_CANCEL -> EdgeInputPolicy.Action.CANCEL;
+            default -> EdgeInputPolicy.Action.OTHER;
+        };
+        boolean finger=false;float x=0,y=0;
+        if(kind==EdgeInputPolicy.Action.DOWN||kind==EdgeInputPolicy.Action.POINTER_DOWN){
+            int i=event.getActionIndex();
+            finger=event.getToolType(i)==MotionEvent.TOOL_TYPE_FINGER;
+            if(finger){x=event.getX(i);y=event.getY(i);changed=1<<event.getPointerId(i);}
+        }else if(kind==EdgeInputPolicy.Action.POINTER_UP)changed=1<<event.getPointerId(event.getActionIndex());
+        return policy.accepted(stream,kind,all,changed,finger,x,y);
     }
 
     private static Field field(Class<?> owner,String name)throws Exception{

@@ -6,6 +6,25 @@ import java.util.*;
 public final class MotionPolicy {
     public static final int ALLOW=0, FIRST_SCREEN=1, ALWAYS=2;
     public static final long WINDOW=7000;
+    public record App(int uid,String packageName,boolean persistent) {}
+    public record Targets(Map<Integer,Integer> rules,Map<Integer,String> packages) {}
+
+    /** Package identities are values; native PM enumeration and later UID revalidation stay in the adapter. */
+    public static Targets targets(List<App> installed,int fallback,Map<String,Integer> overrides){
+        Set<Integer> excluded=new HashSet<>();
+        for(App app:installed)if(app.uid<10000||app.persistent
+                ||Set.of("dev.nativecomplements.module","com.android.systemui","com.google.android.apps.nexuslauncher")
+                    .contains(app.packageName))excluded.add(app.uid);
+        Map<Integer,Integer> rules=new HashMap<>();Map<Integer,String> packages=new HashMap<>();
+        for(App app:installed){
+            if(excluded.contains(app.uid))continue;
+            int mode=resolve(fallback,overrides.get(app.packageName));
+            if(mode==ALLOW)continue;
+            // Shared UIDs cannot be isolated by package; strongest rule wins, preserving iteration's command target.
+            rules.merge(app.uid,mode,Math::max);packages.put(app.uid,app.packageName);
+        }
+        return new Targets(Map.copyOf(rules),Map.copyOf(packages));
+    }
     private Map<Integer,Integer> rules=Map.of();
     private final Map<Integer,Long> until=new HashMap<>();
     private int foreground=-1,pid=-1;

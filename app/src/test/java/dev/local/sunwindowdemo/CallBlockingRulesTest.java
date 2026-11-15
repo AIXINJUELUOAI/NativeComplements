@@ -22,5 +22,11 @@ public class CallBlockingRulesTest {
         assertTrue(CallBlockingRules.decide(true, 1, false, first, false, false, second, "13800138000").blocked);
         assertFalse(CallBlockingRules.decide(true, -1, true, first, false, true, second, "9521").blocked);
         assertFalse(CallBlockingRules.matches("9[0-9]*", "9521"));
+        CallBlockingRules.Repeats repeats = new CallBlockingRules.Repeats();
+        assertFalse(repeats.observe(1,"13800138000",0));
+        assertTrue(repeats.observe(1,"+8613800138000",180_000));
+        assertFalse(repeats.observe(2,"13800138000",180_001));
+        assertFalse(repeats.observe(1,"13800138000",360_001));
+        assertFalse(repeats.observe(1,"13800138000",10)); // elapsed clock rollback expires history
     }
 }

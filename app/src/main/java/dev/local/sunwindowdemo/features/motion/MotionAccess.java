@@ -84,17 +84,11 @@ public final class MotionAccess {
                 if(packages[n]!=null&&modes[n]>=0&&modes[n]<=2)overrides.put(packages[n],modes[n]);
             if(enabled){
                 int fallback=MotionPolicy.resolve(b.getInt("default_mode",0),null);
-                List<ApplicationInfo> installed=context.getPackageManager().getInstalledApplications(0);
-                Set<Integer> excluded=new HashSet<>();
-                for(ApplicationInfo info:installed)if(info.uid<10000||(info.flags&ApplicationInfo.FLAG_PERSISTENT)!=0
-                    ||Set.of("dev.nativecomplements.module","com.android.systemui","com.google.android.apps.nexuslauncher").contains(info.packageName))excluded.add(info.uid);
-                for(ApplicationInfo info:installed){
-                    if(excluded.contains(info.uid))continue;
-                    int mode=MotionPolicy.resolve(fallback,overrides.get(info.packageName));
-                    if(mode==MotionPolicy.ALLOW)continue;
-                    // Shared UIDs cannot be isolated by package. The strongest selected rule wins.
-                    rules.merge(info.uid,mode,Math::max);next.put(info.uid,info.packageName);
-                }
+                List<MotionPolicy.App> installed=new ArrayList<>();
+                for(ApplicationInfo info:context.getPackageManager().getInstalledApplications(0))
+                    installed.add(new MotionPolicy.App(info.uid,info.packageName,(info.flags&ApplicationInfo.FLAG_PERSISTENT)!=0));
+                MotionPolicy.Targets selected=MotionPolicy.targets(installed,fallback,overrides);
+                rules.putAll(selected.rules());next.putAll(selected.packages());
             }
             targets.clear();targets.putAll(next);policy.configure(rules,SystemClock.elapsedRealtime());reconcile();
         }catch(Exception e){

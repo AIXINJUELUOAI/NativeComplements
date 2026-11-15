@@ -45,13 +45,10 @@ public final class CallBlockingRules {
         return value.length() <= 64 && value.matches("\\+?[0-9]+") ? value : "";
     }
 
-    /** Bounded, in-memory only; the same Call callback never advances the repeat window. */
+    /** Bounded value-only history. The native adapter calls once per newly observed Call. */
     public static final class Repeats {
-        private final java.util.WeakHashMap<Object, Boolean> calls = new java.util.WeakHashMap<>();
         private final java.util.LinkedHashMap<String, Long> recent = new java.util.LinkedHashMap<>();
-        public synchronized boolean observe(Object call, int subscriptionId, String number, long now) {
-            Boolean previous = calls.get(call);
-            if (previous != null) return previous;
+        public synchronized boolean observe(int subscriptionId, String number, long now) {
             String normalized = normalizeNumber(number);
             boolean repeated = false;
             if (subscriptionId >= 0 && !normalized.isEmpty()) {
@@ -63,7 +60,6 @@ public final class CallBlockingRules {
                 // ponytail: 512 active caller keys; oldest loses only repeat exemption, raise if needed.
                 if (recent.size() > 512) recent.remove(recent.keySet().iterator().next());
             }
-            calls.put(call, repeated);
             return repeated;
         }
     }
