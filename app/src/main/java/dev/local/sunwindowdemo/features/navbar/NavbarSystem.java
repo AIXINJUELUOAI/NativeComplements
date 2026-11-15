@@ -106,6 +106,10 @@ final class NavbarSystem {
     private volatile Object stickyFloating;
     /** uid/Activity -> the page currently draws its own navigation area (reported by the scoped app). */
     private final java.util.concurrent.ConcurrentHashMap<String, Boolean> pageAdapted = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Page signature inside an Activity reported by the app side (uid/activity -> signature). */
+    private final java.util.concurrent.ConcurrentHashMap<String, String> pageSignature = new java.util.concurrent.ConcurrentHashMap<>();
+    private Object pageWindow;
+    private String pageKey;
     /** Startup: the first STARTUP_MS of a window (splash, open-screen ad, loading) is neither learned nor allowed to override a known page. */
     private static final long STARTUP_MS = 1500;
     private long autoSince;
@@ -330,12 +334,22 @@ final class NavbarSystem {
                     int uid = getSentFromUid();
                     String activity = i.getStringExtra("activity");
                     if (uid < android.os.Process.FIRST_APPLICATION_UID || activity == null || activity.length() > 300) return;
-                    boolean adapted = i.getBooleanExtra("adapted", false);
                     String key = uid + "/" + activity;
-                    Boolean before = pageAdapted.put(key, adapted);
-                    if (pageAdapted.size() > 512) pageAdapted.clear();
-                    if (before != null && before == adapted) return;
-                    NavbarTrace.i("PAGE " + key + " adapted=" + adapted);
+                    String page = i.getStringExtra("page");
+                    boolean pageChanged = false;
+                    if (page != null && page.matches("[0-9a-f]{0,8}")) {
+                        pageChanged = !page.equals(pageSignature.put(key, page));
+                        if (pageSignature.size() > 512) pageSignature.clear();
+                    }
+                    boolean adaptedChanged = false;
+                    boolean adapted = i.getBooleanExtra("adapted", false);
+                    if (i.hasExtra("adapted")) {
+                        Boolean before = pageAdapted.put(key, adapted);
+                        if (pageAdapted.size() > 512) pageAdapted.clear();
+                        adaptedChanged = before == null || before != adapted;
+                    }
+                    if (!pageChanged && !adaptedChanged) return;
+                    NavbarTrace.i("PAGE " + key + " page=" + page + " adapted=" + (i.hasExtra("adapted") ? adapted : "?"));
                     Object window = previousWindow;
                     if (window != null) synchronized (lock) {
                         try { NavbarReflect.call(window, "notifyInsetsChanged"); }
@@ -435,16 +449,22 @@ final class NavbarSystem {
             versions.put(pkg, version);
         }
         WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
-        NavbarRules.Choice resolved = rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
+        Object owner = NavbarReflect.call(window, "getOwningUid");
+        String signature = pageSignature.get(owner + "/" + component.getClassName());
+        String page = signature == null || signature.isEmpty() ? null : component.getClassName() + "#" + signature;
+        // A page inside the Activity has its own rule (labelled or learned) before the Activity's.
+        NavbarRules.Choice resolved = page == null ? null : rules.page(pkg, page, version == null ? -1 : version);
+        if (resolved == null) resolved = rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
                 attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION);
         if (resolved.mode() != NavbarStore.AUTO) return resolved;
         // The app says this page draws its own navigation area: leave it exactly as the app made it.
-        Object owner = NavbarReflect.call(window, "getOwningUid");
         if (Boolean.TRUE.equals(pageAdapted.get(owner + "/" + component.getClassName())))
             return new NavbarRules.Choice(NavbarStore.ORIGINAL, null, "页面自适配", 0);
         // Until the classifier has seen this window it keeps the native layout with sampled color.
         Integer mode = autoModes.get(window);
-        if (mode == null) mode = autoCache.get(component.flattenToShortString());
+        String shortName = component.flattenToShortString();
+        if (mode == null) mode = autoCache.get(page == null ? shortName : shortName + "#" + signature);
+        if (mode == null && page != null) mode = rules.seed(pkg, page);
         if (mode == null) mode = rules.seed(pkg, component.getClassName());
         return new NavbarRules.Choice(mode == null ? NavbarStore.COLOR : mode, null, AUTO_SOURCE, 0);
     }
@@ -926,6 +946,14 @@ final class NavbarSystem {
                 stickyFloating = null;
                 synchronized (lock) { NavbarReflect.call(sticky, "notifyInsetsChanged"); }
             }
+            if (window == pageWindow && !java.util.Objects.equals(pageKey, snapshot.component())) {
+                // Another page inside the same Activity: start from what is known about that page.
+                autoModes.remove(window);
+                autoDirty = true; autoPending = -1; autoReference = null;
+                NavbarTrace.i("AUTO page " + pageKey + " -> " + snapshot.component());
+                synchronized (lock) { NavbarReflect.call(window, "notifyInsetsChanged"); }
+            }
+            pageWindow = window; pageKey = snapshot.component();
             NavbarRules.Choice selected = choice(window, true);
             runtimePage = snapshot.component() + " · 模式=" + selected.mode() + " · " + selected.source();
             if (!"系统宿主".equals(selected.source()) && !"系统窗口".equals(selected.source())) {
@@ -1104,6 +1132,13 @@ final class NavbarSystem {
         }
     }
 
+    /** Activity component plus the page signature inside it ("pkg/.Activity#1a2b3c4d"), used for learning and labels. */
+    private String pageOf(Object window, ComponentName component) throws ReflectiveOperationException {
+        String signature = pageSignature.get(NavbarReflect.call(window, "getOwningUid") + "/" + component.getClassName());
+        String name = component.flattenToShortString();
+        return signature == null || signature.isEmpty() ? name : name + "#" + signature;
+    }
+
     private record Snapshot(Object window, Object raw, Rect frame, Rect bounds, SurfaceControl surface, boolean screenshot,
                             String component, boolean night) {}
     private Snapshot snapshot() throws ReflectiveOperationException {
@@ -1130,7 +1165,7 @@ final class NavbarSystem {
                     new Rect((Rect) NavbarReflect.call(display, "getBounds")),
                     (SurfaceControl) NavbarReflect.call(window, "getSurfaceControl"),
                     screenshotFocused(display),
-                    component == null ? null : component.flattenToShortString(),
+                    component == null ? null : pageOf(window, component),
                     config != null && (config.uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)
                             == android.content.res.Configuration.UI_MODE_NIGHT_YES);
         }

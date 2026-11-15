@@ -132,4 +132,14 @@ public class NavbarRulesTest {
         assertEquals(NavbarStore.COLOR, NavbarStore.label(context, "app", "app.Page", -1));
         assertFalse(NavbarStore.preferences(context).contains("app/app.Page"));
     }
+    @Test public void pageRuleWinsInsideItsActivityOnly() {
+        Bundle settings = new Bundle();
+        settings.putBoolean("enabled", true);
+        settings.putInt("app/app.Main#0000beef", NavbarStore.FLOATING);
+        NavbarRules rules = new NavbarRules(settings);
+        assertEquals("页面规则", rules.page("app", "app.Main#0000beef", 1).source());
+        assertEquals(NavbarStore.FLOATING, rules.page("app", "app.Main#0000beef", 1).mode());
+        assertNull(rules.page("app", "app.Main#0000cafe", 1));
+        assertEquals(NavbarStore.AUTO, rules.resolve("app", "app.Main", 1).mode());
+    }
 }

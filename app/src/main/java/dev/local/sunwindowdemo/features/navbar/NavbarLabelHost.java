@@ -97,7 +97,9 @@ final class NavbarLabelHost {
             String line;
             if (pkg == null) line = "标注模式 · " + (idle.isEmpty() ? "没有可标注的页面" : idle);
             else {
-                String page = activity.substring(activity.lastIndexOf('.') + 1);
+                int hash = activity.indexOf('#');
+                String name = hash < 0 ? activity : activity.substring(0, hash);
+                String page = name.substring(name.lastIndexOf('.') + 1) + (hash < 0 ? "" : " · 页面 " + activity.substring(hash + 1, Math.min(activity.length(), hash + 5)));
                 line = label + " · " + page;
                 if (!folded) line += "\n当前：" + modeName(shown) + " · " + source
                         + (rule >= 0 ? " · 规则=" + modeName(rule) : "") + (note.isEmpty() ? "" : "\n" + note);

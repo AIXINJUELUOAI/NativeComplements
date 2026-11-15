@@ -32,8 +32,10 @@ final class NavbarApp {
     private final Runnable reload = this::readSettings;
     private static final Uri CONFIG = Uri.parse("content://" + NavbarStore.AUTHORITY);
     static final String PAGE = "dev.nativecomplements.module.NAVBAR_PAGE";
-    /** Last reported "page draws its own navigation area" state per decor. */
-    private final Map<View, Boolean> reported = new WeakHashMap<>();
+    /** Last reported page signature and "page draws its own navigation area" state per decor. */
+    private final Map<View, String> reported = new WeakHashMap<>();
+    private final Map<View, Boolean> adaptedState = new WeakHashMap<>();
+    private final Map<View, Runnable> layoutWatch = new WeakHashMap<>();
 
     // LSPosed-only entry: exact ROM members are preflighted; unavailable APIs leave native behavior intact.
     @android.annotation.SuppressLint("BlockedPrivateApi")
@@ -178,28 +180,84 @@ final class NavbarApp {
             if (application == null || !installed) return;
             var reference = activities.get(decor);
             Activity activity = reference == null ? null : reference.get();
-            if (activity == null || activity.isFinishing() || decor.getDisplay() == null) return;
-            if (choice(decor, null) != null) return;
+            if (activity == null || activity.isFinishing() || decor.getDisplay() == null || !decor.isShown()) return;
             Window window = activity.getWindow();
             WindowInsets insets = decor.getRootWindowInsets();
             if (window == null || insets == null) return;
             int nav = insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
             if (nav <= 0) return;
-            boolean painted = (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
-                    && (window.getNavigationBarColor() >>> 24) != 0;
-            View content = decor.findViewById(android.R.id.content);
-            if (content == null || content.getHeight() == 0) return;
-            int[] at = new int[2];
-            content.getLocationInWindow(at);
-            boolean under = at[1] + content.getHeight() >= decor.getHeight() - nav / 2;
-            boolean adapted = !painted && under;
-            if (Boolean.valueOf(adapted).equals(reported.get(decor))) return;
-            reported.put(decor, adapted);
+            Boolean adapted = adaptedState.get(decor);
+            if (choice(decor, null) == null) {
+                boolean painted = (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
+                        && (window.getNavigationBarColor() >>> 24) != 0;
+                View content = decor.findViewById(android.R.id.content);
+                if (content == null || content.getHeight() == 0) return;
+                int[] at = new int[2];
+                content.getLocationInWindow(at);
+                boolean under = at[1] + content.getHeight() >= decor.getHeight() - nav / 2;
+                adapted = !painted && under;
+                adaptedState.put(decor, adapted);
+            }
+            String page = signature(decor);
+            String state = page + "/" + adapted;
+            if (state.equals(reported.get(decor))) return;
+            reported.put(decor, state);
             Intent intent = new Intent(PAGE).setPackage("android")
-                    .putExtra("activity", activity.getComponentName().getClassName()).putExtra("adapted", adapted);
+                    .putExtra("activity", activity.getComponentName().getClassName()).putExtra("page", page);
+            if (adapted != null) intent.putExtra("adapted", (boolean) adapted);
             application.sendBroadcast(intent, null,
                     android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
         } catch (ReflectiveOperationException | RuntimeException ignored) {}
+    }
+
+    /**
+     * Identifies the page shown inside one Activity without relying on class names surviving obfuscation:
+     * the chain of on-screen views covering most of the window (the visible Fragment containers and their
+     * roots). Only full-size views are visited, so the walk stays short; list-like groups (several children
+     * of one class: feeds, pagers) contribute the on-screen child's class but are not entered, so scrolling
+     * content never changes the page. Stable for one app version; "" when nothing qualifies.
+     */
+    static String signature(View decor) {
+        int width = decor.getWidth(), height = decor.getHeight();
+        if (width <= 0 || height <= 0) return "";
+        StringBuilder chain = new StringBuilder();
+        int[] at = new int[2];
+        ArrayDeque<View> pending = new ArrayDeque<>();
+        pending.add(decor);
+        int visited = 0;
+        while (!pending.isEmpty() && visited++ < 400) {
+            View view = pending.removeFirst();
+            if (!(view instanceof ViewGroup group)) continue;
+            Map<Class<?>, Integer> classes = new HashMap<>();
+            List<View> large = new ArrayList<>();
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child.getVisibility() != View.VISIBLE || child.getAlpha() <= 0.01f) continue;
+                classes.merge(child.getClass(), 1, Integer::sum);
+                if (child.getWidth() < width * 0.85f || child.getHeight() < height * 0.6f) continue;
+                child.getLocationInWindow(at);
+                if (Math.abs(at[0]) > width * 0.15f || at[1] > height * 0.3f) continue;   // off-screen pager page
+                large.add(child);
+            }
+            boolean listLike = group.getChildCount() >= 3 && classes.values().stream().anyMatch(count -> count >= 3);
+            for (View child : large) {
+                chain.append(child.getClass().getName()).append(':').append(child.getId()).append(listLike ? ";" : ">");
+                if (!listLike) pending.add(child);
+            }
+        }
+        if (chain.length() == 0) return "";
+        return String.format(Locale.ROOT, "%08x", chain.toString().hashCode());
+    }
+
+    /** Page changes inside an Activity (fragment switch, tab change) re-report after layout settles. */
+    private void watch(View decor) {
+        if (layoutWatch.containsKey(decor)) return;
+        Runnable settle = () -> report(decor);
+        layoutWatch.put(decor, settle);
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            // Throttled, not debounced: apps that lay out every frame still report within 120ms.
+            if (!main.hasCallbacks(settle)) main.postDelayed(settle, 120);
+        });
     }
 
     private static int navigationMode(Context context) {
@@ -220,6 +278,7 @@ final class NavbarApp {
                 View decor = activity.getWindow().getDecorView();
                 activities.put(decor, new java.lang.ref.WeakReference<>(activity));
                 refresh(decor);
+                watch(decor);
                 main.post(() -> report(decor));
             }
             @Override public void onActivityCreated(Activity activity, Bundle state) { track(activity); }

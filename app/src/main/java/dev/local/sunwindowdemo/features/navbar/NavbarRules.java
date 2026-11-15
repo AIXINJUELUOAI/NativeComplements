@@ -45,6 +45,24 @@ public final class NavbarRules {
         return mode >= NavbarStore.ORIGINAL && mode <= NavbarStore.FLOATING ? mode : null;
     }
 
+    /**
+     * Rule for one page inside an Activity ("Activity#signature"): the user's page rule, else (when no user
+     * Activity/app rule exists) a bundled rule for exactly that page. null = use the Activity's resolution.
+     */
+    public Choice page(String packageName, String page, long version) {
+        if (!settings.getBoolean("enabled", false)) return null;
+        String userKey = packageName + "/" + page;
+        if (settings.containsKey(userKey)) return new Choice(valid(settings.getInt(userKey)), null, "页面规则");
+        int hash = page.indexOf('#');
+        if (hash <= 0 || settings.containsKey(packageName + "/" + page.substring(0, hash))
+                || settings.containsKey(packageName + "/*") || packageName.startsWith("com.google.android.")) return null;
+        JSONObject app = packages.optJSONObject(packageName);
+        JSONObject rules = app == null || !app.optBoolean("enabled") ? null : app.optJSONObject("rules");
+        JSONObject rule = rules == null ? null : rules.optJSONObject(page);
+        if (rule == null || rule.optBoolean("learned") && version != rule.optLong("versionCode", -2)) return null;
+        return new Choice(valid(rule.optInt("mode", 0)), rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));
+    }
+
     public Choice resolve(String packageName, String activity, long version) {
         return resolve(packageName, activity, version, true);
     }
