@@ -287,7 +287,7 @@ fun NavbarDiagnosticsScreen() {
         }
         GroupTitle("人工标注")
         SettingsGroup {
-            ToggleRow("标注模式", "常驻面板显示底部容器、边界、检查耗时及建议／实际模式；需授权应用作用域，未知时保留原有。点模式写入当前页面规则，可撤销",
+            ToggleRow("标注模式", "浮窗仅显示容器类型与判断／当前模式，可拖动、折叠；详细信息见本地日志。需授权应用作用域，未识别时保留原有；点模式写入当前页面规则，可撤销",
                 settings?.getBoolean("label_mode", false) ?: false) { NavbarStore.setLabelMode(context, it) }
         }
     }

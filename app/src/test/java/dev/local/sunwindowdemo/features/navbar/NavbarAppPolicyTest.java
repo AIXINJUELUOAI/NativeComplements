@@ -51,6 +51,21 @@ public class NavbarAppPolicyTest {
         assertEquals(NavbarStore.ORIGINAL, new NavbarRules(disabled).resolve("example.app", "example.app.Page", 1).mode());
     }
 
+    @Test public void observingChildWindowsDoesNotAuthorizeTheirLayoutMutation() {
+        for (int type : new int[]{1, 2, WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+                WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL}) {
+            assertTrue(NavbarApp.inspectable(true, true, true, false, false, 0, type));
+            assertEquals(type == 1, NavbarApp.eligible(true, true, true, false, false, 0, type));
+            assertFalse(NavbarApp.inspectable(true, true, true, true, false, 0, type));
+            assertFalse(NavbarApp.inspectable(true, true, true, false, true, 0, type));
+            assertFalse(NavbarApp.inspectable(true, true, false, false, false, 0, type));
+        }
+        assertFalse(NavbarApp.inspectable(true, true, true, false, false, 1, 1));
+        assertFalse(NavbarApp.inspectable(true, true, true, false, false, 0, WindowManager.LayoutParams.TYPE_INPUT_METHOD));
+        assertFalse(NavbarApp.inspectable(false, true, true, false, false, 0, 1));
+        assertFalse(NavbarApp.inspectable(true, false, true, false, false, 0, 1));
+    }
+
     @Test public void safetyConditionsFailClosed() {
         assertTrue(NavbarApp.eligible(true, true, true, false, false, 0, 1));
         assertFalse(NavbarApp.eligible(false, true, true, false, false, 0, 1));

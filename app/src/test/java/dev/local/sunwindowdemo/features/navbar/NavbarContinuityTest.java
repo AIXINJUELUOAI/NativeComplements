@@ -53,9 +53,14 @@ public class NavbarContinuityTest {
         public boolean visible = true;
         public int mode = 1;
         public Object display;
+        public Window parent;
+        public Rect frame = new Rect(0, 0, 1080, 2400);
         public Object getDisplayContent() { return display; }
         public boolean isVisible() { return visible; }
         public int getWindowingMode() { return mode; }
+        public int getBaseType() { return parent == null ? mAttrs.type : parent.getBaseType(); }
+        public Window getParentWindow() { return parent; }
+        public Rect getFrame() { return frame; }
     }
     public static final class Policy {
         public Object mNavBarBackgroundWindowCandidate;
@@ -63,6 +68,12 @@ public class NavbarContinuityTest {
     public static final class Display {
         public Object mCurrentFocus, mFocusedApp;
         public final Policy policy = new Policy();
+        public final java.util.List<Window> windows = new java.util.ArrayList<>();
+        public Rect getBounds() { return new Rect(0, 0, 1080, 2400); }
+        public void forAllWindows(java.util.function.Consumer<Window> consumer, boolean topToBottom) {
+            assertTrue(topToBottom);
+            windows.forEach(consumer);
+        }
         public Policy getDisplayPolicy() { return policy; }
     }
 
@@ -136,6 +147,81 @@ public class NavbarContinuityTest {
         shade.mAttrs.packageName = "other.application";
         shade.mAttrs.setTitle("ScreenshotUI");
         assertSame(shade, NavbarSystem.targetWindow(display, app));
+    }
+
+    private static Window root(Display display, Object activity, int type, Rect frame) {
+        Window window = new Window();
+        window.display = display; window.mActivityRecord = activity;
+        window.mAttrs.type = type; window.frame = frame;
+        display.windows.add(window);
+        return window;
+    }
+
+    @Test public void zOrderSelectsBottomPopupEvenWithoutReportsAndNeverSkipsSecure() throws Exception {
+        Display display = new Display(); Object activity = new Object();
+        Window popup = root(display, activity, WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
+                new Rect(0, 2000, 1080, 2320));
+        Window app = root(display, activity, WindowManager.LayoutParams.TYPE_BASE_APPLICATION, display.getBounds());
+        popup.parent = app;
+        // Parent activity fallback and getBaseType include subwindows; focus can stay on the Activity.
+        popup.mActivityRecord = null;
+        display.mCurrentFocus = app;
+        assertSame(popup, NavbarSystem.bottomWindow(display, NavbarSystem.targetWindow(display, null), 80));
+        popup.mAttrs.flags = WindowManager.LayoutParams.FLAG_SECURE;
+        assertSame(popup, NavbarSystem.bottomWindow(display, app, 80));
+        popup.visible = false;
+        assertSame(app, NavbarSystem.bottomWindow(display, app, 80));
+        popup.visible = true; popup.mAttrs.alpha = 0;
+        assertSame(app, NavbarSystem.bottomWindow(display, app, 80));
+    }
+
+    @Test public void bottomSelectionIgnoresOtherActivitiesOffBandAndOtherDisplays() throws Exception {
+        Display display = new Display(); Object activity = new Object();
+        Window other = root(display, new Object(), WindowManager.LayoutParams.TYPE_BASE_APPLICATION, display.getBounds());
+        Window offBand = root(display, activity, WindowManager.LayoutParams.TYPE_APPLICATION, new Rect(0, 100, 1080, 1000));
+        Window offDisplay = root(display, activity, WindowManager.LayoutParams.TYPE_APPLICATION, display.getBounds());
+        offDisplay.display = new Display();
+        Window app = root(display, activity, WindowManager.LayoutParams.TYPE_BASE_APPLICATION, display.getBounds());
+        assertSame(app, NavbarSystem.bottomWindow(display, app, 80));
+        offBand.frame = new Rect(0, 2200, 1080, 2350);
+        assertSame(offBand, NavbarSystem.bottomWindow(display, app, 80));
+        other.mActivityRecord = activity;
+        assertSame(other, NavbarSystem.bottomWindow(display, app, 80));
+        assertSame(app, NavbarSystem.bottomWindow(display, app, 0));
+    }
+
+    @Test public void popupAndSecureWindowsAreDiagnosticOnlyExceptExplicitBaseFloating() {
+        WindowManager.LayoutParams attrs = new WindowManager.LayoutParams();
+        attrs.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+        attrs.width = attrs.height = WindowManager.LayoutParams.MATCH_PARENT;
+        NavbarRules.Choice automatic = new NavbarRules.Choice(NavbarStore.FLOATING, null, NavbarSystem.AUTO_SOURCE);
+        assertTrue(NavbarSystem.executionWindow(attrs, automatic));
+        attrs.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL;
+        assertFalse(NavbarSystem.executionWindow(attrs, automatic));
+        attrs.type = WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+        attrs.height = 400;
+        assertFalse(NavbarSystem.executionWindow(attrs, automatic));
+        attrs.height = WindowManager.LayoutParams.MATCH_PARENT;
+        attrs.flags = WindowManager.LayoutParams.FLAG_SECURE;
+        assertFalse(NavbarSystem.executionWindow(attrs, automatic));
+        assertFalse(NavbarSystem.executionWindow(attrs, new NavbarRules.Choice(NavbarStore.COLOR, null, "用户Activity")));
+        assertTrue(NavbarSystem.executionWindow(attrs, new NavbarRules.Choice(NavbarStore.FLOATING, null, "用户Activity")));
+        assertTrue(NavbarSystem.keepsOriginal(NavbarStore.ORIGINAL, true, "窗口限制", "pkg/.Popup"));
+    }
+
+    @Test public void detailLogIgnoresTimingAndNodeCountJitterButKeepsGeometryAndReason() {
+        android.os.Bundle data = new android.os.Bundle();
+        data.putBinder("window", new android.os.Binder()); data.putLong("sampledAt", 100);
+        data.putString("container", "固定操作区"); data.putString("node", "LinearLayout");
+        data.putString("bounds", "[0,2200][1080,2320]"); data.putString("reason", "固定控件");
+        data.putInt("suggested", NavbarStore.COLOR); data.putInt("nodes", 5); data.putLong("nanos", 2000);
+        String key = NavbarSystem.structureKey(NavbarStructure.read(data, 100));
+        data.putInt("nodes", 7); data.putLong("nanos", 4000);
+        assertEquals(key, NavbarSystem.structureKey(NavbarStructure.read(data, 100)));
+        data.putString("bounds", "[0,2210][1080,2320]");
+        assertNotEquals(key, NavbarSystem.structureKey(NavbarStructure.read(data, 100)));
+        data.putString("bounds", "[0,2200][1080,2320]"); data.putString("reason", "新原因");
+        assertNotEquals(key, NavbarSystem.structureKey(NavbarStructure.read(data, 100)));
     }
 
     @Test public void failedSampleOnlyRetainsRecentMatchingWindowModeAndGeometry() {

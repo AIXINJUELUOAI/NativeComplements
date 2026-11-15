@@ -25,8 +25,8 @@ import java.util.Map;
 
 /**
  * SystemUI side of the labelling mode: a draggable panel that stays on screen while the mode is on.
- * It shows the current page with the mode actually in effect (pushed by system_server on every change);
- * a mode button writes that Activity's rule at once (latest tap wins) and 撤销 restores the rule before the
+ * It shows only the bottom container and suggested/current modes, pushed by system_server on change;
+ * a mode button writes that page's rule at once (latest tap wins) and 撤销 restores the rule before the
  * last tap. "—" folds the panel to a single line; tapping the line unfolds it.
  */
 final class NavbarLabelHost {
@@ -45,8 +45,8 @@ final class NavbarLabelHost {
     private static WindowManager.LayoutParams params;
     private static LinearLayout panel, row;
     private static TextView text, undoButton, fold;
-    private static String pkg, activity, label = "", source = "", idle = "";
-    private static String note = "", container = "无结构信息";
+    private static String pkg, activity, source = "";
+    private static String container = "无结构信息";
     private static int suggested;
     private static int shown = -1, rule = -1;
     private static boolean folded;
@@ -64,20 +64,17 @@ final class NavbarLabelHost {
                 if (container == null || container.length() > 600) container = "无结构信息";
                 suggested = intent.getIntExtra("suggested", NavbarStore.ORIGINAL);
                 state(intent.getStringExtra("package"), intent.getStringExtra("activity"), intent.getIntExtra("mode", -1),
-                        intent.getStringExtra("source"), intent.getStringExtra("idle"));
+                        intent.getStringExtra("source"));
             }
         }, new IntentFilter(LABEL), "android.permission.STATUS_BAR_SERVICE", main, Context.RECEIVER_EXPORTED);
     }
 
-    private static void state(String nextPkg, String nextActivity, int mode, String nextSource, String nextIdle) {
+    private static void state(String nextPkg, String nextActivity, int mode, String nextSource) {
         boolean page = nextPkg != null && nextActivity != null;
         boolean changed = page ? !nextPkg.equals(pkg) || !nextActivity.equals(activity) : pkg != null;
         if (changed) {
-            note = "";
             rule = -1;
             if (page) {
-                try { label = String.valueOf(app.getPackageManager().getApplicationLabel(app.getPackageManager().getApplicationInfo(nextPkg, 0))); }
-                catch (Exception unknown) { label = nextPkg; }
                 String p = nextPkg, a = nextActivity;
                 call(p, a, QUERY, previous -> { if (p.equals(pkg) && a.equals(activity)) { rule = previous; render(); } });
             }
@@ -86,7 +83,6 @@ final class NavbarLabelHost {
         activity = page ? nextActivity : null;
         shown = mode;
         source = nextSource == null ? "" : nextSource;
-        idle = nextIdle == null ? "" : nextIdle;
         render();
     }
 
@@ -95,23 +91,25 @@ final class NavbarLabelHost {
                 : value == NavbarStore.AUTO ? "自动" : "保留";
     }
 
+    static String formatStatus(String details, int suggestion, int current, String source, boolean page, boolean folded) {
+        String kind = details == null ? "" : details.split("[ ·\\n]", 2)[0];
+        String container = !page ? "未识别" : switch (kind) {
+            case "固定操作区" -> "固定操作区";
+            case "滚动内容区" -> "滚动内容";
+            default -> "未识别";
+        };
+        String override = !page || source == null || source.isEmpty() || "自动".equals(source) ? ""
+                : "用户规则".equals(source) || "页面规则".equals(source) ? "（手动）" : "（规则）";
+        String actual = modeName(page ? current : NavbarStore.ORIGINAL) + override;
+        return folded ? container + " · 当前：" + actual
+                : "容器：" + container + "\n判断：" + modeName(page ? suggestion : NavbarStore.ORIGINAL) + " · 当前：" + actual;
+    }
+
     private static void render() {
         try {
             if (panel == null) build();
-            String line;
-            if (pkg == null) line = "标注模式 · " + (idle.isEmpty() ? "没有可标注的页面" : idle);
-            else {
-                int hash = activity.indexOf('#');
-                String name = hash < 0 ? activity : activity.substring(0, hash);
-                String page = name.substring(name.lastIndexOf('.') + 1) + (hash < 0 ? "" : " · 页面 " + activity.substring(hash + 1, Math.min(activity.length(), hash + 5)));
-                line = label + " · " + page;
-                if (!folded) line += "\n底部容器：" + container + "\n建议：" + modeName(suggested)
-                        + " · 当前：" + modeName(shown) + " · " + source
-                        + (rule >= 0 ? " · 规则=" + modeName(rule) : "") + (note.isEmpty() ? "" : "\n" + note);
-                else line += " · " + container.substring(0, container.indexOf('\n') < 0 ? container.length() : container.indexOf('\n'))
-                        + " → " + modeName(shown);
-            }
-            text.setText(line);
+            text.setMaxLines(folded ? 1 : 2);
+            text.setText(formatStatus(container, suggested, shown, source, pkg != null, folded));
             row.setVisibility(folded || pkg == null ? View.GONE : View.VISIBLE);
             fold.setText(folded ? "＋" : "—");
             for (var entry : choices.entrySet()) highlight(entry.getValue(), entry.getKey() == rule);
@@ -141,6 +139,7 @@ final class NavbarLabelHost {
         text = new TextView(app);
         text.setTextColor(Color.WHITE);
         text.setTextSize(13);
+        text.setEllipsize(android.text.TextUtils.TruncateAt.END);
         header.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         fold = button("—", () -> { folded = !folded; render(); });
         header.addView(fold, new LinearLayout.LayoutParams(dp(44), dp(36)));
@@ -222,10 +221,12 @@ final class NavbarLabelHost {
         if (pkg == null || option == rule) return;
         String p = pkg, a = activity;
         rule = option;
-        note = "已写入：" + modeName(option);
         render();
         call(p, a, option, previous -> {
-            if (previous < -1) { note = "写入失败"; render(); return; }
+            if (previous < -1) {
+                android.widget.Toast.makeText(app, "写入失败", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
             undo.push(new Undo(p, a, previous));
             while (undo.size() > 20) undo.removeLast();
             render();
@@ -237,8 +238,6 @@ final class NavbarLabelHost {
         if (last == null) return;
         call(last.pkg(), last.activity(), last.previous() < 0 ? CLEAR : last.previous(), ignored -> {
             if (last.pkg().equals(pkg) && last.activity().equals(activity)) rule = last.previous();
-            note = "已撤销 " + last.activity().substring(last.activity().lastIndexOf('.') + 1) + " → "
-                    + (last.previous() < 0 ? "无规则" : modeName(last.previous()));
             render();
         });
     }

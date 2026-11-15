@@ -82,7 +82,7 @@ final class NavbarSystem {
     static final String AUTO_SOURCE = "自动";
     private final java.util.concurrent.ConcurrentHashMap<IBinder, NavbarStructure> structures = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile Object stickyFloating;
-    private final java.util.concurrent.ConcurrentHashMap<String, String> pageSignature = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<IBinder, String> pageSignature = new java.util.concurrent.ConcurrentHashMap<>();
     private record Lowres(int[] px, int w, int h, float f) {}
     private static final float TICK_SCALE = 1 / 8f;
     private Lowres tickLow;
@@ -95,6 +95,7 @@ final class NavbarSystem {
     private String fillState = "", fillPrevState = "";
     private String containerSummary = "无结构信息 · 等待作用域内应用报告";
     private int containerSuggestion;
+    private String containerState = "", containerLogged = "";
     private final Method sourceSize, sourceAt, sourceType, sourceVisible;
     private final Method capture, build, crop, scale;
     private final Method securePolicy, protectedPolicy;
@@ -143,6 +144,11 @@ final class NavbarSystem {
             // Native bottom ownership survives input focus moving into a freeform task.
             policy.getDeclaredField("mNavBarBackgroundWindowCandidate");
             window.getMethod("getSurfaceControl");
+            Class.forName("com.android.server.wm.WindowContainer", false, loader)
+                    .getMethod("forAllWindows", java.util.function.Consumer.class, boolean.class);
+            window.getMethod("getBaseType");
+            window.getMethod("getParentWindow");
+            window.getMethod("getOwningUid");
             window.getDeclaredField("mGlobalScale");
             try {
                 WindowManager.LayoutParams.class.getDeclaredField("surfaceInsets");
@@ -153,7 +159,12 @@ final class NavbarSystem {
             }
             Method removed = window.getDeclaredMethod("removeImmediately");
             module.hook(removed).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                try { if (backend.lock != null) synchronized (backend.lock) { backend.clearLayer(chain.getThisObject()); } }
+                try { if (backend.lock != null) synchronized (backend.lock) {
+                    Object removedWindow = chain.getThisObject();
+                    backend.clearLayer(removedWindow);
+                    IBinder token = windowToken(removedWindow);
+                    backend.structures.remove(token); backend.pageSignature.remove(token);
+                } }
                 catch (ReflectiveOperationException | RuntimeException failure) {
                     NavbarTrace.w("Window layer cleanup pending", failure);
                 }
@@ -303,7 +314,7 @@ final class NavbarSystem {
                     try {
                     int uid = getSentFromUid();
                     String activity = i.getStringExtra("activity");
-                    if (uid < android.os.Process.FIRST_APPLICATION_UID || activity == null || activity.length() > 300) return;
+                    if (uid < android.os.Process.FIRST_APPLICATION_UID || activity != null && activity.length() > 300) return;
                     NavbarStructure observation = NavbarStructure.read(i.getExtras(), SystemClock.uptimeMillis());
                     if (observation == null) return;
                     Object window = previousWindow;
@@ -312,14 +323,18 @@ final class NavbarSystem {
                     try {
                         if (window == null) return;
                         synchronized (lock) {
-                            Object record = NavbarReflect.field(window, "mActivityRecord");
+                            Object display = NavbarReflect.call(window, "getDisplayContent");
+                            Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
+                            Object record = activityOf(window);
                             ComponentName current = record == null ? null : (ComponentName) NavbarReflect.field(record, "mActivityComponent");
-                            if ((Integer) NavbarReflect.call(window, "getOwningUid") != uid || current == null
-                                    || !activity.equals(current.getClassName()) || !observation.token.equals(windowToken(window))) return;
+                            if (targetWindow(display, previousWindow, raw) != window
+                                    || (Integer) NavbarReflect.call(window, "getOwningUid") != uid || current == null
+                                    || !observation.token.equals(windowToken(window))) return;
                             String page = i.getStringExtra("page");
                             if (page != null && !page.matches("[0-9a-f]{0,8}")) return;
-                            String key = uid + "/" + activity;
-                            boolean pageChanged = page != null && !page.equals(pageSignature.put(key, page));
+                            WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
+                            boolean pageChanged = attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION && page != null
+                                    && !page.equals(pageSignature.put(observation.token, page));
                             if (pageSignature.size() > 512) pageSignature.clear();
                             NavbarStructure old = structures.put(observation.token, observation);
                             if (structures.size() > 64) { structures.clear(); structures.put(observation.token, observation); }
@@ -410,7 +425,7 @@ final class NavbarSystem {
     }
 
     private NavbarRules.Choice choice(Object window, boolean loadVersion) throws ReflectiveOperationException {
-        Object activity = NavbarReflect.field(window, "mActivityRecord");
+        Object activity = activityOf(window);
         if (activity == null) return new NavbarRules.Choice(0, null, "系统窗口");
         ComponentName component = (ComponentName) NavbarReflect.field(activity, "mActivityComponent");
         String pkg = component.getPackageName();
@@ -424,16 +439,27 @@ final class NavbarSystem {
             versions.put(pkg, version);
         }
         WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
-        Object owner = NavbarReflect.call(window, "getOwningUid");
-        String signature = pageSignature.get(owner + "/" + component.getClassName());
+        String signature = attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+                ? pageSignature.get(windowToken(window)) : null;
         String page = signature == null || signature.isEmpty() ? null : component.getClassName() + "#" + signature;
         // A page inside the Activity has its own rule (explicitly labelled) before the Activity's.
         NavbarRules.Choice resolved = page == null ? null : rules.page(pkg, page, version == null ? -1 : version);
         if (resolved == null) resolved = rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
                 attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION);
-        if (resolved.mode() != NavbarStore.AUTO) return resolved;
-        NavbarStructure observation = structure(window);
-        return new NavbarRules.Choice(observation == null ? NavbarStore.ORIGINAL : observation.mode, null, AUTO_SOURCE, 0);
+        if (resolved.mode() == NavbarStore.AUTO) {
+            NavbarStructure observation = structure(window);
+            resolved = new NavbarRules.Choice(observation == null ? NavbarStore.ORIGINAL : observation.mode, null, AUTO_SOURCE, 0);
+        }
+        // Observe dialogs/popups without expanding their layout or painting through them onto the Activity.
+        if (!executionWindow(attrs, resolved)) return new NavbarRules.Choice(NavbarStore.ORIGINAL, null, "窗口限制");
+        return resolved;
+    }
+
+    static boolean executionWindow(WindowManager.LayoutParams attrs, NavbarRules.Choice selected) {
+        return attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+                && attrs.width == WindowManager.LayoutParams.MATCH_PARENT && attrs.height == WindowManager.LayoutParams.MATCH_PARENT
+                && ((attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0
+                    || selected.mode() == NavbarStore.FLOATING && !AUTO_SOURCE.equals(selected.source()));
     }
 
     private long windowReportAt;
@@ -466,6 +492,12 @@ final class NavbarSystem {
         return ((IInterface) NavbarReflect.field(window, "mClient")).asBinder();
     }
 
+    /** Timing/node-count jitter is diagnostic payload, not a reason to emit another event. */
+    static String structureKey(NavbarStructure observation) {
+        return observation == null ? "无结构信息" : observation.kind + "/" + observation.node + "/"
+                + observation.bounds + "/" + observation.reason + "/" + observation.mode;
+    }
+
     private NavbarStructure structure(Object window) throws ReflectiveOperationException {
         IBinder token = windowToken(window);
         NavbarStructure observation = structures.get(token);
@@ -481,7 +513,7 @@ final class NavbarSystem {
         if (context == null) return;
         String component = labelMode ? labelComponent : null;
         int mode = !publishedActive ? NavbarStore.ORIGINAL : publishedMode == NavbarStore.FLOATING ? NavbarStore.FLOATING : NavbarStore.COLOR;
-        String key = !labelMode ? "off" : component == null ? "idle:" + labelIdle : component + "=" + mode + "/" + labelSource + "/" + containerSummary + "/" + containerSuggestion;
+        String key = !labelMode ? "off" : component == null ? "idle:" + labelIdle : component + "=" + mode + "/" + labelSource + "/" + containerState;
         long now = SystemClock.uptimeMillis();
         if (!force && key.equals(labelLast) && now - labelAt < 5000) return;
         if (!labelMode && "off".equals(labelLast)) return;
@@ -606,9 +638,9 @@ final class NavbarSystem {
             throws ReflectiveOperationException {
         WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
         Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
-        return attrs.type >= 1 && attrs.type <= 99 && (allowSecure || (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0)
+        return applicationWindow(window) && (allowSecure || (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0)
                 && (Integer) NavbarReflect.call(window, "getWindowingMode") == 1 && frame.height() > 0 && frame.width() > 0
-                && (ignoreFocus || targetWindow(display, previousWindow) == window)
+                && (ignoreFocus || targetWindow(display, previousWindow, raw) == window)
                 && supportsNavigation(frame, landscapeClear,
                     (Boolean) window.getClass().getMethod("isRequestedVisible", int.class).invoke(window, WindowInsets.Type.navigationBars()),
                     visible(raw, WindowInsets.Type.navigationBars()), visible(raw, WindowInsets.Type.ime()));
@@ -619,7 +651,59 @@ final class NavbarSystem {
         return frame.width() > frame.height() ? clearLandscape : requested && visible;
     }
 
-    /** Input focus may belong to a freeform task; the native policy still knows the bottom owner. */
+    private static Object activityOf(Object window) throws ReflectiveOperationException {
+        // Subwindows normally inherit mActivityRecord; parent lookup also handles attached vendor roots.
+        for (int depth = 0; window != null && depth < 16; depth++) {
+            Object activity = NavbarReflect.field(window, "mActivityRecord");
+            if (activity != null) return activity;
+            window = NavbarReflect.call(window, "getParentWindow");
+        }
+        return null;
+    }
+
+    private static boolean applicationWindow(Object window) throws ReflectiveOperationException {
+        int base = (Integer) NavbarReflect.call(window, "getBaseType");
+        return base >= WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW
+                && base <= WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
+    }
+
+    private Object targetWindow(Object display, Object previous, Object raw) throws ReflectiveOperationException {
+        Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
+        Insets nav = (Insets) insetsClass.getMethod("calculateInsets", Rect.class, Rect.class, int.class, boolean.class)
+                .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), true);
+        return bottomWindow(display, targetWindow(display, previous), nav.bottom);
+    }
+
+    /** WM supplies real top-to-bottom order; an unreported/secure popup still blocks the root below. */
+    static Object bottomWindow(Object display, Object anchor, int navHeight) throws ReflectiveOperationException {
+        if (anchor == null || navHeight <= 0 || !applicationWindow(anchor)) return anchor;
+        Object activity = activityOf(anchor);
+        if (activity == null) return anchor;
+        Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
+        int navTop = bounds.bottom - navHeight;
+        Object[] selected = {null};
+        ReflectiveOperationException[] failure = {null};
+        java.util.function.Consumer<Object> inspect = window -> {
+            if (selected[0] != null || failure[0] != null) return;
+            try {
+                if (!applicationWindow(window) || activityOf(window) != activity
+                        || NavbarReflect.call(window, "getDisplayContent") != display
+                        || (Integer) NavbarReflect.call(window, "getWindowingMode") != 1
+                        || !(Boolean) NavbarReflect.call(window, "isVisible")) return;
+                WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
+                Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
+                if (attrs.alpha > 0 && frame.left < bounds.right && frame.right > bounds.left
+                        && !frame.isEmpty() && frame.top <= navTop && frame.bottom >= navTop) selected[0] = window;
+            } catch (ReflectiveOperationException invalid) { failure[0] = invalid; }
+        };
+        Method all = display.getClass().getMethod("forAllWindows", java.util.function.Consumer.class, boolean.class);
+        all.setAccessible(true);
+        all.invoke(display, inspect, true);
+        if (failure[0] != null) throw failure[0];
+        return selected[0] == null ? anchor : selected[0];
+    }
+
+    /** Input focus/system panels/freeform policy establishes ownership, not the bottom root's Z order. */
     static Object targetWindow(Object display, Object previous) throws ReflectiveOperationException {
         Object focused = NavbarReflect.field(display, "mCurrentFocus");
         if (focused != null) {
@@ -628,14 +712,14 @@ final class NavbarSystem {
             // app without owning the bottom: keep the app (same focused activity) as the target.
             boolean systemOverlay = "com.android.systemui".equals(attrs.packageName);
             if (!systemOverlay) {
-                boolean application = attrs.type >= 1 && attrs.type <= 99;
+                boolean application = applicationWindow(focused);
                 if (application && (Integer) NavbarReflect.call(focused, "getWindowingMode") == 5) {
                     Object policy = NavbarReflect.call(display, "getDisplayPolicy");
                     Object bottom = NavbarReflect.field(policy, "mNavBarBackgroundWindowCandidate");
                     if (bottom != null && (Integer) NavbarReflect.call(bottom, "getWindowingMode") == 1
                             && (Boolean) NavbarReflect.call(bottom, "isVisible")) {
                         WindowManager.LayoutParams bottomAttrs = (WindowManager.LayoutParams) NavbarReflect.field(bottom, "mAttrs");
-                        if (bottomAttrs.type >= 1 && bottomAttrs.type <= 99
+                        if (applicationWindow(bottom)
                                 && (bottomAttrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0
                                 && NavbarReflect.call(bottom, "getDisplayContent") == display) return bottom;
                     }
@@ -644,8 +728,8 @@ final class NavbarSystem {
                 return focused;
             }
         }
-        if (previous == null || NavbarReflect.field(previous, "mActivityRecord") == null
-                || NavbarReflect.field(previous, "mActivityRecord") != NavbarReflect.field(display, "mFocusedApp")) return null;
+        if (previous == null || activityOf(previous) == null
+                || activityOf(previous) != NavbarReflect.field(display, "mFocusedApp")) return null;
         return (Boolean) NavbarReflect.call(previous, "isVisible") ? previous : null;
     }
 
@@ -706,7 +790,7 @@ final class NavbarSystem {
     static boolean keepsOriginal(int selectedMode, boolean landscape, String source, String component) {
         if (selectedMode != NavbarStore.ORIGINAL) return false;
         boolean launcher = component != null && component.startsWith("com.google.android.apps.nexuslauncher/");
-        return !landscape || "系统窗口".equals(source) || "系统宿主".equals(source) && !launcher;
+        return !landscape || "窗口限制".equals(source) || "系统窗口".equals(source) || "系统宿主".equals(source) && !launcher;
     }
 
     static boolean clearsLauncherHost(boolean landscape, boolean ownedTasks, String component) {
@@ -730,6 +814,7 @@ final class NavbarSystem {
         labelIdle = "";
         containerSummary = "无结构信息 · 当前没有可检查的应用窗口";
         containerSuggestion = NavbarStore.ORIGINAL;
+        containerState = containerSummary;
         try {
             int navigationMode = navigationMode(context);
             gestures = navigationMode == 2;
@@ -785,7 +870,14 @@ final class NavbarSystem {
             NavbarStructure observation = structure(window);
             containerSummary = observation == null ? "无结构信息 · 未授权应用作用域／报告未到达或已过期" : observation.summary();
             containerSuggestion = observation == null ? NavbarStore.ORIGINAL : observation.mode;
+            containerState = structureKey(observation);
             NavbarRules.Choice selected = choice(window, true);
+            String detail = snapshot.component() + "/" + windowToken(window) + "/" + containerState + "/" + selected.mode() + "/" + selected.source();
+            if (!detail.equals(containerLogged)) {
+                containerLogged = detail;
+                NavbarTrace.i("CONTAINER_DETAIL " + snapshot.component() + " · " + containerSummary.replace('\n', ' ')
+                        + " · suggested=" + containerSuggestion + " actual=" + selected.mode() + "/" + selected.source());
+            }
             runtimePage = snapshot.component() + " · 模式=" + selected.mode() + " · " + selected.source();
             if (!"系统宿主".equals(selected.source()) && !"系统窗口".equals(selected.source())) {
                 labelComponent = snapshot.component();
@@ -947,7 +1039,8 @@ final class NavbarSystem {
 
     /** Activity component plus the page signature inside it ("pkg/.Activity#1a2b3c4d"), used only for explicit page rules and labels. */
     private String pageOf(Object window, ComponentName component) throws ReflectiveOperationException {
-        String signature = pageSignature.get(NavbarReflect.call(window, "getOwningUid") + "/" + component.getClassName());
+        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
+        String signature = attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION ? pageSignature.get(windowToken(window)) : null;
         String name = component.flattenToShortString();
         return signature == null || signature.isEmpty() ? name : name + "#" + signature;
     }
@@ -957,9 +1050,10 @@ final class NavbarSystem {
     private Snapshot snapshot() throws ReflectiveOperationException {
         synchronized (lock) {
             Object display = NavbarReflect.call(NavbarReflect.field(wm, "mRoot"), "getDefaultDisplay");
-            Object window = targetWindow(display, previousWindow);
             Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
-            if (window == null || !eligible(window, display, raw)) {
+            Object window = targetWindow(display, previousWindow, raw);
+            // Secure/popups may be observed but choice() keeps their native rendering (except explicit secure floating).
+            if (window == null || !eligible(window, display, raw, true, false)) {
                 boolean laidOut = window == null || window == previousWindow || NavbarReflect.field(window, "mActivityRecord") == null
                         || !((Rect) NavbarReflect.call(window, "getFrame")).isEmpty();
                 if (laidOut) pendingWindow = null;
@@ -970,7 +1064,7 @@ final class NavbarSystem {
                 return null;
             }
             pendingWindow = null;
-            Object activity = NavbarReflect.field(window, "mActivityRecord");
+            Object activity = activityOf(window);
             ComponentName component = activity == null ? null : (ComponentName) NavbarReflect.field(activity, "mActivityComponent");
             android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
             return new Snapshot(window, stateTools.copy(raw),

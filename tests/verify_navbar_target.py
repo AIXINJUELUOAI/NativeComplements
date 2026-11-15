@@ -46,6 +46,20 @@ checks["android.view.WindowInsetsController"] = [("getRequestedVisibleTypes", "(
 checks["android.view.WindowInsets$Builder"] = [("setInsets", "(ILandroid/graphics/Insets;)Landroid/view/WindowInsets$Builder;"), ("setInsetsIgnoringVisibility", "(ILandroid/graphics/Insets;)Landroid/view/WindowInsets$Builder;")]
 checks["com.android.internal.policy.DecorView"] = []
 checks["android.view.ViewRootImpl"] = []
+checks["com.android.server.wm.WindowContainer"].append(("forAllWindows", "(Ljava/util/function/Consumer;Z)V"))
+checks["com.android.server.wm.WindowState"] += [
+    ("getBaseType", "()I"), ("getParentWindow", "()Lcom/android/server/wm/WindowState;"), ("getOwningUid", "()I")]
+checks["android.view.WindowManagerGlobal"] = [
+    ("getInstance", "()Landroid/view/WindowManagerGlobal;"), ("getWindowViews", "()Ljava/util/ArrayList;"),
+    ("addView", "(Landroid/view/View;Landroid/view/ViewGroup$LayoutParams;Landroid/view/Display;Landroid/view/Window;I)V")]
+# Reflection uses setAccessible for these ROM internals; existence/signature, not public visibility, is the contract.
+reflected_checks = {
+    "com.android.internal.policy.DecorView": [
+        ("calculateNavigationBarColor", "(I)I"),
+        ("updateColorViews", "(Landroid/view/WindowInsets;Z)Landroid/view/WindowInsets;"),
+        ("onApplyWindowInsets", "(Landroid/view/WindowInsets;)Landroid/view/WindowInsets;"),
+        ("drawLegacyNavigationBarBackground", "(Landroid/graphics/RecordingCanvas;)V")],
+}
 dex.TARGETS = ["L" + name.replace(".", "/") + ";" for name in checks]
 classes = {}
 for relative, expected_hash in [
@@ -61,8 +75,10 @@ for relative, expected_hash in [
             if name.startswith("classes") and name.endswith(".dex"):
                 classes.update(dex.Dex(archive.read(name)).classes)
 
-for method, signature in [("calculateNavigationBarColor", "(I)I"), ("updateColorViews", "(Landroid/view/WindowInsets;Z)Landroid/view/WindowInsets;"), ("onApplyWindowInsets", "(Landroid/view/WindowInsets;)Landroid/view/WindowInsets;"), ("drawLegacyNavigationBarBackground", "(Landroid/graphics/RecordingCanvas;)V") ]:
-    assert any(m["name"] == method and m["descriptor"] == signature for m in classes["Lcom/android/internal/policy/DecorView;"]["methods"]), method
+for name, methods in reflected_checks.items():
+    owner = "L" + name.replace(".", "/") + ";"
+    for method, descriptor in methods:
+        assert sum(m["name"] == method and m["descriptor"] == descriptor for m in classes[owner]["methods"]) == 1, (owner, method, descriptor)
 assert any(f["name"] == "mWindow" and f["type"] == "Lcom/android/internal/policy/PhoneWindow;" for f in classes["Lcom/android/internal/policy/DecorView;"]["fields"])
 count = 0
 for name, methods in checks.items():

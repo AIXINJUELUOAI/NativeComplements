@@ -39,8 +39,7 @@ final class NavbarApp {
     private final Runnable reload = this::readSettings;
     private static final Uri CONFIG = Uri.parse("content://" + NavbarStore.AUTHORITY);
     static final String PAGE = "dev.nativecomplements.module.NAVBAR_PAGE";
-    /** Last reported page signature and "page draws its own navigation area" state per decor. */
-    private final Map<View, Integer> containerModes = new WeakHashMap<>();
+    /** Window-local geometry supplied by the matching system window, never inferred from transparency. */
     private final Map<View, Boolean> active = new WeakHashMap<>();
     private final Map<View, Integer> navigationHeights = new WeakHashMap<>();
     private final Map<View, Integer> contentBottoms = new WeakHashMap<>();
@@ -51,8 +50,39 @@ final class NavbarApp {
                 && Boolean.TRUE.equals(serverFloating.get(decor));
     }
     private final Map<View, String> pageSignatures = new WeakHashMap<>();
-    private final Map<View, Boolean> adaptedState = new WeakHashMap<>();
     private final Map<View, Runnable> layoutWatch = new WeakHashMap<>();
+    private final Map<View, Runnable> watchCleanup = new WeakHashMap<>();
+    private Method windowViews;
+    private Object windowManager;
+
+    /** Window roots, not Activity names, own observations. All map access stays on the main thread. */
+    private void trackRoot(View root) {
+        if (root == null || root.getParent() == null || root.getHandler() == null
+                || root.getHandler().getLooper() != Looper.getMainLooper()) return;
+        active.put(root, true);
+        watch(root);
+        Runnable probe = layoutWatch.get(root);
+        main.removeCallbacks(probe);
+        if (enabled) main.post(probe);
+    }
+
+    private void forgetRoot(View root) {
+        Runnable probe = layoutWatch.remove(root);
+        if (probe != null) main.removeCallbacks(probe);
+        Runnable cleanup = watchCleanup.remove(root);
+        if (cleanup != null) cleanup.run();
+        active.remove(root); activities.remove(root);
+        navigationHeights.remove(root); contentBottoms.remove(root); serverFloating.remove(root);
+        serverSeen.remove(root); pageSignatures.remove(root);
+    }
+
+    private void scanRoots() {
+        if (windowManager == null) return;
+        try {
+            Object value = windowViews.invoke(windowManager);
+            if (value instanceof List<?> roots) for (Object root : roots) if (root instanceof View view) trackRoot(view);
+        } catch (ReflectiveOperationException | RuntimeException error) { probeFailure(error); }
+    }
 
     // LSPosed-only entry: exact ROM members are preflighted; unavailable APIs leave native behavior intact.
     @android.annotation.SuppressLint("BlockedPrivateApi")
@@ -96,7 +126,6 @@ final class NavbarApp {
                 } catch (ReflectiveOperationException | RuntimeException ignored) {}
                 if (next == null) {
                     Object result = chain.proceed();
-                    main.post(() -> report(view));
                     return result;
                 }
                 Layout previous = layout.get();
@@ -126,6 +155,24 @@ final class NavbarApp {
                 catch (ReflectiveOperationException | RuntimeException ignored) {}
                 return chain.proceed();
             }));
+            // One framework boundary covers Activity, Dialog and PopupWindow roots; no app hooks.
+            Class<?> global = Class.forName("android.view.WindowManagerGlobal", false, loader);
+            windowViews = global.getDeclaredMethod("getWindowViews"); windowViews.setAccessible(true);
+            windowManager = global.getDeclaredMethod("getInstance").invoke(null);
+            int added = 0;
+            for (Method method : global.getDeclaredMethods()) {
+                if (!method.getName().equals("addView") || method.getParameterCount() == 0
+                        || method.getParameterTypes()[0] != View.class) continue;
+                hooks.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                    Object result = chain.proceed();
+                    View root = (View) chain.getArg(0);
+                    // View.post also queues until attach; addView alone does not guarantee mAttachInfo yet.
+                    root.post(() -> { if (Looper.myLooper() == Looper.getMainLooper()) trackRoot(root); });
+                    return result;
+                }));
+                added++;
+            }
+            if (added == 0) throw new NoSuchMethodException("WindowManagerGlobal.addView");
             installed = true;
             android.util.Log.i("NativeNavbar", "APP_HOOK_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
@@ -152,6 +199,16 @@ final class NavbarApp {
                             boolean keyboard, int display, int windowType) {
         return enabled && gestures && fullscreen && !secure && !keyboard && display == 0
                 && windowType == WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+    }
+
+    /** Observation covers app/subwindows; layout mutation remains limited to the original full-screen base. */
+    static boolean inspectable(boolean enabled, boolean gestures, boolean fullscreen, boolean secure,
+                               boolean keyboard, int display, int windowType) {
+        boolean application = windowType >= WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW
+                && windowType <= WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
+        boolean child = windowType >= WindowManager.LayoutParams.FIRST_SUB_WINDOW
+                && windowType <= WindowManager.LayoutParams.LAST_SUB_WINDOW;
+        return enabled && gestures && fullscreen && !secure && !keyboard && display == 0 && (application || child);
     }
 
     private NavbarRules.Choice choice(View decor, WindowInsets incoming) throws ReflectiveOperationException {
@@ -195,53 +252,38 @@ final class NavbarApp {
         return selected.mode() == NavbarStore.FLOATING ? selected : null;
     }
 
-    /**
-     * The page is adapted when the window framework paints no navigation background and the content view
-     * reaches the screen bottom: the app itself draws behind the gesture area (QQ home blur bar). Unadapted
-     * pages leave DecorView's coloured navigation background there. Native adaptation is never inferred
-     * while this module makes the window transparent; live container reports continue on layout/scroll/heartbeat.
-     */
+    /** Read the exact window root. A transparent full-size shell is not evidence of native adaptation. */
     private void report(View decor) {
         try {
             if (application == null || !installed || !enabled) return;
+            if (!Boolean.TRUE.equals(active.get(decor)) || !decor.isAttachedToWindow()
+                    || decor.getDisplay() == null || !decor.isShown()) return;
             var reference = activities.get(decor);
             Activity activity = reference == null ? null : reference.get();
-            if (activity == null || activity.isFinishing() || activity.isDestroyed() || decor.getDisplay() == null || !decor.isShown()) return;
-            Window window = activity.getWindow();
+            if (activity != null && (activity.isFinishing() || activity.isDestroyed())) return;
             WindowInsets insets = decor.getRootWindowInsets();
-            if (window == null || insets == null || decor.getWindowToken() == null) return;
+            if (insets == null || !(decor.getLayoutParams() instanceof WindowManager.LayoutParams attrs)
+                    || decor.getWindowToken() == null) return;
             int nav = insets.getInsetsIgnoringVisibility(WindowInsets.Type.navigationBars()).bottom;
             if (nav > 0) navigationHeights.put(decor, nav);
             nav = navigationHeights.getOrDefault(decor, 0);
             if (nav <= 0) return;
-            pageSignatures.put(decor, signature(decor));
-            boolean floating = serverFloating(decor) || choice(decor, null) != null;
-            int previous = containerModes.getOrDefault(decor, NavbarStore.ORIGINAL);
-            Boolean adapted = adaptedState.get(decor);
-            // Never interpret our own transparency / insets as native app adaptation.
-            if (!floating) {
-                boolean painted = (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
-                        && (window.getNavigationBarColor() >>> 24) != 0;
-                View content = decor.findViewById(android.R.id.content);
-                if (content != null && content.getHeight() > 0) {
-                    int[] at = new int[2]; content.getLocationInWindow(at);
-                    adapted = !painted && at[1] + content.getHeight() >= decor.getHeight() - nav / 2;
-                    adaptedState.put(decor, adapted);
-                }
-            }
-            boolean secure = (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE) != 0;
-            boolean safe = eligible(enabled, navigationMode == 2, !activity.isInMultiWindowMode() && !activity.isInPictureInPictureMode(),
-                    secure, insets.isVisible(WindowInsets.Type.ime()), decor.getDisplay().getDisplayId(), window.getAttributes().type)
-                    && activity.getResources().getConfiguration().orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            boolean floating = serverFloating(decor);
+            boolean secure = (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) != 0;
+            boolean fullscreen = (Integer) windowingMode.invoke(windowConfiguration.get(decor.getResources().getConfiguration())) == 1
+                    && (activity == null || !activity.isInMultiWindowMode() && !activity.isInPictureInPictureMode());
+            boolean safe = inspectable(enabled, navigationMode == 2, fullscreen, secure,
+                    insets.isVisible(WindowInsets.Type.ime()), decor.getDisplay().getDisplayId(), attrs.type)
+                    && decor.getResources().getConfiguration().orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+            if (safe && activity != null) pageSignatures.put(decor, signature(decor));
             int reserved = floating ? 0 : Math.max(0, decor.getHeight() - contentBottoms.getOrDefault(decor, decor.getHeight() - nav));
             NavbarContainer.Result result = safe ? NavbarContainer.inspect(decor, reserved, floating) : null;
-            int suggestion = result == null || Boolean.TRUE.equals(adapted) ? NavbarStore.ORIGINAL : result.mode();
-            containerModes.put(decor, suggestion);
+            int suggestion = result == null ? NavbarStore.ORIGINAL : result.mode();
             String page = pageSignatures.getOrDefault(decor, "");
             Bundle extras = new Bundle();
             extras.putBinder("window", windowClient(decor));
             extras.putLong("sampledAt", SystemClock.uptimeMillis());
-            extras.putString("container", result == null ? "无结构信息" : Boolean.TRUE.equals(adapted) ? "应用自绘导航区" : result.kind());
+            extras.putString("container", result == null ? "无结构信息" : result.kind());
             extras.putString("node", result == null ? "" : result.node());
             extras.putString("reason", result == null ? (secure ? "安全窗口不检查" : "键盘／横屏／窗口安全限制") : result.reason());
             extras.putString("bounds", result == null || result.bounds() == null ? "" : result.bounds().toShortString());
@@ -249,11 +291,10 @@ final class NavbarApp {
             extras.putLong("nanos", result == null ? 0 : result.nanos());
             extras.putInt("suggested", suggestion);
             Intent intent = new Intent(PAGE).setPackage("android")
-                    .putExtra("activity", activity.getComponentName().getClassName()).putExtra("page", page).putExtras(extras);
-            if (adapted != null) intent.putExtra("adapted", (boolean) adapted);
+                    .putExtra("activity", activity == null ? "" : activity.getComponentName().getClassName())
+                    .putExtra("page", page).putExtras(extras);
             application.sendBroadcast(intent, null,
                     android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
-            if (previous != suggestion) refresh(decor);
         } catch (ReflectiveOperationException | RuntimeException error) { probeFailure(error); }
     }
 
@@ -321,8 +362,22 @@ final class NavbarApp {
                 main.removeCallbacks(settle); scheduledAt[0] = due; main.postDelayed(settle, 64);
             }
         };
-        decor.getViewTreeObserver().addOnGlobalLayoutListener(changed::run);
-        decor.getViewTreeObserver().addOnScrollChangedListener(changed::run);
+        android.view.ViewTreeObserver.OnGlobalLayoutListener global = changed::run;
+        android.view.ViewTreeObserver.OnScrollChangedListener scroll = changed::run;
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(global);
+        decor.getViewTreeObserver().addOnScrollChangedListener(scroll);
+        View.OnAttachStateChangeListener attached = new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) { trackRoot(view); }
+            @Override public void onViewDetachedFromWindow(View view) { forgetRoot(view); }
+        };
+        decor.addOnAttachStateChangeListener(attached);
+        watchCleanup.put(decor, () -> {
+            decor.removeOnAttachStateChangeListener(attached);
+            if (decor.getViewTreeObserver().isAlive()) {
+                decor.getViewTreeObserver().removeOnGlobalLayoutListener(global);
+                decor.getViewTreeObserver().removeOnScrollChangedListener(scroll);
+            }
+        });
     }
 
     private static int navigationMode(Context context) {
@@ -354,17 +409,22 @@ final class NavbarApp {
                     IBinder token = intent.getExtras() == null ? null : intent.getExtras().getBinder("window");
                     int height = intent.getIntExtra("height", 0);
                     if (token == null || height <= 0 || height > app.getResources().getDisplayMetrics().heightPixels / 3) return;
-                    for (View decor : new ArrayList<>(activities.keySet())) {
+                    for (View decor : new ArrayList<>(layoutWatch.keySet())) {
                         if (!token.equals(windowClient(decor))) continue;
                         navigationHeights.put(decor, height);
                         int bottom = intent.getIntExtra("contentBottom", -1);
+                        Integer beforeBottom = contentBottoms.get(decor);
                         if (bottom > 0 && bottom <= decor.getHeight()) contentBottoms.put(decor, bottom);
+                        else contentBottoms.remove(decor);
                         boolean next = intent.getBooleanExtra("floating", false);
                         serverSeen.put(decor, SystemClock.uptimeMillis());
                         Boolean before = serverFloating.put(decor, next);
+                        boolean changed = before == null || before != next || !Objects.equals(beforeBottom, contentBottoms.get(decor));
                         if (before == null || before != next) refresh(decor);
                         Runnable probe = layoutWatch.get(decor);
-                        if (probe != null && !main.hasCallbacks(probe)) main.post(probe);
+                        if (probe != null && (changed || !main.hasCallbacks(probe))) {
+                            main.removeCallbacks(probe); main.postDelayed(probe, 64);
+                        }
                     }
                 } catch (ReflectiveOperationException | RuntimeException ignored) {}
             }
@@ -376,20 +436,15 @@ final class NavbarApp {
             private void track(Activity activity) {
                 View decor = activity.getWindow().getDecorView();
                 activities.put(decor, new java.lang.ref.WeakReference<>(activity));
-                active.put(decor, true);
                 refresh(decor);
-                watch(decor);
-                Runnable probe = layoutWatch.get(decor);
-                main.removeCallbacks(probe); main.post(probe);
+                decor.post(() -> trackRoot(decor));
             }
             @Override public void onActivityCreated(Activity activity, Bundle state) { track(activity); }
             @Override public void onActivityResumed(Activity activity) { track(activity); reader.post(reload); }
             @Override public void onActivityDestroyed(Activity activity) {
                 View decor = activity.getWindow().peekDecorView();
                 if (decor == null) return;
-                Runnable probe = layoutWatch.remove(decor); if (probe != null) main.removeCallbacks(probe);
-                active.remove(decor); activities.remove(decor); containerModes.remove(decor);
-                adaptedState.remove(decor); navigationHeights.remove(decor); contentBottoms.remove(decor); serverFloating.remove(decor); serverSeen.remove(decor); pageSignatures.remove(decor);
+                forgetRoot(decor);
             }
             @Override public void onActivityStarted(Activity activity) { track(activity); }
             @Override public void onActivityPaused(Activity activity) {}
@@ -442,9 +497,9 @@ final class NavbarApp {
             navigationMode = nextNavigationMode;
             enabled = nextEnabled;
             rules = next;
-            containerModes.clear();
-            if (!enabled) { adaptedState.clear(); serverFloating.clear(); serverSeen.clear(); }
-            for (View decor : new ArrayList<>(activities.keySet())) {
+            if (!enabled) { serverFloating.clear(); serverSeen.clear(); }
+            scanRoots();
+            for (View decor : new ArrayList<>(layoutWatch.keySet())) {
                 refresh(decor);
                 Runnable probe = layoutWatch.get(decor);
                 if (probe != null) { main.removeCallbacks(probe); if (enabled) main.post(probe); }

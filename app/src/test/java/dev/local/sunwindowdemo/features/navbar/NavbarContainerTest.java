@@ -1,6 +1,7 @@
 package dev.local.sunwindowdemo.features.navbar;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.view.SurfaceView;
 import android.view.View;
@@ -44,6 +45,7 @@ public class NavbarContainerTest {
 
     private FrameLayout bar(ViewGroup parent, int bottom) {
         FrameLayout bar = add(parent, new FrameLayout(context), 0, bottom - 100, 1000, bottom);
+        bar.setBackgroundColor(Color.WHITE);
         add(bar, new EditText(context), 20, 10, 800, 90);
         add(bar, new Button(context), 820, 10, 980, 90);
         assertEquals(1000, bar.getWidth());
@@ -80,6 +82,26 @@ public class NavbarContainerTest {
         assertEquals("固定操作区", result.kind());
         assertEquals("FrameLayout", result.node());
         assertEquals(new Rect(0, 1820, 1000, 1920), result.bounds());
+    }
+
+    @Test public void independentBarAbsorbsItsStandardEditorTouchingTheBottomEdge() {
+        FrameLayout root = root();
+        FrameLayout bar = bar(root, 1920);
+        bar.getChildAt(0).layout(20, 0, 800, 100);
+        NavbarContainer.Result result = inspect(root, 80, false);
+        mode(NavbarContainer.COLOR, result);
+        assertEquals("FrameLayout", result.node());
+        // Self-drawn evidence cannot be absorbed, even when a known editor is in front of it.
+        View unknown = add(bar, new View(context), 0, 0, 1000, 100);
+        unknown.setTranslationZ(-1);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
+    }
+
+    @Test public void isolatedBottomEditorStillBlocksTheListBehindIt() {
+        FrameLayout root = root();
+        add(root, new ScrollView(context), 0, 0, 1000, 1920);
+        add(root, new EditText(context), 0, 1820, 900, 1920);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
     }
 
     @Test public void blankOrMerelyClickableContainerIsNotAnOperationBar() {
@@ -130,6 +152,7 @@ public class NavbarContainerTest {
     @Test public void siblingOrderAndElevationDetermineWhichWideLayerIsInFront() {
         FrameLayout root = root();
         ScrollView scroll = add(root, new ScrollView(context), 0, 0, 1000, 1920);
+        scroll.setBackgroundColor(Color.WHITE);
         FrameLayout bar = bar(root, 1920);
         mode(NavbarContainer.COLOR, inspect(root, 80, false));
         scroll.setElevation(10);
@@ -141,7 +164,7 @@ public class NavbarContainerTest {
     @Test public void publicCustomDrawingOrderIsRespected() {
         ReverseLayout root = new ReverseLayout(context);
         root.layout(0, 0, 1000, 2000);
-        add(root, new ScrollView(context), 0, 0, 1000, 1920);
+        add(root, new ScrollView(context), 0, 0, 1000, 1920).setBackgroundColor(Color.WHITE);
         bar(root, 1920);
         mode(NavbarContainer.FLOATING, inspect(root, 80, false));
     }
@@ -237,6 +260,95 @@ public class NavbarContainerTest {
         NavbarContainer.Result depth = inspect(root, 80, false);
         mode(NavbarContainer.ORIGINAL, depth);
         assertTrue(depth.reason(), depth.reason().contains("深度上限"));
+    }
+
+    @Test public void customDrawingShellsDoNotHideStandardChildren() {
+        FrameLayout root = root();
+        DrawingShell shell = add(root, new DrawingShell(context), 0, 0, 1000, 1920);
+        assertFalse(shell.willNotDraw());
+        add(shell, new ScrollView(context), 0, 0, 1000, 1920);
+        mode(NavbarContainer.FLOATING, inspect(root, 80, false));
+        shell.removeAllViews();
+        bar(shell, 1920);
+        mode(NavbarContainer.COLOR, inspect(root, 80, false));
+    }
+
+    @Test public void unknownScrollCapableDrawingGroupIsDetectedBeforeSelfDrawing() {
+        FrameLayout root = root();
+        EndScrollGroup group = add(root, new EndScrollGroup(context), 0, 0, 1000, 1920);
+        bar(group, 1920);
+        assertFalse(group.canScrollVertically(1));
+        assertTrue(group.canScrollVertically(-1));
+        NavbarContainer.Result result = inspect(root, 80, false);
+        mode(NavbarContainer.FLOATING, result);
+        assertEquals(2, result.nodes());
+    }
+
+    @Test public void clippedNonBottomHugeTreeIsPrunedBeforeItsChildren() {
+        FrameLayout root = root();
+        FrameLayout upper = add(root, new FrameLayout(context), 0, 0, 1000, 1200);
+        for (int i = 0; i < NavbarContainer.MAX_NODES + 20; i++)
+            add(upper, new Button(context), 0, 0, 100, 100);
+        // Add last so this non-opaque foreground is visited before the real bottom bar.
+        root.removeView(upper);
+        bar(root, 1920);
+        root.addView(upper);
+        NavbarContainer.Result result = inspect(root, 80, false);
+        mode(NavbarContainer.COLOR, result);
+        assertTrue(result.nodes() < 10);
+    }
+
+    @Test public void nonClippingParentCanExposeBottomChildOutsideItsFrame() {
+        FrameLayout root = root();
+        DrawingShell shell = add(root, new DrawingShell(context), 0, 0, 1000, 1200);
+        shell.setClipChildren(false);
+        bar(shell, 1920);
+        mode(NavbarContainer.COLOR, inspect(root, 80, false));
+        shell.setClipChildren(true);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
+    }
+
+    @Test public void opaqueFullWidthForegroundStopsHiddenHugeSubtree() {
+        FrameLayout root = root();
+        FrameLayout hidden = add(root, new FrameLayout(context), 0, 0, 1000, 1920);
+        for (int i = 0; i < NavbarContainer.MAX_NODES + 20; i++)
+            add(hidden, new Button(context), 0, 1800, 100, 1900);
+        FrameLayout foreground = bar(root, 1920);
+        assertTrue(foreground.isOpaque());
+        NavbarContainer.Result result = inspect(root, 80, false);
+        mode(NavbarContainer.COLOR, result);
+        assertEquals(4, result.nodes());
+        foreground.setAlpha(0.5f);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
+    }
+
+    @Test public void translucentAndUnconfirmedForegroundsNeverSelectTheListBehindThem() {
+        FrameLayout root = root();
+        add(root, new ScrollView(context), 0, 0, 1000, 1920);
+        FrameLayout foreground = bar(root, 1920);
+        foreground.setAlpha(0.5f);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
+        foreground.setAlpha(1);
+        foreground.setBackground(null);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
+        foreground.setAlpha(0);
+        mode(NavbarContainer.FLOATING, inspect(root, 80, false));
+    }
+
+    @Test public void substantialPartialForegroundDoesNotLeakThroughToFullWidthScroll() {
+        FrameLayout root = root();
+        add(root, new ScrollView(context), 0, 0, 1000, 1920);
+        add(root, new View(context), 0, 1800, 600, 1920);
+        mode(NavbarContainer.ORIGINAL, inspect(root, 80, false));
+    }
+
+    private static class DrawingShell extends FrameLayout {
+        DrawingShell(Context context) { super(context); setWillNotDraw(false); }
+    }
+
+    private static final class EndScrollGroup extends DrawingShell {
+        EndScrollGroup(Context context) { super(context); }
+        @Override public boolean canScrollVertically(int direction) { return direction < 0; }
     }
 
     private static final class ReverseLayout extends FrameLayout {
