@@ -2,18 +2,28 @@ package dev.local.sunwindowdemo.features.alive;
 
 import android.app.KeyguardManager;
 import android.content.*;
+import android.hardware.display.DisplayManager;
 import android.os.*;
+import android.view.Display;
 import android.service.wallpaper.WallpaperService;
 import android.view.SurfaceHolder;
 import org.aliveclean.AliveRenderer;
 
 /** Own wallpaper only: no authentication, input, other wallpaper or SystemUI modification. */
-public final class AliveWallpaperService extends WallpaperService {
+public class AliveWallpaperService extends WallpaperService {
+    protected boolean supportsOwnAmbient(){return false;}
     @Override public Engine onCreateEngine(){return new PhotoEngine();}
 
     private final class PhotoEngine extends Engine {
         private AliveRenderer renderer;
-        private boolean ambient,visible,registered,destroyed;
+        private boolean ambient,visible,registered,destroyed,displayRegistered,displayRemoved;
+        private DisplayManager displays;
+        private int displayId=Display.INVALID_DISPLAY;
+        private final DisplayManager.DisplayListener displayListener=new DisplayManager.DisplayListener(){
+            @Override public void onDisplayAdded(int id){if(id==displayId)update();}
+            @Override public void onDisplayChanged(int id){if(id==displayId)update();}
+            @Override public void onDisplayRemoved(int id){if(id==displayId){displayRemoved=true;update();}}
+        };
         private final Handler main=new Handler(Looper.getMainLooper());
         private final Runnable refresh=this::update;
         private final BroadcastReceiver screens=new BroadcastReceiver(){
@@ -30,29 +40,42 @@ public final class AliveWallpaperService extends WallpaperService {
             IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
             filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);
             registerReceiver(screens,filter,null,main,Context.RECEIVER_NOT_EXPORTED);registered=true;
+            Display own=getDisplayContext().getDisplay();
+            if(own!=null)displayId=own.getDisplayId();
+            displays=getSystemService(DisplayManager.class);
+            if(displays!=null){displays.registerDisplayListener(displayListener,main);displayRegistered=true;}
             update();
         }
-        private void update(){
+        private void update(){update(true);}
+        private void update(boolean animate){
             if(destroyed||renderer==null)return;
             boolean interactive=getSystemService(PowerManager.class).isInteractive();
             boolean locked=getSystemService(KeyguardManager.class).isKeyguardLocked();
+            AlivePhase.DisplayState state=displayState();
             // Preview is a real system-hosted preview, not an artificial HOME/unlocked override.
-            renderer.mode(AlivePhase.phase(interactive,ambient,locked),true);
-            renderer.visible(visible&&interactive);
+            renderer.mode(AlivePhase.phase(interactive&&state==AlivePhase.DisplayState.ON,ambient,locked),
+                animate&&state!=AlivePhase.DisplayState.DOZE_SUSPEND);
+            renderer.visible(AlivePhase.drawable(supportsOwnAmbient(),visible,interactive,ambient,state));
+        }
+        private AlivePhase.DisplayState displayState(){
+            Display own=displays==null||displayRemoved?null:displays.getDisplay(displayId);
+            if(own==null)return AlivePhase.DisplayState.UNKNOWN;
+            return switch(own.getState()){
+                case Display.STATE_ON -> AlivePhase.DisplayState.ON;
+                case Display.STATE_DOZE -> AlivePhase.DisplayState.DOZE;
+                case Display.STATE_DOZE_SUSPEND -> AlivePhase.DisplayState.DOZE_SUSPEND;
+                case Display.STATE_OFF -> AlivePhase.DisplayState.OFF;
+                default -> AlivePhase.DisplayState.UNKNOWN;
+            };
         }
         @Override public void onSurfaceChanged(SurfaceHolder holder,int format,int width,int height){
             super.onSurfaceChanged(holder,format,width,height);
-            renderer.attach(holder.getSurface(),width,height);update();
+            update();renderer.attach(holder.getSurface(),width,height);
         }
         @Override public void onVisibilityChanged(boolean next){visible=next;update();}
-        // Platform system callback; metadata deliberately does not request privileged ambient support.
+        // Only the separate ambient component opts into the module-authorized native ambient path.
         public void onAmbientModeChanged(boolean next,long duration){
-            ambient=next;
-            if(renderer!=null){
-                boolean interactive=getSystemService(PowerManager.class).isInteractive();
-                renderer.mode(AlivePhase.phase(interactive,ambient,getSystemService(KeyguardManager.class).isKeyguardLocked()),duration>0);
-                renderer.visible(visible&&interactive);
-            }
+            ambient=next;update(duration>0);
         }
         public boolean shouldZoomOutWallpaper(){return false;}
         @Override public Bundle onCommand(String action,int x,int y,int z,Bundle extras,boolean resultRequested){
@@ -66,7 +89,8 @@ public final class AliveWallpaperService extends WallpaperService {
         @Override public void onSurfaceDestroyed(SurfaceHolder holder){renderer.detach();super.onSurfaceDestroyed(holder);}
         @Override public void onDestroy(){
             destroyed=true;main.removeCallbacks(refresh);
-            if(registered)unregisterReceiver(screens);
+            if(registered){unregisterReceiver(screens);registered=false;}
+            if(displayRegistered){displays.unregisterDisplayListener(displayListener);displayRegistered=false;}
             getSharedPreferences("alive_wallpaper",MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
             if(renderer!=null){renderer.close();renderer=null;}
             super.onDestroy();

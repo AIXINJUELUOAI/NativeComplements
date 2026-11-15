@@ -4,5 +4,9 @@
             <intent-filter><action android:name="android.service.wallpaper.WallpaperService" /></intent-filter>
             <meta-data android:name="android.service.wallpaper" android:resource="@xml/alive_wallpaper" />
         </service>
+        <service android:name=".features.alive.AliveAmbientWallpaperService" android:label="Alive 壁纸 · 息屏实验版" android:permission="android.permission.BIND_WALLPAPER" android:exported="true">
+            <intent-filter><action android:name="android.service.wallpaper.WallpaperService" /></intent-filter>
+            <meta-data android:name="android.service.wallpaper" android:resource="@xml/alive_ambient_wallpaper" />
+        </service>
     </application>
 </manifest>

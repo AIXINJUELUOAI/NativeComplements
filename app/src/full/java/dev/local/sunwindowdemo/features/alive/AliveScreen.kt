@@ -129,7 +129,9 @@ fun AliveScreen(bottomInset: Dp = 0.dp) {
             }
             GroupTitle("系统预览")
             SettingsGroup {
-                SettingRow("使用限制", "AOD 暂不支持：系统签名权限与原生黑屏行为不修改。锁屏呈现与过渡以系统实际支持为准。")
+                SettingRow("普通版", "不接入息屏显示；不需要新增系统适配。可随时从系统预览选回，作为实验版的回退。")
+                SettingRow("息屏实验版", "需要启用本模块的系统框架与系统界面作用域，并在系统设置里自行开启 AOD。仅选用此版时接入息屏壁纸，不修改指纹、密码或强制常亮。遮挡暂停、省电与黑屏仍由系统决定。尚未完成真机验证。")
+                SettingRow("短时测试提醒", "息屏照片目前固定位置，尚未接入照片的防烧屏位移。系统时钟移动不代表照片也移动；请勿长期常亮测试，保留系统保护也不能保证不烧屏。")
                 if (backendError.isNotBlank()) SettingRow("渲染器状态", backendError)
             }
             Button(onClick = {
@@ -137,7 +139,13 @@ fun AliveScreen(bottomInset: Dp = 0.dp) {
                     context.startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
                         .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(context, AliveWallpaperService::class.java)))
                 } catch (failure: Exception) { message = failure.message ?: "无法打开系统壁纸预览" }
-            }, enabled = arm64 && ready && hasPhoto && !busy, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("打开系统预览并选择应用") }
+            }, enabled = arm64 && ready && hasPhoto && !busy, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("预览普通版／恢复普通版") }
+            OutlinedButton(onClick = {
+                try {
+                    context.startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+                        .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(context, AliveAmbientWallpaperService::class.java)))
+                } catch (failure: Exception) { message = failure.message ?: "无法打开息屏实验版；可选择普通版恢复" }
+            }, enabled = arm64 && ready && hasPhoto && !busy, modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) { Text("预览息屏实验版（需模块生效）") }
             Text("仅在系统预览中由你确认应用本模块的壁纸服务。选择资源或样式不会替你确认；资源与照片只保存在本机。上游素材版权归原作者，请自行确认使用许可。", Modifier.padding(vertical = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

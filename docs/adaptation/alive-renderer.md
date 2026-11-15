@@ -16,6 +16,12 @@
 - 不可见/脱离/关闭停止帧，取消动画、关闭遮罩 worker，释放自有 texture/native/EGL surface/context；默认 EGLDisplay 在同进程多个壁纸引擎间共享，不由单引擎 `eglTerminate`，保活至进程退出由系统回收。不可见期间收到 0→1/2 唤醒转场会记录 seed=0，重建后先建立 AOD 状态再真正启动三组动画；普通应用遮挡后的 2→2 不伪造睡眠。仍存活场景的反向转场沿用当前动画采样。
 - [NativeScene](<../../app/src/full/java/org/aliveclean/NativeScene.java>)只从 importer 给出的 canonical 私有只读绝对路径 `System.load`；同进程不得切换 native 世代。R8 必须保留 JNI 类/方法及 ObjectAnimator 属性入口。五种 chromakey 照片着色分支不采样 lens decorator，但 native 总入口仍要求非零装饰纹理；必须从本地导入的真实 `lens_decorator.png` 解码上传并传入，不能用 0 或占位纹理规避 ABI，释放时同步删除。
 
+## AOD 实验生命周期补充
+
+0.11.1-aod-test1 渲染器初始不可见，由 Engine 的自身显示器/ambient/visible 门控后才创建 EGL。`mode(同一阶段,false)` 也必须结束纹理、照片、公共动画并清除等待中的旧采样；因此原生零时长回调或进入 DOZE_SUSPEND 不会被“阶段未变”短路，最终只提交有限端点帧，不强制唤醒显示器。
+
+固定导入 native 的 AOD target 以不透明黑色清屏，再按照片局部 quad 与色键遮罩合成；不是保留全屏原图。但 **照片模型锚点当前固定，不随系统时钟的 burn-in 偏移移动**。不把“时钟在移动”或“停 vsync”描述为照片已有防烧屏保护；尚不适合长期息屏显示测试，真实亮度/功耗/呈现仍需设备验证。
+
 ## 失败与证据限制
 
 初始化、遮罩解码（最多三次）、native packet 或 EGL swap 失败时释放资源并停试，不无限重建；`error()` 与 `alive_wallpaper/backend_error` 暴露错误，只在值变化写偏好，第一次成功 swap 后清除。用户更换资源/照片/样式触发显式 reload 才重试；缺资源时不是渲染成功，也不以占位图掩盖失败。`photo_revision/resources_revision/style` 变化由服务转交 reload，错误键不应触发 reload 回环。

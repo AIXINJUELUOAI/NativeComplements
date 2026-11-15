@@ -1,6 +1,7 @@
 # NativeComplements
 
 - 默认简体中文。原生 Android 设置风格，Compose MD3/M3E、系统动态颜色与深色模式。
+- 最新Alive授权优先：用户要求真正AOD→锁屏→桌面模块，并明确同意仅自有Alive壁纸的必要系统绑定检查例外（不是全局权限grant）；手机现已断开继续离线开发，不自动安装/重启/写设置。保留旧普通壁纸component的false ambient metadata作为原生回退，新增明确选择的AliveAmbientWallpaperService实验component复用同Engine；只此component绑定作用域例外，不改认证、强亮屏或全局scrim。SystemUI仅当前user实际锁屏精确该组件时组合原生能力Flow，不改readonlyFlow，保留真实AOD用户设置、省电、遮挡暂停。0.11.0普通照片版不是完整Alive交付；本轮0.11.1-aod-test1/code141须标实验未真机验证。暗光不等遮挡：已读日志NEAR约0.2秒即FAR取消原生10秒暂停，不能断定硬件或保护失效，不擅自缩短延迟/关闭保护。
 - 当前追加授权：持续完成全部现有功能规则/状态与宿主执行解耦及接入文档，分阶段验证提交推送后再研究实现Alive壁纸，最终交付0.11原签名模块；不得在全部解耦push前提前实施Alive。用户要求少测试：复用已有检查，不按功能堆测试，不小改动反复全套；仅高风险启动/桌面、权限、Hook失败回退与数据恢复保留最小必要检查，不自动安装重启。全部现有功能规则边界已完成并分阶段push至5ee8e95，随后开始Alive；0.11.0/code140主版新增原生WallpaperService内OpenAlive固定版照片效果，官方native/shader/mask仅用户本地导入不bundled，AOD明确不支持、不绕签名权限、不改认证与系统黑屏。独立小窗版不含Alive。此前0.10.0/code139小窗闭环已交付v0.10.0，最新证据统一见[接入索引](<docs/adaptation/README.md>)，138历史正文保留。按可验证小阶段测试、提交并推送main，记录receipt，不强推、不把本地提交称已同步。遵循“平台事件输入 → 共用规则状态 → 平台执行与恢复”，保持主包兼容、隔离独立身份/恢复记录、防重复接管，共用Freeform启用校验且不自动改设置。复用已有规则，native AtomicFile/Parcel/WM/Binder留适配侧，不以Engine行数衡量解耦；代码闭环及打包核验不代替真机效果，不称设备/LOS兼容。我们完成refactor后，LOS贡献者再fork/adapt/test PR，经review和现设备回归后决定merge。
 - 首页按功能独立跳转；功能做到可用后再加入入口。当前功能为小窗、弹幕通知、来电拦截、边缘防误触、快捷建议、加速度传感器控制、图标适配与外观和控制（含小白条沉浸、通知／控制中心横屏双栏），不创建其他功能的占位页面或接口。
 - 管理页面共用 SettingsPage 标题栏和系统安全区，页面内部不重复创建标题与 Scaffold。开发者工具仅从“关于”连续点击版本号七次后显示，日常页面不展示后端连接及实验信息。

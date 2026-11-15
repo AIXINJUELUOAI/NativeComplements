@@ -26,7 +26,7 @@ public final class AliveRenderer implements AutoCloseable {
     private int width,height,photo,mask,decorator,mode=1,seed=-1;
     private boolean seedAnimate;
     private float aspect;
-    private boolean visible=true,framePosted,failed;
+    private boolean visible,framePosted,failed;
     private volatile boolean closed;
     private volatile String error="";
     private String reportedError;
@@ -49,7 +49,13 @@ public final class AliveRenderer implements AutoCloseable {
     public void mode(int next,boolean animate){
         if(next<0||next>2)throw new IllegalArgumentException("scene");
         post(()->{
-            if(mode==next)return;
+            if(mode==next){
+                if(!animate){
+                    seed=-1;seedAnimate=false;
+                    if(scene!=0){textures.change(next,false);frameMotion.finish();motion.finish();sample.clear();schedule();}
+                }
+                return;
+            }
             int previous=mode;mode=next;sample.clear();
             if(scene==0){if(next==0){seed=-1;seedAnimate=false;}else if(previous==0&&animate){seed=0;seedAnimate=true;}}
             if(scene!=0){

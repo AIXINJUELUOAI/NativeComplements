@@ -1,3 +1,4 @@
 <resources>
     <string name="alive_wallpaper_description">OpenAlive 照片效果 · 原生锁屏与桌面 · 本地导入资源</string>
+    <string name="alive_ambient_wallpaper_description">OpenAlive 照片效果 · 需 LSPosed 模块接入 · 原生 AOD 实验版</string>
 </resources>

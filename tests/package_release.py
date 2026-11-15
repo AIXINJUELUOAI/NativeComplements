@@ -24,7 +24,8 @@ WINDOW_FORBIDDEN = {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
     "features/callblocking/CallBlockingModule", "features/navbar/NavbarModule", "features/iconlayers/IconLayerModule",
     "features/iconlayers/SystemIconModule", "features/iconlayers/DrawerMonet", "features/motion/MotionAccess",
     "features/edgetouch/EdgeInputFilter", "features/shade/LandscapeShade", "features/shade/StatusBarOffset", "features/shade/SignalDisplay",
-    "features/alive/AliveWallpaperService", "features/alive/AliveAssets", "features/alive/AlivePhase")}
+    "features/alive/AliveWallpaperService", "features/alive/AliveAssets", "features/alive/AlivePhase",
+    "features/alive/AliveAmbientWallpaperService", "features/alive/AliveAmbientAccess", "features/alive/AliveSystemUi")}
 
 
 
@@ -73,7 +74,10 @@ def main():
                 assert "assets/licenses/openalive/LICENSE" in archive.namelist()
                 assert "assets/licenses/openalive/NOTICE.txt" in archive.namelist()
                 alive_types = {"Lorg/aliveclean/NativeScene;", "Lorg/aliveclean/AliveRenderer;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveWallpaperService;"}
+                               "Ldev/local/sunwindowdemo/features/alive/AliveWallpaperService;",
+                               "Ldev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService;",
+                               "Ldev/local/sunwindowdemo/features/alive/AliveAmbientAccess;",
+                               "Ldev/local/sunwindowdemo/features/alive/AliveSystemUi;"}
                 found = set()
                 for name in archive.namelist():
                     if name.endswith(".dex"):
@@ -102,12 +106,19 @@ def main():
             for feature in ("CallBlockingProvider", "MotionProvider", "EdgeTouchProvider", "ShadeProvider", "BarrageProvider", "SuggestionProvider", "NavbarProvider", "SuggestionSmsReceiver", "IconLayerProvider"):
                 assert feature not in manifest, (product, feature)
             assert "WindowIconProvider" in manifest
-            assert "AliveWallpaperService" not in manifest, "Alive must not enter the standalone window product"
+            assert "AliveWallpaperService" not in manifest and "AliveAmbientWallpaperService" not in manifest, "Alive must not enter the standalone window product"
         else:
             assert "AliveWallpaperService" in manifest and "android.permission.BIND_WALLPAPER" in manifest
             assert "android.permission.AMBIENT_WALLPAPER" not in manifest
             assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
         resources = run(tools / "aapt2.exe", "dump", "resources", apk)
+        if not standalone:
+            assert "AliveAmbientWallpaperService" in manifest
+            for xml, expected in (("alive_wallpaper", "false"), ("alive_ambient_wallpaper", "true")):
+                match = re.search(r"resource [^\n]+ xml/" + xml + r"\s+\(\) \(file\) (\S+)", resources)
+                assert match, "Missing wallpaper XML: " + xml
+                metadata = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", match[1])
+                assert re.search(r"supportsAmbientMode[^\n]*=" + expected + r"(?:\s|$)", metadata), metadata
         shortcut_path = re.search(r"resource [^\n]+ xml/shortcuts\s+\(\) \(file\) (\S+)", resources)
         assert shortcut_path, "Missing compiled static shortcut resource"
         shortcut = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", shortcut_path[1])

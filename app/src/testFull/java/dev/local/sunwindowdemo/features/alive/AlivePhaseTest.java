@@ -14,5 +14,15 @@ public class AlivePhaseTest {
         assertEquals(1,AlivePhase.phase(true,false,true));
         assertEquals(2,AlivePhase.phase(true,false,false));
         assertEquals(1,AlivePhase.phase(true,false,true)); // Cancelled/relocked: no sticky HOME state.
+        for(AlivePhase.DisplayState display:AlivePhase.DisplayState.values())for(int bits=0;bits<16;bits++){
+            boolean own=(bits&1)!=0,visible=(bits&2)!=0,interactive=(bits&4)!=0,ambient=(bits&8)!=0;
+            boolean expected=visible&&(display==AlivePhase.DisplayState.ON&&interactive
+                ||(display==AlivePhase.DisplayState.DOZE||display==AlivePhase.DisplayState.DOZE_SUSPEND)&&own&&ambient);
+            assertEquals(expected,AlivePhase.drawable(own,visible,interactive,ambient,display));
+        }
+        assertFalse(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.OFF));
+        assertFalse(AlivePhase.drawable(false,true,false,true,AlivePhase.DisplayState.DOZE));
+        assertTrue(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.DOZE));
+        assertFalse(AlivePhase.drawable(true,false,false,true,AlivePhase.DisplayState.DOZE_SUSPEND));
     }
 }
