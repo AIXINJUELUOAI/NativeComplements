@@ -47,12 +47,6 @@ public final class NavbarStore {
         changed(context);
     }
 
-    public static void setDefaultMode(Context context, int mode) {
-        if (mode < ORIGINAL || mode > AUTO) throw new IllegalArgumentException("mode");
-        preferences(context).edit().putInt("default_mode", mode).apply();
-        changed(context);
-    }
-
     public static void clearMode(Context context, String packageName, String activity) {
         preferences(context).edit().remove(packageName + "/" + activity).apply();
         changed(context);
@@ -65,7 +59,7 @@ public final class NavbarStore {
     public static Bundle read(Context context, String packageName) {
         Bundle snapshot = systemSnapshot(context);
         Bundle result = new Bundle();
-        result.putInt("*", snapshot.getInt("default_mode", AUTO));
+        result.putInt("*", AUTO);
         String prefix = packageName + "/";
         for (String key : snapshot.keySet()) {
             Object value = snapshot.get(key);
@@ -75,7 +69,6 @@ public final class NavbarStore {
             }
         }
         result.putBoolean("enabled", snapshot.getBoolean("enabled", false));
-        result.putInt("default_mode", snapshot.getInt("default_mode", AUTO));
         org.json.JSONObject packages = new org.json.JSONObject();
         try {
             org.json.JSONObject all = new org.json.JSONObject(snapshot.getString("templates", "{}"))

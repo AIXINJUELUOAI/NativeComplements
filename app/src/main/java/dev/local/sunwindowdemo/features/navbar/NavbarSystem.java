@@ -79,8 +79,11 @@ final class NavbarSystem {
     /** Last decision per component, so a revisited page starts in its previous mode without a jump. */
     private final java.util.concurrent.ConcurrentHashMap<String, Integer> autoCache = new java.util.concurrent.ConcurrentHashMap<>();
     private Object autoWindow;
-    private long autoAt;
-    private int autoPending = -1, autoVotes;
+    /** Last content thumbnail of the tracked window; a large change followed by a quiet frame is a refresh. */
+    private int[] autoThumb;
+    private boolean autoDirty;
+    private long autoQuietUntil, autoThumbNanos;
+    private int autoPending = -1, autoThumbs;
     private final Method sourceSize, sourceAt, sourceType, sourceVisible;
     private final Method capture, build, crop, scale;
     private final Method broadcast;
@@ -370,50 +373,126 @@ final class NavbarSystem {
     }
 
     /**
-     * Single-frame layout classification of the app layer: 320dp above the navigation boundary plus the
-     * window's own rows inside the navigation area. Runs on the worker outside the WM lock, at most every
-     * 700ms per window. COLOR -> FLOATING needs two agreeing frames; FLOATING is kept for the window's
-     * lifetime because the edge-to-edge layout it causes can no longer be judged against the boundary.
+     * Refresh-triggered single-frame layout classification. Every tick takes a 1/16 thumbnail of the content
+     * above the navigation area; the full 320dp classification runs only on the window's first frame and after
+     * a large content change has settled (page switch inside the same Activity, scroll end). A change of the
+     * decision needs two agreeing classifications, except the window's first one. The relayout caused by our
+     * own switch is ignored for 600ms. FLOATING windows are judged against the screen bottom, where their own
+     * bottom bar now sits.
      * @return true when the decision changed and the window was asked to relayout.
      */
-    private boolean classify(Object window, SurfaceControl surface, Rect frame, int navTop, int navHeight, String component)
-            throws ReflectiveOperationException {
+    private boolean classify(Object window, SurfaceControl surface, Rect frame, int navTop, int navHeight,
+                             String component, int mode) throws ReflectiveOperationException {
         if (component == null) return false;
-        long now = SystemClock.uptimeMillis();
-        Integer current = autoModes.get(window);
-        if (current != null && current == NavbarStore.FLOATING) return false;
-        if (window == autoWindow && now - autoAt < 700) return false;
-        if (window != autoWindow) { autoWindow = window; autoPending = -1; autoVotes = 0; }
-        autoAt = now;
         android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
         float density = config == null ? 0 : config.densityDpi / 160f;
-        if (density <= 0 || navTop <= 0) return false;
-        int top = Math.max(0, navTop - (int) Math.ceil(320 * density));
-        int width = frame.width(), navRows = Math.max(0, Math.min(frame.height(), navTop + navHeight) - navTop);
-        int[] roi = pixels(surface, new Rect(0, top, width, navTop));
+        int width = frame.width();
+        if (density <= 0 || navTop <= 0 || width < 64) return false;
+        long now = SystemClock.uptimeMillis();
+        if (window != autoWindow) {
+            autoWindow = window; autoThumb = null; autoDirty = true; autoPending = -1; autoQuietUntil = 0;
+        }
+        long t0 = System.nanoTime();
+        int[] thumb = thumbnail(surface, width, navTop);
+        autoThumbNanos += System.nanoTime() - t0;
+        if (++autoThumbs >= 64) {
+            android.util.Log.i("NativeNavbar", "AUTO thumb avg="
+                    + String.format(java.util.Locale.ROOT, "%.2f", autoThumbNanos / 1e6 / autoThumbs) + "ms");
+            autoThumbs = 0; autoThumbNanos = 0;
+        }
+        if (thumb == null) return false;
+        int[] previousThumb = autoThumb;
+        autoThumb = thumb;
+        if (now < autoQuietUntil) { autoDirty = false; return false; }
+        if (previousThumb != null && previousThumb.length == thumb.length) {
+            double change = changed(previousThumb, thumb);
+            if (change > 0.25) { autoDirty = true; return false; }   // still moving: wait for the quiet frame
+            if (change > 0.08) return false;
+        } else if (previousThumb != null) { autoDirty = true; return false; }
+        if (!autoDirty) return false;
+
+        long t1 = System.nanoTime();
+        boolean floating = mode == NavbarStore.FLOATING;
+        int bottom = floating ? frame.height() : navTop;
+        int top = Math.max(0, bottom - (int) Math.ceil(320 * density));
+        int navRows = floating ? 0 : Math.max(0, Math.min(frame.height(), navTop + navHeight) - navTop);
+        int[] roi = pixels(surface, new Rect(0, top, width, bottom));
         int[] nav = navRows == 0 ? new int[0] : pixels(surface, new Rect(0, navTop, width, navTop + navRows));
         if (roi == null || nav == null) return false;
-        Bundle verdict = NavbarLayout.analyze(roi, width, navTop - top, density, nav, width, navRows);
+        Bundle verdict = NavbarLayout.analyze(roi, width, bottom - top, density, nav, width, navRows);
         String decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
         int next = "EXTEND".equals(decision) ? NavbarStore.COLOR : "NATIVE".equals(decision) ? NavbarStore.FLOATING : -1;
-        if (next < 0) return false;
-        int previous = current != null ? current : autoCache.getOrDefault(component, -1);
-        if (next == autoPending) autoVotes++; else { autoPending = next; autoVotes = 1; }
-        boolean first = current == null && previous < 0;
-        if (next == previous || (!first && next == NavbarStore.FLOATING && autoVotes < 2)) {
-            if (current == null && next == previous) autoModes.put(window, next);
+        long ms = (System.nanoTime() - t1) / 1_000_000;
+        Integer current = autoModes.get(window);
+        if (next < 0) { autoDirty = false; autoPending = -1; return false; }
+        if (next == mode) {
+            autoDirty = false; autoPending = -1;
+            if (current == null) {
+                autoModes.put(window, next); autoCache.put(component, next);
+                android.util.Log.i("NativeNavbar", "AUTO " + component + " = " + label(next)
+                        + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
+            }
             return false;
         }
+        if (current != null && autoPending != next) {
+            autoPending = next;        // stay dirty: confirm on the next quiet tick
+            return false;
+        }
+        autoDirty = false; autoPending = -1; autoQuietUntil = now + 600;
         autoModes.put(window, next);
         if (autoCache.size() > 256) autoCache.clear();
         autoCache.put(component, next);
-        android.util.Log.i("NativeNavbar", "AUTO " + component + " -> " + (next == NavbarStore.FLOATING ? "floating" : "extend")
-                + " reason=" + verdict.getString("reviewReason"));
-        if (previous != next) synchronized (lock) {
+        android.util.Log.i("NativeNavbar", "AUTO " + component + " " + label(mode) + " -> " + label(next)
+                + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
+        synchronized (lock) {
             NavbarReflect.call(window, "notifyInsetsChanged");
             NavbarReflect.call(wm, "requestTraversal");
         }
-        return previous != next;
+        return true;
+    }
+
+    private static String label(int mode) { return mode == NavbarStore.FLOATING ? "floating" : "extend"; }
+
+    /** Fraction of thumbnail pixels whose largest channel moved by more than 32. */
+    static double changed(int[] a, int[] b) {
+        int moved = 0;
+        for (int i = 0; i < a.length; i++) {
+            int x = a[i], y = b[i];
+            int d = Math.max(Math.abs(((x >> 16) & 255) - ((y >> 16) & 255)),
+                    Math.max(Math.abs(((x >> 8) & 255) - ((y >> 8) & 255)), Math.abs((x & 255) - (y & 255))));
+            if (d > 32) moved++;
+        }
+        return a.length == 0 ? 0 : moved / (double) a.length;
+    }
+
+    /** 1/16 scale capture of the content above the navigation area, about 7k pixels on a phone. */
+    private int[] thumbnail(SurfaceControl surface, int width, int navTop) {
+        HardwareBuffer hardware = null;
+        Bitmap bitmap = null, software = null;
+        try {
+            if (surface == null || !surface.isValid()) return null;
+            Object builder = captureBuilder.newInstance(surface);
+            crop.invoke(builder, new Rect(0, 0, width, navTop));
+            scale.invoke(builder, 1 / 16f, 1 / 16f);
+            Object buffer = capture.invoke(null, build.invoke(builder));
+            if (buffer == null) return null;
+            hardware = (HardwareBuffer) NavbarReflect.call(buffer, "getHardwareBuffer");
+            if ((Boolean) NavbarReflect.call(buffer, "containsSecureLayers")) return null;
+            bitmap = (Bitmap) NavbarReflect.call(buffer, "asBitmap");
+            if (bitmap == null) return null;
+            software = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+            if (software == null) return null;
+            int w = software.getWidth(), h = software.getHeight();
+            int[] out = new int[w * h];
+            software.getPixels(out, 0, w, 0, 0, w, h);
+            return out;
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            return null;
+        } finally {
+            if (software != null) software.recycle();
+            if (bitmap != null) bitmap.recycle();
+            if (hardware != null) hardware.close();
+        }
     }
 
     /** Opaque app-layer pixels of a window-local rectangle, or null when unavailable or protected. */
@@ -638,7 +717,8 @@ final class NavbarSystem {
                 return;
             }
             if (AUTO_SOURCE.equals(selected.source())
-                    && classify(window, surface, frame, navigationTop(frame, bounds, nav.bottom), nav.bottom, snapshot.component()))
+                    && classify(window, surface, frame, navigationTop(frame, bounds, nav.bottom), nav.bottom, snapshot.component(),
+                        selected.mode()))
                 selected = choice(window, true);
             if (selected.mode() == NavbarStore.FLOATING) { runtime("悬浮中 · " + selected.source()); publish(true, 0, NavbarStore.FLOATING); return; }
             if (snapshot.screenshot() && lastGood != null && lastGood.matches(window, selected.mode(), nav.bottom)) {

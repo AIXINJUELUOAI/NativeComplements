@@ -60,7 +60,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
         LinearProgressIndicator(Modifier.fillMaxWidth().padding(16.dp))
         return
     }
-    var showDefault by remember { mutableStateOf(false) }
     val templates = remember(settings) {
         JSONObject(settings.getString("templates", "{}")).optJSONObject("packages")
     }
@@ -98,7 +97,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 ToggleRow("横屏导航条透明", "移除手势导航条背后的系统阴影", settings.getBoolean("landscape_clear", true)) {
                     NavbarStore.setLandscapeClear(context, it)
                 }
-                SettingRow("通用默认模式", modeLabel(settings.getInt("default_mode", NavbarStore.AUTO)), onClick = { showDefault = true })
             }
             Hint("竖屏按应用或 Activity 选择模式，横屏可保持导航条透明。推荐作用域不等于已授权：请在 LSPosed 中确认系统框架、SystemUI、Pixel 桌面及需要适配的推荐应用作用域，变更后手动重启生效；规则由本页总开关统一控制。")
             GroupTitle("逐应用设置")
@@ -111,8 +109,9 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
             val activityRules = settings.keySet().count { it.startsWith("${app.packageName}/") && it != "${app.packageName}/*" }
             val source = when {
                 packageMode >= 0 -> "应用默认 · ${modeLabel(packageMode)}"
-                templates?.optJSONObject(app.packageName) != null -> "内置适配名单"
-                else -> "通用 · ${modeLabel(settings.getInt("default_mode", NavbarStore.AUTO))}"
+                app.packageName.startsWith("com.google.android.") -> "白名单 · 保留系统原有"
+                templates?.optJSONObject(app.packageName) != null -> "内置名单"
+                else -> "自动"
             }
             SettingsGroup {
                 SettingRow(app.label, source + if (activityRules > 0) " · $activityRules 条独立规则" else "",
@@ -138,15 +137,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     }
     selected?.let { activity ->
         NavbarActivitySheet(activity.packageName, activity.name, settings) { selected = null }
-    }
-    if (showDefault) ModalBottomSheet(onDismissRequest = { showDefault = false }) {
-        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text("通用默认模式", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 14.dp))
-            NavbarModeRows(settings.getInt("default_mode", NavbarStore.AUTO), null) {
-                NavbarStore.setDefaultMode(context, it)
-                showDefault = false
-            }
-        }
     }
 }
 
@@ -193,7 +183,7 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
             SettingsGroup { SettingRow(app.label, app.packageName, leading = { NavbarAppIcon(app) }) }
             if (!settings.getBoolean("enabled", false)) Hint("导航栏适配当前关闭，规则将在开启后生效。")
             GroupTitle("应用默认模式")
-            NavbarModeRows(settings.getInt("$prefix*", -1), "跟随适配名单与通用设置") { mode ->
+            NavbarModeRows(settings.getInt("$prefix*", -1), "跟随白名单与自动") { mode ->
                 if (mode == -1) NavbarStore.clearMode(context, app.packageName, "*")
                 else NavbarStore.setMode(context, app.packageName, "*", mode)
             }
@@ -230,7 +220,7 @@ private fun NavbarActivitySheet(packageName: String, activity: String, settings:
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text(activity.substringAfterLast('.'), style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(bottom = 14.dp))
-            NavbarModeRows(settings.getInt("$packageName/$activity", -1), "跟随应用与适配名单") { mode ->
+            NavbarModeRows(settings.getInt("$packageName/$activity", -1), "跟随应用设置") { mode ->
                 if (mode == -1) NavbarStore.clearMode(context, packageName, activity)
                 else NavbarStore.setMode(context, packageName, activity, mode)
                 dismiss()

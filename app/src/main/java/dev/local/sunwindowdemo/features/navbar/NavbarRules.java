@@ -38,6 +38,8 @@ public final class NavbarRules {
         if (settings.containsKey(userKey)) return new Choice(valid(settings.getInt(userKey)), null, "用户规则");
         String packageKey = packageName + "/*";
         if (settings.containsKey(packageKey)) return new Choice(valid(settings.getInt(packageKey)), null, "用户规则");
+        // Google apps already draw their own navigation area.
+        if (packageName.startsWith("com.google.android.")) return new Choice(NavbarStore.ORIGINAL, null, "白名单");
         JSONObject app = packages.optJSONObject(packageName);
         if (app != null && !app.optBoolean("enabled"))
             return new Choice(0, null, "模板关闭适配");
@@ -59,7 +61,7 @@ public final class NavbarRules {
                         rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));
             }
         }
-        return new Choice(valid(settings.getInt("default_mode", NavbarStore.AUTO)), null, "通用策略");
+        return new Choice(NavbarStore.AUTO, null, "自动");
     }
 
     private static int valid(int mode) { return mode >= 0 && mode <= NavbarStore.AUTO ? mode : 0; }

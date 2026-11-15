@@ -14,7 +14,6 @@ public class NavbarRulesTest {
     private Bundle settings() {
         Bundle snapshot = new Bundle();
         snapshot.putBoolean("enabled", true);
-        snapshot.putInt("default_mode", 1);
         snapshot.putString("templates", """
             {"packages":{"sample":{"enabled":true,"disableVersionCode":10,"rules":{
             "*":{"mode":2,"source":"base"},
@@ -29,6 +28,7 @@ public class NavbarRulesTest {
         assertEquals("exact", rules.resolve("sample", "sample.Details", 11).source());
         assertEquals("specific", rules.resolve("sample", "sample.DetailOther", 11).source());
         assertEquals(2, rules.resolve("sample", "sample.Other", 11).mode());
+        assertEquals(NavbarStore.AUTO, rules.resolve("sample", "sample.Other", 10).mode());
         assertEquals(Integer.valueOf(-1), rules.resolve("sample", "sample.Details", 11).color());
     }
     @Test public void explicitOriginalOverridesTemplateAndAppRule() {
@@ -41,7 +41,7 @@ public class NavbarRulesTest {
     }
     @Test public void templatesFollowMasterSwitchIncludingOldDisabledTemplatePreference() {
         Bundle snapshot = settings();
-        assertEquals(1, new NavbarRules(snapshot).resolve("sample", "sample.Other", 10).mode());
+        assertEquals(NavbarStore.AUTO, new NavbarRules(snapshot).resolve("sample", "sample.Other", 10).mode());
         snapshot.putBoolean("templates_enabled", false);
         assertEquals(2, new NavbarRules(snapshot).resolve("sample", "sample.Other", 11).mode());
         snapshot.putBoolean("enabled", false);
@@ -59,17 +59,16 @@ public class NavbarRulesTest {
         }
         return snapshot;
     }
-    @Test public void eligibilityIsExactAndBaseWindowSensitiveIncludingCachedResults() throws Exception {
+    @Test public void whitelistKeepsOriginalAndEverythingElseIsAuto() throws Exception {
         NavbarRules rules = new NavbarRules(bundledSettings());
-        String page = "com.tencent.mm.framework.app.UIPageFragmentActivity";
-        assertEquals(0, rules.resolve("com.tencent.mm", page, 1, true).mode());
-        assertEquals(1, rules.resolve("com.tencent.mm", page, 1, false).mode());
-        assertEquals(0, rules.resolve("com.tencent.mm", page, 1).mode());
-        assertEquals(1, rules.resolve("com.tencent.mm", page + "Other", 1, true).mode());
-        assertEquals(1, rules.resolve("another.package", page, 1, true).mode());
-        String music = "com.netease.cloudmusic.activity.PlayerActivity";
-        assertEquals(0, rules.resolve("com.netease.cloudmusic", music, 1, false).mode());
-        assertEquals(0, rules.resolve("com.netease.cloudmusic", music, 1, true).mode());
+        assertEquals(NavbarStore.ORIGINAL, rules.resolve("com.openai.chatgpt", "any.Page", 1, false).mode());
+        assertEquals(NavbarStore.ORIGINAL, rules.resolve("com.google.android.dialer", "any.Page", 1).mode());
+        assertEquals(NavbarStore.ORIGINAL, rules.resolve("com.android.settings", "any.Page", 1).mode());
+        assertEquals(NavbarStore.AUTO, rules.resolve("com.tencent.mm", "com.tencent.mm.ui.LauncherUI", 1).mode());
+        assertEquals(NavbarStore.AUTO, rules.resolve("com.jingdong.app.mall", "new.UnknownActivity", 1).mode());
+        assertEquals(NavbarStore.FLOATING, rules.resolve("com.max.xiaoheihe",
+                "com.max.xiaoheihe.module.story.StoryActivity", 1).mode());
+        assertEquals(NavbarStore.AUTO, rules.resolve("com.max.xiaoheihe", "com.max.xiaoheihe.MainActivity", 1).mode());
     }
     @Test public void bundledTransparencyKeepsPolicyBitsAndUserOverrides() throws Exception {
         Bundle snapshot = bundledSettings();
@@ -83,30 +82,17 @@ public class NavbarRulesTest {
         assertEquals(2, rules.resolve("sample", "sample.Transparent", 1, true).mode());
         assertFalse(rules.resolve("sample", "sample.Transparent", 1, true).consumesNavigationInsets());
         assertTrue(rules.resolve("sample", "sample.Consume", 1, true).consumesNavigationInsets());
-        assertEquals(1, rules.resolve("sample", "sample.Transparent", 1, false).mode());
+        assertEquals(NavbarStore.AUTO, rules.resolve("sample", "sample.Transparent", 1, false).mode());
         snapshot.putInt("sample/*", 0);
         assertEquals(0, new NavbarRules(snapshot).resolve("sample", "sample.Transparent", 1).mode());
     }
-    @Test public void verifiedTaobaoTransparencyAndUnknownPagesRemainDistinct() throws Exception {
-        NavbarRules rules = new NavbarRules(bundledSettings());
-        var detail = rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", 1);
-        assertEquals(2, detail.mode());
-        assertEquals(4, detail.policyFlags());
-        assertFalse(detail.consumesNavigationInsets());
-        assertEquals(2, rules.resolve("com.taobao.taobao", "com.taobao.android.detail2.core.framework.NewDetailActivity", 1, false).mode());
-        assertEquals(1, rules.resolve("com.jingdong.app.mall", "com.jingdong.app.mall.MainFrameActivity", 1).mode());
-        assertEquals(1, rules.resolve("com.jingdong.app.mall", "new.UnknownActivity", 1).mode());
-    }
-    @Test public void savedUserRulesAndDefaultRemainAuthoritative() throws Exception {
+    @Test public void savedUserRulesBeatWhitelistAndAuto() throws Exception {
         Bundle snapshot = bundledSettings();
-        String page = "com.tencent.mm.framework.app.UIPageFragmentActivity";
-        snapshot.putInt("com.tencent.mm/*", 2);
-        assertEquals(2, new NavbarRules(snapshot).resolve("com.tencent.mm", page, 1).mode());
-        snapshot.putInt("com.tencent.mm/" + page, 0);
-        assertEquals(0, new NavbarRules(snapshot).resolve("com.tencent.mm", page, 1).mode());
-        snapshot.putInt("default_mode", 0);
-        assertEquals(0, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
-        snapshot.remove("default_mode");
-        assertEquals(1, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
+        snapshot.putInt("com.openai.chatgpt/*", 2);
+        assertEquals(2, new NavbarRules(snapshot).resolve("com.openai.chatgpt", "any.Page", 1).mode());
+        snapshot.putInt("com.tencent.mm/com.tencent.mm.ui.LauncherUI", 1);
+        assertEquals(1, new NavbarRules(snapshot).resolve("com.tencent.mm", "com.tencent.mm.ui.LauncherUI", 1).mode());
+        snapshot.putInt("default_mode", 0);   // retired preference is ignored
+        assertEquals(NavbarStore.AUTO, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
     }
 }

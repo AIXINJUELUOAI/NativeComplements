@@ -82,23 +82,15 @@ for owner, name, descriptor in [
     ("Lcom/android/launcher3/taskbar/TaskbarBackgroundRenderer;", "strokePaint", "Landroid/graphics/Paint;"),
 ]:
     assert any(field["name"] == name and field["type"] == descriptor for field in classes[owner]["fields"]), (owner, name)
-assert templates["name"] == "类原生补全计划适配名单"
-assert all(source["name"].startswith("ColorOS ") for source in templates["sources"])
-assert len(templates["packages"]) == 60
-assert sum(bool(app.get("rules")) for app in templates["packages"].values()) == 30
-rules = [rule for app in templates["packages"].values() for rule in app["rules"].values()]
-assert len(rules) == 57
-translucent = [rule for app in templates["packages"].values()
-               for rule in app.get("translucent_rules", {}).values()]
-assert len(translucent) == 147
-assert all(isinstance(rule["base_only"], bool) and isinstance(rule["policy_flag"], int)
-           and 0 <= rule["policy_flag"] <= 15 for rule in translucent)
-assert all(activity and "*" not in activity for app in templates["packages"].values()
-           for activity in app.get("translucent_rules", {}))
-assert all(app["enabled"] for app in templates["packages"].values())
-assert all(rule["mode"] == 0 and isinstance(rule["base_only"], bool) and "color" not in rule for rule in rules)
-assert sum(not rule["base_only"] for rule in rules) == 2
-assert all("*" not in activity for app in templates["packages"].values() for activity in app["rules"])
-assert all(word not in json.dumps(templates) for word in ("HyperOS", "HyperNavBar"))
-print(f"PASS: {count} exact public API37 methods; 60 template applications / 30 blacklist applications / "
-      "57 exact eligibility exceptions / 147 transparency policies; device behavior awaits verification")
+assert templates["name"] == "类原生补全计划导航条白名单"
+whitelist = {pkg for pkg, app in templates["packages"].items()
+             if app["rules"] == {"*": {"mode": 0, "source": "白名单", "base_only": False}}}
+assert {"com.openai.chatgpt", "com.coolapk.market", "com.android.settings", "com.android.chrome",
+        "org.telegram.messenger", "dev.nativecomplements.module"} <= whitelist
+assert not any(pkg.startswith("com.google.android.") for pkg in templates["packages"])  # prefix rule in code
+assert templates["packages"]["com.max.xiaoheihe"]["rules"] == {
+    "com.max.xiaoheihe.module.story.StoryActivity": {"mode": 2, "source": "内置规则", "base_only": True}}
+assert all(app["enabled"] and "translucent_rules" not in app for app in templates["packages"].values())
+assert all(word not in json.dumps(templates, ensure_ascii=False) for word in ("ColorOS", "HyperOS", "HyperNavBar"))
+print(f"PASS: {count} exact public API37 methods; {len(whitelist)} whitelist applications plus com.google.android.*, "
+      "everything else AUTO; device behavior awaits verification")
