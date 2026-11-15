@@ -557,7 +557,10 @@ final class NavbarSystem {
         Intent intent = new Intent(NavbarLabelHost.LABEL).setPackage("com.android.systemui")
                 .putExtra("package", name.getPackageName()).putExtra("activity", name.getClassName()).putExtra("mode", mode);
         try {
-            broadcast.invoke(context, intent, android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE", null);
+            // SystemUI accepts the chip only from uid 1000, which it can see only when identity is shared.
+            broadcast.invoke(context, intent, android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE",
+                    BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+            NavbarTrace.i("LABEL offer " + component + " " + label(mode));
         } catch (ReflectiveOperationException | RuntimeException failure) { NavbarTrace.w("label offer failed", failure); }
     }
 

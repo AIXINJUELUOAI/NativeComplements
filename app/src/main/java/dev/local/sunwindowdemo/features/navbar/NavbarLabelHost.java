@@ -49,7 +49,7 @@ final class NavbarLabelHost {
         app = application;
         application.registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
-                if (getSentFromUid() != 1000) return;
+                if (getSentFromUid() != 1000) { android.util.Log.w("NativeNavbar", "label from uid " + getSentFromUid() + " ignored"); return; }
                 verdict(intent.getStringExtra("package"), intent.getStringExtra("activity"), intent.getIntExtra("mode", -1));
             }
         }, new IntentFilter(LABEL), "android.permission.STATUS_BAR_SERVICE", main, Context.RECEIVER_EXPORTED);
