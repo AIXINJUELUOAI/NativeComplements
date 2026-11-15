@@ -535,7 +535,7 @@ final class WindowEngine {
                 completeOpen(i,true);
                 note("ACTIVE：小窗已开启，无定时退出");
                 if(SystemClock.elapsedRealtime()>=s.nextStatus) {s.nextStatus=SystemClock.elapsedRealtime()+1000;report("TICK");}
-            handler.postDelayed(() -> tick(s), 250);
+            handler.postDelayed(() -> tick(s), WindowLifecycle.Pause.LIVE.delay);
             } catch (Throwable e) {
                 completeOpen(i,false);
                 synchronized(lock){
@@ -2211,7 +2211,7 @@ final class WindowEngine {
         if(sessions.isEmpty())return false;
         Session s;
         try{s=sessionFor(a.call(fragment,"getTask"));}catch(Exception e){return false;}
-        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.prioritySuspended||s.screenSuspended&&!continueHidden(s)||lock==null
+        if(s==null||!WindowLifecycle.resumeCandidate(new WindowLifecycle.Resume(visible(s),s.restoring,s.closing,s.fullTransition,s.parked,s.prioritySuspended))||s.screenSuspended&&!continueHidden(s)||lock==null
             ||!("mini".equals(s.frame)||"normal".equals(s.frame)))return false;
         try{synchronized(lock){
             if(!visible(s)||a.call(fragment,"getTask")!=s.task||!s.lease.isBinderAlive()
@@ -2220,9 +2220,10 @@ final class WindowEngine {
             Object top=a.call(fragment,"topRunningActivity");
             // Only retain a live visible top Activity. Native pause still owns
             // sleep, shutdown, occlusion, same-task page changes and teardown.
-            return top!=null&&!(Boolean)a.field(top,"finishing")&&a.bool(top,"isVisibleRequested")
-                &&a.bool(top,"attachedToProcess")
-                &&(Integer)a.call(fragment,"getVisibility",new Class<?>[]{a.activity},resuming)==0;
+            boolean present=top!=null,finishing=present&&(Boolean)a.field(top,"finishing");
+            boolean shown=present&&!finishing&&a.bool(top,"isVisibleRequested"),attached=shown&&a.bool(top,"attachedToProcess");
+            int visibility=attached?(Integer)a.call(fragment,"getVisibility",new Class<?>[]{a.activity},resuming):-1;
+            return WindowLifecycle.retainTop(new WindowLifecycle.Top(present,finishing,shown,attached,visibility));
         }}catch(Exception e){return false;}
     }
     boolean retainMiniActivity(Object activity,Object resuming){
@@ -2248,12 +2249,11 @@ final class WindowEngine {
     // recents' running task. Keep that gate intact. A visible mini can use the
     // same native fragment lifecycle path without becoming the focused task.
     private void resumeMini(Session s){
-        if(!visibleResumeReady||!visible(s)||!"mini".equals(s.frame)||s.transitioning
-            ||s.backRequested||pendingStart!=null)return;
+        if(s==null||!WindowLifecycle.resumeMini(visibleResumeReady,visible(s),s.frame,s.transitioning,s.backRequested,pendingStart!=null))return;
         try{
             Object top=a.call(s.task,"topRunningActivity");if(top==null)return;
             String state=String.valueOf(a.call(top,"getState"));
-            if(!("PAUSED".equals(state)||"STARTED".equals(state)||"STOPPED".equals(state)||"STOPPING".equals(state)))return;
+            if(!WindowLifecycle.resumableState(state))return;
             Object fragment=a.call(top,"getTaskFragment");
             if(!shouldResumeMiniActivity(top,null))return;
             a.call(fragment,"resumeTopActivity",new Class<?>[]{a.activity,ActivityOptions.class,boolean.class},null,null,false);
@@ -2339,9 +2339,10 @@ final class WindowEngine {
     boolean blockContentTouch(Object container){
         if(sessions.isEmpty())return false;
         try{Session s=sessionFor(a.call(container,"getTask"));
-            if(s!=null){int priority=priorityState(s);if(priority!=0)return priority==2;}
-            return s!=null&&(s.parked||s.restoring||s.prioritySuspended||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
-                ||s.startMask!=null&&s.startMask.holding());
+            WindowLifecycle.Input input=WindowLifecycle.input(s!=null,s==null?0:priorityState(s));
+            if(input!=WindowLifecycle.Input.STATE)return input==WindowLifecycle.Input.BLOCK;
+            return WindowLifecycle.blocksContent(new WindowLifecycle.Content(s.parked,s.restoring,s.prioritySuspended,s.screenSuspended,
+                s.rotation.active(),s.closing,s.frame,s.startMask!=null&&s.startMask.holding()));
         }catch(Exception e){return false;}
     }
     /* SystemUI's outside-dismiss overlays arrive asynchronously (frame IPC, addView, first draw)
@@ -2807,8 +2808,9 @@ final class WindowEngine {
         if (handler != null) handler.post(() -> { if (sessions.contains(s)) recover("适配异常：" + FrameworkAccess.reason(e)); });
     }
     private boolean continueHidden(Session s){
-        return continuationReady&&continuation!=null&&keepEdgeAwake&&visible(s)&&!s.restoring&&!s.closing&&!s.parked
-            &&!s.fullTransition&&!s.prioritySuspended&&s.edgeHidden&&"mini".equals(s.frame)&&s.uid>=10000
+        if(s==null)return false;
+        return WindowLifecycle.continuation(new WindowLifecycle.Continuation(continuationReady,continuation!=null,keepEdgeAwake,
+            visible(s),s.restoring,s.closing,s.parked,s.fullTransition,s.prioritySuspended,s.edgeHidden,s.frame,s.uid))
             &&s.lease!=null&&s.lease.isBinderAlive();
     }
     boolean continueHiddenTask(Object fragment){
@@ -2843,7 +2845,7 @@ final class WindowEngine {
     }
     // 0=native exception/no match; 1=other UID inside this task; 2=external task/window.
     static int systemPriority(Object display,Object task,int uid,Object windowDisplay,Object windowTask,int windowUid,boolean visible){
-        return !visible||display==null||display!=windowDisplay||uid<0||windowUid<0||windowUid==uid?0:task==windowTask?1:2;
+        return WindowLifecycle.priority(display!=null&&display==windowDisplay,task==windowTask,uid,windowUid,visible);
     }
     private int priorityState(Session s)throws Exception{
         if(a.overlayHidingWindows==null||wms==null)return 0;
@@ -2856,8 +2858,8 @@ final class WindowEngine {
         return result;
     }
     private boolean updatePriorityState(Session s)throws Exception{
-        int priority=priorityState(s);boolean blocked=priority!=0,hide=priority==2;
-        if(s.prioritySuspended==blocked&&s.priorityHideTask==hide){
+        WindowLifecycle.Priority priority=WindowLifecycle.priority(priorityState(s));boolean blocked=priority.blocked(),hide=priority.hide();
+        if(!priority.changed(s.prioritySuspended,s.priorityHideTask)){
             if(blocked&&a.bool(s.task,"isFocusable")==hide)
                 a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},!hide);
             return false;
@@ -2866,7 +2868,7 @@ final class WindowEngine {
         if(blocked&&!wasBlocked)s.priorityWasFocusable=a.bool(s.task,"isFocusable");
         s.prioritySuspended=blocked;s.priorityHideTask=hide;
         // A permission Activity inside a mini needs native key focus, unlike an external installer.
-        boolean focusable=blocked?!hide:s.priorityWasFocusable&&!s.parked&&"normal".equals(s.frame);
+        boolean focusable=priority.focusable(s.priorityWasFocusable,s.parked,s.frame);
         if(a.bool(s.task,"isFocusable")!=focusable)
             a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},focusable);
         if(blocked){
@@ -2922,11 +2924,12 @@ final class WindowEngine {
         }
     }
     private void tick(Session s) {
-        if(!sessions.contains(s)||s.restoring||recovering)return;
+        WindowLifecycle.Tick admission=WindowLifecycle.tick(sessions.contains(s),s.restoring,recovering,visible(s));
+        if(admission==WindowLifecycle.Tick.STOP)return;
         try {
-            if(!visible(s)){
+            if(admission==WindowLifecycle.Tick.HIDDEN){
                 synchronized(lock){if(find(s.taskId)!=s.task||a.call(s.task,"topRunningActivity")==null){retire(s);return;}apply(s);}
-                handler.postDelayed(()->tick(s),1000);return;
+                handler.postDelayed(()->tick(s),WindowLifecycle.Pause.HIDDEN.delay);return;
             }
             if (!s.lease.isBinderAlive()) { s.closing=true; recover("SystemUI 控制进程退出"); return; }
             synchronized (lock) {
@@ -2939,10 +2942,11 @@ final class WindowEngine {
                 updateScreenState(s);
                 if(updatePriorityState(s))renderFrame(s);
                 handler.post(this::updateContinuation);
-                if(s.prioritySuspended){renderFrame(s);a.call(wms,"requestTraversal");handler.postDelayed(()->tick(s),250);return;}
-                if(s.screenSuspended){
+                WindowLifecycle.Pause pause=WindowLifecycle.pause(s.prioritySuspended,s.screenSuspended);
+                if(pause==WindowLifecycle.Pause.PRIORITY){renderFrame(s);a.call(wms,"requestTraversal");handler.postDelayed(()->tick(s),pause.delay);return;}
+                if(pause==WindowLifecycle.Pause.SCREEN){
                     if(continueHidden(s)){resumeMini(s);traceVisibleRuntime(s,a.call(s.task,"getDisplayContent"));}
-                    handler.postDelayed(()->tick(s),500);return;
+                    handler.postDelayed(()->tick(s),pause.delay);return;
                 }
                 Object display = a.call(s.task, "getDisplayContent");
                 if (display == null) throw new IllegalStateException("任务已离开显示器");
@@ -2953,7 +2957,7 @@ final class WindowEngine {
                 else if (!s.transitioning && !a.animating(s.task)) { apply(s); a.call(wms, "requestTraversal"); }
             }
             if(SystemClock.elapsedRealtime()>=s.nextStatus) {s.nextStatus=SystemClock.elapsedRealtime()+1000;report("TICK");}
-            handler.postDelayed(() -> tick(s), 250);
+            handler.postDelayed(() -> tick(s), WindowLifecycle.Pause.LIVE.delay);
         } catch (Throwable e) { failure(s, e); }
     }
 

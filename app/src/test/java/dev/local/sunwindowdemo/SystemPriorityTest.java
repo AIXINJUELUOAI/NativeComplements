@@ -56,6 +56,8 @@ public class SystemPriorityTest {
         assertEquals(0,WindowEngine.systemPriority(display,task,10001,new Object(),other,10002,true));
         assertEquals(0,WindowEngine.systemPriority(display,task,10001,display,other,10002,false));
         assertEquals(0,WindowEngine.systemPriority(display,task,10001,display,other,-1,true));
+        assertEquals(0,WindowEngine.systemPriority(null,task,10001,null,other,10002,true));
+        assertEquals(0,WindowEngine.systemPriority(display,task,-1,display,other,10002,true));
     }
     @Test public void externalInstallerSuspendsInputAndRestoresPlacementWithoutMovingFocus()throws Exception{
         Object display=new Object();Task task=new Task(display);Object session=session(task),placement=get(session,"placement");
@@ -77,6 +79,9 @@ public class SystemPriorityTest {
         assertTrue(update(engine,session));assertTrue((Boolean)get(session,"prioritySuspended"));assertFalse((Boolean)get(session,"priorityHideTask"));
         assertTrue(task.focusable);assertEquals(0,task.focusChanges);
         assertFalse(engine.blockContentTouch(permission));assertFalse(engine.blockBackgroundTouch(permission));
+        set(session,"screenSuspended",true);set(session,"closing",true);
+        assertFalse("Same-task permission overrides blocked content state",engine.blockContentTouch(permission));
+        set(session,"screenSuspended",false);set(session,"closing",false);
         assertFalse((Boolean)get(session,"surfaceHidden"));assertFalse((Boolean)get(session,"screenSuspended"));
         wms.mHidingNonSystemOverlayWindows.clear();assertTrue(update(engine,session));assertEquals(0,task.focusChanges);
     }
