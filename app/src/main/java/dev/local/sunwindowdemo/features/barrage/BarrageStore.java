@@ -26,7 +26,7 @@ public final class BarrageStore {
         out.putStringArrayList("apps",new ArrayList<>(p.getStringSet("apps",Set.of())));return out;
     }
     public static void enabled(Context c,boolean enabled){migrate(c);prefs(c).edit().putBoolean("enabled",enabled).apply();changed(c);}
-    public static int lineLimit(int value){return value==0||value==5?value:3;}
+    public static int lineLimit(int value){return BarrageState.Companion.lineLimit(value);}
     public static void lines(Context c,int value){migrate(c);prefs(c).edit().putInt("lines",lineLimit(value)).apply();changed(c);}
     public static void select(Context c,String pkg,boolean selected){
         if(!Rules.validPackage(pkg))throw new IllegalArgumentException("barrage package");

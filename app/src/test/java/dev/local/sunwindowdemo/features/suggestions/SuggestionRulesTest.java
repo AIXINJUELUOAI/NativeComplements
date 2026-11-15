@@ -4,6 +4,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class SuggestionRulesTest {
+    @Test public void staleAsyncRepliesCannotCompleteANewerAttemptAndTimeoutInvalidatesItsTicket(){
+        var state=new SuggestionRules.Attempt();int old=state.begin();assertTrue(state.timeout(false,old));
+        int current=state.begin();assertFalse(state.complete(false,old));assertTrue(state.running());
+        assertFalse(state.complete(true,current));assertTrue(state.complete(false,current));assertFalse(state.complete(false,current));
+        assertEquals(5100,SuggestionRules.offerUntil(100,1));assertEquals(100,SuggestionRules.adjustUntil(100,100,200));
+        assertTrue(SuggestionRules.undimEvent(true,true,0,1,true));assertFalse(SuggestionRules.undimReady(1501,true,false));
+        assertTrue(SuggestionRules.matchesSms("验证码 001234","验证码001234"));assertFalse(SuggestionRules.matchesSms("甲001234","乙001234"));
+        assertTrue(SuggestionRules.validInput(false,"001234",100));assertFalse(SuggestionRules.validInput(false,"13800138000",100));
+    }
     @Test public void codesPreserveLeadingZerosWithoutTreatingPhoneNumbersAsCodes(){
         assertEquals("001234",SuggestionRules.otp("【示例服务】2026年您的验证码为001234，请勿泄露。",false));
         assertEquals("000321",SuggestionRules.otp("Your verification code is 000321",false));

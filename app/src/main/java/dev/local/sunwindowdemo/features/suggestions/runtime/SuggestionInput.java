@@ -37,7 +37,7 @@ final class SuggestionInput {
         ResultReceiver receiver=request.getParcelableExtra("inputReply",ResultReceiver.class);
         String digits=request.getStringExtra("digits");int delay=request.getIntExtra("delay",100);
         if(receiver==null)return;
-        if(running||digits==null||!digits.matches("[0-9]{4,8}")||delay<50||delay>500
+        if(!dev.local.sunwindowdemo.features.suggestions.SuggestionRules.validInput(running,digits,delay)
                 ||!Wire.validToken(request.getStringExtra("token"))){receiver.send(0,null);return;}
         try{synchronized(lock){
             Object display=a.call(root,"getDefaultDisplay"),current=a.field(display,"mCurrentFocus");

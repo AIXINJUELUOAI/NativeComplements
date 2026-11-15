@@ -54,16 +54,21 @@ final class ProductFeatures {
             Handler main=new Handler(Looper.getMainLooper());
             module.hook(event).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 boolean offer=false;long time=(Long)chain.getArg(1);
-                try{Object g=chain.getArg(0);offer=(Integer)chain.getArg(2)==touch&&((Integer)chain.getArg(3)&noLights)==0
-                    &&(Integer)id.invoke(g)==0&&(Integer)wake.invoke(g)==1&&(Boolean)dim.invoke(g);}
+                try{Object g=chain.getArg(0);
+                    boolean touched=(Integer)chain.getArg(2)==touch,lights=touched&&((Integer)chain.getArg(3)&noLights)==0;
+                    int groupId=lights?(Integer)id.invoke(g):-1,wakefulness=lights&&groupId==0?(Integer)wake.invoke(g):-1;
+                    boolean dimmed=lights&&groupId==0&&wakefulness==1&&(Boolean)dim.invoke(g);
+                    offer=dev.local.sunwindowdemo.features.suggestions.SuggestionRules.undimEvent(touched,lights,groupId,wakefulness,dimmed);}
                 catch(Exception ignored){}
                 Object result=chain.proceed();
                 if(offer&&Boolean.TRUE.equals(result))try{
                     Context c=(Context)context.get(chain.getThisObject());
                     main.post(()->{try{
                         long age=SystemClock.uptimeMillis()-time;
-                        if(age<0||age>1500||!c.getSystemService(PowerManager.class).isInteractive()
-                            ||c.getSystemService(android.app.KeyguardManager.class).isKeyguardLocked())return;
+                        boolean fresh=age>=0&&age<=1500;
+                        boolean interactive=fresh&&c.getSystemService(PowerManager.class).isInteractive();
+                        boolean keyguard=interactive&&c.getSystemService(android.app.KeyguardManager.class).isKeyguardLocked();
+                        if(!dev.local.sunwindowdemo.features.suggestions.SuggestionRules.undimReady(age,interactive,keyguard))return;
                         c.sendBroadcast(new Intent(dev.local.sunwindowdemo.features.suggestions.SuggestionStore.AWAKE)
                             .setPackage(BackBridge.PACKAGE).putExtra("time",time),null,
                             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());

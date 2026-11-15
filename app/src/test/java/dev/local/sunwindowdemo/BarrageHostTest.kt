@@ -43,6 +43,7 @@ class BarrageHostTest {
     private class Provider : ContentProvider() {
         val history = mutableListOf<Bundle>()
         var lines = 3
+        var save = true
         override fun onCreate() = true
         override fun call(method: String, arg: String?, extras: Bundle?): Bundle = when (method) {
             "read" -> Bundle().apply {
@@ -52,7 +53,7 @@ class BarrageHostTest {
             }
             "addHistory" -> {
                 history += Bundle(requireNotNull(extras))
-                Bundle().apply { putBoolean("saved", true) }
+                Bundle().apply { putBoolean("saved", save) }
             }
             else -> error(method)
         }
@@ -202,6 +203,19 @@ class BarrageHostTest {
             assertTrue(ReflectionHelpers.getField<Boolean>(entries().getValue(1), "saved"))
             assertFalse(listener.activeNotifications.any { it.key == newest.key })
         } finally { blocked.countDown() }
+    }
+
+    @Test fun historyFailureKeepsNativeNotificationUntilTheSamePlayingDeliveryIsSaved() {
+        provider.save=false
+        val notice=notification("保存重试",100)
+        post(notice);drain()
+        val entry=entries().getValue(0)
+        assertFalse(ReflectionHelpers.getField<Boolean>(entry,"saved"))
+        assertTrue(listener.activeNotifications.any { it.key==notice.key })
+        provider.save=true;host.notification(listener,notice);drain()
+        assertSame(entry,entries().getValue(0))
+        assertTrue(ReflectionHelpers.getField<Boolean>(entry,"saved"))
+        assertFalse(listener.activeNotifications.any { it.key==notice.key })
     }
 
     @Test fun suspensionPausesAllLinesAndResumesTheirExistingViews() {

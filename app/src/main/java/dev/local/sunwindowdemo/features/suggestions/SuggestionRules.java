@@ -9,6 +9,37 @@ import java.util.regex.Pattern;
 public final class SuggestionRules {
     private SuggestionRules() {}
     public record Link(String packageName,String value,boolean token) {}
+    /** Async replies and timeouts share one generation; no Android callback identity enters here. */
+    public static final class Attempt {
+        private int generation;
+        private boolean running;
+        public int begin(){running=true;return ++generation;}
+        public boolean running(){return running;}
+        public boolean complete(boolean closed,int ticket){
+            if(closed||!running||ticket!=generation)return false;
+            running=false;return true;
+        }
+        public boolean timeout(boolean closed,int ticket){
+            if(!complete(closed,ticket))return false;generation++;return true;
+        }
+        public void cancel(){running=false;generation++;}
+    }
+    public static long offerUntil(long now,int seconds){return now+Math.max(5,Math.min(300,seconds))*1000L;}
+    public static long adjustUntil(long deadline,long now,long delta){return deadline>now?deadline+delta:deadline;}
+    public static boolean undimEvent(boolean touch,boolean changesLights,int group,int wakefulness,boolean dim){
+        return touch&&changesLights&&group==0&&wakefulness==1&&dim;
+    }
+    public static boolean undimReady(long age,boolean interactive,boolean keyguard){return age>=0&&age<=1500&&interactive&&!keyguard;}
+    public static boolean matchesSms(String shown,String notice){
+        return (shown==null?"":shown.replaceAll("\\s+","")).equals(notice==null?"":notice.replaceAll("\\s+",""));
+    }
+    public static String rotationRefusal(boolean restoring,boolean closed,boolean ready,boolean enabled,boolean overlay,boolean chooser){
+        return restoring?"正在恢复原生":closed?"宿主已关闭":!ready?"窗口服务未就绪":!enabled?"配置未启用或尚未读取"
+            :overlay?"系统面板遮挡":chooser?"地图选择面板显示中":null;
+    }
+    public static boolean validInput(boolean running,String digits,int delay){
+        return !running&&digits!=null&&digits.matches("[0-9]{4,8}")&&delay>=50&&delay<=500;
+    }
     private record App(String pkg,String[] domains,String[] tokens) {}
     private static final App[] APPS={
         new App("com.taobao.taobao",new String[]{"taobao.com","tmall.com","tb.cn"},new String[]{"淘口令","淘宝","天猫"}),

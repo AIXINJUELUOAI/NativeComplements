@@ -36,17 +36,7 @@ public final class DiagnosticsProvider extends ContentProvider {
             return DiagnosticsStore.state();
         }
         if ("events".equals(method)) {
-            if (arg == null || arg.length() > 4096) throw new IllegalArgumentException("events");
-            String[] lines = arg.split("\n");
-            if (lines.length == 0 || lines.length > 32) throw new IllegalArgumentException("batch size");
-            String[][] batch = new String[lines.length][];
-            for (int i = 0; i < lines.length; i++) {
-                batch[i] = lines[i].split(":", -1);
-                String[] parts = batch[i];
-                if (parts.length != 3 || !caller.equals(parts[0])
-                        || !DiagnosticsBuffer.valid(parts[0], parts[1], parts[2]))
-                    throw new IllegalArgumentException("event policy");
-            }
+            String[][] batch = DiagnosticsBuffer.batch(caller, arg);
             for (String[] parts : batch) DiagnosticsStore.add(parts[0], parts[1], parts[2]);
             return Bundle.EMPTY;
         }

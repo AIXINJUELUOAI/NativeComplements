@@ -43,8 +43,9 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private View view;
     private SuggestionDrag drag;
     private final Set<String> litCameras=new HashSet<>();
-    private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,inputRunning,chooser;
-    private boolean torchDismissed,opening,rotationRestoring;
+    private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,chooser;
+    private boolean torchDismissed,rotationRestoring;
+    private final SuggestionRules.Attempt opening=new SuggestionRules.Attempt(),inputAttempt=new SuggestionRules.Attempt();
     private final Binder rotationLease=new Binder();
     void publishRotationSettings(){
         Bundle extras=new Bundle();extras.putBinder("lease",rotationLease);
@@ -58,10 +59,9 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         try{restore.run();}finally{rotationRestoring=false;}
     }
     private Runnable rotationClick,rotationRestore;
-    private int openGeneration;
     private String lastTorchCamera,requestedTorchCamera;
     private Boolean requestedTorchMode;
-    private int imeTop=Integer.MAX_VALUE,renderGeneration,inputGeneration;
+    private int imeTop=Integer.MAX_VALUE,renderGeneration;
     private int clipboardHash;
     private long clipboardTimestamp;
     private String code,smsBody,mapText,displayedSmsBody;
@@ -145,8 +145,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     if(closed)return;
                     long delta=(next.getInt("duration",60)-settings.getInt("duration",60))*1000L;
                     long time=now();
-                    if(codeUntil>time)codeUntil+=delta;if(contentUntil>time)contentUntil+=delta;
-                    if(torchUntil>time)torchUntil+=delta;if(bluetoothUntil>time)bluetoothUntil+=delta;if(awakeUntil>time)awakeUntil+=delta;
+                    codeUntil=SuggestionRules.adjustUntil(codeUntil,time,delta);contentUntil=SuggestionRules.adjustUntil(contentUntil,time,delta);
+                    torchUntil=SuggestionRules.adjustUntil(torchUntil,time,delta);bluetoothUntil=SuggestionRules.adjustUntil(bluetoothUntil,time,delta);awakeUntil=SuggestionRules.adjustUntil(awakeUntil,time,delta);
                     boolean offerBluetooth=next.getBoolean("enabled")&&next.getBoolean("bluetooth")&&(!enabled("bluetooth")
                         ||!Objects.equals(settings.getString("bluetooth_app"),next.getString("bluetooth_app")));
                     settings=next;
@@ -200,7 +200,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         }catch(RuntimeException e){status("CLIPBOARD_UNAVAILABLE");}
     }
     private static long now(){return SystemClock.elapsedRealtime();}
-    private long offerUntil(){return now()+Math.max(5,Math.min(300,settings.getInt("duration",60)))*1000L;}
+    private long offerUntil(){return SuggestionRules.offerUntil(now(),settings.getInt("duration",60));}
     private boolean locked(){return !context.getSystemService(PowerManager.class).isInteractive()||context.getSystemService(KeyguardManager.class).isKeyguardLocked();}
     private void sms(String body){
         if(!enabled("otp"))return;
@@ -232,13 +232,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         }catch(RuntimeException ignored){/* Keep the original notification on every uncertain path. */}
     }
     void notificationRemoved(String key){notices.remove(key);}
-    private static String canonical(String text){return text==null?"":text.replaceAll("\\s+","");}
     private void hideMatchedNotice(){
         if(!enabled("hide_sms")||displayedSmsBody==null||displayedSmsUntil<=now())return;
         for(Notice notice:new ArrayList<>(notices.values())){
             if(now()-notice.received>60000){notices.remove(notice.key);continue;}
             // Exact whole-message association, never just a matching code or a clipboard candidate.
-            if(canonical(displayedSmsBody).equals(canonical(notice.body))){
+            if(SuggestionRules.matchesSms(displayedSmsBody,notice.body)){
                 try{notice.source.cancelNotification(notice.key);notices.remove(notice.key);}catch(RuntimeException ignored){}
             }
         }
@@ -307,8 +306,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     }
     boolean rotationSuggestion(Runnable click,Runnable restore){
         if(click==null){rotationClick=null;rotationRestore=null;render();return false;}
-        String refusal=rotationRestoring?"正在恢复原生":closed?"宿主已关闭":wm==null?"窗口服务未就绪":!enabled("rotate")?"配置未启用或尚未读取"
-            :systemOverlay?"系统面板遮挡":chooser?"地图选择面板显示中":locked()?"锁屏或息屏":null;
+        String refusal=SuggestionRules.rotationRefusal(rotationRestoring,closed,wm!=null,enabled("rotate"),systemOverlay,chooser);
+        if(refusal==null&&locked())refusal="锁屏或息屏";
         if(refusal!=null){RotationDiagnostics.update("host",refusal);return false;}
         RotationDiagnostics.update("host","正在接管SystemUI旋转建议");
         dev.local.sunwindowdemo.features.diagnostics.Diagnostics.event(context,"systemui","rotation_proposed");
@@ -367,10 +366,10 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&bluetoothUntil>now()&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
                 Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);open(launch,bluetooth,()->{bluetoothUsed=true;render();});
             },()->bluetoothUsed=true);
-            if(enabled("otp")&&code!=null&&!inputRunning){
-                ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputRunning?"正在逐位填入验证码":"逐位填入验证码",this::input,()->{code=null;smsBody=null;displayedSmsBody=null;displayedSmsUntil=0;});
+            if(enabled("otp")&&code!=null&&!inputAttempt.running()){
+                ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputAttempt.running()?"正在逐位填入验证码":"逐位填入验证码",this::input,()->{code=null;smsBody=null;displayedSmsBody=null;displayedSmsUntil=0;});
                 paint(otp,SuggestionTones.tone(night(),SuggestionTones.OTP_LIGHT,SuggestionTones.OTP_DARK));
-                otp.setEnabled(!inputRunning);otp.setAlpha(inputRunning?.5f:1);
+                otp.setEnabled(!inputAttempt.running());otp.setAlpha(inputAttempt.running()?.5f:1);
                 int generation=renderGeneration;
                 row.getViewTreeObserver().addOnDrawListener(new android.view.ViewTreeObserver.OnDrawListener(){
                     boolean scheduled;
@@ -420,7 +419,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         catch(RuntimeException e){view=null;RotationDiagnostics.update("window","窗口添加失败: "+e.getClass().getSimpleName());status("OVERLAY_UNAVAILABLE");}
     }
     private void open(Intent intent,String pkg,Runnable completed){
-        if(intent==null||locked()||opening)return;
+        if(intent==null||locked()||opening.running())return;
         try{
             Intent launch=new Intent(intent).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if(launch.resolveActivity(context.getPackageManager())==null)throw new IllegalStateException();
@@ -428,19 +427,18 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 if(!new Config(context).enabled()){
                     Toast.makeText(context,"请开启小窗控制，或关闭建议中的小窗打开",Toast.LENGTH_SHORT).show();return;
                 }
-                opening=true;int generation=++openGeneration;
+                int generation=opening.begin();
                 ResultReceiver reply=new ResultReceiver(main){
                     @Override protected void onReceiveResult(int result,Bundle data){
-                        if(closed||generation!=openGeneration||!opening)return;
-                        opening=false;
+                        if(!opening.complete(closed,generation))return;
                         if(result==1){chooser=false;completed.run();}
                         else {Toast.makeText(context,"打开未完成，请重试",Toast.LENGTH_SHORT).show();render();}
                     }
                 };
                 Wire.openIntent(context,pkg,launch,reply);
-                main.postDelayed(()->{if(!closed&&opening&&generation==openGeneration){opening=false;openGeneration++;Toast.makeText(context,"打开超时，请重试",Toast.LENGTH_SHORT).show();render();}},15000);
+                main.postDelayed(()->{if(opening.timeout(closed,generation)){Toast.makeText(context,"打开超时，请重试",Toast.LENGTH_SHORT).show();render();}},15000);
             }else {context.startActivity(launch);chooser=false;completed.run();}
-        }catch(Exception e){opening=false;openGeneration++;Toast.makeText(context,"目标应用暂不支持此入口",Toast.LENGTH_SHORT).show();}
+        }catch(Exception e){opening.cancel();Toast.makeText(context,"目标应用暂不支持此入口",Toast.LENGTH_SHORT).show();}
     }
     private void openMap(String pkg){
         if(mapText==null)return;
@@ -456,17 +454,17 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         open(target,pkg,()->{if(Objects.equals(mapText,text))mapText=null;chooser=false;render();});
     }
     private void input(){
-        if(inputRunning||code==null||codeUntil<=now()||locked())return;
-        inputRunning=true;String digits=code;int generation=++inputGeneration;render();
+        if(inputAttempt.running()||code==null||codeUntil<=now()||locked())return;
+        String digits=code;int generation=inputAttempt.begin();render();
         ResultReceiver reply=new ResultReceiver(main){
             @Override protected void onReceiveResult(int result,Bundle data){
-                if(closed||generation!=inputGeneration||!inputRunning)return;inputRunning=false;
+                if(!inputAttempt.complete(closed,generation))return;
                 if(result==1&&Objects.equals(code,digits)){code=null;smsBody=null;}
                 else if(result!=1)Toast.makeText(context,"输入已停止，请确认目标输入框与键盘",Toast.LENGTH_SHORT).show();render();
             }
         };
         Wire.inputDigits(context,digits,settings.getInt("delay",100),reply);
-        main.postDelayed(()->{if(!closed&&inputRunning&&generation==inputGeneration){inputRunning=false;inputGeneration++;render();Toast.makeText(context,"输入服务未响应，请检查模块后端",Toast.LENGTH_SHORT).show();}},12000);
+        main.postDelayed(()->{if(inputAttempt.timeout(closed,generation)){render();Toast.makeText(context,"输入服务未响应，请检查模块后端",Toast.LENGTH_SHORT).show();}},12000);
     }
     private void toggleTorch(){
         if(requestedTorchMode!=null)return;

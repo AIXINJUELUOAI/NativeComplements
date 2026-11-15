@@ -27,6 +27,20 @@ final class DiagnosticsBuffer {
     static boolean valid(String source, String event, String exception) {
         return SOURCES.contains(source) && EVENTS.contains(event) && EXCEPTIONS.contains(exception);
     }
+    /** Validate the entire value-only batch before the provider publishes any event. */
+    static String[][] batch(String caller, String value) {
+        if (value == null || value.length() > 4096) throw new IllegalArgumentException("events");
+        String[] lines = value.split("\n");
+        if (lines.length == 0 || lines.length > 32) throw new IllegalArgumentException("batch size");
+        String[][] batch = new String[lines.length][];
+        for (int i = 0; i < lines.length; i++) {
+            batch[i] = lines[i].split(":", -1);
+            String[] parts = batch[i];
+            if (parts.length != 3 || !caller.equals(parts[0]) || !valid(parts[0], parts[1], parts[2]))
+                throw new IllegalArgumentException("event policy");
+        }
+        return batch;
+    }
     synchronized void start(long now) {
         lines.setLength(0); bytes = 0; started = now; stopped = 0; recording = true;
     }
