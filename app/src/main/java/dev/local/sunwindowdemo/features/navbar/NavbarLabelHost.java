@@ -37,7 +37,8 @@ final class NavbarLabelHost {
     private static LinearLayout chip;
     private static TextView text;
     private static String pkg, activity, label;
-    private static int mode = -1;
+    private static int mode = -1, verdictMode = -1;
+    private static final java.util.Map<Integer, TextView> choices = new java.util.HashMap<>();
     private static boolean previewing;
     private static long lastShownAt;
     private static final Runnable hide = NavbarLabelHost::dismiss;
@@ -61,7 +62,7 @@ final class NavbarLabelHost {
         // The same verdict for the same page is shown again only after the chip had time to go away.
         if (same && chip != null && chip.isAttachedToWindow()) return;
         if (same && SystemClock.uptimeMillis() - lastShownAt < SHOW_MS + 4000) return;
-        pkg = nextPkg; activity = nextActivity; mode = nextMode;
+        pkg = nextPkg; activity = nextActivity; mode = nextMode; verdictMode = nextMode;
         try { label = String.valueOf(app.getPackageManager().getApplicationLabel(app.getPackageManager().getApplicationInfo(pkg, 0))); }
         catch (Exception unknown) { label = pkg; }
         show();
@@ -75,7 +76,8 @@ final class NavbarLabelHost {
         try {
             if (chip == null) build();
             String page = activity.substring(activity.lastIndexOf('.') + 1);
-            text.setText(label + " · " + page + "\n" + (previewing ? "预览：" : "判断：") + modeName(mode));
+            text.setText(label + " · " + page + "\n" + "判断：" + modeName(verdictMode) + (previewing ? "　预览：" + modeName(mode) : ""));
+            for (var entry : choices.entrySet()) highlight(entry.getValue(), entry.getKey() == mode);
             if (!chip.isAttachedToWindow()) windows.addView(chip, params());
             lastShownAt = SystemClock.uptimeMillis();
             main.removeCallbacks(hide);
@@ -88,8 +90,7 @@ final class NavbarLabelHost {
     private static void build() {
         windows = app.getSystemService(WindowManager.class);
         chip = new LinearLayout(app);
-        chip.setOrientation(LinearLayout.HORIZONTAL);
-        chip.setGravity(Gravity.CENTER_VERTICAL);
+        chip.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(8);
         chip.setPadding(dp(14), pad, pad, pad);
         GradientDrawable background = new GradientDrawable();
@@ -99,9 +100,27 @@ final class NavbarLabelHost {
         text = new TextView(app);
         text.setTextColor(Color.WHITE);
         text.setTextSize(13);
-        chip.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        chip.addView(button("✓", NavbarLabelHost::confirm));
-        chip.addView(button("✗", NavbarLabelHost::reject));
+        chip.addView(text, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout row = new LinearLayout(app);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        for (int option : new int[]{NavbarStore.COLOR, NavbarStore.FLOATING, NavbarStore.ORIGINAL}) {
+            TextView choice = button(modeName(option), () -> choose(option));
+            choice.setTextSize(14);
+            choices.put(option, choice);
+            row.addView(choice, new LinearLayout.LayoutParams(0, dp(40), 1));
+        }
+        TextView ok = button("✓", NavbarLabelHost::confirm);
+        row.addView(ok, new LinearLayout.LayoutParams(dp(52), dp(40)));
+        chip.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    private static void highlight(TextView view, boolean on) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(16));
+        shape.setColor(on ? Color.argb(255, 138, 180, 248) : Color.TRANSPARENT);
+        view.setBackground(shape);
+        view.setTextColor(on ? Color.rgb(32, 33, 36) : Color.WHITE);
     }
 
     private static TextView button(String glyph, Runnable action) {
@@ -140,12 +159,15 @@ final class NavbarLabelHost {
         });
     }
 
-    /** ✗: preview the next mode on the page; ✓ then confirms what is now visible. */
-    private static void reject() {
-        mode = mode == NavbarStore.FLOATING ? NavbarStore.COLOR : mode == NavbarStore.COLOR ? NavbarStore.ORIGINAL : NavbarStore.FLOATING;
-        previewing = true;
+    /** A mode button: preview it on the page (the verdict itself needs no preview); ✓ confirms the highlighted one. */
+    private static void choose(int option) {
+        if (option == mode) return;
+        mode = option;
+        boolean wasPreviewing = previewing;
+        previewing = option != verdictMode;
         show();
-        call("preview", pkg, activity, mode, null);
+        if (previewing) call("preview", pkg, activity, option, null);
+        else if (wasPreviewing) call("preview", pkg, activity, -1, null);
     }
 
     private static void dismiss() {

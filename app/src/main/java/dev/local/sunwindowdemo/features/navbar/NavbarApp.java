@@ -3,6 +3,7 @@ package dev.local.sunwindowdemo.features.navbar;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
+import android.content.Intent;
 import android.database.ContentObserver;
 import android.graphics.Insets;
 import android.net.Uri;
@@ -30,6 +31,9 @@ final class NavbarApp {
     private boolean installed, enabled;
     private final Runnable reload = this::readSettings;
     private static final Uri CONFIG = Uri.parse("content://" + NavbarStore.AUTHORITY);
+    static final String PAGE = "dev.nativecomplements.module.NAVBAR_PAGE";
+    /** Last reported "page draws its own navigation area" state per decor. */
+    private final Map<View, Boolean> reported = new WeakHashMap<>();
 
     // LSPosed-only entry: exact ROM members are preflighted; unavailable APIs leave native behavior intact.
     @android.annotation.SuppressLint("BlockedPrivateApi")
@@ -71,7 +75,11 @@ final class NavbarApp {
                         next = new Layout(window, layoutAttributes(window.getAttributes()));
                     }
                 } catch (ReflectiveOperationException | RuntimeException ignored) {}
-                if (next == null) return chain.proceed();
+                if (next == null) {
+                    Object result = chain.proceed();
+                    main.post(() -> report(view));
+                    return result;
+                }
                 Layout previous = layout.get();
                 layout.set(next);
                 try { return chain.proceed(new Object[]{incoming, false}); }
@@ -159,6 +167,41 @@ final class NavbarApp {
         return selected.mode() == NavbarStore.FLOATING ? selected : null;
     }
 
+    /**
+     * The page is adapted when the window framework paints no navigation background and the content view
+     * reaches the screen bottom: the app itself draws behind the gesture area (QQ home blur bar). Unadapted
+     * pages leave DecorView's coloured navigation background there. Reported to system_server on change only;
+     * never while this module itself makes the window transparent.
+     */
+    private void report(View decor) {
+        try {
+            if (application == null || !installed) return;
+            var reference = activities.get(decor);
+            Activity activity = reference == null ? null : reference.get();
+            if (activity == null || activity.isFinishing() || decor.getDisplay() == null) return;
+            if (choice(decor, null) != null) return;
+            Window window = activity.getWindow();
+            WindowInsets insets = decor.getRootWindowInsets();
+            if (window == null || insets == null) return;
+            int nav = insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
+            if (nav <= 0) return;
+            boolean painted = (window.getAttributes().flags & WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0
+                    && (window.getNavigationBarColor() >>> 24) != 0;
+            View content = decor.findViewById(android.R.id.content);
+            if (content == null || content.getHeight() == 0) return;
+            int[] at = new int[2];
+            content.getLocationInWindow(at);
+            boolean under = at[1] + content.getHeight() >= decor.getHeight() - nav / 2;
+            boolean adapted = !painted && under;
+            if (Boolean.valueOf(adapted).equals(reported.get(decor))) return;
+            reported.put(decor, adapted);
+            Intent intent = new Intent(PAGE).setPackage("android")
+                    .putExtra("activity", activity.getComponentName().getClassName()).putExtra("adapted", adapted);
+            application.sendBroadcast(intent, null,
+                    android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+        } catch (ReflectiveOperationException | RuntimeException ignored) {}
+    }
+
     private static int navigationMode(Context context) {
         int mode = Settings.Secure.getInt(context.getContentResolver(), "navigation_mode", -1);
         if (mode >= 0 && mode <= 2) return mode;
@@ -177,6 +220,7 @@ final class NavbarApp {
                 View decor = activity.getWindow().getDecorView();
                 activities.put(decor, new java.lang.ref.WeakReference<>(activity));
                 refresh(decor);
+                main.post(() -> report(decor));
             }
             @Override public void onActivityCreated(Activity activity, Bundle state) { track(activity); }
             @Override public void onActivityResumed(Activity activity) { track(activity); reader.post(reload); }

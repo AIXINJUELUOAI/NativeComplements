@@ -7,6 +7,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -206,8 +208,19 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
         (activities.orEmpty() + settings.keySet().filter { it.startsWith(prefix) && it != "$prefix*" }
             .map { it.removePrefix(prefix) }).distinct().sorted()
     }
-    val matchingActivities = remember(allActivities, query, app.packageName) {
-        allActivities.filter { navbarSearchMatches(query, app.label, app.packageName, it) }
+    var status by rememberSaveable(app.packageName) { mutableStateOf("全部") }
+    val statusOf = { activity: String ->
+        val resolved = rules.resolve(app.packageName, activity, version)
+        val own = settings.containsKey(prefix + activity)
+        listOf(resolved.source(), modeLabel(resolved.mode()), if (own) "独立规则" else "",
+            if (resolved.mode() == NavbarStore.COLOR) "延伸" else "").joinToString(" ")
+    }
+    val matchingActivities = remember(allActivities, query, status, settings, app.packageName) {
+        allActivities.filter { activity ->
+            val text = statusOf(activity)
+            (status == "全部" || text.contains(status))
+                    && (navbarSearchMatches(query, app.label, app.packageName, activity) || (query.isNotBlank() && text.contains(query.trim())))
+        }
     }
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp + bottomInset)) {
@@ -220,7 +233,12 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
                 else NavbarStore.setMode(context, app.packageName, "*", mode)
             }
             GroupTitle("Activity 独立规则")
-            OutlinedTextField(query, { query = it }, label = { Text("筛选 Activity") },
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (option in listOf("全部", "独立规则", "自动", "取色", "悬浮", "保留")) {
+                    FilterChip(selected = status == option, onClick = { status = option }, label = { Text(option) })
+                }
+            }
+            OutlinedTextField(query, { query = it }, label = { Text("筛选 Activity、模式或来源") },
                 trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
                 singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
         }

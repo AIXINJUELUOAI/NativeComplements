@@ -103,6 +103,8 @@ final class NavbarSystem {
      * and the live tile never show the black navigation background it draws once insets come back.
      */
     private volatile Object stickyFloating;
+    /** uid/Activity -> the page currently draws its own navigation area (reported by the scoped app). */
+    private final java.util.concurrent.ConcurrentHashMap<String, Boolean> pageAdapted = new java.util.concurrent.ConcurrentHashMap<>();
     /** Startup: the first STARTUP_MS of a window (splash, open-screen ad, loading) is neither learned nor allowed to override a known page. */
     private static final long STARTUP_MS = 1500;
     private long autoSince;
@@ -322,6 +324,26 @@ final class NavbarSystem {
                     worker.post(tick);
                 }
             }, screen, null, worker, Context.RECEIVER_NOT_EXPORTED);
+            context.registerReceiver(new BroadcastReceiver() {
+                @Override public void onReceive(Context c, Intent i) {
+                    int uid = getSentFromUid();
+                    String activity = i.getStringExtra("activity");
+                    if (uid < android.os.Process.FIRST_APPLICATION_UID || activity == null || activity.length() > 300) return;
+                    boolean adapted = i.getBooleanExtra("adapted", false);
+                    String key = uid + "/" + activity;
+                    Boolean before = pageAdapted.put(key, adapted);
+                    if (pageAdapted.size() > 512) pageAdapted.clear();
+                    if (before != null && before == adapted) return;
+                    NavbarTrace.i("PAGE " + key + " adapted=" + adapted);
+                    Object window = previousWindow;
+                    if (window != null) synchronized (lock) {
+                        try { NavbarReflect.call(window, "notifyInsetsChanged"); }
+                        catch (ReflectiveOperationException | RuntimeException ignored) {}
+                    }
+                    worker.removeCallbacks(tick);
+                    worker.post(tick);
+                }
+            }, new IntentFilter(NavbarApp.PAGE), null, worker, Context.RECEIVER_EXPORTED);
             IntentFilter packages = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
             packages.addAction(Intent.ACTION_PACKAGE_REMOVED);
             packages.addDataScheme("package");
@@ -413,6 +435,10 @@ final class NavbarSystem {
         NavbarRules.Choice resolved = rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
                 attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION);
         if (resolved.mode() != NavbarStore.AUTO) return resolved;
+        // The app says this page draws its own navigation area: leave it exactly as the app made it.
+        Object owner = NavbarReflect.call(window, "getOwningUid");
+        if (Boolean.TRUE.equals(pageAdapted.get(owner + "/" + component.getClassName())))
+            return new NavbarRules.Choice(NavbarStore.ORIGINAL, null, "页面自适配", 0);
         // Until the classifier has seen this window it keeps the native layout with sampled color.
         Integer mode = autoModes.get(window);
         if (mode == null) mode = autoCache.get(component.flattenToShortString());
