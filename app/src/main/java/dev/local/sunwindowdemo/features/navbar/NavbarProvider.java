@@ -19,18 +19,16 @@ public final class NavbarProvider extends ContentProvider {
                     extras.getLong("version", -1), extras.getInt("mode", -1));
             return Bundle.EMPTY;
         }
-        if ("confirm".equals(method) || "preview".equals(method)) {
+        if ("label".equals(method)) {
             try {
                 if (uid != getContext().getApplicationInfo().uid
                         && uid != getContext().getPackageManager().getApplicationInfo("com.android.systemui", 0).uid)
                     throw new SecurityException("navbar labeller");
             } catch (android.content.pm.PackageManager.NameNotFoundException error) { throw new SecurityException(error); }
             if (extras == null) return Bundle.EMPTY;
-            String pkg = extras.getString("package"), activity = extras.getString("activity");
-            int mode = extras.getInt("mode", -1);
             Bundle reply = new Bundle();
-            if ("confirm".equals(method)) reply.putString("result", NavbarStore.confirm(getContext(), pkg, activity, mode));
-            else if (pkg != null && activity != null) NavbarStore.preview(getContext(), pkg, activity, mode);
+            reply.putInt("previous", NavbarStore.label(getContext(), extras.getString("package"),
+                    extras.getString("activity"), extras.getInt("mode", -2)));
             return reply;
         }
         if ("system".equals(method) || "status".equals(method)) {

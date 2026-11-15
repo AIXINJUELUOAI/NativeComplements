@@ -57,8 +57,6 @@ public final class NavbarRules {
 
     private Choice resolveEnabled(String packageName, String activity, long version, boolean isBaseApplication) {
         String userKey = packageName + "/" + activity;
-        if (settings.containsKey("preview:" + userKey))
-            return new Choice(valid(settings.getInt("preview:" + userKey)), null, "标注预览");
         if (settings.containsKey(userKey)) return new Choice(valid(settings.getInt(userKey)), null, "用户规则");
         String packageKey = packageName + "/*";
         if (settings.containsKey(packageKey)) return new Choice(valid(settings.getInt(packageKey)), null, "用户规则");

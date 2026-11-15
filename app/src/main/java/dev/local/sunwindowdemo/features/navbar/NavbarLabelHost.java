@@ -1,5 +1,6 @@
 package dev.local.sunwindowdemo.features.navbar;
 
+import android.annotation.SuppressLint;
 import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -12,36 +13,42 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
- * SystemUI side of the labelling mode: a small chip under the status bar showing the AUTO verdict of the
- * current page with ✓ (write it as the Activity rule) and ✗ (preview the next mode on the page, then decide).
- * Nothing is written without ✓; an unconfirmed preview is withdrawn after a few idle seconds.
+ * SystemUI side of the labelling mode: a draggable panel that stays on screen while the mode is on.
+ * It shows the current page with the mode actually in effect (pushed by system_server on every change);
+ * a mode button writes that Activity's rule at once (latest tap wins) and 撤销 restores the rule before the
+ * last tap. "—" folds the panel to a single line; tapping the line unfolds it.
  */
 final class NavbarLabelHost {
     static final String LABEL = "dev.nativecomplements.module.NAVBAR_LABEL";
     private static final Uri PROVIDER = Uri.parse("content://" + NavbarStore.AUTHORITY);
-    private static final long SHOW_MS = 20000, PREVIEW_IDLE_MS = 20000;
     /** Hidden WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL (FIRST_SYSTEM_WINDOW + 24), SystemUI-only. */
     private static final int TYPE_NAVIGATION_BAR_PANEL = 2024;
+    private static final int QUERY = -3, CLEAR = -1;
     private static final Handler main = new Handler(Looper.getMainLooper());
     private static final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private record Undo(String pkg, String activity, int previous) {}
+    private static final ArrayDeque<Undo> undo = new ArrayDeque<>();
+    private static final Map<Integer, TextView> choices = new HashMap<>();
     private static Application app;
     private static WindowManager windows;
-    private static LinearLayout chip;
-    private static TextView text;
-    private static String pkg, activity, label;
-    private static int mode = -1, verdictMode = -1;
-    private static final java.util.Map<Integer, TextView> choices = new java.util.HashMap<>();
-    private static boolean previewing;
-    private static long lastShownAt;
-    private static final Runnable hide = NavbarLabelHost::dismiss;
+    private static WindowManager.LayoutParams params;
+    private static LinearLayout panel, row;
+    private static TextView text, undoButton, fold;
+    private static String pkg, activity, label = "", source = "", idle = "";
+    private static String note = "";
+    private static int shown = -1, rule = -1;
+    private static boolean folded;
 
     private NavbarLabelHost() {}
 
@@ -51,71 +58,124 @@ final class NavbarLabelHost {
         application.registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context context, Intent intent) {
                 if (getSentFromUid() != 1000) { android.util.Log.w("NativeNavbar", "label from uid " + getSentFromUid() + " ignored"); return; }
-                verdict(intent.getStringExtra("package"), intent.getStringExtra("activity"), intent.getIntExtra("mode", -1));
+                if (!intent.getBooleanExtra("on", false)) { remove(); return; }
+                state(intent.getStringExtra("package"), intent.getStringExtra("activity"), intent.getIntExtra("mode", -1),
+                        intent.getStringExtra("source"), intent.getStringExtra("idle"));
             }
         }, new IntentFilter(LABEL), "android.permission.STATUS_BAR_SERVICE", main, Context.RECEIVER_EXPORTED);
     }
 
-    private static void verdict(String nextPkg, String nextActivity, int nextMode) {
-        if (nextPkg == null || nextActivity == null || nextMode < 0 || previewing) return;
-        boolean same = nextPkg.equals(pkg) && nextActivity.equals(activity) && nextMode == verdictMode;
-        // While labelling the chip stays up: a repeated verdict only extends it.
-        if (same && chip != null && chip.isAttachedToWindow()) {
-            main.removeCallbacks(hide);
-            main.postDelayed(hide, SHOW_MS);
-            return;
+    private static void state(String nextPkg, String nextActivity, int mode, String nextSource, String nextIdle) {
+        boolean page = nextPkg != null && nextActivity != null;
+        boolean changed = page ? !nextPkg.equals(pkg) || !nextActivity.equals(activity) : pkg != null;
+        if (changed) {
+            note = "";
+            rule = -1;
+            if (page) {
+                try { label = String.valueOf(app.getPackageManager().getApplicationLabel(app.getPackageManager().getApplicationInfo(nextPkg, 0))); }
+                catch (Exception unknown) { label = nextPkg; }
+                String p = nextPkg, a = nextActivity;
+                call(p, a, QUERY, previous -> { if (p.equals(pkg) && a.equals(activity)) { rule = previous; render(); } });
+            }
         }
-        pkg = nextPkg; activity = nextActivity; mode = nextMode; verdictMode = nextMode;
-        try { label = String.valueOf(app.getPackageManager().getApplicationLabel(app.getPackageManager().getApplicationInfo(pkg, 0))); }
-        catch (Exception unknown) { label = pkg; }
-        show();
+        pkg = page ? nextPkg : null;
+        activity = page ? nextActivity : null;
+        shown = mode;
+        source = nextSource == null ? "" : nextSource;
+        idle = nextIdle == null ? "" : nextIdle;
+        render();
     }
 
     private static String modeName(int value) {
-        return value == NavbarStore.FLOATING ? "悬浮" : value == NavbarStore.COLOR ? "延伸" : "保留原有";
+        return value == NavbarStore.FLOATING ? "悬浮" : value == NavbarStore.COLOR ? "延伸"
+                : value == NavbarStore.AUTO ? "自动" : "保留";
     }
 
-    private static void show() {
+    private static void render() {
         try {
-            if (chip == null) build();
-            String page = activity.substring(activity.lastIndexOf('.') + 1);
-            text.setText(label + " · " + page + "\n" + "判断：" + modeName(verdictMode) + (previewing ? "　预览：" + modeName(mode) : ""));
-            for (var entry : choices.entrySet()) highlight(entry.getValue(), entry.getKey() == mode);
-            if (!chip.isAttachedToWindow()) windows.addView(chip, params());
-            lastShownAt = SystemClock.uptimeMillis();
-            main.removeCallbacks(hide);
-            main.postDelayed(hide, previewing ? PREVIEW_IDLE_MS : SHOW_MS);
+            if (panel == null) build();
+            String line;
+            if (pkg == null) line = "标注模式 · " + (idle.isEmpty() ? "没有可标注的页面" : idle);
+            else {
+                String page = activity.substring(activity.lastIndexOf('.') + 1);
+                line = label + " · " + page;
+                if (!folded) line += "\n当前：" + modeName(shown) + " · " + source
+                        + (rule >= 0 ? " · 规则=" + modeName(rule) : "") + (note.isEmpty() ? "" : "\n" + note);
+                else line += " · " + modeName(shown);
+            }
+            text.setText(line);
+            row.setVisibility(folded || pkg == null ? View.GONE : View.VISIBLE);
+            fold.setText(folded ? "＋" : "—");
+            for (var entry : choices.entrySet()) highlight(entry.getValue(), entry.getKey() == rule);
+            undoButton.setAlpha(undo.isEmpty() ? 0.35f : 1f);
+            if (!panel.isAttachedToWindow()) windows.addView(panel, params);
         } catch (RuntimeException failure) {
-            android.util.Log.w("NativeNavbar", "label chip unavailable", failure);
+            android.util.Log.w("NativeNavbar", "label panel unavailable", failure);
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     private static void build() {
         windows = app.getSystemService(WindowManager.class);
-        chip = new LinearLayout(app);
-        chip.setOrientation(LinearLayout.VERTICAL);
+        params = params();
+        panel = new LinearLayout(app);
+        panel.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(8);
-        chip.setPadding(dp(14), pad, pad, pad);
+        panel.setPadding(dp(14), pad, pad, pad);
         GradientDrawable background = new GradientDrawable();
         background.setColor(Color.argb(235, 32, 33, 36));
-        background.setCornerRadius(dp(24));
-        chip.setBackground(background);
+        background.setCornerRadius(dp(20));
+        panel.setBackground(background);
+
+        LinearLayout header = new LinearLayout(app);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
         text = new TextView(app);
         text.setTextColor(Color.WHITE);
         text.setTextSize(13);
-        chip.addView(text, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        LinearLayout row = new LinearLayout(app);
+        header.addView(text, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        fold = button("—", () -> { folded = !folded; render(); });
+        header.addView(fold, new LinearLayout.LayoutParams(dp(44), dp(36)));
+        panel.addView(header, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        drag(text);
+
+        row = new LinearLayout(app);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        for (int option : new int[]{NavbarStore.COLOR, NavbarStore.FLOATING, NavbarStore.ORIGINAL}) {
+        for (int option : new int[]{NavbarStore.COLOR, NavbarStore.FLOATING, NavbarStore.ORIGINAL, NavbarStore.AUTO}) {
             TextView choice = button(modeName(option), () -> choose(option));
-            choice.setTextSize(14);
             choices.put(option, choice);
             row.addView(choice, new LinearLayout.LayoutParams(0, dp(40), 1));
         }
-        TextView ok = button("✓", NavbarLabelHost::confirm);
-        row.addView(ok, new LinearLayout.LayoutParams(dp(52), dp(40)));
-        chip.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        undoButton = button("撤销", NavbarLabelHost::undo);
+        row.addView(undoButton, new LinearLayout.LayoutParams(0, dp(40), 1));
+        panel.addView(row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+    }
+
+    /** Dragging the text moves the panel; a tap without movement unfolds a folded panel. */
+    @SuppressLint("ClickableViewAccessibility")
+    private static void drag(View handle) {
+        float[] start = new float[4];
+        boolean[] moved = new boolean[1];
+        handle.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN -> {
+                    start[0] = event.getRawX(); start[1] = event.getRawY(); start[2] = params.x; start[3] = params.y;
+                    moved[0] = false;
+                }
+                case MotionEvent.ACTION_MOVE -> {
+                    float dx = event.getRawX() - start[0], dy = event.getRawY() - start[1];
+                    if (!moved[0] && Math.hypot(dx, dy) < dp(6)) return true;
+                    moved[0] = true;
+                    params.x = Math.round(start[2] + dx);
+                    params.y = Math.max(0, Math.round(start[3] + dy));
+                    if (panel.isAttachedToWindow()) windows.updateViewLayout(panel, params);
+                }
+                case MotionEvent.ACTION_UP -> { if (!moved[0] && folded) { folded = false; render(); } }
+                default -> {}
+            }
+            return true;
+        });
     }
 
     private static void highlight(TextView view, boolean on) {
@@ -129,18 +189,17 @@ final class NavbarLabelHost {
     private static TextView button(String glyph, Runnable action) {
         TextView button = new TextView(app);
         button.setText(glyph);
-        button.setTextSize(20);
+        button.setTextSize(14);
         button.setTextColor(Color.WHITE);
         button.setGravity(Gravity.CENTER);
-        button.setMinWidth(dp(48));
-        button.setMinHeight(dp(40));
+        button.setMinHeight(dp(36));
         button.setOnClickListener(view -> action.run());
         return button;
     }
 
     private static WindowManager.LayoutParams params() {
         WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                Math.min(dp(360), app.getResources().getDisplayMetrics().widthPixels - dp(24)),
+                Math.min(dp(380), app.getResources().getDisplayMetrics().widthPixels - dp(24)),
                 WindowManager.LayoutParams.WRAP_CONTENT, TYPE_NAVIGATION_BAR_PANEL,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
@@ -150,50 +209,53 @@ final class NavbarLabelHost {
         return p;
     }
 
-    /** ✓: the shown mode becomes this Activity's rule (or the Activity is marked multi-page). */
-    private static void confirm() {
+    /** A mode button: written immediately as this Activity's rule; the previous rule is kept for 撤销. */
+    private static void choose(int option) {
+        if (pkg == null || option == rule) return;
         String p = pkg, a = activity;
-        int m = mode;
-        previewing = false;
-        call("confirm", p, a, m, result -> {
-            text.setText("multi".equals(result) ? "该 Activity 含多个页面，保持自动" : "已写入：" + modeName(m));
-            main.removeCallbacks(hide);
-            main.postDelayed(hide, 1500);
+        rule = option;
+        note = "已写入：" + modeName(option);
+        render();
+        call(p, a, option, previous -> {
+            if (previous < -1) { note = "写入失败"; render(); return; }
+            undo.push(new Undo(p, a, previous));
+            while (undo.size() > 20) undo.removeLast();
+            render();
         });
     }
 
-    /** A mode button: preview it on the page (the verdict itself needs no preview); ✓ confirms the highlighted one. */
-    private static void choose(int option) {
-        if (option == mode) return;
-        mode = option;
-        boolean wasPreviewing = previewing;
-        previewing = option != verdictMode;
-        show();
-        if (previewing) call("preview", pkg, activity, option, null);
-        else if (wasPreviewing) call("preview", pkg, activity, -1, null);
+    private static void undo() {
+        Undo last = undo.poll();
+        if (last == null) return;
+        call(last.pkg(), last.activity(), last.previous() < 0 ? CLEAR : last.previous(), ignored -> {
+            if (last.pkg().equals(pkg) && last.activity().equals(activity)) rule = last.previous();
+            note = "已撤销 " + last.activity().substring(last.activity().lastIndexOf('.') + 1) + " → "
+                    + (last.previous() < 0 ? "无规则" : modeName(last.previous()));
+            render();
+        });
     }
 
-    private static void dismiss() {
-        if (previewing) { previewing = false; call("preview", pkg, activity, -1, null); }
-        if (chip != null && chip.isAttachedToWindow()) {
-            try { windows.removeView(chip); } catch (RuntimeException ignored) {}
+    private static void remove() {
+        pkg = null; activity = null;
+        if (panel != null && panel.isAttachedToWindow()) {
+            try { windows.removeView(panel); } catch (RuntimeException ignored) {}
         }
     }
 
-    private static void call(String method, String p, String a, int m, java.util.function.Consumer<String> done) {
+    private static void call(String p, String a, int m, java.util.function.IntConsumer done) {
         io.execute(() -> {
-            String result = "error";
+            int result = -2;
             try {
                 Bundle extras = new Bundle();
                 extras.putString("package", p);
                 extras.putString("activity", a);
                 extras.putInt("mode", m);
-                Bundle reply = app.getContentResolver().call(PROVIDER, method, null, extras);
-                result = reply == null ? "ok" : reply.getString("result", "ok");
+                Bundle reply = app.getContentResolver().call(PROVIDER, "label", null, extras);
+                if (reply != null) result = reply.getInt("previous", -2);
             } catch (RuntimeException failure) {
-                android.util.Log.w("NativeNavbar", "label " + method + " failed", failure);
+                android.util.Log.w("NativeNavbar", "label call failed", failure);
             }
-            String r = result;
+            int r = result;
             if (done != null) main.post(() -> done.accept(r));
         });
     }

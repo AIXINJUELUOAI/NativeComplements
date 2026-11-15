@@ -76,7 +76,7 @@ class NavbarUiTest {
         screenshot("navbar-settings-main")
         compose.onNodeWithText("示例应用").performScrollTo().performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("应用默认模式").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("取色").performScrollTo().performClick()
+        compose.onAllNodesWithText("取色").onLast().performScrollTo().performClick()
         compose.runOnIdle { assertEquals(NavbarStore.COLOR, preferences.getInt("$pkg/*", -1)) }
         compose.waitUntil(10_000) { compose.onAllNodesWithText("DetailActivity").fetchSemanticsNodes().isNotEmpty() }
         screenshot("navbar-settings-app")
@@ -87,7 +87,7 @@ class NavbarUiTest {
         compose.onAllNodesWithText("保留系统原有").onLast().performClick()
         compose.runOnIdle { assertEquals(NavbarStore.ORIGINAL, preferences.getInt("$pkg/$alias", -1)) }
         compose.onNodeWithText("DetailActivity").performScrollTo().performClick()
-        compose.onNodeWithText("跟随应用与适配名单").performClick()
+        compose.onNodeWithText("跟随应用设置").performClick()
         compose.runOnIdle {
             assertFalse(preferences.contains("$pkg/$detailActivity"))
             detail.value = false

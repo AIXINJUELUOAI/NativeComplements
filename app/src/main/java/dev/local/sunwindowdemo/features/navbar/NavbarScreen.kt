@@ -75,20 +75,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     }
     var query by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<NavbarActivity?>(null) }
-    var confirmClear by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val exportLearned = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openOutputStream(uri, "wt")!!.use {
-                        it.write(NavbarStore.exportLearned(context).toByteArray(Charsets.UTF_8))
-                    }
-                }
-            }
-            Toast.makeText(context, if (result.isSuccess) "学习结果已导出" else "导出失败", Toast.LENGTH_SHORT).show()
-        }
-    }
     val activityIndex by produceState<List<NavbarActivity>?>(null, installed) {
         value = null
         value = withContext(Dispatchers.IO) {
@@ -110,6 +96,11 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp + bottomInset)) {
         item {
+            OutlinedTextField(query, { query = it }, label = { Text("搜索应用、包名或 Activity") },
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
+                singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
+        }
+        if (query.isBlank()) item {
             SettingsGroup {
                 ToggleRow("启用导航栏适配", value = settings.getBoolean("enabled", false)) {
                     NavbarStore.setEnabled(context, it)
@@ -117,18 +108,9 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 ToggleRow("横屏导航条透明", "移除手势导航条背后的系统阴影", settings.getBoolean("landscape_clear", true)) {
                     NavbarStore.setLandscapeClear(context, it)
                 }
-                ToggleRow("标注模式", "屏幕顶部显示当前页面的判断，点 ✓ 写入规则，点 ✗ 换一种模式预览", settings.getBoolean("label_mode", false)) {
-                    NavbarStore.setLabelMode(context, it)
-                }
-                SettingRow("导出学习结果", "自动模式在页面稳定后记下的判断，可分享或合并进内置规则",
-                    onClick = { exportLearned.launch("navbar-learned-${System.currentTimeMillis() / 1000}.json") })
-                SettingRow("清除学习结果", onClick = { confirmClear = true })
             }
             Hint("竖屏按应用或 Activity 选择模式，横屏可保持导航条透明。推荐作用域不等于已授权：请在 LSPosed 中确认系统框架、SystemUI、Pixel 桌面及需要适配的推荐应用作用域，变更后手动重启生效；规则由本页总开关统一控制。")
             GroupTitle("逐应用设置")
-            OutlinedTextField(query, { query = it }, label = { Text("搜索应用、包名或 Activity") },
-                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
-                singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
         }
         items(matchingApps, key = { "app:${it.packageName}" }) { app ->
             val packageMode = settings.getInt("${app.packageName}/*", -1)
@@ -164,14 +146,6 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     selected?.let { activity ->
         NavbarActivitySheet(activity.packageName, activity.name, settings) { selected = null }
     }
-    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
-        title = { Text("清除学习结果？") },
-        text = { Text("已记下的页面判断会全部删除，重启后自动模式从头学习。") },
-        confirmButton = { TextButton(onClick = {
-            NavbarStore.clearLearned(context); confirmClear = false
-            Toast.makeText(context, "已清除", Toast.LENGTH_SHORT).show()
-        }) { Text("清除") } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -225,6 +199,16 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 8.dp, bottom = 32.dp + bottomInset)) {
         item {
+            OutlinedTextField(query, { query = it }, label = { Text("筛选 Activity、模式或来源") },
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
+                singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (option in listOf("全部", "独立规则", "自动", "取色", "悬浮", "保留")) {
+                    FilterChip(selected = status == option, onClick = { status = option }, label = { Text(option) })
+                }
+            }
+        }
+        if (query.isBlank() && status == "全部") item {
             SettingsGroup { SettingRow(app.label, app.packageName, leading = { NavbarAppIcon(app) }) }
             if (!settings.getBoolean("enabled", false)) Hint("导航栏适配当前关闭，规则将在开启后生效。")
             GroupTitle("应用默认模式")
@@ -233,14 +217,6 @@ fun NavbarAppScreen(app: LaunchableApp?, loaded: Boolean, bottomInset: Dp) {
                 else NavbarStore.setMode(context, app.packageName, "*", mode)
             }
             GroupTitle("Activity 独立规则")
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (option in listOf("全部", "独立规则", "自动", "取色", "悬浮", "保留")) {
-                    FilterChip(selected = status == option, onClick = { status = option }, label = { Text(option) })
-                }
-            }
-            OutlinedTextField(query, { query = it }, label = { Text("筛选 Activity、模式或来源") },
-                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("清空") } },
-                singleLine = true, modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp))
         }
         items(matchingActivities, key = { it }) { activity ->
             val resolved = rules.resolve(app.packageName, activity, version)
@@ -307,8 +283,41 @@ fun NavbarDiagnosticsScreen() {
         onDispose { status.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     val snapshot = remember(revision) { status.all }
-    SettingsGroup {
-        SettingRow("系统宿主", snapshot["host"] as? String ?: "系统宿主尚未连接")
-        SettingRow("最近运行状态", snapshot["runtime"] as? String ?: "等待应用窗口")
+    val settings = rememberNavbarSettings()
+    var confirmClear by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val exportLearned = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openOutputStream(uri, "wt")!!.use {
+                        it.write(NavbarStore.exportLearned(context).toByteArray(Charsets.UTF_8))
+                    }
+                }
+            }
+            Toast.makeText(context, if (result.isSuccess) "学习结果已导出" else "导出失败", Toast.LENGTH_SHORT).show()
+        }
     }
+    Column {
+        SettingsGroup {
+            SettingRow("系统宿主", snapshot["host"] as? String ?: "系统宿主尚未连接")
+            SettingRow("最近运行状态", snapshot["runtime"] as? String ?: "等待应用窗口")
+        }
+        GroupTitle("标注与学习")
+        SettingsGroup {
+            ToggleRow("标注模式", "屏幕上常驻一个可拖动的面板，显示当前页面的模式；点模式即写入该 Activity 的规则，可撤销",
+                settings?.getBoolean("label_mode", false) ?: false) { NavbarStore.setLabelMode(context, it) }
+            SettingRow("导出学习结果", "自动模式记下的判断与手动规则，可合并进内置规则",
+                onClick = { exportLearned.launch("navbar-learned-${System.currentTimeMillis() / 1000}.json") })
+            SettingRow("清除学习结果", onClick = { confirmClear = true })
+        }
+    }
+    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
+        title = { Text("清除学习结果？") },
+        text = { Text("已记下的页面判断会全部删除，重启后自动模式从头学习。") },
+        confirmButton = { TextButton(onClick = {
+            NavbarStore.clearLearned(context); confirmClear = false
+            Toast.makeText(context, "已清除", Toast.LENGTH_SHORT).show()
+        }) { Text("清除") } },
+        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }

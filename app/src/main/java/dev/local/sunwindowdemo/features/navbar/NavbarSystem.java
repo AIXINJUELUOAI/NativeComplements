@@ -40,7 +40,8 @@ final class NavbarSystem {
     /** Labelling mode: every settled AUTO verdict is offered to the SystemUI chip for ✓/✗. */
     private volatile boolean labelMode;
     private long labelAt;
-    private String labelLast = "";
+    private String labelLast = "", labelLogged = "", labelIdle = "", labelSource = "";
+    private String labelComponent;
     private Object wm, lock;
     private volatile Object previousWindow;
     private final Map<Object, NavbarWindowLayer> windowLayers = new java.util.IdentityHashMap<>();
@@ -373,7 +374,9 @@ final class NavbarSystem {
             rules = new NavbarRules(config);
             enabled = config.getBoolean("enabled", false);
             landscapeClear = config.getBoolean("landscape_clear", true);
+            boolean wasLabelling = labelMode;
             labelMode = config.getBoolean("label_mode", false);
+            if (wasLabelling != labelMode) worker.post(() -> offerState(true));
             versions.clear();
             synchronized (lock) {
                 Object display = NavbarReflect.call(NavbarReflect.field(wm, "mRoot"), "getDefaultDisplay");
@@ -536,7 +539,6 @@ final class NavbarSystem {
             return false;
         }
         if (next == mode) {
-            if (!startup) offerLabel(component, next);
             autoDirty = false; autoPending = -1; autoReference = thumb;
             if (current == null) {
                 autoModes.put(window, next); autoCache.put(component, next);
@@ -553,7 +555,6 @@ final class NavbarSystem {
         autoModes.put(window, next);
         if (autoCache.size() > 256) autoCache.clear();
         autoCache.put(component, next);
-        offerLabel(component, next);
         NavbarTrace.i("AUTO " + component + " " + label(mode) + " -> " + label(next)
                 + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
         synchronized (lock) {
@@ -572,22 +573,30 @@ final class NavbarSystem {
         NavbarTrace.i(message);
     }
 
-    private void offerLabel(String component, int mode) {
-        if (!labelMode || context == null) return;
-        ComponentName name = ComponentName.unflattenFromString(component);
-        if (name == null) return;
+    /**
+     * Label panel state: the page on screen and the mode actually shown, sent to SystemUI whenever it changes
+     * (and every 5s as a keep-alive so a restarted SystemUI picks it up). component null = no app page.
+     */
+    private void offerState(boolean force) {
+        if (context == null) return;
+        String component = labelMode ? labelComponent : null;
+        int mode = !publishedActive ? NavbarStore.ORIGINAL : publishedMode == NavbarStore.FLOATING ? NavbarStore.FLOATING : NavbarStore.COLOR;
+        String key = !labelMode ? "off" : component == null ? "idle:" + labelIdle : component + "=" + mode + "/" + labelSource;
         long now = SystemClock.uptimeMillis();
-        String key = component + "=" + mode;
-        if (key.equals(labelLast) && now - labelAt < 800) return;
+        if (!force && key.equals(labelLast) && now - labelAt < 5000) return;
+        if (!labelMode && "off".equals(labelLast)) return;
         labelLast = key; labelAt = now;
-        Intent intent = new Intent(NavbarLabelHost.LABEL).setPackage("com.android.systemui")
-                .putExtra("package", name.getPackageName()).putExtra("activity", name.getClassName()).putExtra("mode", mode);
+        Intent intent = new Intent(NavbarLabelHost.LABEL).setPackage("com.android.systemui").putExtra("on", labelMode);
+        ComponentName name = component == null ? null : ComponentName.unflattenFromString(component);
+        if (name != null) intent.putExtra("package", name.getPackageName()).putExtra("activity", name.getClassName())
+                .putExtra("mode", mode).putExtra("source", labelSource);
+        else intent.putExtra("idle", labelIdle);
         try {
-            // SystemUI accepts the chip only from uid 1000, which it can see only when identity is shared.
+            // SystemUI accepts the panel state only from uid 1000, which it can see only when identity is shared.
             broadcast.invoke(context, intent, android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE",
                     BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
-            NavbarTrace.i("LABEL offer " + component + " " + label(mode));
-        } catch (ReflectiveOperationException | RuntimeException failure) { NavbarTrace.w("label offer failed", failure); }
+            if (!key.equals(labelLogged)) { labelLogged = key; NavbarTrace.i("LABEL " + key); }
+        } catch (ReflectiveOperationException | RuntimeException failure) { NavbarTrace.w("label state failed", failure); }
     }
 
     /** One stable vote per classification, persisted by the module (never during startup). */
@@ -868,6 +877,8 @@ final class NavbarSystem {
         captureExclude = new SurfaceControl[0];
         waitingFirstFrame = false;
         runtimePage = "";
+        labelComponent = null;
+        labelIdle = "";
         try {
             int navigationMode = navigationMode(context);
             gestures = navigationMode == 2;
@@ -880,6 +891,7 @@ final class NavbarSystem {
             }
             if (unavailable) {
                 String reason = !enabled ? "总开关关闭" : !gestures ? "导航模式 " + navigationMode : !interactive ? "屏幕已关闭" : "锁屏中";
+                labelIdle = reason;
                 runtime("已暂停 · " + reason);
                 publish(false, 0, 0);
                 return;
@@ -890,9 +902,11 @@ final class NavbarSystem {
                 if (pendingWindow != null && holdsSwitch(false, publishedActive, pendingSince, SystemClock.uptimeMillis())) {
                     adapting = true;
                     waitingFirstFrame = true;
+                    labelIdle = "等待页面布局";
                     runtime("等待页面布局");
                     return;
                 }
+                labelIdle = "当前窗口暂不适配";
                 runtime("当前窗口暂不适配");
                 publish(false, 0, 0);
                 return;
@@ -914,6 +928,10 @@ final class NavbarSystem {
             }
             NavbarRules.Choice selected = choice(window, true);
             runtimePage = snapshot.component() + " · 模式=" + selected.mode() + " · " + selected.source();
+            if (!"系统宿主".equals(selected.source()) && !"系统窗口".equals(selected.source())) {
+                labelComponent = snapshot.component();
+                labelSource = selected.source();
+            } else labelIdle = "系统界面";
             boolean landscape = frame.width() > frame.height();
             if (window != previousWindow) {
                 previousWindow = window;
@@ -930,6 +948,7 @@ final class NavbarSystem {
             boolean launcherHandoff;
             synchronized (lock) { launcherHandoff = !windowLayers.isEmpty(); }
             if (clearsLauncherHost(landscape, launcherHandoff, snapshot.component())) {
+                labelComponent = null; labelIdle = "桌面";
                 runtime("桌面／最近任务导航背景透明");
                 frameNavHeight = 0;
                 publish(true, 0, NavbarStore.FLOATING);
@@ -964,6 +983,7 @@ final class NavbarSystem {
             } else follow(null);
             if (landscape) {
                 adapting = false;
+                labelComponent = null; labelIdle = "横屏";
                 runtime("横屏导航条透明");
                 publish(true, 0, NavbarStore.FLOATING);
                 return;
@@ -1038,6 +1058,7 @@ final class NavbarSystem {
             runtime("系统接口异常 · " + failure.getClass().getSimpleName());
             publish(false, 0, 0);
         } finally {
+            if (labelMode || !"off".equals(labelLast)) offerState(false);
             if (enabled && context.getSystemService(PowerManager.class).isInteractive()) {
                 worker.removeCallbacks(tick);
                 worker.postDelayed(tick, adapting ? (stability.needsConfirmation() || waitingFirstFrame ? COALESCE_MS : 160) : 1000);

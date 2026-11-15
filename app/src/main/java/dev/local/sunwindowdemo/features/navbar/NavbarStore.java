@@ -114,7 +114,7 @@ public final class NavbarStore {
             String key = entry.getKey();
             int slash = key.indexOf('/');
             if (!(entry.getValue() instanceof Integer mode) || slash <= 0 || key.endsWith("/*") || key.startsWith("preview:")
-                    || mode < ORIGINAL || mode > FLOATING) continue;
+                    || mode < ORIGINAL || mode > AUTO) continue;
             String pkg = key.substring(0, slash), activity = key.substring(slash + 1);
             org.json.JSONObject app = packages.optJSONObject(pkg);
             if (app == null) packages.put(pkg, app = new org.json.JSONObject().put("enabled", true).put("rules", new org.json.JSONObject()));
@@ -153,44 +153,24 @@ public final class NavbarStore {
         changed(context);
     }
 
-    /** Temporary mode shown on the page while the user decides; -1 withdraws it. Only one at a time. */
-    static void preview(Context context, String packageName, String activity, int mode) {
-        SharedPreferences.Editor edit = preferences(context).edit();
-        for (String key : preferences(context).getAll().keySet()) if (key.startsWith("preview:")) edit.remove(key);
-        if (mode >= ORIGINAL && mode <= FLOATING) edit.putInt("preview:" + packageName + "/" + activity, mode);
-        edit.apply();
-        changed(context);
-    }
-
     /**
-     * ✓ in the chip: the mode becomes the Activity rule; the latest confirmation wins. An Activity confirmed
-     * with different modes hosts several pages, so its rule is removed and it stays AUTO ("multi").
+     * A tap in the label panel: the mode (AUTO included) becomes this Activity's rule at once, -1 removes it.
+     * The latest tap wins. Returns the previous rule (-1 = none) so the panel can undo the tap; -3 only reads it.
      */
-    static String confirm(Context context, String packageName, String activity, int mode) {
-        if (packageName == null || activity == null || mode < ORIGINAL || mode > FLOATING) return "error";
+    static int label(Context context, String packageName, String activity, int mode) {
+        if (packageName == null || activity == null || mode < -3 || mode > AUTO) return -2;
         String page = packageName + "/" + activity;
-        SharedPreferences labels = labelPreferences(context);
-        SharedPreferences.Editor rules = preferences(context).edit();
-        for (String key : preferences(context).getAll().keySet()) if (key.startsWith("preview:")) rules.remove(key);
-        String result;
-        if (labels.getBoolean("multi:" + page, false)) result = "multi";
-        else {
-            int before = labels.getInt("confirmed:" + page, -1);
-            long at = labels.getLong("confirmedAt:" + page, 0);
-            // Different modes confirmed for one Activity within a session of use: several pages share it.
-            if (before >= 0 && before != mode && System.currentTimeMillis() - at < 6L * 3600_000) {
-                labels.edit().putBoolean("multi:" + page, true).remove("confirmed:" + page).apply();
-                rules.remove(page);
-                result = "multi";
-            } else {
-                labels.edit().putInt("confirmed:" + page, mode).putLong("confirmedAt:" + page, System.currentTimeMillis()).apply();
-                rules.putInt(page, mode);
-                result = "ok";
-            }
-        }
-        rules.apply();
+        SharedPreferences rules = preferences(context);
+        int previous = rules.getInt(page, -1);
+        if (mode == -3) return previous;   // query only
+        if (mode == -2) return -2;
+        SharedPreferences.Editor edit = rules.edit();
+        for (String key : rules.getAll().keySet()) if (key.startsWith("preview:")) edit.remove(key);
+        if (mode < 0) edit.remove(page); else edit.putInt(page, mode);
+        edit.apply();
+        labelPreferences(context).edit().remove("multi:" + page).remove("confirmed:" + page).remove("confirmedAt:" + page).apply();
         changed(context);
-        return result;
+        return previous;
     }
 
     public static void setLandscapeClear(Context context, boolean enabled) {
