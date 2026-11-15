@@ -6,8 +6,8 @@ import java.util.*;
 
 /** Independent per-app choices; replacing a library never replaces these overrides. */
 public final class IconPolicy {
-    public static final int AUTO = 0, MANUAL = 1, ALGORITHM = 2, ORIGINAL = 3;
-    public static final int FOLLOW = 0, UPLOAD = 1, UNCHANGED = 2;
+    public static final int AUTO = IconRenderPolicy.AUTO, MANUAL = IconRenderPolicy.MANUAL, ALGORITHM = IconRenderPolicy.ALGORITHM, ORIGINAL = IconRenderPolicy.ORIGINAL;
+    public static final int FOLLOW = IconRenderPolicy.FOLLOW, UPLOAD = IconRenderPolicy.UPLOAD, UNCHANGED = IconRenderPolicy.UNCHANGED;
     public int color, monochrome, notification=UNCHANGED;
     public String background = "", foreground = "", monoImage = "", notificationImage = "";
     public String generatedBackground="",generatedForeground="",generatedVersion="";

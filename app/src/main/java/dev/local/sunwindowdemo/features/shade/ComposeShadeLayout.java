@@ -90,10 +90,8 @@ final class ComposeShadeLayout {
     }
 
     static Object overrideBoolean(Object original, int id, boolean scoped, boolean force, int split, int fullWidth) {
-        if (!scoped || !force) return original;
-        if (id == split) return true;
-        if (id == fullWidth) return false;
-        return original;
+        Boolean override = ShadePolicy.resourceOverride(id, scoped, force, split, fullWidth);
+        return override == null ? original : override;
     }
 
     static void refresh(Configuration current) throws Exception {

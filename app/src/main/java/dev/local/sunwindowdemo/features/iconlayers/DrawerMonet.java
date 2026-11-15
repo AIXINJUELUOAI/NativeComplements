@@ -145,7 +145,7 @@ final class DrawerMonet {
     void systemThemed(boolean themed) { systemThemed = themed; apply(); }
 
     private void apply() {
-        boolean next = userEnabled && systemThemed;
+        boolean next = IconRenderPolicy.themed(userEnabled,systemThemed);
         if (enabled == next) return;
         enabled = next;
         android.util.Log.i("NcDrawerMonet", "enabled=" + next + " user=" + userEnabled + " systemThemed=" + systemThemed);

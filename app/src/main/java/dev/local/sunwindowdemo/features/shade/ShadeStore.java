@@ -58,23 +58,23 @@ public final class ShadeStore {
     }
 
     public static int iconScale(Context context, boolean notification) {
-        return Math.max(80, Math.min(120, preferences(context).getInt(
-                notification ? "notification_icon_scale" : "system_icon_scale", 100)));
+        return ShadePolicy.iconScale(preferences(context).getInt(
+                notification ? "notification_icon_scale" : "system_icon_scale", 100));
     }
 
     public static void setIconScale(Context context, boolean notification, int percent) {
         preferences(context).edit().putInt(notification ? "notification_icon_scale" : "system_icon_scale",
-                Math.max(80, Math.min(120, percent))).apply();
+                ShadePolicy.iconScale(percent)).apply();
         context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 
     public static int offset(Context context) {
-        return Math.max(-32, Math.min(32, preferences(context).getInt("status_bar_offset", 0)));
+        return ShadePolicy.offset(preferences(context).getInt("status_bar_offset", 0));
     }
 
     public static void setOffset(Context context, int dp) {
-        preferences(context).edit().putInt("status_bar_offset", Math.max(-32, Math.min(32, dp))).apply();
+        preferences(context).edit().putInt("status_bar_offset", ShadePolicy.offset(dp)).apply();
         context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }

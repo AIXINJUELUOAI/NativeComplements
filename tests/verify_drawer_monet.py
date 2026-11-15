@@ -95,7 +95,9 @@ assert 'gridIcons.get(view)' in drawer and 'searchRecycler.isInstance(parent)' i
 assert 'view.getParent() == null' in drawer and '!searchRecycler.isInstance(createdFor)' in drawer
 assert 'eligibleItem(view, info)' in drawer and 'Object info = chain.getArg(0);' in drawer
 # Drawer lookups request themed cache entries; loaded items are upgraded through the native background reload.
-assert 'updateIconInBackground' in drawer and 'THEMED_LOOKUP = 8' in drawer and 'userEnabled && systemThemed' in drawer
+assert 'updateIconInBackground' in drawer and 'THEMED_LOOKUP = 8' in drawer
+assert 'IconRenderPolicy.themed(userEnabled,systemThemed)' in drawer
+assert 'return userEnabled&&systemThemed;' in (src / 'features/iconlayers/IconRenderPolicy.java').read_text(encoding='utf-8')
 assert 'predictionParent(view)' in drawer and 'PredictionRowView' in drawer
 assert not (src / 'features/iconlayers/DrawerMonetAssets.java').exists()
 for forbidden in ['Bitmap.createBitmap', 'MaterialKey', 'loadMaterial', 'createThemedBitmap', 'safeMonochrome',

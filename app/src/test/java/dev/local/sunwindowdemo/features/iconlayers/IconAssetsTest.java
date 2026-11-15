@@ -63,6 +63,22 @@ public class IconAssetsTest {
         return bitmap.getPixel(96,96);
     }
 
+    @Test public void channelRoutesPreserveExistingChoicesAndThemeGate(){
+        for(int color=0;color<=3;color++)for(int mono=0;mono<=2;mono++)for(int notice=0;notice<=2;notice++)
+            for(boolean library:new boolean[]{false,true})for(boolean generated:new boolean[]{false,true}){
+                var plan=IconRenderPolicy.plan(color,mono,notice,library,generated);
+                boolean packed=color==IconPolicy.AUTO&&library,algorithm=color==IconPolicy.ALGORITHM&&generated;
+                boolean expected=!(color==IconPolicy.ORIGINAL&&mono==IconPolicy.UNCHANGED&&notice==IconPolicy.UNCHANGED)
+                    &&(packed||algorithm||color==IconPolicy.MANUAL||mono==IconPolicy.UPLOAD||notice!=IconPolicy.UNCHANGED);
+                assertEquals(expected,plan.resolve());
+                assertEquals(color==IconPolicy.MANUAL?IconRenderPolicy.ColorSource.MANUAL:packed?IconRenderPolicy.ColorSource.LIBRARY
+                    :algorithm?IconRenderPolicy.ColorSource.GENERATED:IconRenderPolicy.ColorSource.NATIVE,plan.color());
+                assertEquals(mono==IconPolicy.UPLOAD?IconRenderPolicy.MaskSource.UPLOAD:mono==IconPolicy.FOLLOW?IconRenderPolicy.MaskSource.FOLLOW:IconRenderPolicy.MaskSource.KEEP,plan.monochrome());
+                assertEquals(notice==IconPolicy.UPLOAD?IconRenderPolicy.MaskSource.UPLOAD:notice==IconPolicy.FOLLOW?IconRenderPolicy.MaskSource.FOLLOW:IconRenderPolicy.MaskSource.KEEP,plan.notification());
+            }
+        assertTrue(IconRenderPolicy.themed(true,true));assertFalse(IconRenderPolicy.themed(true,false));
+        assertFalse(IconRenderPolicy.themed(false,true));assertFalse(IconRenderPolicy.themed(false,false));
+    }
     @Test public void startupRetriesNullAndEmptyTargetsWithoutExposingOriginalIcon()throws Exception{
         provider.nullReads=1;provider.emptyReads=1;
         reload();assertFalse(IconAssets.ready());assertEquals(Color.TRANSPARENT,menuPixel());

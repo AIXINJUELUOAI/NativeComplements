@@ -117,7 +117,7 @@ public final class StatusBarOffset {
     }
 
     private static void set(int dp) {
-        offsetDp = Math.max(-32, Math.min(32, dp));
+        offsetDp = ShadePolicy.offset(dp);
         main.post(StatusBarOffset::applyNow);
     }
 

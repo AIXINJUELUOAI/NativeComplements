@@ -116,7 +116,7 @@ public final class IconAssets {
             }
         }
         boolean themed=config.getBoolean("systemThemed");
-        boolean cover=themed&&config.getBoolean("coverMonet"),window=themed&&config.getBoolean("windowMonet");
+        boolean cover=IconRenderPolicy.themed(config.getBoolean("coverMonet"),themed),window=IconRenderPolicy.themed(config.getBoolean("windowMonet"),themed);
         Map<String,Bitmap> activityMonos=cover||window?activityMonos(c,config.getStringArrayList("targets"),stale):Map.of();
         if(stale.getAsBoolean())return false;
         coverMonet=cover;windowMonet=window;
@@ -220,31 +220,31 @@ public final class IconAssets {
     static Entry resolve(Context c,String pkg,IconPolicy policy,String generation,int side,boolean local) throws Exception {
         ApplicationInfo info=c.getPackageManager().getApplicationInfo(pkg,0);
         Drawable original=c.getPackageManager().getApplicationIcon(info);
-        if(policy.color==IconPolicy.ORIGINAL&&policy.monochrome==IconPolicy.UNCHANGED&&policy.notification==IconPolicy.UNCHANGED)return null;
-        boolean packed=policy.color==IconPolicy.AUTO&&!generation.isEmpty();
-        boolean generated=policy.color==IconPolicy.ALGORITHM&&!policy.generatedBackground.isEmpty()&&!policy.generatedForeground.isEmpty();
-        if(!packed&&!generated&&policy.color!=IconPolicy.MANUAL&&policy.monochrome!=IconPolicy.UPLOAD&&policy.notification==IconPolicy.UNCHANGED)return null;
+        IconRenderPolicy.Plan plan=IconRenderPolicy.plan(policy.color,policy.monochrome,policy.notification,
+            policy.color==IconPolicy.AUTO&&!generation.isEmpty(),
+            policy.color==IconPolicy.ALGORITHM&&!policy.generatedBackground.isEmpty()&&!policy.generatedForeground.isEmpty());
+        if(!plan.resolve())return null;
         Bitmap bg,fg,nativeMono=null;boolean colorChanged=false,nativeColor=true;
         if(original instanceof AdaptiveIconDrawable adaptive){
             bg=IconImages.render(adaptive.getBackground(),side);fg=IconImages.render(adaptive.getForeground(),side);
             if(adaptive.getMonochrome()!=null)nativeMono=IconImages.render(adaptive.getMonochrome(),side);
         }else{bg=IconImages.solid(Color.TRANSPARENT,1);fg=IconImages.render(original,side);}
-        if(policy.color==IconPolicy.MANUAL){
+        if(plan.color()==IconRenderPolicy.ColorSource.MANUAL){
             Bitmap customBg=custom(c,policy.background,side,local),customFg=custom(c,policy.foreground,side,local);
             if(customBg!=null&&customFg!=null){bg=customBg;fg=customFg;nativeColor=false;colorChanged=true;}
-        }else if(packed){
+        }else if(plan.color()==IconRenderPolicy.ColorSource.LIBRARY){
             try{Bitmap pairBg=library(c,generation,pkg,0,side,local),pairFg=library(c,generation,pkg,1,side,local);bg=pairBg;fg=pairFg;nativeColor=false;colorChanged=true;}
             catch(FileNotFoundException absent){} // Missing assets retain the application original; no automatic algorithm fallback.
-        }else if(generated){
+        }else if(plan.color()==IconRenderPolicy.ColorSource.GENERATED){
             Bitmap customBg=custom(c,policy.generatedBackground,side,local),customFg=custom(c,policy.generatedForeground,side,local);
             if(customBg!=null&&customFg!=null){bg=customBg;fg=customFg;nativeColor=false;colorChanged=true;}
         }
         Bitmap mono=nativeMono;boolean monoChanged=false;
-        if(policy.monochrome==IconPolicy.UPLOAD){Bitmap custom=custom(c,policy.monoImage,side,local);if(custom!=null){mono=IconImages.monochrome(custom,false);monoChanged=mono!=null;}}
-        else if(policy.monochrome==IconPolicy.FOLLOW&&!nativeColor){Bitmap mask=IconImages.monochrome(fg,false);mono=mask==null?nativeMono:mask;monoChanged=mono!=null;}
+        if(plan.monochrome()==IconRenderPolicy.MaskSource.UPLOAD){Bitmap custom=custom(c,policy.monoImage,side,local);if(custom!=null){mono=IconImages.monochrome(custom,false);monoChanged=mono!=null;}}
+        else if(plan.monochrome()==IconRenderPolicy.MaskSource.FOLLOW&&!nativeColor){Bitmap mask=IconImages.monochrome(fg,false);mono=mask==null?nativeMono:mask;monoChanged=mono!=null;}
         Bitmap notice=null;
-        if(policy.notification==IconPolicy.UPLOAD){Bitmap custom=custom(c,policy.notificationImage,side,local);if(custom!=null)notice=IconImages.monochrome(custom,true);}
-        else if(policy.notification==IconPolicy.FOLLOW){notice=IconImages.monochrome(nativeColor&&nativeMono!=null?nativeMono:fg,true);}
+        if(plan.notification()==IconRenderPolicy.MaskSource.UPLOAD){Bitmap custom=custom(c,policy.notificationImage,side,local);if(custom!=null)notice=IconImages.monochrome(custom,true);}
+        else if(plan.notification()==IconRenderPolicy.MaskSource.FOLLOW){notice=IconImages.monochrome(nativeColor&&nativeMono!=null?nativeMono:fg,true);}
         // A legacy flat Drawable has no independent themed slot. Leaving its color untouched also preserves native wrapping.
         if(policy.color==IconPolicy.ORIGINAL&&!(original instanceof AdaptiveIconDrawable))monoChanged=false;
         return colorChanged||monoChanged||notice!=null?new Entry(IconImages.compactSolid(bg),fg,mono,notice,colorChanged,monoChanged,nativeColor):null;

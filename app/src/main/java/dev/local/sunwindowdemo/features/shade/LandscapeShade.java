@@ -166,7 +166,7 @@ public final class LandscapeShade {
     }
 
     static boolean forceSplit(boolean userEnabled, Configuration config) {
-        return userEnabled && config.orientation == Configuration.ORIENTATION_LANDSCAPE && config.screenWidthDp >= 600;
+        return userEnabled && ShadePolicy.forceSplit(true, config.orientation == Configuration.ORIENTATION_LANDSCAPE, config.screenWidthDp);
     }
 
     /** Called after Application.onCreate regardless of whether SystemUiHost connected. */

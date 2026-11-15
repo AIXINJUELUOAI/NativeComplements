@@ -37,6 +37,9 @@ public class ShadeTest {
         assertFalse(LandscapeShade.forceSplit(true, c));
         c.orientation = Configuration.ORIENTATION_UNDEFINED;
         assertFalse(LandscapeShade.forceSplit(true, c));
+        assertTrue(ShadePolicy.forceSplit(true, true, 600));
+        assertFalse(ShadePolicy.forceSplit(true, true, 599));
+        assertFalse(ShadePolicy.forceSplit(false, true, 900));
     }
 
     @Test public void deoptimizationIncludesIndependentQsLayoutAndOtherNativeConsumers() {
@@ -56,6 +59,9 @@ public class ShadeTest {
         assertEquals(false, ComposeShadeLayout.overrideBoolean(false, 1, false, true, 1, 2));
         assertEquals(true, ComposeShadeLayout.overrideBoolean(true, 2, true, false, 1, 2));
         assertEquals(false, ComposeShadeLayout.overrideBoolean(false, 3, true, true, 1, 2));
+        assertNull(ShadePolicy.resourceOverride(3, true, true, 1, 2));
+        Object nativeValue = new Object();
+        assertSame(nativeValue, ComposeShadeLayout.overrideBoolean(nativeValue, 3, true, true, 1, 2));
     }
 
     @Test public void composeIdsComeFromHostResourcesWithoutRuntimeRClass() throws Exception {
