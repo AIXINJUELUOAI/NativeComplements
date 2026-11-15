@@ -6,7 +6,9 @@ Without --write only the report is printed. Rules:
   * whitelist packages ("*" rule) and hand-written rules (no "learned" flag) are never touched;
   * per page the newest app versionCode wins; inside one version votes are summed across files;
   * a page becomes a rule only with >= 3 votes and >= 90% agreement, otherwise it is reported as a conflict
-    (several pages share the Activity, or devices disagree) and stays AUTO.
+    (several pages share the Activity, or devices disagree) and stays AUTO;
+  * manually confirmed rules ("manual") beat learned ones; the last file given wins between manual rules,
+    and a different existing hand-written rule is reported instead of overwritten.
 """
 import json
 import pathlib
@@ -15,13 +17,15 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 ASSET = ROOT / "app/src/main/assets/navbar/templates.json"
 MIN_VOTES, AGREEMENT = 3, 0.9
-COLOR, FLOATING = 1, 2
+ORIGINAL, COLOR, FLOATING = 0, 1, 2
+MODES = (ORIGINAL, COLOR, FLOATING)
 
 
 def votes_of(rule):
+    """Votes for the rule's mode plus a bucket (-1) for the disagreeing rest."""
     total = int(rule.get("samples", 0))
     agree = round(total * float(rule.get("agreement", 0)))
-    return (agree, total - agree) if rule["mode"] == COLOR else (total - agree, agree)
+    return {rule["mode"]: agree, -1: total - agree}
 
 
 def main(argv):
@@ -30,7 +34,8 @@ def main(argv):
     if not files:
         print(__doc__)
         return 2
-    pages = {}   # (pkg, activity) -> {version: [extend, floating]}
+    pages = {}   # (pkg, activity) -> {version: {mode: votes}}
+    manual = {}  # (pkg, activity) -> mode, last file wins
     mixed = []
     for name in files:
         data = json.loads(pathlib.Path(name).read_text(encoding="utf-8"))
@@ -38,26 +43,51 @@ def main(argv):
             raise SystemExit(f"{name}: unsupported format")
         for pkg, app in data.get("packages", {}).items():
             for activity, rule in app.get("rules", {}).items():
-                if not rule.get("learned") or rule.get("mode") not in (COLOR, FLOATING):
+                if rule.get("mode") not in MODES:
                     continue
-                extend, floating = votes_of(rule)
-                slot = pages.setdefault((pkg, activity), {}).setdefault(int(rule.get("versionCode", -1)), [0, 0])
-                slot[0] += extend
-                slot[1] += floating
-        mixed += [f'{m["package"]}/{m["activity"]} v{m["versionCode"]} extend={m["extend"]} floating={m["floating"]}'
+                if rule.get("manual"):
+                    manual[(pkg, activity)] = rule["mode"]
+                    continue
+                if not rule.get("learned"):
+                    continue
+                slot = pages.setdefault((pkg, activity), {}).setdefault(int(rule.get("versionCode", -1)), {})
+                for mode, count in votes_of(rule).items():
+                    slot[mode] = slot.get(mode, 0) + count
+        mixed += [f'{m["package"]}/{m["activity"]} ' + " ".join(f"{k}={v}" for k, v in m.items() if k not in ("package", "activity"))
                   for m in data.get("mixed", [])]
 
     template = json.loads(ASSET.read_text(encoding="utf-8"))
     packages = template["packages"]
     added = updated = 0
     conflicts, skipped = [], []
+    for (pkg, activity), mode in sorted(manual.items()):
+        app = packages.get(pkg)
+        rules = app.get("rules", {}) if app else {}
+        existing = rules.get(activity)
+        if "*" in rules and not rules["*"].get("learned"):
+            skipped.append(f"{pkg}/{activity}: whitelist package")
+            continue
+        if existing is not None and not existing.get("learned") and not existing.get("manual") and existing.get("mode") != mode:
+            conflicts.append(f"{pkg}/{activity}: manual {mode} vs hand-written {existing.get('mode')}")
+            continue
+        rule = {"mode": mode, "source": "人工确认", "base_only": True, "manual": True}
+        if app is None:
+            app = packages[pkg] = {"enabled": True, "rules": {}}
+        app.setdefault("rules", {})
+        if existing is None:
+            added += 1
+        elif existing != rule:
+            updated += 1
+        app["rules"][activity] = rule
     for (pkg, activity), by_version in sorted(pages.items()):
+        if (pkg, activity) in manual:
+            continue
         version = max(by_version)
-        extend, floating = by_version[version]
-        total = extend + floating
+        counts = by_version[version]
+        total = sum(counts.values())
         if total < MIN_VOTES:
             continue
-        mode = COLOR if extend >= total * AGREEMENT else FLOATING if floating >= total * AGREEMENT else None
+        mode = next((m for m in MODES if counts.get(m, 0) >= total * AGREEMENT), None)
         app = packages.get(pkg)
         rules = app.get("rules", {}) if app else {}
         if "*" in rules and not rules["*"].get("learned"):
@@ -68,10 +98,10 @@ def main(argv):
             skipped.append(f"{pkg}/{activity}: hand-written rule kept")
             continue
         if mode is None:
-            conflicts.append(f"{pkg}/{activity} v{version}: extend={extend} floating={floating}")
+            conflicts.append(f"{pkg}/{activity} v{version}: votes={counts}")
             continue
         rule = {"mode": mode, "source": "学习规则", "base_only": True, "learned": True, "versionCode": version,
-                "samples": total, "agreement": round(max(extend, floating) / total, 3)}
+                "samples": total, "agreement": round(counts[mode] / total, 3)}
         if app is None:
             app = packages[pkg] = {"enabled": True, "rules": {}}
         app.setdefault("rules", {})
@@ -81,7 +111,7 @@ def main(argv):
             updated += 1
         app["rules"][activity] = rule
 
-    print(f"pages={len(pages)} added={added} updated={updated} conflicts={len(conflicts)} skipped={len(skipped)} mixed={len(mixed)}")
+    print(f"pages={len(pages)} manual={len(manual)} added={added} updated={updated} conflicts={len(conflicts)} skipped={len(skipped)} mixed={len(mixed)}")
     for title, lines in (("conflicts (kept AUTO)", conflicts), ("skipped", skipped), ("mixed on device (kept AUTO)", mixed)):
         if lines:
             print(f"-- {title}")

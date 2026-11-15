@@ -112,9 +112,26 @@ public class NavbarRulesTest {
         assertNull(rules.seed("other", "other.Unknown"));
     }
     @Test public void learnedVotesNeedThreeAndNinetyPercent() {
-        assertEquals(-2, NavbarStore.learnedMode(1, 1));
-        assertEquals(NavbarStore.COLOR, NavbarStore.learnedMode(9, 1));
-        assertEquals(NavbarStore.FLOATING, NavbarStore.learnedMode(0, 3));
-        assertEquals(-1, NavbarStore.learnedMode(6, 4));
+        assertEquals(-2, NavbarStore.learnedMode(1, 1, 0));
+        assertEquals(NavbarStore.COLOR, NavbarStore.learnedMode(9, 1, 0));
+        assertEquals(NavbarStore.FLOATING, NavbarStore.learnedMode(0, 3, 0));
+        assertEquals(NavbarStore.ORIGINAL, NavbarStore.learnedMode(0, 0, 4));
+        assertEquals(-1, NavbarStore.learnedMode(6, 4, 0));
+        assertArrayEquals(new long[]{1, 2, 0}, NavbarStore.votes("5,1,2", 5));
+        assertNull(NavbarStore.votes("5,1,2,3", 6));
+    }
+    @Test public void previewWinsAndConfirmDetectsMultiPageActivities() {
+        android.content.Context context = RuntimeEnvironment.getApplication();
+        NavbarStore.preferences(context).edit().clear().commit();
+        NavbarStore.labelPreferences(context).edit().clear().commit();
+        NavbarStore.preview(context, "app", "app.Page", NavbarStore.FLOATING);
+        Bundle snapshot = NavbarStore.systemSnapshot(context);
+        snapshot.putBoolean("enabled", true);
+        assertEquals("标注预览", new NavbarRules(snapshot).resolve("app", "app.Page", 1).source());
+        assertEquals("ok", NavbarStore.confirm(context, "app", "app.Page", NavbarStore.FLOATING));
+        assertEquals(NavbarStore.FLOATING, NavbarStore.preferences(context).getInt("app/app.Page", -1));
+        assertFalse(NavbarStore.preferences(context).contains("preview:app/app.Page"));
+        assertEquals("multi", NavbarStore.confirm(context, "app", "app.Page", NavbarStore.COLOR));
+        assertFalse(NavbarStore.preferences(context).contains("app/app.Page"));
     }
 }

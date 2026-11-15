@@ -34,7 +34,10 @@ public final class NavbarModule extends XposedModule {
                         Object result = chain.proceed();
                         if (appBackend == null) {
                             if (launcher) NavbarTaskbarHost.connect((Application) chain.getArg(0));
-                            else NavbarHost.connect((Application) chain.getArg(0));
+                            else {
+                                NavbarHost.connect((Application) chain.getArg(0));
+                                NavbarLabelHost.connect((Application) chain.getArg(0));
+                            }
                         }
                         return result;
                     });

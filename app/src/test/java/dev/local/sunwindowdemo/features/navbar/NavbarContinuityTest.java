@@ -121,13 +121,18 @@ public class NavbarContinuityTest {
         assertNull(NavbarSystem.targetWindow(display, null));
     }
 
-    @Test public void otherSystemPanelsAndApplicationsKeepTheirOwnFocus() throws Exception {
+    @Test public void systemUiPanelsKeepTheAppBelowAndOtherAppsKeepTheirOwnFocus() throws Exception {
         Window app = new Window(), shade = new Window();
         shade.mAttrs.packageName = "com.android.systemui";
         shade.mAttrs.setTitle("NotificationShade");
         Display display = new Display();
         display.mCurrentFocus = shade;
-        assertSame(shade, NavbarSystem.targetWindow(display, app));
+        // Control centre over the app: the app still owns the bottom and keeps its adaptation.
+        app.mActivityRecord = new Object();
+        display.mFocusedApp = app.mActivityRecord;
+        assertSame(app, NavbarSystem.targetWindow(display, app));
+        display.mFocusedApp = new Object();
+        assertNull(NavbarSystem.targetWindow(display, app));
         shade.mAttrs.packageName = "other.application";
         shade.mAttrs.setTitle("ScreenshotUI");
         assertSame(shade, NavbarSystem.targetWindow(display, app));

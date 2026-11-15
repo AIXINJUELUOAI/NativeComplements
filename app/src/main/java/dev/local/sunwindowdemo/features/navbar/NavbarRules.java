@@ -12,7 +12,7 @@ public final class NavbarRules {
         }
     }
     private final JSONObject packages;
-    /** This device's learned pages: "package/Activity" -> COLOR or FLOATING (mixed pages are absent). */
+    /** This device's learned pages: "package/Activity" -> ORIGINAL, COLOR or FLOATING (mixed pages are absent). */
     private final JSONObject learned;
     private final Bundle settings;
     private final java.util.concurrent.ConcurrentHashMap<String, Choice> resolved = new java.util.concurrent.ConcurrentHashMap<>();
@@ -39,10 +39,10 @@ public final class NavbarRules {
         JSONObject rule = rules == null ? null : rules.optJSONObject(activity);
         if (rule != null && rule.optBoolean("learned")) {
             int mode = rule.optInt("mode", -1);
-            if (mode == NavbarStore.COLOR || mode == NavbarStore.FLOATING) return mode;
+            if (mode >= NavbarStore.ORIGINAL && mode <= NavbarStore.FLOATING) return mode;
         }
         int mode = learned.optInt(packageName + "/" + activity, -1);
-        return mode == NavbarStore.COLOR || mode == NavbarStore.FLOATING ? mode : null;
+        return mode >= NavbarStore.ORIGINAL && mode <= NavbarStore.FLOATING ? mode : null;
     }
 
     public Choice resolve(String packageName, String activity, long version) {
@@ -57,6 +57,8 @@ public final class NavbarRules {
 
     private Choice resolveEnabled(String packageName, String activity, long version, boolean isBaseApplication) {
         String userKey = packageName + "/" + activity;
+        if (settings.containsKey("preview:" + userKey))
+            return new Choice(valid(settings.getInt("preview:" + userKey)), null, "标注预览");
         if (settings.containsKey(userKey)) return new Choice(valid(settings.getInt(userKey)), null, "用户规则");
         String packageKey = packageName + "/*";
         if (settings.containsKey(packageKey)) return new Choice(valid(settings.getInt(packageKey)), null, "用户规则");

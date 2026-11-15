@@ -37,6 +37,10 @@ final class NavbarSystem {
     private volatile boolean suspended = true;
     private volatile boolean gestures;
     private volatile boolean landscapeClear = true;
+    /** Labelling mode: every settled AUTO verdict is offered to the SystemUI chip for ✓/✗. */
+    private volatile boolean labelMode;
+    private long labelAt;
+    private String labelLast = "";
     private Object wm, lock;
     private volatile Object previousWindow;
     private final Map<Object, NavbarWindowLayer> windowLayers = new java.util.IdentityHashMap<>();
@@ -91,6 +95,14 @@ final class NavbarSystem {
     private record Lowres(int[] px, int w, int h, float f) {}
     private static final float TICK_SCALE = 1 / 8f, CLASSIFY_SCALE = 1 / 2f;
     private Lowres tickLow;
+    /** Our own fill child of the tracked window, excluded from every capture so it never judges itself. */
+    private SurfaceControl[] captureExclude = new SurfaceControl[0];
+    private Method excludeLayers;
+    /**
+     * The last floating application window keeps floating while home/recents has focus, so its recents card
+     * and the live tile never show the black navigation background it draws once insets come back.
+     */
+    private volatile Object stickyFloating;
     /** Startup: the first STARTUP_MS of a window (splash, open-screen ad, loading) is neither learned nor allowed to override a known page. */
     private static final long STARTUP_MS = 1500;
     private long autoSince;
@@ -129,6 +141,8 @@ final class NavbarSystem {
         scale = builder.getMethod("setFrameScale", float.class, float.class);
         // Same as navbar-demo: protected/secure layers throw instead of returning a silently redacted black image.
         securePolicy = optional(builder, "setSecureContentPolicy");
+        try { excludeLayers = builder.getMethod("setExcludeLayers", SurfaceControl[].class); }
+        catch (NoSuchMethodException missing) { excludeLayers = null; }
         protectedPolicy = optional(builder, "setProtectedContentPolicy");
         build = builder.getMethod("build");
         capture = captureClass.getMethod("captureLayers", args);
@@ -262,12 +276,16 @@ final class NavbarSystem {
         NavbarRules.Choice candidate = choice(target, false);
         WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(target, "mAttrs");
         Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
-        return candidate.mode() == NavbarStore.FLOATING
-                && attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION
-                && attrs.width == WindowManager.LayoutParams.MATCH_PARENT && attrs.height == WindowManager.LayoutParams.MATCH_PARENT
-                && (Integer) NavbarReflect.call(target, "getDisplayId") == 0
-                && bounds.height() >= bounds.width()
-                && eligible(target, display, raw) ? candidate : null;
+        if (candidate.mode() != NavbarStore.FLOATING
+                || attrs.type != WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+                || attrs.width != WindowManager.LayoutParams.MATCH_PARENT || attrs.height != WindowManager.LayoutParams.MATCH_PARENT
+                || (Integer) NavbarReflect.call(target, "getDisplayId") != 0
+                || bounds.height() < bounds.width()) return null;
+        // Floating only changes layout and never reads pixels, so a secure page may follow an explicit rule.
+        boolean secureAllowed = !AUTO_SOURCE.equals(candidate.source());
+        if (eligible(target, display, raw, secureAllowed, false)) return candidate;
+        return target == stickyFloating && launcherFocused(display) && eligible(target, display, raw, secureAllowed, true)
+                ? candidate : null;
     }
 
     static WindowManager.LayoutParams transparentLayout(WindowManager.LayoutParams original, NavbarRules.Choice selected) throws ReflectiveOperationException {
@@ -333,6 +351,7 @@ final class NavbarSystem {
             rules = new NavbarRules(config);
             enabled = config.getBoolean("enabled", false);
             landscapeClear = config.getBoolean("landscape_clear", true);
+            labelMode = config.getBoolean("label_mode", false);
             versions.clear();
             synchronized (lock) {
                 Object display = NavbarReflect.call(NavbarReflect.field(wm, "mRoot"), "getDefaultDisplay");
@@ -471,7 +490,13 @@ final class NavbarSystem {
         int[] nav = hNavRows == 0 ? new int[0] : rows(half, hNavTop, hNavTop + hNavRows);
         Bundle verdict = NavbarLayout.analyze(roi, half.w(), hBottom - hTop, hd, nav, half.w(), hNavRows);
         String decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
-        int next = "EXTEND".equals(decision) ? NavbarStore.COLOR : "NATIVE".equals(decision) ? NavbarStore.FLOATING : -1;
+        if ("app_draws_under_navigation".equals(verdict.getString("reviewReason")) && busyRows(nav, half.w(), hNavRows) < 0.3) {
+            // A divider line or a few stray pixels: judge the content above the boundary alone.
+            verdict = NavbarLayout.analyze(roi, half.w(), hBottom - hTop, hd, new int[0], half.w(), 0);
+            decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
+        }
+        int next = "app_draws_under_navigation".equals(verdict.getString("reviewReason")) ? NavbarStore.ORIGINAL
+                : "EXTEND".equals(decision) ? NavbarStore.COLOR : "NATIVE".equals(decision) ? NavbarStore.FLOATING : -1;
         long ms = (System.nanoTime() - t1) / 1_000_000;
         Integer current = autoModes.get(window);
         NavbarTrace.i("AUTO check " + component + " mode=" + label(mode) + " -> " + decision
@@ -485,6 +510,7 @@ final class NavbarSystem {
             return false;
         }
         if (next == mode) {
+            if (!startup) offerLabel(component, next);
             autoDirty = false; autoPending = -1; autoReference = thumb;
             if (current == null) {
                 autoModes.put(window, next); autoCache.put(component, next);
@@ -501,6 +527,7 @@ final class NavbarSystem {
         autoModes.put(window, next);
         if (autoCache.size() > 256) autoCache.clear();
         autoCache.put(component, next);
+        offerLabel(component, next);
         NavbarTrace.i("AUTO " + component + " " + label(mode) + " -> " + label(next)
                 + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
         synchronized (lock) {
@@ -517,6 +544,21 @@ final class NavbarSystem {
         if (now - autoLogAt < 2000) return;
         autoLogAt = now;
         NavbarTrace.i(message);
+    }
+
+    private void offerLabel(String component, int mode) {
+        if (!labelMode || context == null) return;
+        ComponentName name = ComponentName.unflattenFromString(component);
+        if (name == null) return;
+        long now = SystemClock.uptimeMillis();
+        String key = component + "=" + mode;
+        if (key.equals(labelLast) && now - labelAt < 800) return;
+        labelLast = key; labelAt = now;
+        Intent intent = new Intent(NavbarLabelHost.LABEL).setPackage("com.android.systemui")
+                .putExtra("package", name.getPackageName()).putExtra("activity", name.getClassName()).putExtra("mode", mode);
+        try {
+            broadcast.invoke(context, intent, android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE", null);
+        } catch (ReflectiveOperationException | RuntimeException failure) { NavbarTrace.w("label offer failed", failure); }
     }
 
     /** One stable vote per classification, persisted by the module (never during startup). */
@@ -558,7 +600,25 @@ final class NavbarSystem {
         if (sampling != null) sampling.follow(area, worker::post);
     }
 
-    private static String label(int mode) { return mode == NavbarStore.FLOATING ? "floating" : "extend"; }
+    private static String label(int mode) {
+        return mode == NavbarStore.FLOATING ? "floating" : mode == NavbarStore.ORIGINAL ? "original" : "extend";
+    }
+
+    /** Share of navigation-area rows the app itself paints non-uniformly (content, gradient, blur). */
+    static double busyRows(int[] nav, int width, int rows) {
+        if (rows <= 0 || width <= 0) return 0;
+        int busy = 0;
+        for (int r = 0; r < rows; r++) {
+            int base = nav[r * width], near = 0;
+            for (int x = 0; x < width; x++) {
+                int c = nav[r * width + x];
+                if (Math.abs(((c >> 16) & 255) - ((base >> 16) & 255)) <= 12 && Math.abs(((c >> 8) & 255) - ((base >> 8) & 255)) <= 12
+                        && Math.abs((c & 255) - (base & 255)) <= 12) near++;
+            }
+            if (near < width * 0.9) busy++;
+        }
+        return busy / (double) rows;
+    }
 
     /** Fraction of thumbnail pixels whose largest channel moved by more than 16 (dark pages differ by ~30). */
     static double changed(int[] a, int[] b) {
@@ -580,6 +640,8 @@ final class NavbarSystem {
         Object builder = captureBuilder.newInstance(surface);
         if (securePolicy != null) securePolicy.invoke(builder, 2);
         if (protectedPolicy != null) protectedPolicy.invoke(builder, 2);
+        SurfaceControl[] exclude = captureExclude;
+        if (excludeLayers != null && exclude.length > 0) excludeLayers.invoke(builder, (Object) exclude);
         return builder;
     }
 
@@ -643,11 +705,23 @@ final class NavbarSystem {
     }
 
     private boolean eligible(Object window, Object display, Object raw) throws ReflectiveOperationException {
+        return eligible(window, display, raw, false, false);
+    }
+
+    private static boolean launcherFocused(Object display) throws ReflectiveOperationException {
+        Object focused = NavbarReflect.field(display, "mCurrentFocus");
+        if (focused == null) return true;   // mid-transition into recents
+        String pkg = ((WindowManager.LayoutParams) NavbarReflect.field(focused, "mAttrs")).packageName;
+        return "com.google.android.apps.nexuslauncher".equals(pkg) || "com.android.systemui".equals(pkg);
+    }
+
+    private boolean eligible(Object window, Object display, Object raw, boolean allowSecure, boolean ignoreFocus)
+            throws ReflectiveOperationException {
         WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
         Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
-        return attrs.type >= 1 && attrs.type <= 99 && (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0
+        return attrs.type >= 1 && attrs.type <= 99 && (allowSecure || (attrs.flags & WindowManager.LayoutParams.FLAG_SECURE) == 0)
                 && (Integer) NavbarReflect.call(window, "getWindowingMode") == 1 && frame.height() > 0 && frame.width() > 0
-                && targetWindow(display, previousWindow) == window
+                && (ignoreFocus || targetWindow(display, previousWindow) == window)
                 && supportsNavigation(frame, landscapeClear,
                     (Boolean) window.getClass().getMethod("isRequestedVisible", int.class).invoke(window, WindowInsets.Type.navigationBars()),
                     visible(raw, WindowInsets.Type.navigationBars()), visible(raw, WindowInsets.Type.ime()));
@@ -663,9 +737,10 @@ final class NavbarSystem {
         Object focused = NavbarReflect.field(display, "mCurrentFocus");
         if (focused != null) {
             WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(focused, "mAttrs");
-            boolean screenshot = "com.android.systemui".equals(attrs.packageName)
-                    && "ScreenshotUI".contentEquals(attrs.getTitle());
-            if (!screenshot) {
+            // ScreenshotUI, the notification shade / control centre and other SystemUI panels sit on top of the
+            // app without owning the bottom: keep the app (same focused activity) as the target.
+            boolean systemOverlay = "com.android.systemui".equals(attrs.packageName);
+            if (!systemOverlay) {
                 boolean application = attrs.type >= 1 && attrs.type <= 99;
                 if (application && (Integer) NavbarReflect.call(focused, "getWindowingMode") == 5) {
                     Object policy = NavbarReflect.call(display, "getDisplayPolicy");
@@ -761,6 +836,7 @@ final class NavbarSystem {
         boolean adapting = false;
         tickLow = null;
         tickLowTried = false;
+        captureExclude = new SurfaceControl[0];
         waitingFirstFrame = false;
         runtimePage = "";
         try {
@@ -796,6 +872,17 @@ final class NavbarSystem {
             Object raw = snapshot.raw();
             Rect frame = snapshot.frame(), bounds = snapshot.bounds();
             SurfaceControl surface = snapshot.surface();
+            synchronized (lock) {
+                NavbarWindowLayer own = windowLayers.get(window);
+                SurfaceControl child = own == null ? null : own.surface();
+                captureExclude = child == null ? new SurfaceControl[0] : new SurfaceControl[]{child};
+            }
+            Object sticky = stickyFloating;
+            if (sticky != null && sticky != window) {
+                // Another application owns the bottom now: give the old window its native insets back.
+                stickyFloating = null;
+                synchronized (lock) { NavbarReflect.call(sticky, "notifyInsetsChanged"); }
+            }
             NavbarRules.Choice selected = choice(window, true);
             runtimePage = snapshot.component() + " · 模式=" + selected.mode() + " · " + selected.source();
             boolean landscape = frame.width() > frame.height();
@@ -818,6 +905,17 @@ final class NavbarSystem {
                 frameNavHeight = 0;
                 publish(true, 0, NavbarStore.FLOATING);
                 return;
+            }
+            if (AUTO_SOURCE.equals(selected.source()) && selected.mode() == NavbarStore.ORIGINAL && !landscape) {
+                Insets own = (Insets) insetsClass.getMethod("calculateInsets", Rect.class, Rect.class, int.class, boolean.class)
+                        .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), false);
+                if (own.bottom > 0 && classify(window, surface, frame, navigationTop(frame, bounds, own.bottom), own.bottom,
+                        snapshot.component(), NavbarStore.ORIGINAL)) selected = choice(window, true);
+                if (selected.mode() == NavbarStore.ORIGINAL) {
+                    runtime("页面已自行适配 · 保留原有");
+                    publish(false, 0, 0);
+                    return;
+                }
             }
             if (keepsOriginal(selected.mode(), landscape, selected.source(), snapshot.component())) {
                 if (!"系统宿主".equals(selected.source())) runtime("保留系统原有 · " + selected.source());
@@ -845,7 +943,8 @@ final class NavbarSystem {
                     && classify(window, surface, frame, navigationTop(frame, bounds, nav.bottom), nav.bottom, snapshot.component(),
                         selected.mode()))
                 selected = choice(window, true);
-            if (selected.mode() == NavbarStore.FLOATING) { runtime("悬浮中 · " + selected.source()); publish(true, 0, NavbarStore.FLOATING); return; }
+            if (selected.mode() == NavbarStore.ORIGINAL) { runtime("页面已自行适配 · 保留原有"); publish(false, 0, 0); return; }
+            if (selected.mode() == NavbarStore.FLOATING) { stickyFloating = window; runtime("悬浮中 · " + selected.source()); publish(true, 0, NavbarStore.FLOATING); return; }
             if (snapshot.screenshot() && lastGood != null && lastGood.matches(window, selected.mode(), nav.bottom)) {
                 lastGood = new Frame(window, lastGood.color(), lastGood.mode(), nav.bottom, SystemClock.uptimeMillis());
                 runtime("截图期间保持颜色 · " + selected.source());

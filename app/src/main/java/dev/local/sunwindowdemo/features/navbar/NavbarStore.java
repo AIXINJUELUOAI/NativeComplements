@@ -37,38 +37,45 @@ public final class NavbarStore {
         return context.createDeviceProtectedStorageContext().getSharedPreferences("navbar_learned", Context.MODE_PRIVATE);
     }
 
-    /** value "version,extendVotes,floatingVotes"; a new app version restarts the count. */
+    /** value "version,extend,floating,original" votes; a new app version restarts the count. */
     static void learn(Context context, String component, long version, int mode) {
-        if (component == null || component.length() > 400 || (mode != COLOR && mode != FLOATING)) return;
+        if (component == null || component.length() > 400 || (mode != COLOR && mode != FLOATING && mode != ORIGINAL)) return;
         SharedPreferences preferences = learnedPreferences(context);
-        String[] old = preferences.getString(component, "").split(",");
-        long extend = 0, floating = 0;
-        if (old.length == 3 && old[0].equals(Long.toString(version))) {
-            try { extend = Long.parseLong(old[1]); floating = Long.parseLong(old[2]); }
-            catch (NumberFormatException ignored) { extend = 0; floating = 0; }
-        } else if (!preferences.contains(component) && preferences.getAll().size() >= LEARN_LIMIT) return;
-        if (mode == COLOR) extend++; else floating++;
-        preferences.edit().putString(component, version + "," + extend + "," + floating).apply();
+        long[] votes = votes(preferences.getString(component, ""), version);
+        if (votes == null) {
+            if (!preferences.contains(component) && preferences.getAll().size() >= LEARN_LIMIT) return;
+            votes = new long[3];
+        }
+        votes[mode == COLOR ? 0 : mode == FLOATING ? 1 : 2]++;
+        preferences.edit().putString(component, version + "," + votes[0] + "," + votes[1] + "," + votes[2]).apply();
     }
 
-    /** -1 for a page whose votes disagree (several pages share one Activity). */
-    static int learnedMode(long extend, long floating) {
-        long total = extend + floating;
+    /** Votes of a stored value for this version, null when absent, unreadable or of another version. */
+    static long[] votes(String value, long version) {
+        String[] parts = value.split(",");
+        if ((parts.length != 3 && parts.length != 4) || (version != Long.MIN_VALUE && !parts[0].equals(Long.toString(version)))) return null;
+        try {
+            return new long[]{Long.parseLong(parts[1]), Long.parseLong(parts[2]), parts.length == 4 ? Long.parseLong(parts[3]) : 0};
+        } catch (NumberFormatException invalid) { return null; }
+    }
+
+    /** -2 not enough votes; -1 votes disagree (several pages share one Activity). */
+    static int learnedMode(long extend, long floating, long original) {
+        long total = extend + floating + original;
         if (total < LEARN_MIN) return -2;
         if (extend >= total * LEARN_AGREEMENT) return COLOR;
         if (floating >= total * LEARN_AGREEMENT) return FLOATING;
+        if (original >= total * LEARN_AGREEMENT) return ORIGINAL;
         return -1;
     }
 
     private static org.json.JSONObject learnedModes(Context context) {
         org.json.JSONObject out = new org.json.JSONObject();
         learnedPreferences(context).getAll().forEach((key, value) -> {
-            String[] parts = String.valueOf(value).split(",");
-            if (parts.length != 3) return;
-            try {
-                int mode = learnedMode(Long.parseLong(parts[1]), Long.parseLong(parts[2]));
-                if (mode == COLOR || mode == FLOATING) out.put(key, mode);
-            } catch (NumberFormatException | org.json.JSONException ignored) {}
+            long[] votes = votes(String.valueOf(value), Long.MIN_VALUE);
+            if (votes == null) return;
+            int mode = learnedMode(votes[0], votes[1], votes[2]);
+            try { if (mode >= 0) out.put(key, mode); } catch (org.json.JSONException ignored) {}
         });
         return out;
     }
@@ -79,19 +86,19 @@ public final class NavbarStore {
         org.json.JSONArray mixed = new org.json.JSONArray();
         java.util.TreeMap<String, Object> sorted = new java.util.TreeMap<>(learnedPreferences(context).getAll());
         for (var entry : sorted.entrySet()) {
-            String[] parts = String.valueOf(entry.getValue()).split(",");
+            String value = String.valueOf(entry.getValue());
+            long[] votes = votes(value, Long.MIN_VALUE);
             int slash = entry.getKey().indexOf('/');
-            if (parts.length != 3 || slash <= 0) continue;
-            long version, extend, floating;
-            try { version = Long.parseLong(parts[0]); extend = Long.parseLong(parts[1]); floating = Long.parseLong(parts[2]); }
-            catch (NumberFormatException invalid) { continue; }
+            if (votes == null || slash <= 0) continue;
+            long version;
+            try { version = Long.parseLong(value.split(",")[0]); } catch (NumberFormatException invalid) { continue; }
             String pkg = entry.getKey().substring(0, slash), activity = entry.getKey().substring(slash + 1);
-            int mode = learnedMode(extend, floating);
-            long total = extend + floating;
+            long extend = votes[0], floating = votes[1], original = votes[2], total = extend + floating + original;
+            int mode = learnedMode(extend, floating, original);
             if (mode == -2) continue;
             if (mode == -1) {
                 mixed.put(new org.json.JSONObject().put("package", pkg).put("activity", activity)
-                        .put("versionCode", version).put("extend", extend).put("floating", floating));
+                        .put("versionCode", version).put("extend", extend).put("floating", floating).put("original", original));
                 continue;
             }
             org.json.JSONObject app = packages.optJSONObject(pkg);
@@ -99,7 +106,27 @@ public final class NavbarStore {
             app.getJSONObject("rules").put(activity, new org.json.JSONObject()
                     .put("mode", mode).put("source", "学习规则").put("base_only", true).put("learned", true)
                     .put("versionCode", version).put("samples", total)
-                    .put("agreement", Math.round(Math.max(extend, floating) * 1000.0 / total) / 1000.0));
+                    .put("agreement", Math.round(Math.max(extend, Math.max(floating, original)) * 1000.0 / total) / 1000.0));
+        }
+        // Rules the user set or confirmed by hand travel as manually verified rules and win over learning.
+        SharedPreferences labels = labelPreferences(context);
+        for (var entry : new java.util.TreeMap<>(preferences(context).getAll()).entrySet()) {
+            String key = entry.getKey();
+            int slash = key.indexOf('/');
+            if (!(entry.getValue() instanceof Integer mode) || slash <= 0 || key.endsWith("/*") || key.startsWith("preview:")
+                    || mode < ORIGINAL || mode > FLOATING) continue;
+            String pkg = key.substring(0, slash), activity = key.substring(slash + 1);
+            org.json.JSONObject app = packages.optJSONObject(pkg);
+            if (app == null) packages.put(pkg, app = new org.json.JSONObject().put("enabled", true).put("rules", new org.json.JSONObject()));
+            app.getJSONObject("rules").put(activity, new org.json.JSONObject()
+                    .put("mode", mode).put("source", "人工确认").put("base_only", true).put("manual", true));
+        }
+        for (String key : new java.util.TreeSet<>(labels.getAll().keySet())) {
+            if (!key.startsWith("multi:")) continue;
+            String page = key.substring(6);
+            int slash = page.indexOf('/');
+            if (slash > 0) mixed.put(new org.json.JSONObject().put("package", page.substring(0, slash))
+                    .put("activity", page.substring(slash + 1)).put("manual", "multi-page"));
         }
         return new org.json.JSONObject()
                 .put("name", "类原生补全计划导航条学习结果")
@@ -113,6 +140,57 @@ public final class NavbarStore {
 
     public static void clearLearned(Context context) {
         learnedPreferences(context).edit().clear().apply();
+    }
+
+    // ---------------- labelling mode (chip in SystemUI) ----------------
+
+    static SharedPreferences labelPreferences(Context context) {
+        return context.createDeviceProtectedStorageContext().getSharedPreferences("navbar_labels", Context.MODE_PRIVATE);
+    }
+
+    public static void setLabelMode(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("label_mode", enabled).apply();
+        changed(context);
+    }
+
+    /** Temporary mode shown on the page while the user decides; -1 withdraws it. Only one at a time. */
+    static void preview(Context context, String packageName, String activity, int mode) {
+        SharedPreferences.Editor edit = preferences(context).edit();
+        for (String key : preferences(context).getAll().keySet()) if (key.startsWith("preview:")) edit.remove(key);
+        if (mode >= ORIGINAL && mode <= FLOATING) edit.putInt("preview:" + packageName + "/" + activity, mode);
+        edit.apply();
+        changed(context);
+    }
+
+    /**
+     * ✓ in the chip: the mode becomes the Activity rule; the latest confirmation wins. An Activity confirmed
+     * with different modes hosts several pages, so its rule is removed and it stays AUTO ("multi").
+     */
+    static String confirm(Context context, String packageName, String activity, int mode) {
+        if (packageName == null || activity == null || mode < ORIGINAL || mode > FLOATING) return "error";
+        String page = packageName + "/" + activity;
+        SharedPreferences labels = labelPreferences(context);
+        SharedPreferences.Editor rules = preferences(context).edit();
+        for (String key : preferences(context).getAll().keySet()) if (key.startsWith("preview:")) rules.remove(key);
+        String result;
+        if (labels.getBoolean("multi:" + page, false)) result = "multi";
+        else {
+            int before = labels.getInt("confirmed:" + page, -1);
+            long at = labels.getLong("confirmedAt:" + page, 0);
+            // Different modes confirmed for one Activity within a session of use: several pages share it.
+            if (before >= 0 && before != mode && System.currentTimeMillis() - at < 6L * 3600_000) {
+                labels.edit().putBoolean("multi:" + page, true).remove("confirmed:" + page).apply();
+                rules.remove(page);
+                result = "multi";
+            } else {
+                labels.edit().putInt("confirmed:" + page, mode).putLong("confirmedAt:" + page, System.currentTimeMillis()).apply();
+                rules.putInt(page, mode);
+                result = "ok";
+            }
+        }
+        rules.apply();
+        changed(context);
+        return result;
     }
 
     public static void setLandscapeClear(Context context, boolean enabled) {

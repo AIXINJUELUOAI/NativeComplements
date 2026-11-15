@@ -115,6 +115,9 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 ToggleRow("横屏导航条透明", "移除手势导航条背后的系统阴影", settings.getBoolean("landscape_clear", true)) {
                     NavbarStore.setLandscapeClear(context, it)
                 }
+                ToggleRow("标注模式", "屏幕顶部显示当前页面的判断，点 ✓ 写入规则，点 ✗ 换一种模式预览", settings.getBoolean("label_mode", false)) {
+                    NavbarStore.setLabelMode(context, it)
+                }
                 SettingRow("导出学习结果", "自动模式在页面稳定后记下的判断，可分享或合并进内置规则",
                     onClick = { exportLearned.launch("navbar-learned-${System.currentTimeMillis() / 1000}.json") })
                 SettingRow("清除学习结果", onClick = { confirmClear = true })

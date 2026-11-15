@@ -91,7 +91,9 @@ assert not any(pkg.startswith("com.google.android.") for pkg in templates["packa
 assert templates["packages"]["com.max.xiaoheihe"]["rules"]["com.max.xiaoheihe.module.story.StoryActivity"] == {
     "mode": 2, "source": "内置规则", "base_only": True}
 learned = [rule for app in templates["packages"].values() for rule in app["rules"].values() if rule.get("learned")]
-assert all(rule["mode"] in (1, 2) and rule["source"] == "学习规则" and isinstance(rule["versionCode"], int)
+manual = [rule for app in templates["packages"].values() for rule in app["rules"].values() if rule.get("manual")]
+assert all(rule["mode"] in (0, 1, 2) and rule["source"] == "人工确认" for rule in manual)
+assert all(rule["mode"] in (0, 1, 2) and rule["source"] == "学习规则" and isinstance(rule["versionCode"], int)
            and rule["samples"] >= 3 and rule["agreement"] >= 0.9 for rule in learned)
 assert all(app["enabled"] and "translucent_rules" not in app for app in templates["packages"].values())
 assert all(word not in json.dumps(templates, ensure_ascii=False) for word in ("ColorOS", "HyperOS", "HyperNavBar"))

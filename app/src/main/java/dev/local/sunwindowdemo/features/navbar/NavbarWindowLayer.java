@@ -145,6 +145,9 @@ final class NavbarWindowLayer implements AutoCloseable {
         }
     }
 
+    /** Our child surface, for capture exclusion; null when none is shown. */
+    SurfaceControl surface() { return child != null && child.isValid() ? child : null; }
+
     boolean valid() {
         return owner != null && owner.isValid() && child != null && child.isValid();
     }
