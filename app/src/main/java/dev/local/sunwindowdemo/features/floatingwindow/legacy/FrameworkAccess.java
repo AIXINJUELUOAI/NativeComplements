@@ -14,6 +14,8 @@ final class FrameworkAccess {
     final Method requestTransition,finishLayers;
     private Method playingTransition,freezerLeash;
     private Field surfaceFreezer;
+    Method overlayVisibilityChanged;
+    Field overlayHidingWindows;
     /* Lookups run on Binder, animation and display threads, often under the WM lock.
      * Lock-free caches keyed by identity, without building a String per call. */
     private record MethodKey(Class<?> owner,String name,Class<?>[] args){
@@ -142,6 +144,14 @@ final class FrameworkAccess {
         TaskDecoration.preflight(this);
         recentVisible=method(Class.forName("com.android.server.wm.RecentTasks",false,loader),"isVisibleRecentTask",task);
         Class<?> win=Class.forName("com.android.server.wm.WindowState",false,loader);
+        try{
+            Field hiding=field(wms,"mHidingNonSystemOverlayWindows");
+            Method changed=method(wms,"updateNonSystemOverlayWindowsVisibilityIfNeeded",win,boolean.class);
+            if(!List.class.isAssignableFrom(hiding.getType())||changed.getReturnType()!=void.class)
+                throw new NoSuchMethodException("native overlay visibility signature");
+            method(win,"getOwningUid");method(win,"getDisplayContent");method(win,"isVisible");
+            overlayHidingWindows=hiding;overlayVisibilityChanged=changed;
+        }catch(Exception ignored){overlayHidingWindows=null;overlayVisibilityChanged=null;}
         Class<?> insets=Class.forName("com.android.server.wm.InsetsPolicy",false,loader);
         systemBars=method(insets,"updateSystemBars",win,int.class,int.class,boolean.class);
         field(insets,"mDisplayContent");method(win,"getTask");method(dc,"getDisplayPolicy");

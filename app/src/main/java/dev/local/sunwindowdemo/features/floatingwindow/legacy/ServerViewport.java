@@ -63,6 +63,13 @@ final class ServerViewport {
         a.call(copy,"setOverrideConfiguration",new Class<?>[]{Configuration.class},configuration((Configuration)a.call(copy,"getOverrideConfiguration"),mode));
         return copy;
     }
+    @FunctionalInterface interface InsetsMapper { Object map(Object source)throws Exception; }
+    /** The native Binder out object keeps its identity; the owner mapper copies WM's state before mutation. */
+    static void mapInsets(FrameworkAccess a,Object outgoing,InsetsMapper mapper)throws Exception{
+        if(outgoing==null)return;
+        Object mapped=mapper.map(outgoing);
+        if(mapped!=outgoing)a.call(outgoing,"set",new Class<?>[]{outgoing.getClass(),boolean.class},mapped,true);
+    }
     static void install(XposedModule module,FrameworkAccess a,WindowEngine engine,List<XposedInterface.HookHandle> handles)throws Exception{
         ServerViewport policy=new ServerViewport(a);
         String[] names={"LaunchActivityItem","ActivityRelaunchItem","ActivityConfigurationChangeItem","MoveToDisplayItem","WindowStateResizeItem"};
@@ -118,9 +125,15 @@ final class ServerViewport {
         Class<?> wms=Class.forName("com.android.server.wm.WindowManagerService",false,a.task.getClassLoader());
         Class<?> resultType=Class.forName("android.view.WindowRelayoutResult");
         Field resultConfig=a.field(resultType,"mergedConfiguration"),resultInsets=a.field(resultType,"insetsState");
-        int installed=0;
-        for(Method method:wms.getDeclaredMethods())if(method.getName().equals("relayoutWindow")){
+        int installed=0,added=0;
+        for(Method method:wms.getDeclaredMethods())if(method.getName().equals("relayoutWindow")||method.getName().equals("addWindow")){
+            boolean initial=method.getName().equals("addWindow");
             Class<?>[] types=method.getParameterTypes();int client=-1,result=-1;
+            if(initial&&(method.getReturnType()!=int.class||types.length!=9
+                ||!types[0].getName().equals("com.android.server.wm.Session")
+                ||!types[1].getName().equals("android.view.IWindow")||types[2]!=android.view.WindowManager.LayoutParams.class
+                ||types[3]!=int.class||types[4]!=int.class||types[5]!=int.class||types[6]!=int.class
+                ||!types[7].getName().equals("android.view.InputChannel")||types[8]!=resultType))continue;
             for(int i=0;i<types.length;i++){
                 if(types[i].getName().equals("android.view.IWindow"))client=i;
                 if(types[i]==resultType)result=i;
@@ -133,17 +146,18 @@ final class ServerViewport {
                 Object resultObject=chain.getArg(resultIndex);
                 Object owner=resultObject==null?null:engine.clientOwner(chain.getArg(clientIndex));
                 if(owner!=null){
-                    Object outgoing=resultConfig.get(resultObject);
-                    // This out parameter belongs to the Binder response, not WindowState's cache.
-                    a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing,engine.clientMode(owner)));
-                    Object insets=resultInsets.get(resultObject);
-                    Object mapped=engine.ownerInsets(owner,insets);
-                    a.call(insets,"set",new Class<?>[]{insets.getClass(),boolean.class},mapped,true);
+                    // addWindow fills Insets before the client's first layout, but not mergedConfiguration.
+                    // Never map its empty configuration into a fabricated fullscreen report.
+                    if(!initial){
+                        Object outgoing=resultConfig.get(resultObject);
+                        a.call(outgoing,"setTo",new Class<?>[]{policy.merged},policy.merged(outgoing,engine.clientMode(owner)));
+                    }
+                    mapInsets(a,resultInsets.get(resultObject),insets->engine.ownerInsets(owner,insets));
                 }
                 return value;
-            }));installed++;
+            }));if(initial)added++;else installed++;
         }
-        if(installed!=1)throw new NoSuchMethodException("expected one relayoutWindow output, found "+installed);
+        if(installed!=1||added!=1)throw new NoSuchMethodException("expected one addWindow and relayoutWindow output, found "+added+"/"+installed);
         // Direct insets-control notifications bypass resize transactions and relayout.
         Class<?> proxy=Class.forName("android.view.IWindow$Stub$Proxy");
         Class<?> state=Class.forName("android.view.InsetsState");
@@ -154,6 +168,6 @@ final class ServerViewport {
             if(owner==null)return chain.proceed();
             return chain.proceed(new Object[]{engine.ownerInsets(owner,chain.getArg(0)),chain.getArg(1)});
         }));
-        module.log(4,"SunWindowDemo5","VIEWPORT_READY system-side launch/process/activity/resize/relayout logical-display");
+        module.log(4,"SunWindowDemo5","VIEWPORT_READY system-side launch/process/activity/add/resize/relayout logical-display");
     }
 }

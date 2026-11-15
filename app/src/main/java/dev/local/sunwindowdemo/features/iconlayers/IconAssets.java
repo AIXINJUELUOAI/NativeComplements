@@ -14,8 +14,8 @@ import java.util.function.BooleanSupplier;
 /** Each host publishes one immutable bitmap snapshot. Public rendering access never uses Binder or disk. */
 public final class IconAssets {
     public record Entry(Bitmap background,Bitmap foreground,Bitmap mono,Bitmap notification,boolean colorChanged,boolean monoChanged,boolean nativeColor) {}
-    record Snapshot(Map<String,Entry> entries,String generation,int failures,int demo,Set<String> algorithms) {}
-    private static volatile Snapshot snapshot=new Snapshot(Map.of(),"",0,0,Set.of());
+    record Snapshot(Map<String,Entry> entries,Map<String,Bitmap> activityMonos,String generation,int failures,int demo,Set<String> algorithms) {}
+    private static volatile Snapshot snapshot=new Snapshot(Map.of(),Map.of(),"",0,0,Set.of());
     private static final AtomicInteger epoch=new AtomicInteger();
     private static volatile Handler worker;
     private static volatile boolean ready;
@@ -35,8 +35,14 @@ public final class IconAssets {
         IntentFilter lifecycle=new IntentFilter(Intent.ACTION_BOOT_COMPLETED);lifecycle.addAction(Intent.ACTION_USER_UNLOCKED);
         context.registerReceiver(new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){reload();}},lifecycle,Context.RECEIVER_NOT_EXPORTED);
         IntentFilter packages=new IntentFilter();packages.addAction(Intent.ACTION_PACKAGE_ADDED);packages.addAction(Intent.ACTION_PACKAGE_REMOVED);
-        packages.addAction(Intent.ACTION_PACKAGE_REPLACED);packages.addDataScheme("package");
+        packages.addAction(Intent.ACTION_PACKAGE_REPLACED);packages.addAction(Intent.ACTION_PACKAGE_CHANGED);packages.addDataScheme("package");
         context.registerReceiver(new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){reload();}},packages,Context.RECEIVER_NOT_EXPORTED);
+        context.registerReceiver(new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){reload();}},
+                new IntentFilter(Intent.ACTION_WALLPAPER_CHANGED),Context.RECEIVER_NOT_EXPORTED);
+        context.registerComponentCallbacks(new ComponentCallbacks(){
+            @Override public void onConfigurationChanged(android.content.res.Configuration config){reload();}
+            @Override public void onLowMemory(){}
+        });
         reload();
     }
     public static synchronized void onReload(Runnable listener){listeners.add(listener);}
@@ -109,10 +115,34 @@ public final class IconAssets {
                 catch(Exception failure){failed++;android.util.Log.w("NcIconAssets","asset failed: "+pkg);}
             }
         }
-        if(stale.getAsBoolean())return false;
         boolean themed=config.getBoolean("systemThemed");
-        coverMonet=themed&&config.getBoolean("coverMonet");windowMonet=themed&&config.getBoolean("windowMonet");
-        snapshot=new Snapshot(Map.copyOf(entries),generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));ready=true;return true;
+        boolean cover=themed&&config.getBoolean("coverMonet"),window=themed&&config.getBoolean("windowMonet");
+        Map<String,Bitmap> activityMonos=cover||window?activityMonos(c,stale):Map.of();
+        if(stale.getAsBoolean())return false;
+        coverMonet=cover;windowMonet=window;
+        snapshot=new Snapshot(Map.copyOf(entries),activityMonos,generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));ready=true;return true;
+    }
+    /** Activity artwork can declare monochrome even when the application's icon does not. Worker only. */
+    static Map<String,Bitmap> activityMonos(Context c,BooleanSupplier stale){
+        Map<String,Bitmap> result=new HashMap<>();long bytes=0;
+        try{
+            var launcher=c.getSystemService(android.content.pm.LauncherApps.class);
+            if(launcher==null)return Map.of();
+            int density=c.getResources().getDisplayMetrics().densityDpi;
+            for(var activity:launcher.getActivityList(null,android.os.Process.myUserHandle())){
+                if(stale.getAsBoolean())return Map.of();
+                String pkg=activity.getComponentName().getPackageName();if(result.containsKey(pkg))continue;
+                try{
+                    Drawable original=activity.getIcon(density);
+                    if(!(original instanceof AdaptiveIconDrawable adaptive)||adaptive.getMonochrome()==null)continue;
+                    Bitmap mono=IconImages.render(adaptive.getMonochrome(),256);
+                    // ponytail: bound host memory; apps past this limit retain their original artwork.
+                    if(bytes+mono.getAllocationByteCount()>32L*1024*1024){mono.recycle();continue;}
+                    bytes+=mono.getAllocationByteCount();result.put(pkg,mono);
+                }catch(RuntimeException unavailable){android.util.Log.w("NcIconAssets","activity mono unavailable: "+pkg);}
+            }
+        }catch(RuntimeException unavailable){android.util.Log.w("NcIconAssets","activity icons unavailable",unavailable);}
+        return Map.copyOf(result);
     }
     static Snapshot snapshot(){return snapshot;}
 
@@ -142,12 +172,12 @@ public final class IconAssets {
      * monochrome layer) and the launcher's themed colours. Apps without any monochrome stay original.
      */
     static Drawable themed(Context c,String pkg,Drawable original){
-        Entry entry=snapshot.entries.get(pkg);Drawable mono=null;
+        Snapshot current=snapshot;Entry entry=current.entries.get(pkg);Drawable mono=null;
         if(entry!=null&&entry.mono!=null)mono=drawable(c,entry.mono);
         else if(original instanceof AdaptiveIconDrawable adaptive&&adaptive.getMonochrome()!=null){
             Drawable.ConstantState state=adaptive.getMonochrome().getConstantState();
             mono=state!=null?state.newDrawable(c.getResources()).mutate():adaptive.getMonochrome().mutate();
-        }
+        }else if(current.activityMonos.containsKey(pkg))mono=drawable(c,current.activityMonos.get(pkg));
         if(mono==null)return null;
         int[] colors=themedColors(c);
         mono.setTintList(null);mono.setTint(colors[1]);mono.setTintMode(PorterDuff.Mode.SRC_IN);

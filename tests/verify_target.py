@@ -27,7 +27,13 @@ for cls,sections in checks.items():
   for name,descriptor in members:
    assert any(x['name']==name and x.get('descriptor' if kind=='methods' else 'type')==descriptor for x in classes[cls][kind]),(cls,name,descriptor)
    total+=1
-print(f'PASS: {total} exact API37 members from archived target artifacts; current-device behavior remains unverified')
+assert any(m['name']=='addWindow' and m['descriptor']=='(Lcom/android/server/wm/Session;Landroid/view/IWindow;Landroid/view/WindowManager$LayoutParams;IIIILandroid/view/InputChannel;Landroid/view/WindowRelayoutResult;)I'
+           for m in classes['Lcom/android/server/wm/WindowManagerService;']['methods'])
+assert any(m['name']=='updateNonSystemOverlayWindowsVisibilityIfNeeded' and m['descriptor']=='(Lcom/android/server/wm/WindowState;Z)V'
+           for m in classes['Lcom/android/server/wm/WindowManagerService;']['methods'])
+assert any(f['name']=='mHidingNonSystemOverlayWindows' and f['type']=='Ljava/util/ArrayList;'
+           for f in classes['Lcom/android/server/wm/WindowManagerService;']['fields'])
+print(f'PASS: {total + 3} exact API37 members from archived target artifacts; current-device behavior remains unverified')
 
 game=json.loads((root/'tests/target/game-members.json').read_text())
 assert game['sha256']=='a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972'

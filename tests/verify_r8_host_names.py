@@ -15,6 +15,13 @@ REQUIRED = {
     (PREFIX + "features/navbar/NavbarHost;", "install"): {
         "com.android.systemui.navigationbar.views.NavigationBar", "android.view.InsetsFrameProvider",
         "getBarLayoutParamsForRotation", "onInit", "draw", "callApplicationOnCreate", "IMMERSIVE_PREFLIGHT_READY"},
+    (PREFIX + "features/navbar/NavbarTaskbarHost;", "<init>"): {
+        "context", "mIsDestroyed", "mDragLayer", "mWindowManager", "mWindowLayoutParams",
+        "mBackgroundRenderer", "mControllers", "navbarButtonsViewController", "mTaskbarTransitions",
+        "mBarBackground", "isGestureNav", "onTaskbarOrBubblebarWindowHeightOrInsetsChanged", "getType", "setInsetsSize"},
+    (PREFIX + "features/navbar/NavbarTaskbarHost;", "install"): {
+        "com.android.launcher3.taskbar.TaskbarInsetsController", "android.view.InsetsFrameProvider",
+        "setProviderInsets", "draw", "dispatchDraw", "callApplicationOnCreate"},
     (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit"},
     (PREFIX + "features/shade/ComposeShadeLayout;", "install"): {"kotlin.coroutines.Continuation"},
     (PREFIX + "features/shade/SignalDisplay;", "install"): {"kotlin.Pair"},
@@ -41,6 +48,7 @@ RUNTIME_METHODS = {
     "features/iconlayers/IconPolicy": {"batch"},
     "features/navbar/NavbarModule": {"onModuleLoaded", "onPackageLoaded"},
     "features/navbar/NavbarHost": {"install", "eligible", "onLayout", "removeNavigationInset", "hideBackground", "applyEnabled", "refreshBars", "log"},
+    "features/navbar/NavbarTaskbarHost": {"install", "eligible", "onProvider", "hideBackground", "applyEnabled", "refreshControllers"},
     "core/HostSnapshot": {"read", "cached", "store"},
     "features/iconlayers/IconAssets": {"imageBytes"},
     "features/iconlayers/IconImages": {"notificationSize"},
@@ -48,7 +56,7 @@ RUNTIME_METHODS = {
 
 REMOVED_NAVBAR_CLASSES = {
     "NavbarApp", "NavbarSystem", "NavbarContainer", "NavbarRules", "NavbarStructure", "NavbarSignature",
-    "NavbarTaskbarHost", "NavbarTrace", "NavbarLabelHost", "NavbarViewTree", "NavbarInsets", "NavbarReflect",
+    "NavbarTrace", "NavbarLabelHost", "NavbarViewTree", "NavbarInsets", "NavbarReflect",
     "NavbarColorCache", "NavbarColors", "NavbarWindowLayer", "NavbarLayout", "NavbarScreenKt",
 }
 REMOVED_NAVBAR_OWNERS = {PREFIX + "features/navbar/" + name + ";" for name in REMOVED_NAVBAR_CLASSES}

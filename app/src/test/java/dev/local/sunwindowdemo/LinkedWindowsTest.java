@@ -132,6 +132,10 @@ public class LinkedWindowsTest {
         assertNull(call("occupySlot",new Class<?>[]{session,String.class},mini,"mini"));
     }
     @Test public void entryKeepsTouchGuardAndRetainsFinalResizeCommit()throws Throwable{
+        // control() now reads the native priority list under the same lock as the live WMS.
+        set(engine,"lock",new Object());
+        Class<?> unsafe=Class.forName("sun.misc.Unsafe");Field singleton=unsafe.getDeclaredField("theUnsafe");singleton.setAccessible(true);
+        set(engine,"a",unsafe.getMethod("allocateInstance",Class.class).invoke(singleton.get(null),FrameworkAccess.class));
         Object normal=create(97,1);save(normal);set(engine,"active",normal);set(normal,"entering",true);
         android.content.Intent sample=new android.content.Intent().putExtra("op","RESIZE").putExtra("taskId",97).putExtra("token",token).putExtra("scale",.5f);
         call("control",new Class<?>[]{android.content.Intent.class},sample);

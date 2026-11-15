@@ -65,6 +65,24 @@ public class NavbarProviderTest {
         assertTrue(reply.getBoolean("enabled"));
     }
 
+    @Test public void actualLauncherUidReadsOnlyEnabledEvenWithoutSystemUiInstalled() {
+        PackageInfo pkg = new PackageInfo();
+        pkg.packageName = "com.google.android.apps.nexuslauncher";
+        pkg.applicationInfo = new ApplicationInfo();
+        pkg.applicationInfo.packageName = pkg.packageName;
+        pkg.applicationInfo.uid = 54321;
+        org.robolectric.Shadows.shadowOf(context.getPackageManager()).installPackage(pkg);
+        NavbarStore.setEnabled(context, true);
+        ShadowBinder.setCallingUid(54321);
+        Bundle extras = new Bundle();
+        extras.putBoolean("enabled", false);
+        Bundle result = provider().call("system", "com.android.systemui", extras);
+        assertEquals(java.util.Set.of("enabled"), result.keySet());
+        assertTrue(result.getBoolean("enabled"));
+        ShadowBinder.setCallingUid(54322);
+        assertThrows(SecurityException.class, () -> provider().call("system", pkg.packageName, extras));
+    }
+
     @Test public void ordinaryUidAndUnneededSystemServerCannotRead() {
         for (int uid : new int[]{99999, 1000}) {
             ShadowBinder.setCallingUid(uid);

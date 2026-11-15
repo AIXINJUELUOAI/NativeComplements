@@ -99,7 +99,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final android.window.OnBackInvokedCallback panelBack=this::backPanel;
     private android.window.OnBackInvokedDispatcher openWaitDispatcher;
     private final android.window.OnBackInvokedCallback openWaitBack=this::cancelOpenWait;
-    void controlsChanged(){main.post(()->publish(false));}
+    private void syncControlsOcclusion(){
+        if(controls!=null&&miniControls!=null)miniControls.normalOcclusion(controls.contentOcclusion());
+    }
+    void controlsChanged(){main.post(()->{syncControlsOcclusion();publish(false);});}
     private int publishedWidth,publishedHeight;
     private final CornerGesture cornerGesture=new CornerGesture();
     private volatile CornerGesture.Area cornerArea;
@@ -253,7 +256,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         publish(false);
         try{if(!config.enabled()||!getSystemService(android.os.PowerManager.class).isInteractive()||getSystemService(KeyguardManager.class).isKeyguardLocked())hideControls();else {controls.update(i);
             Intent mini=i.getParcelableExtra("pinnedFrame",Intent.class);
+            syncControlsOcclusion();
             if(mini==null)miniControls.hide();else miniControls.update(mini);
+            syncControlsOcclusion();
         }}catch(RuntimeException e){hideControls();android.util.Log.e("NativeComplements","overlay controls failed",e);}
         if(i.getStringExtra("event")!=null&&(i.getStringExtra("event").endsWith("FAILED")||"BLOCKED".equals(i.getStringExtra("event"))))Toast.makeText(this,WindowPolicy.failureMessage(i.getStringExtra("report")),Toast.LENGTH_SHORT).show();
     }

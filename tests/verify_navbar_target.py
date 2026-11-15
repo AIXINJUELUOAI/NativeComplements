@@ -102,9 +102,67 @@ def check(label, artifacts):
     print(f"PASS: {label}: archive hashes, exact navigation/Insets/background members, native refresh and background draw/animation calls")
 
 
+def check_taskbar():
+    base = "Lcom/android/launcher3/taskbar/"
+    controller, owner = base + "TaskbarInsetsController;", base + "TaskbarActivityContext;"
+    layer, renderer = base + "TaskbarDragLayer;", base + "TaskbarBackgroundRenderer;"
+    controllers, buttons = base + "TaskbarControllers;", base + "NavbarButtonsViewController;"
+    transitions = base + "TaskbarTransitions;"
+    methods = {
+        controller: [("setProviderInsets", "(" + PROVIDER + "II)V"),
+                     ("onTaskbarOrBubblebarWindowHeightOrInsetsChanged", "()V")],
+        owner: [("isGestureNav", "()Z"), ("notifyUpdateLayoutParams", "()V")],
+        layer: [("dispatchDraw", "(Landroid/graphics/Canvas;)V")],
+        renderer: [("draw", "(Landroid/graphics/Canvas;)V")],
+        BACKGROUND: [("draw", "(Landroid/graphics/Canvas;)V")],
+    }
+    fields = {
+        controller: [("context", owner)],
+        owner: [("mIsDestroyed", "Z"), ("mDragLayer", layer), ("mControllers", controllers),
+                ("mWindowManager", "Landroid/view/WindowManager;"), ("mWindowLayoutParams", PARAMS),
+                ("mLastUpdatedLayoutParams", PARAMS)],
+        layer: [("mBackgroundRenderer", renderer)],
+        controllers: [("navbarButtonsViewController", buttons)],
+        buttons: [("mTaskbarTransitions", transitions)],
+        TRANSITIONS: [("mBarBackground", BACKGROUND)],
+    }
+    dex.TARGETS = set(methods) | set(fields) | {transitions}
+    path = ROOT / "verification/navbar-system/NexusLauncher.apk"
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == "3d7c14c02a7a42c9b88b0d5ced4662330ce6e6989563dab5abe9a8158cd70b56"
+    classes, definitions = {}, {}
+    with zipfile.ZipFile(path) as archive:
+        for name in archive.namelist():
+            if not name.startswith("classes") or not name.endswith(".dex") or "/" in name:
+                continue
+            for data in dex_views(archive.read(name)):
+                for key, cls in data.classes.items():
+                    assert key not in classes, key
+                    classes[key], definitions[key] = cls, data
+    for key, required in methods.items():
+        for name, descriptor in required:
+            assert any(m["name"] == name and m["descriptor"] == descriptor for m in classes[key]["methods"]), (key, name, descriptor)
+    for key, required in fields.items():
+        for name, kind in required:
+            assert any(f["name"] == name and f["type"] == kind for f in classes[key]["fields"]), (key, name, kind)
+    assert classes[transitions]["superclass"] == TRANSITIONS
+    refresh = definitions[controller].instructions(controller, "onTaskbarOrBubblebarWindowHeightOrInsetsChanged", "()V")
+    calls = [ins["method"] for ins in refresh if "method" in ins]
+    assert sum(m["owner"] == controller and m["name"] == "setProviderInsets" and m["descriptor"] == "(" + PROVIDER + "II)V" for m in calls) == 2
+    assert any(ins.get("field", {}).get("name") == "paramsForRotation" for ins in refresh)
+    assert any(m["owner"] == owner and m["name"] == "notifyUpdateLayoutParams" for m in calls)
+    notify = definitions[owner].instructions(owner, "notifyUpdateLayoutParams", "()V")
+    assert any(ins.get("method", {}).get("name") == "copyFrom" for ins in notify)
+    assert any(ins.get("method", {}).get("name") == "updateViewLayout" for ins in notify)
+    draw = definitions[layer].instructions(layer, "dispatchDraw", "(Landroid/graphics/Canvas;)V")
+    assert any(ins.get("method", {}).get("owner") == renderer and ins["method"]["name"] == "draw" for ins in draw)
+    print("PASS: live-hash Pixel launcher: exact 3-argument provider ABI, native main/rotation refresh, shallow notify guard and owned backgrounds")
+    print("UNSUPPORTED: QPR2 launcher uses a different setter ABI; only its SystemUI path is verified here")
+
+
 def main():
     for label, artifacts in ARCHIVES.items():
         check(label, artifacts)
+    check_taskbar()
     print("UNVERIFIED: live gesture bar, IME, rotation, transitions and disable restoration; archive ABI evidence is not device behavior")
 
 

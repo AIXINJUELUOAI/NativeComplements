@@ -86,6 +86,13 @@ public final class SunWindowModule extends XposedModule {
                 return chain.proceed();
             }));
             Class<?> window=Class.forName("com.android.server.wm.WindowState",false,p.getClassLoader());
+            if(a.overlayVisibilityChanged!=null)try{
+                handles.add(hook(a.overlayVisibilityChanged).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    Object result=chain.proceed();engine.priorityWindowsChanged();return result;
+                }));
+                note("SYSTEM_PRIORITY_HOOK_READY");
+            }catch(Exception error){note("SYSTEM_PRIORITY_HOOK_UNAVAILABLE "+FrameworkAccess.reason(error));}
+            else note("SYSTEM_PRIORITY_HOOK_UNAVAILABLE native-list");
             try{
                 java.lang.reflect.Method drawn=a.method(window,"finishDrawing",android.view.SurfaceControl.Transaction.class,int.class);
                 if(drawn.getReturnType()!=boolean.class)throw new NoSuchMethodException("finishDrawing(Transaction,int)");

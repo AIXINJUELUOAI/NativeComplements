@@ -21,6 +21,9 @@ final class WindowControls {
     private final List<WindowManager.LayoutParams> params=new ArrayList<>();
     private FrameLayout controlsRoot;
     private boolean separateWindows;
+    private final Region normalOcclusion=new Region();
+    private final List<Rect> unclippedBounds=new ArrayList<>();
+    private boolean miniTouchActive;
     private String token,frame="";
     private int taskId=-1;
     private float x,y,w,h,scale,normalScale=.75f;
@@ -59,8 +62,22 @@ final class WindowControls {
     private float edgeCenterY;
     /** Clear each touch-only buffer explicitly; it must never become a visible backdrop. */
     private class ClearView extends FrameLayout {
+        private boolean rejectedStream;
         ClearView(){super(c);setBackgroundColor(Color.TRANSPARENT);setWillNotDraw(false);}
         @Override protected void onDraw(Canvas canvas){canvas.drawColor(Color.TRANSPARENT,PorterDuff.Mode.CLEAR);}
+        @Override public boolean dispatchTouchEvent(MotionEvent event){
+            int action=event.getActionMasked();
+            if(action==MotionEvent.ACTION_DOWN){
+                rejectedStream=blockedMiniDown(event);
+                if(!rejectedStream&&"mini".equals(frame))miniTouchActive=true;
+            }
+            boolean result=rejectedStream||super.dispatchTouchEvent(event);
+            if(action==MotionEvent.ACTION_UP||action==MotionEvent.ACTION_CANCEL){
+                miniTouchActive=false;rejectedStream=false;
+                post(()->{if(!views.isEmpty()){clipSeparateMini();changed();}});
+            }
+            return result;
+        }
     }
     WindowControls(Context context){
         host=context;
@@ -324,6 +341,37 @@ final class WindowControls {
         barAlpha=1;scheduleMotion("RESIZE",s,0,0);
     }
     private void send(String op,float value,float x,float y){flushMotion();if(token!=null)Wire.control(c,op,token,taskId,value,x,y);}
+    Region contentOcclusion(){
+        Region region=new Region();
+        if(token==null||systemBlocked||!"normal".equals(frame)||views.isEmpty())return region;
+        region.set(new Rect((int)Math.floor(x),(int)Math.floor(y),(int)Math.ceil(x+w),(int)Math.ceil(y+h)));
+        if(views.size()>5&&views.get(5).getVisibility()==View.VISIBLE){
+            WindowManager.LayoutParams p=params.get(5);region.op(p.x,p.y,p.x+p.width,p.y+p.height,Region.Op.UNION);
+        }
+        return region;
+    }
+    void normalOcclusion(Region region){
+        if(normalOcclusion.equals(region))return;
+        normalOcclusion.set(region);
+        if(!miniTouchActive)clipSeparateMini();
+        changed();
+    }
+    static Rect largestUncovered(Rect bounds,Region occlusion){
+        Region remaining=new Region(bounds);remaining.op(occlusion,Region.Op.DIFFERENCE);
+        RegionIterator iterator=new RegionIterator(remaining);Rect part=new Rect(),largest=new Rect();long area=0;
+        while(iterator.next(part)){
+            long next=(long)part.width()*part.height();if(next>area){area=next;largest.set(part);}
+        }
+        return largest;
+    }
+    private boolean blockedMiniDown(MotionEvent event){
+        return "mini".equals(frame)&&event.getActionMasked()==MotionEvent.ACTION_DOWN
+            &&normalOcclusion.contains((int)Math.floor(event.getRawX()),(int)Math.floor(event.getRawY()));
+    }
+    private void clipSeparateMini(){
+        if(controlsRoot!=null||!"mini".equals(frame)||miniTouchActive||systemBlocked||transitioning&&!inputPending)return;
+        if(!views.isEmpty()&&!unclippedBounds.isEmpty())applyRect(0,unclippedBounds.get(0));
+    }
     private void add(View v){
         WindowManager.LayoutParams p=new WindowManager.LayoutParams(1,1,WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,PixelFormat.TRANSLUCENT);
@@ -339,7 +387,7 @@ final class WindowControls {
             v.setVisibility(View.GONE);
             controlsRoot.addView(v,new FrameLayout.LayoutParams(1,1,Gravity.TOP|Gravity.LEFT));
         }
-        views.add(v);params.add(p);
+        views.add(v);params.add(p);unclippedBounds.add(new Rect());
     }
     private void buildControlsRoot(){
         try{
@@ -383,9 +431,10 @@ final class WindowControls {
         if(systemBlocked||transitioning&&!inputPending)return;
         for(View view:views)if(view.getVisibility()==View.VISIBLE)
             region.op(view.getLeft(),view.getTop(),view.getRight(),view.getBottom(),Region.Op.UNION);
+        if("mini".equals(frame)&&!miniTouchActive)region.op(normalOcclusion,Region.Op.DIFFERENCE);
     }
     private void rect(int index,float x,float y,float w,float h){
-        if(index>=views.size())return;WindowManager.LayoutParams p=params.get(index);
+        if(index>=views.size())return;
         WindowMetrics metrics=layoutMetrics==null?wm.getCurrentWindowMetrics():layoutMetrics;
         int avoid=index==0&&"mini".equals(frame)?0:WindowInsets.Type.displayCutout();
         // Only normal-window controls avoid the camera; mini content and edge handles
@@ -396,9 +445,23 @@ final class WindowControls {
         float bottom=Math.min(y+h,Math.min(imeTop,metrics.getBounds().height()-bars.bottom));
         x=Math.max(x,bars.left);y=Math.max(y,bars.top);w=Math.max(0,right-x);h=Math.max(0,bottom-y);
         // Outside-dismiss overlays leave the keyboard, status bar and navigation bar usable.
-        int nx=Math.round(x),ny=Math.round(y),nw=Math.max(1,Math.round(w)),nh=Math.max(1,Math.round(h));
-        View view=views.get(index);view.setVisibility(w>0&&h>0?View.VISIBLE:View.GONE);
-        if(p.x!=nx||p.y!=ny||p.width!=nw||p.height!=nh){
+        Rect bounds=new Rect(Math.round(x),Math.round(y),Math.round(x+Math.max(0,w)),Math.round(y+Math.max(0,h)));
+        unclippedBounds.get(index).set(bounds);applyRect(index,bounds);
+    }
+    private void applyRect(int index,Rect bounds){
+        WindowManager.LayoutParams p=params.get(index);View view=views.get(index);
+        if(controlsRoot==null&&"mini".equals(frame)&&miniTouchActive)return;
+        Rect clipped=bounds;
+        if(controlsRoot==null&&"mini".equals(frame)&&!miniTouchActive){
+            // ponytail: fallback keeps the largest free rectangle; exact disconnected regions need more windows.
+            clipped=largestUncovered(bounds,normalOcclusion);
+        }
+        int nx=clipped.left,ny=clipped.top,nw=Math.max(1,clipped.width()),nh=Math.max(1,clipped.height());
+        int oldFlags=p.flags;
+        if(clipped.isEmpty())p.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        else p.flags&=~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        view.setVisibility(!clipped.isEmpty()?View.VISIBLE:View.GONE);
+        if(p.x!=nx||p.y!=ny||p.width!=nw||p.height!=nh||oldFlags!=p.flags){
             p.x=nx;p.y=ny;p.width=nw;p.height=nh;
             if(controlsRoot==null)wm.updateViewLayout(view,p);
             else{
@@ -442,6 +505,12 @@ final class WindowControls {
         changed();
     }
     int[] protectedRects(){
+        int[] bounds=unoccludedProtectedRects();
+        if(bounds.length!=4||!"mini".equals(frame))return bounds;
+        Rect visible=largestUncovered(new Rect(bounds[0],bounds[1],bounds[2],bounds[3]),normalOcclusion);
+        return visible.isEmpty()?new int[0]:new int[]{visible.left,visible.top,visible.right,visible.bottom};
+    }
+    private int[] unoccludedProtectedRects(){
         if(systemBlocked||transitioning&&!inputPending)return new int[0];
         // Keep the existing one-rectangle GestureGate contract. Protect the
         // compact buttons, rather than the potentially wide landscape preview.
@@ -597,7 +666,7 @@ final class WindowControls {
         hideMenu();
         if(controlsRoot!=null){try{wm.removeViewImmediate(controlsRoot);}catch(RuntimeException ignored){}controlsRoot=null;}
         else for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}
-        views.clear();params.clear();hideDismiss();
+        views.clear();params.clear();unclippedBounds.clear();miniTouchActive=false;hideDismiss();
     }
     void hide(){cancelEdgeDrag();cancelMiniDrag();clearMotion();hideViews();frame="";token=null;dragging=false;changed();}
     void close(){send("CLOSE",0,0,0);hide();}

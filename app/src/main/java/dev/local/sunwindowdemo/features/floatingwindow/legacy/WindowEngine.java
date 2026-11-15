@@ -210,11 +210,11 @@ final class WindowEngine {
     private boolean visible(Session s){return s!=null&&(s==active||s==pinned);}
     private boolean normalOccupied(){return active!=null&&!active.restoring&&"normal".equals(active.frame);}
     private boolean entryInputPending(Session s){
-        return visible(s)&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.screenSuspended&&!s.rotation.active()
+        return visible(s)&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.screenSuspended&&!s.prioritySuspended&&!s.rotation.active()
             &&(s.entering||s.cover!=null&&!s.coverFullscreen);
     }
     private void completeEntryInput(Session s)throws Exception{
-        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.screenSuspended||entryInputPending(s))return;
+        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.prioritySuspended||s.screenSuspended||entryInputPending(s))return;
         if("normal".equals(s.frame))focusExpanded(s);
         Intent pending=s.entryControl;s.entryControl=null;
         frameReport("ENTRY_INPUT_READY");
@@ -296,6 +296,9 @@ final class WindowEngine {
         long startedAt=SystemClock.elapsedRealtime();
         volatile boolean restoring;
         volatile boolean screenSuspended;
+        volatile boolean prioritySuspended,priorityHideTask;
+        boolean priorityWasFocusable;
+        long priorityFocusUntil;
         IBinder lease;
         IBinder.DeathRecipient death;
         volatile Geometry.Placement placement;
@@ -967,7 +970,7 @@ final class WindowEngine {
         if(request==null||target==null||recovering||lock==null)return null;
         synchronized(lock){
             Session owner=sessionFor(target);
-            if(owner==null||owner!=active||owner.restoring||owner.closing||owner.fullTransition||owner.screenSuspended
+            if(owner==null||owner!=active||owner.restoring||owner.closing||owner.fullTransition||owner.prioritySuspended||owner.screenSuspended
                 ||owner.parked||!"normal".equals(owner.frame)||screenBlocked()||owner.placement==null
                 ||!a.bool(target,"isAttached")||find(owner.taskId)!=target)return null;
             Intent intent=(Intent)a.field(request,"intent");
@@ -1000,7 +1003,7 @@ final class WindowEngine {
             ShareLaunch share=shareLaunch.get();
             if(share!=null&&share.request==requestActivity)return share.nativeFullscreen?null:startShare(requestActivity,started,share);
             Session s=active;
-            if(s==null||recovering||s.restoring||s.closing||s.fullTransition||s.screenSuspended
+            if(s==null||recovering||s.restoring||s.closing||s.fullTransition||s.prioritySuspended||s.screenSuspended
                 ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
                 ||pendingStart!=null||!"normal".equals(s.frame))return null;
             // Native system interactions keep their own dialog/picker presentation,
@@ -1059,7 +1062,7 @@ final class WindowEngine {
         if(value instanceof OwnedStart owned){
             Session s=owned.target;
             if(success)handler.post(()->{try{synchronized(lock){
-                if(s==active&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.parked&&!s.screenSuspended
+                if(s==active&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.parked&&!s.screenSuspended&&!s.prioritySuspended
                     &&!screenBlocked()&&s.placement!=null&&a.bool(s.task,"isAttached")&&find(s.taskId)==s.task){
                     preserveOwnedTask(s);refresh(s);frameReport("OWNED_LAUNCH");
                 }
@@ -1310,6 +1313,7 @@ final class WindowEngine {
     private void control(Intent i) throws Exception {
         Session s=controlled(i);
         if(s==null||s.restoring)throw new IllegalStateException("小窗已结束");
+        synchronized(lock){updatePriorityState(s);if(s.prioritySuspended)return;}
         String op=i.getStringExtra("op");
         if(entryInputPending(s)){
             if(entryGesture(s,i,op))return;
@@ -1455,7 +1459,7 @@ final class WindowEngine {
         if(s==null||lock==null||handler==null)return null;
         try{synchronized(lock){
             if(active!=s||recovering||s.restoring||s.closing||s.transitioning||s.fullTransition||s.parked
-                ||s.screenSuspended||pendingStart!=null||!"normal".equals(s.frame)||!s.lease.isBinderAlive()
+                ||s.prioritySuspended||s.screenSuspended||pendingStart!=null||!"normal".equals(s.frame)||!s.lease.isBinderAlive()
                 ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
                 ||!context.getSystemService(PowerManager.class).isInteractive()||s.returnTo!=null&&returnTarget(s)==null)return null;
             Object top=a.call(s.task,"topRunningActivity"),first=a.call(s.task,"getRootActivity");
@@ -1543,7 +1547,7 @@ final class WindowEngine {
                 if(!visible(s)||s.restoring||revision!=s.animationRev)return;
                 try{
                     synchronized(lock){
-                        if(s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
+                        if(s.prioritySuspended||s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
                             if(began>=0&&lastFrame>=0)began+=now-lastFrame;
                             lastFrame=now;frames.postFrameCallback(this);return;
                         }
@@ -1667,7 +1671,7 @@ final class WindowEngine {
                 long callbackStart=SystemClock.elapsedRealtimeNanos();
                 try{
                     synchronized(lock){
-                        if(s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
+                        if(s.prioritySuspended||s.screenSuspended||s.rotation.active()||a.presentationLeashed(s.task)){
                             nativeWaits++;
                             if(began>=0&&lastFrame>=0)began+=time-lastFrame;
                             lastFrame=time;frames.postFrameCallback(this);return;
@@ -1985,7 +1989,7 @@ final class WindowEngine {
     private static RectF visualBounds(Geometry.Placement p){return new RectF(p.x(),p.y(),p.x()+p.width()*p.scale(),p.y()+p.height()*p.scale());}
     private long exitCover(Session s){
         if(s.cover!=null&&s.cover.exiting())return 0;
-        if(s.placement==null||s.screenSuspended)return 0;
+        if(s.placement==null||s.prioritySuspended||s.screenSuspended)return 0;
         try{
             if(s.cover!=null&&!s.cover.mask.holding())endCover(s);
             if(s.cover==null)beginCover(s,s.placement,s.placement,false);
@@ -1993,7 +1997,7 @@ final class WindowEngine {
         }catch(Throwable error){log.accept("COVER_EXIT_SKIPPED "+FrameworkAccess.reason(error));return 0;}
     }
     private void beginCover(Session s,Geometry.Placement from,Geometry.Placement to,boolean fullscreen){
-        if(from==null||to==null)return;
+        if(from==null||to==null||s.prioritySuspended)return;
         try{
             TaskCover previous=s.cover;
             boolean sameMode=s.coverFullscreen==fullscreen;
@@ -2064,7 +2068,9 @@ final class WindowEngine {
                         if(s.coverFullscreen){
                             Object display=a.call(s.task,"getDisplayContent");if(display!=null)cover.target(new RectF((Rect)a.call(display,"getBounds")));
                         }else ready&=!s.entering&&!s.transitioning&&!s.rotation.active();
-                        boolean visible=context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
+                        updatePriorityState(s);
+                        if(s.cover!=cover)return;
+                        boolean visible=!s.prioritySuspended&&context.getSystemService(PowerManager.class).isInteractive()&&!context.getSystemService(KeyguardManager.class).isKeyguardLocked();
                         long frameClock=SystemClock.elapsedRealtime()-Math.max(0,System.nanoTime()-frameTime)/1_000_000L;
                         if(s.launchFlow!=null&&s.launchFlow.active()&&!cover.exiting()){
                             s.launchFlow.visibility(visible,frameClock);
@@ -2074,6 +2080,7 @@ final class WindowEngine {
                             }else ready=false;
                         }
                         boolean continuing=cover.step(ready,visible,frameClock);
+                        if(s.priorityHideTask){a.opacity(s.task,0);surfaceVisible(s,false);}
                         callbacks++;maxWork=Math.max(maxWork,SystemClock.elapsedRealtimeNanos()-started);
                         if(previous>=0)maxGap=Math.max(maxGap,frameTime-previous);previous=frameTime;
                         if(!continuing){
@@ -2093,8 +2100,9 @@ final class WindowEngine {
         });
     }
     private float coverReleaseAlpha(Session s){
+        if(s.prioritySuspended&&!s.priorityHideTask&&!s.screenSuspended&&!s.parked)return 1;
         if(s.cover!=null&&s.cover.exiting())return 0;
-        if(s.parked||s.screenSuspended)return 0;
+        if(s.parked||s.priorityHideTask||s.screenSuspended)return 0;
         if(s.restoring)return s.restoreForeground?1:0;
         if(s.startMask!=null&&s.startMask.holding()||s.rotationMask!=null&&s.rotationMask.holding())return 0;
         return s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
@@ -2250,7 +2258,8 @@ final class WindowEngine {
     boolean mayAllowResize(){return !sessions.isEmpty()||resizeCandidate.get()!=null;}
     boolean allowResize(Object task){return task!=null&&(task==resizeCandidate.get()||owns(task));}
     private void focusExpanded(Session s)throws Exception {
-        if(active!=s||s.restoring||s.closing||context.getSystemService(KeyguardManager.class).isKeyguardLocked())return;
+        if(active!=s||s.restoring||s.closing||s.prioritySuspended||updatePriorityState(s)
+            ||SystemClock.uptimeMillis()<s.priorityFocusUntil||context.getSystemService(KeyguardManager.class).isKeyguardLocked())return;
         Object top=a.call(s.task,"topRunningActivity");if(top==null)return;
         // Same native focus path used by setFocusedTask, without requesting an
         // extra TO_FRONT transition for an already always-on-top freeform task.
@@ -2263,7 +2272,7 @@ final class WindowEngine {
     private void repairNormalFocus(Session s){
         try{synchronized(lock){
             if(active!=s||!"normal".equals(s.frame)||!s.presented||s.restoring||s.closing||s.parked
-                ||s.screenSuspended||s.transitioning||s.fullTransition||s.cover!=null||s.rotation.active()
+                ||s.prioritySuspended||s.screenSuspended||s.transitioning||s.fullTransition||s.cover!=null||s.rotation.active()
                 ||pendingStart!=null||!s.lease.isBinderAlive()||a.animating(s.task)
                 ||screenBlocked())return;
             Object display=a.call(s.task,"getDisplayContent"),focus=display==null?null:a.field(display,"mCurrentFocus");
@@ -2280,7 +2289,7 @@ final class WindowEngine {
         if(sessions.isEmpty())return false;
         Session s;
         try{s=sessionFor(a.call(fragment,"getTask"));}catch(Exception e){return false;}
-        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.screenSuspended&&!continueHidden(s)||lock==null
+        if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.parked||s.prioritySuspended||s.screenSuspended&&!continueHidden(s)||lock==null
             ||!("mini".equals(s.frame)||"normal".equals(s.frame)))return false;
         try{synchronized(lock){
             if(!visible(s)||a.call(fragment,"getTask")!=s.task||!s.lease.isBinderAlive()
@@ -2408,7 +2417,8 @@ final class WindowEngine {
     boolean blockContentTouch(Object container){
         if(sessions.isEmpty())return false;
         try{Session s=sessionFor(a.call(container,"getTask"));
-            return s!=null&&(s.parked||s.restoring||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
+            if(s!=null){int priority=priorityState(s);if(priority!=0)return priority==2;}
+            return s!=null&&(s.parked||s.restoring||s.prioritySuspended||s.screenSuspended||s.rotation.active()||s.closing||"mini".equals(s.frame)
                 ||s.startMask!=null&&s.startMask.holding());
         }catch(Exception e){return false;}
     }
@@ -2421,7 +2431,7 @@ final class WindowEngine {
     private volatile Session touchGuardOwner;
     private volatile long touchGuardSince,touchGuardUntil;
     private static boolean normalShown(Session s){
-        return s!=null&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.parked&&!s.screenSuspended&&"normal".equals(s.frame);
+        return s!=null&&!s.restoring&&!s.closing&&!s.fullTransition&&!s.parked&&!s.screenSuspended&&!s.prioritySuspended&&"normal".equals(s.frame);
     }
     private static boolean entryGuard(Session s){
         return normalShown(s)&&(s.entering||s.transitioning||s.cover!=null&&!s.coverFullscreen);
@@ -2456,6 +2466,7 @@ final class WindowEngine {
         if(!WindowPolicy.backgroundTouchGuard(true,entryGuard(s),reported&&touchGuarded,touchGuardSince,
             reported?touchGuardUntil:0,now,TOUCH_GUARD_MAX_MS))return false;
         try{
+            if(priorityState(s)!=0)return false;
             Object task=a.call(window,"getTask");
             return task!=null&&task!=s.task&&sessionFor(task)==null
                 &&a.call(task,"getDisplayContent")==a.call(s.task,"getDisplayContent");
@@ -2494,6 +2505,7 @@ final class WindowEngine {
         }}catch(Throwable e){log.accept("ROTATION_CONFIG_GUARD_FAILED "+FrameworkAccess.reason(e));}
     }
     private void beginRotation(Session s){
+        if(s.prioritySuspended)return;
         try{
             if("normal".equals(s.frame)&&s.placement!=null&&s.cover==null)beginCover(s,s.placement,s.placement,false);
             if(s.rotationMask==null||!s.rotationMask.holding()){
@@ -2514,7 +2526,8 @@ final class WindowEngine {
         handler.postDelayed(()->{synchronized(lock){s.rotationProbeQueued=false;probeRotation(s);}},delay);
     }
     private float presentationAlpha(Session s){
-        return s.parked||s.restoring||s.screenSuspended||s.startMask!=null&&s.startMask.holding()
+        if(s.prioritySuspended&&!s.priorityHideTask&&!s.screenSuspended&&!s.parked)return 1;
+        return s.parked||s.restoring||s.priorityHideTask||s.screenSuspended||s.startMask!=null&&s.startMask.holding()
             ||s.cover!=null&&s.cover.mask.holding()?0:s.opacity*s.rotation.alpha(SystemClock.elapsedRealtime());
     }
     private TaskVisibilityGuard presentationMask(Session s){
@@ -2530,7 +2543,7 @@ final class WindowEngine {
                 endRotation(s,false);return;
             }
             long now=SystemClock.elapsedRealtime();
-            if(s.screenSuspended||!context.getSystemService(PowerManager.class).isInteractive()
+            if(s.prioritySuspended||s.screenSuspended||!context.getSystemService(PowerManager.class).isInteractive()
                 ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()){
                 s.rotation.defer(now);queueRotationProbe(s,250);return;
             }
@@ -2570,7 +2583,7 @@ final class WindowEngine {
                         try{
                             if(!sessions.contains(s)||s.restoring){s.rotation.clear();return;}
                             long clock=SystemClock.elapsedRealtime();
-                            if(s.screenSuspended||a.presentationLeashed(s.task)){
+                            if(s.prioritySuspended||s.screenSuspended||a.presentationLeashed(s.task)){
                                 beginRotation(s);return;
                             }
                             renderFrame(s);frameReport("ROTATION_APPEARING");
@@ -2688,7 +2701,7 @@ final class WindowEngine {
                     android.view.SurfaceControl surface=(android.view.SurfaceControl)a.field(s.task,"mSurfaceControl");
                     if(surface!=null&&surface.isValid()){start.setAlpha(surface,0);finish.setAlpha(surface,0);}
                 }
-                if(touched&&!s.restoring&&!s.parked&&!s.screenSuspended&&s.placement!=null
+                if(touched&&!s.restoring&&!s.parked&&!s.screenSuspended&&!s.prioritySuspended&&s.placement!=null
                     &&(mask==null||!mask.holding())){
                     // Native finish resets task position/scale/crop even for a no-animation
                     // foreground transition. Put the owned presentation into that same
@@ -2720,7 +2733,7 @@ final class WindowEngine {
         try{
             int transitionType=(Integer)a.field(transition,"mType");
             boolean foregroundTransition=transitionType>=1&&transitionType<=4;
-            boolean busy=s.entering||s.closing||s.restoring||s.parked||s.screenSuspended||s.transitioning||s.fullTransition
+            boolean busy=s.entering||s.closing||s.restoring||s.parked||s.prioritySuspended||s.screenSuspended||s.transitioning||s.fullTransition
                 ||s.geometryDirty||pendingStart!=null||s.startMask!=null&&s.startMask.holding()
                 ||a.bool(a.field(s.task,"mSurfaceAnimator"),"hasLeash");
             boolean dependent=false;
@@ -2821,6 +2834,16 @@ final class WindowEngine {
             return;
         }
         if(s.placement==null)return;
+        updatePriorityState(s);
+        if(s.prioritySuspended){
+            if(s.cover!=null){s.cover.ownerAlpha(s.priorityHideTask?0:1);s.cover.step(false,false);}
+            if(s.decoration!=null)s.decoration.hide(s.task);
+            if(s.priorityHideTask||s.screenSuspended||s.parked){a.opacity(s.task,0);surfaceVisible(s,false);return;}
+            // Same-task permission UI remains transformed like its native task, but never masked by our controls.
+            surfaceVisible(s,true);a.opacity(s.task,1);
+            Rect parent=(Rect)a.call(s.parent,"getBounds");Geometry.Placement p=s.placement;
+            a.transform(s.task,p.scale(),p.x()-parent.left,p.y()-parent.top);return;
+        }
         if(s.parked||s.screenSuspended){
             surfaceVisible(s,false);
             a.opacity(s.task,0);if(s.decoration!=null)s.decoration.hide(s.task);return;
@@ -2880,6 +2903,7 @@ final class WindowEngine {
         updateDecoration(s,p,density,!a.inFrame()&&!s.backRequested);
     }
     private void updateDecoration(Session s,Geometry.Placement p,float density,boolean structural)throws Exception{
+        if(s.prioritySuspended){if(s.decoration!=null)s.decoration.hide(s.task);return;}
         if(s.decoration!=null){
             boolean wasPresented=s.presented;
             s.decoration.dimAmount(windowDim);
@@ -2921,7 +2945,7 @@ final class WindowEngine {
     }
     private boolean continueHidden(Session s){
         return continuationReady&&continuation!=null&&keepEdgeAwake&&visible(s)&&!s.restoring&&!s.closing&&!s.parked
-            &&!s.fullTransition&&s.edgeHidden&&"mini".equals(s.frame)&&s.uid>=10000
+            &&!s.fullTransition&&!s.prioritySuspended&&s.edgeHidden&&"mini".equals(s.frame)&&s.uid>=10000
             &&s.lease!=null&&s.lease.isBinderAlive();
     }
     boolean continueHiddenTask(Object fragment){
@@ -2939,6 +2963,68 @@ final class WindowEngine {
         java.util.Map<Integer,String> desired=new java.util.HashMap<>();
         synchronized(lock){for(Session s:sessions)if(continueHidden(s))desired.put(s.uid,s.pkg);}
         continuation.update(desired);
+    }
+    private final java.util.concurrent.atomic.AtomicBoolean priorityQueued=new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicBoolean priorityReportQueued=new java.util.concurrent.atomic.AtomicBoolean();
+    void priorityWindowsChanged(){
+        if(handler==null||lock==null||sessions.isEmpty()||!priorityQueued.compareAndSet(false,true))return;
+        handler.post(()->{
+            priorityQueued.set(false);
+            try{synchronized(lock){
+                boolean changed=false;
+                for(Session s:sessions)if(!s.restoring&&updatePriorityState(s)){renderFrame(s);changed=true;}
+                if(changed){a.call(wms,"updateFocusedWindowLocked",new Class<?>[]{int.class,boolean.class},0,true);
+                    a.call(wms,"requestTraversal");}
+            }}catch(Exception error){log.accept("SYSTEM_PRIORITY_FAILED "+FrameworkAccess.reason(error));}
+        });
+    }
+    // 0=native exception/no match; 1=other UID inside this task; 2=external task/window.
+    static int systemPriority(Object display,Object task,int uid,Object windowDisplay,Object windowTask,int windowUid,boolean visible){
+        return !visible||display==null||display!=windowDisplay||uid<0||windowUid<0||windowUid==uid?0:task==windowTask?1:2;
+    }
+    private int priorityState(Session s)throws Exception{
+        if(a.overlayHidingWindows==null||wms==null)return 0;
+        Object display=a.call(s.task,"getDisplayContent");int result=0;
+        for(Object window:(java.util.List<?>)a.overlayHidingWindows.get(wms)){
+            result=Math.max(result,systemPriority(display,s.task,s.uid,a.call(window,"getDisplayContent"),
+                a.call(window,"getTask"),a.integer(window,"getOwningUid"),a.bool(window,"isVisible")));
+            if(result==2)break;
+        }
+        return result;
+    }
+    private boolean updatePriorityState(Session s)throws Exception{
+        int priority=priorityState(s);boolean blocked=priority!=0,hide=priority==2;
+        if(s.prioritySuspended==blocked&&s.priorityHideTask==hide){
+            if(blocked&&a.bool(s.task,"isFocusable")==hide)
+                a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},!hide);
+            return false;
+        }
+        boolean wasBlocked=s.prioritySuspended;
+        if(blocked&&!wasBlocked)s.priorityWasFocusable=a.bool(s.task,"isFocusable");
+        s.prioritySuspended=blocked;s.priorityHideTask=hide;
+        // A permission Activity inside a mini needs native key focus, unlike an external installer.
+        boolean focusable=blocked?!hide:s.priorityWasFocusable&&!s.parked&&"normal".equals(s.frame);
+        if(a.bool(s.task,"isFocusable")!=focusable)
+            a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},focusable);
+        if(blocked){
+            s.entryControl=null;
+            if(s.decoration!=null)s.decoration.hide(s.task);
+            if(!hide){
+                // A permission Activity can share the task: never keep its parent's alpha mask.
+                if(s.startMask!=null){s.startMask.release(1);s.startMask=null;}
+                if(s.rotationMask!=null){s.rotationMask.release(1);s.rotationMask=null;s.rotation.clear();}
+                if(s.cover!=null){
+                    TaskCover cover=s.cover;s.cover=null;s.coverFollowing=false;coverTasks.remove(s.task);
+                    cover.ownerAlpha(1);cover.close();
+                }
+            }
+        }else s.priorityFocusUntil=SystemClock.uptimeMillis()+1000;
+        log.accept((blocked?"SYSTEM_PRIORITY_SUSPEND":"SYSTEM_PRIORITY_RESUME")+" task="+s.taskId+" hideTask="+hide);
+        // apply()/focus/input can see the change before the optional after-hook worker does.
+        if(handler!=null&&priorityReportQueued.compareAndSet(false,true))handler.post(()->{
+            priorityReportQueued.set(false);report("SYSTEM_PRIORITY_CHANGED");
+        });
+        return true;
     }
     // Screen/keyguard changes suspend presentation, never restore the fullscreen
     // configuration. Keep frame, placement, return chain and recovery journal.
@@ -2988,7 +3074,9 @@ final class WindowEngine {
                     return;
                 }
                 updateScreenState(s);
+                if(updatePriorityState(s))renderFrame(s);
                 handler.post(this::updateContinuation);
+                if(s.prioritySuspended){renderFrame(s);a.call(wms,"requestTraversal");handler.postDelayed(()->tick(s),250);return;}
                 if(s.screenSuspended){
                     if(continueHidden(s)){resumeMini(s);traceVisibleRuntime(s,a.call(s.task,"getDisplayContent"));}
                     handler.postDelayed(()->tick(s),500);return;
@@ -3329,6 +3417,7 @@ final class WindowEngine {
     }
     private void fillFrame(Intent result,Session s){
         if(s==null||s.restoring||s.placement==null)return;
+        if(s.prioritySuspended){result.putExtra("systemOverlay",true).putExtra("presented",false).putExtra("inputPending",false);return;}
         Geometry.Placement p=s.placement;
         result.putExtra("token",s.token).putExtra("package",s.pkg).putExtra("taskId",s.taskId)
             .putExtra("frame",s.frame).putExtra("x",p.x()).putExtra("y",p.y())
@@ -3373,7 +3462,8 @@ final class WindowEngine {
             if(focus!=null){android.view.WindowManager.LayoutParams attrs=(android.view.WindowManager.LayoutParams)a.field(focus,"mAttrs");
                 String title=String.valueOf(attrs.getTitle());system=BackBridge.PACKAGE.equals(attrs.packageName)&&!title.startsWith("NativeComplements");
                 out.putExtra("systemOverlayTitle",title);}
-            out.putExtra("systemOverlay",system);
+            boolean priority=sessions.stream().anyMatch(s->visible(s)&&s.prioritySuspended);
+            out.putExtra("systemOverlay",system||priority);
         }catch(Exception e){out.putExtra("environmentError",FrameworkAccess.reason(e));}}
     }
     private void report(String event) {

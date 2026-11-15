@@ -7,7 +7,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
 
-/** Only the manager and SystemUI may read the immersive switch; there are no rule/write endpoints. */
+/** Only the manager and verified SystemUI/Pixel launcher owners may read the one switch. */
 public final class NavbarProvider extends ContentProvider {
     public static final Uri URI = Uri.parse("content://" + NavbarStore.AUTHORITY);
     @Override public boolean onCreate() { return true; }
@@ -16,12 +16,13 @@ public final class NavbarProvider extends ContentProvider {
         if (!"system".equals(method)) throw new IllegalArgumentException("system read only");
         int uid = Binder.getCallingUid();
         if (uid != getContext().getApplicationInfo().uid) {
-            try {
-                if (uid != getContext().getPackageManager().getApplicationInfo("com.android.systemui", 0).uid)
-                    throw new SecurityException("immersive navbar reader");
-            } catch (android.content.pm.PackageManager.NameNotFoundException error) {
-                throw new SecurityException(error);
+            boolean allowed = false;
+            for (String owner : new String[]{"com.android.systemui", "com.google.android.apps.nexuslauncher"}) {
+                try {
+                    if (uid == getContext().getPackageManager().getApplicationInfo(owner, 0).uid) allowed = true;
+                } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {}
             }
+            if (!allowed) throw new SecurityException("immersive navbar reader");
         }
         return NavbarStore.systemSnapshot(getContext());
     }

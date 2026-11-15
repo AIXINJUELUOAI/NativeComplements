@@ -40,7 +40,7 @@ public class IconAssetsTest {
         provider.background=png(Color.BLUE);provider.foreground=png(Color.TRANSPARENT);
         set("host",context);set("worker",new Handler(Looper.getMainLooper()));set("ready",false);
         set("settings",null);
-        set("snapshot",new IconAssets.Snapshot(Map.of(),"",0,0,Set.of()));
+        set("snapshot",new IconAssets.Snapshot(Map.of(),Map.of(),"",0,0,Set.of()));
         IconAssets.onReload(()->callbacks++);
     }
     private static void set(String name,Object value)throws Exception{

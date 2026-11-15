@@ -84,13 +84,19 @@ public final class SystemIconModule extends XposedModule {
             int type=suggest.getInt(chain.getThisObject());
             if(c==null||target==null||target.applicationInfo==null||type==3||type==4
                 ||!UserHandle.getUserHandleForUid(target.applicationInfo.uid).equals(android.os.Process.myUserHandle()))return chain.proceed();
-            Drawable replacement=IconAssets.colored(c,target.packageName);
+            Object values=temporary.get(outer.get(chain.getThisObject()));Object previous=icon.get(values);
+            Drawable replacement=splashIcon(c,target.packageName,previous instanceof Drawable drawable?drawable:null);
             if(replacement==null)return chain.proceed();
-            Object values=temporary.get(outer.get(chain.getThisObject()));Object previous=icon.get(values);int oldBackground=background.getInt(values);
+            int oldBackground=background.getInt(values);
             try{icon.set(values,replacement);background.setInt(values,0);return chain.proceed();}
             finally{icon.set(values,previous);background.setInt(values,oldBackground);}
         });
         note("SPLASH_READY");
+    }
+    /** Null keeps the native splash's own icon/fallback path; never replace it merely to obtain Monet. */
+    static Drawable splashIcon(Context c,String pkg,Drawable original){
+        Drawable themed=IconAssets.cover(c,pkg,original);
+        return themed!=null?themed:IconAssets.colored(c,pkg);
     }
     private static Field field(Class<?> cls,String name)throws Exception{Field field=cls.getDeclaredField(name);field.setAccessible(true);return field;}
     private void note(String s){try{log(4,"NcSystemIcons",s);}catch(Throwable ignored){}}

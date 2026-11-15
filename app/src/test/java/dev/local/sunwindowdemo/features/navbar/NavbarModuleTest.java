@@ -38,9 +38,10 @@ public class NavbarModuleTest {
         };
     }
 
-    private XposedModuleInterface.PackageLoadedParam target() {
+    private XposedModuleInterface.PackageLoadedParam target() { return target("com.android.systemui"); }
+    private XposedModuleInterface.PackageLoadedParam target(String packageName) {
         return new XposedModuleInterface.PackageLoadedParam() {
-            public String getPackageName() { return "com.android.systemui"; }
+            public String getPackageName() { return packageName; }
             public ApplicationInfo getApplicationInfo() { return new ApplicationInfo(); }
             public boolean isFirstPackage() { return true; }
             public ClassLoader getDefaultClassLoader() {
@@ -63,6 +64,17 @@ public class NavbarModuleTest {
         assertEquals("IMMERSIVE_PACKAGE_LOADED first=true", events.get(1));
         assertEquals("IMMERSIVE_INSTALL_FAILED rolledBack=0", events.get(2));
         assertEquals(1, failures.size());
+        assertTrue(failures.get(0) instanceof ClassNotFoundException);
+    }
+
+    @Test public void launcherUsesTaskbarBackendRatherThanSystemUiBackend() {
+        NavbarModule module = module();
+        module.onModuleLoaded(process("com.google.android.apps.nexuslauncher", false));
+        module.onPackageLoaded(target());
+        assertEquals(1, events.size());
+        module.onPackageLoaded(target("com.google.android.apps.nexuslauncher"));
+        assertEquals(3, events.size());
+        assertEquals("IMMERSIVE_TASKBAR_INSTALL_FAILED", events.get(2));
         assertTrue(failures.get(0) instanceof ClassNotFoundException);
     }
 
