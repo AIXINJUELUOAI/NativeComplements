@@ -2,15 +2,7 @@
 
 ## 当前实施状态：0.10.0 / code139
 
-已 push：`3afdb01` 的纯 [WindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowPresentation.java>) / [AndroidWindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowPresentation.java>) 执行分界；`58f39f9` 的真实 Freeform correlated STATUS gate 与 single Properties owner 隔离；`bd3aafb` 的独立 [LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>)。345 pass 为更早阶段单测证据。
-
-`a6da12a` 已 commit 并 push main（receipt：`bd3aafb..a6da12a`）：C1 [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>) / [AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>)；`full` / `window` productFlavors 共用同一 Engine；[HostExtras](<../../app/src/main/java/dev/local/sunwindowdemo/HostExtras.java>) 与两源集 ProductFeatures 隔离非小窗实现。导航分为 [full ModuleApp](<../../app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>) / [window ModuleApp](<../../app/src/window/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)，[Page](<../../app/src/main/java/dev/local/sunwindowdemo/navigation/Page.kt>) 共享。注册为 [full 7 entry](<../../app/src/full/resources/META-INF/xposed/java_init.list>) / [window 4 entry](<../../app/src/window/resources/META-INF/xposed/java_init.list>)（3 window + LauncherThemeModule），main 三系统 scope 不变。
-
-`a6da12a` 阶段双全测 full 353 / window 348 均 0 失败，双 release/R8、原签名/身份/scope/入口/快捷方式及禁止非小窗 Hook 的 DEX 核验通过；仍为阶段产物，未做设备回归。
-
-`004aa43` 已 commit 并 push 的 C2 [WindowControl](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowControl.java>)（6组测试）、C3a [LongBackGesture](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LongBackGesture.java>)（5组）及 [OpenWaitState](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/OpenWaitState.java>)（4组）完整双单测 full 368 / window 363 零失败，基线/全部主机规则及归档接口检查通过；此阶段未重新发布 APK。
-
-仍剩5闭环：导航 native ticket / pure WindowNavigation 与 Policy Object 签名改 facts、recovery boot/retry、tick lease/screen schedule、Host 不同入口 admission、BackBridge C3b handoff generation/idle/timeout。已有 Geometry/Rules/CornerGesture/GestureGate/History/LaunchCoverFlow 不重复重写；native AtomicFile/Parcel/WM/Binder 保留适配侧不算业务未解耦。不能把以上阶段称为全部解耦、独立版可用或 LOS 兼容。当前状态与贡献顺序以 [接入总览](<README.md>) 为准：我们完成 refactor 后，LOS 贡献者再 fork / adapt / test PR，我们 review + 现设备回归后才决定 merge。
+小窗解耦与同源 full/window 实施阶段已 commit 并 push 至 `a8d6d60`。最新边界、集中测试/推送证据及仍待恢复与窗口生命周期两闭环，统一见[最新进度](<README.md#最新进度a8d6d60-已提交并-push>)；不是全部解耦、独立版可用或设备/LOS 兼容声明。下方只保留 138 历史架构审计，不用当前阶段结论改写历史。
 
 ## 138 历史审计（以下正文）
 

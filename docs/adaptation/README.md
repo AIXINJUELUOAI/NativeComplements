@@ -4,7 +4,23 @@
 
 当前第一轮小窗解耦与同源独立小窗版正在实施，版本为 `0.10.0` / versionCode `139`，以 [构建配置](<../../app/build.gradle.kts>) 为准。**不是全部解耦完成、独立版可用或 LOS 兼容声明。** Alive 与其他功能重构仍暂缓。
 
-### 已提交并 push 的边界
+### 最新进度：a8d6d60 已提交并 push
+
+最新阶段 `a8d6d60` 已 commit 并 push main，receipt：`00b6db6..a8d6d60`。本节集中记录最新证据；后面的提交与数字均是对应阶段历史，不覆盖后续未提交改动。
+
+- `WindowNavigation` 已为纯 value，native 票据由 `AndroidWindowLaunch` 持有；`WindowPolicy` 的 5 个 Object 签名改为 boolean facts，Host 各入口统一使用 `WindowHostPolicy` admission。
+- `BackHandoffState` 提取 once、generation、idle 与 timeout 状态；**同时修复既有 late/duplicate callbacks 可能导致多次 commit 的漏洞**，不是只搬代码。原生取消、Shell 与主线程 IPC 顺序保留。
+- 完整双单测 **full 396 / window 391，均 0 失败**；`verify_runtime` 的原基线 5 unchanged / 21 documented changes 与 35 additions、全部 host checks，以及无 Android 编译依赖的标准 javac 纯类检查通过。
+- 双 release/R8、双 APK 打包的原签名、IDs、scope、entries、shortcuts 与 forbidden DEX 检查通过；独立 review 的 P0/P1 为 0。以上均是阶段静态/主机/构建证据，**不是设备或 LOS 兼容结论**。
+
+仍剩两闭环，未完成前不称整轮解耦完成，也不以 Engine 行数衡量进度：
+
+1. **恢复**：boot/retry 决策与 History 120ms 链；`monet-fix` task32 独占 Engine 恢复工作，尚未纳入本节已验证阶段。
+2. **窗口生命周期**：tick、priority、input、continuation eligibility，以及 lease/screen schedule；task33 需等恢复阶段 push 后由 `window-server` 接续，避免并写 Engine。
+
+生成 APK 仍为阶段检查产物，不 present/tag，不提前宣布独立版可用。Alive、其他功能重构仍暂缓；native AtomicFile/Parcel/WM/Binder 留在适配侧，复用已有规则不重复重写。
+
+### 此前已提交并 push 的边界
 
 - `3afdb01`：呈现规则提取为纯 [WindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowPresentation.java>)，原生对象、锁与事务保留在 [AndroidWindowPresentation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowPresentation.java>) 执行侧；并非整个引擎平台无关。
 - `58f39f9`：启用前使用真实 Freeform 能力与 correlated STATUS 请求/响应门控，不自动修改系统设置；以 single Properties owner 隔离重复接管，保留主包身份和恢复含义。这不是任意 OEM 原生小窗的通用共存协议。
@@ -27,15 +43,7 @@
 
 推送 receipt：`a6da12a..004aa43` 到 main。完整双全测 **full 368 / window 363，均零失败**；基线/全部主机规则与归档接口检查通过。此阶段未重新发布 APK；之后未提交改动不得沿用该结果。
 
-### 仍剩 5 个闭环
-
-1. 导航 native ticket 与纯 [WindowNavigation](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowNavigation.java>) 分界，以及 [WindowPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowPolicy.java>) 的 Object 签名改 facts。
-2. recovery 的 boot/retry 决策。
-3. tick 的 lease/screen 调度。
-4. Host 不同入口的 admission。
-5. BackBridge C3b 的 handoff generation/idle/timeout。
-
-复用已有 Geometry、Rules、CornerGesture、GestureGate、History、LaunchCoverFlow，不重复重写；native AtomicFile、Parcel、WM、Binder 留在适配侧，不据此判为业务未解耦。上述未闭环前不称全部解耦、独立版可用或 LOS 兼容；编译、单测、R8、当前设备回归和目标系统验证分开记录。
+`004aa43` 当时剩余导航/Policy、恢复、tick 调度、Host admission 与 Back handoff 五闭环；其中导航/Policy、Host admission、Back handoff 已在后续阶段推进，**当前只剩恢复与窗口生命周期两项**，范围和协作顺序以[最新进度](<#最新进度a8d6d60-已提交并-push>)为准。编译、单测、R8、当前设备回归和目标系统验证分开记录。
 
 未来 LOS 贡献顺序：**先由我们完成 refactor → 贡献者再 fork / adapt / test 并提交 PR → 我们 review 并做现设备回归 → 最后决定 merge**。不在当前未冻结边界上承诺适配完成，不凭 ROM 名或 Freeform 开关宣称兼容。
 
