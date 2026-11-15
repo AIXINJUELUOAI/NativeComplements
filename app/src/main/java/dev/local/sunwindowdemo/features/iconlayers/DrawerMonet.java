@@ -8,11 +8,25 @@ import android.view.ViewParent;
 import dev.local.sunwindowdemo.core.HostSnapshot;
 import dev.local.sunwindowdemo.features.shade.ShadeStore;
 import io.github.libxposed.api.*;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.*;
 
-/** Drawer-only themed flag; all material, geometry, delegates and caching belong to Launcher. */
+/**
+ * Drawer-only themed flag; all material, geometry, delegates and caching belong to Launcher.
+ * Drawer AppInfo icons are normally fetched without the cache's theme flag, which strips the
+ * monochrome layer, so only icons previously loaded themed could render Monet. While enabled the
+ * drawer lookups request themed entries and already-loaded drawer icons are upgraded once.
+ */
 final class DrawerMonet {
+    private static final int THEMED_LOOKUP = 8;
+    private final Map<Object, Boolean> upgraded = Collections.synchronizedMap(new WeakHashMap<>());
+    private volatile boolean userEnabled, systemThemed;
+    private Object iconCacheRef;
+    private Method updateInBackground, updateMask, themeGet;
+    private Field bitmapField, themedField, themeState, themeController;
+    private Object themeSingleton;
+    private Boolean reportedThemed;
     private final Map<View, java.lang.ref.WeakReference<View>> gridIcons = new WeakHashMap<>();
     private final ThreadLocal<Boolean> binding = new ThreadLocal<>();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -37,6 +51,23 @@ final class DrawerMonet {
         standard = bubble.getDeclaredMethod("setStandardIcon", item);
         standard.setAccessible(true);
         Method create = bitmap.getDeclaredMethod("newIcon", Context.class, int.class, shape);
+        Class<?> lookup = Class.forName("com.android.launcher3.icons.cache.CacheLookupFlag", false, loader);
+        updateMask = lookup.getDeclaredMethod("updateMask", int.class, boolean.class);
+        Class<?> cache = Class.forName("com.android.launcher3.icons.IconCache", false, loader);
+        Class<?> receiver = Class.forName("com.android.launcher3.icons.IconCache$ItemInfoUpdateReceiver", false, loader);
+        updateInBackground = cache.getDeclaredMethod("updateIconInBackground", java.util.concurrent.Executor.class, receiver, item, lookup);
+        Method titleAndIcon = cache.getDeclaredMethod("getTitleAndIcon", item, lookup, java.util.function.Supplier.class);
+        Class<?> request = Class.forName("com.android.launcher3.model.data.IconRequestInfo", false, loader);
+        java.lang.reflect.Constructor<?> requestInit = request.getDeclaredConstructor(item,
+                android.content.pm.LauncherActivityInfo.class, byte[].class, boolean.class, lookup);
+        bitmapField = item.getField("bitmap");
+        themedField = bitmap.getField("themedBitmap");
+        Class<?> theme = Class.forName("com.android.launcher3.graphics.ThemeManager", false, loader);
+        themeSingleton = theme.getField("INSTANCE").get(null);
+        themeGet = themeSingleton.getClass().getMethod("get", Context.class);
+        themeState = theme.getField("iconState");
+        themeController = themeState.getType().getField("themeController");
+        Method verify = theme.getDeclaredMethod("verifyIconState");
         module.deoptimize(bubble.getDeclaredMethod("applyIconAndLabel", item));
         module.deoptimize(bubble.getDeclaredMethod("applyFromWorkspaceItem",
                 Class.forName("com.android.launcher3.model.data.WorkspaceItemInfo", false, loader)));
@@ -56,7 +87,30 @@ final class DrawerMonet {
                 if (predictions != null) synchronized (gridIcons) {
                     gridIcons.put(view, new java.lang.ref.WeakReference<>(predictions));
                 }
-                return inScope(binding, enabled && eligibleItem(view, chain.getArg(0)), chain::proceed);
+                Object info = chain.getArg(0);
+                boolean active = enabled && eligibleItem(view, info);
+                Object result = inScope(binding, active, chain::proceed);
+                if (active && appInfo.isInstance(info)) upgrade(view, info);
+                return result;
+            }));
+            // New drawer lookups keep the monochrome layer while enabled (bulk loader and single loads).
+            hooks.add(module.hook(requestInit).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                if (!enabled || !appInfo.isInstance(chain.getArg(0))) return chain.proceed();
+                Object[] args = chain.getArgs().toArray();
+                args[4] = themedLookup(args[4]);
+                return chain.proceed(args);
+            }));
+            hooks.add(module.hook(titleAndIcon).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                if (!enabled || !appInfo.isInstance(chain.getArg(0))) return chain.proceed();
+                Object[] args = chain.getArgs().toArray();
+                args[1] = themedLookup(args[1]);
+                return chain.proceed(args);
+            }));
+            // The wallpaper picker themed-icon switch lands here; follow it and tell the module.
+            hooks.add(module.hook(verify).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Object result = chain.proceed();
+                refreshSystemTheme();
+                return result;
             }));
             hooks.add(module.hook(create).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 if (!enabled || !Boolean.TRUE.equals(binding.get())) return chain.proceed();
@@ -72,6 +126,68 @@ final class DrawerMonet {
     }
 
     static int themedFlags(int flags) { return flags | 1; }
+
+    private Object themedLookup(Object flag) throws ReflectiveOperationException {
+        return flag == null ? null : updateMask.invoke(flag, THEMED_LOOKUP, true);
+    }
+
+    /** One background reload per drawer item whose BitmapInfo was cached without its themed layer. */
+    private void upgrade(View view, Object info) {
+        try {
+            Object bitmap = bitmapField.get(info);
+            if (bitmap == null || themedField.get(bitmap) != null || upgraded.put(info, Boolean.TRUE) != null) return;
+            Object cache = iconCache();
+            if (cache == null || !updateInBackground.getParameterTypes()[1].isInstance(view)) return;
+            Object flag = bitmap.getClass().getMethod("getMatchingLookupFlag").invoke(bitmap);
+            updateInBackground.invoke(cache, (java.util.concurrent.Executor) main::post, view, info, themedLookup(flag));
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            android.util.Log.w("NcDrawerMonet", "themed reload failed", failure);
+        }
+    }
+
+    private Object iconCache() throws ReflectiveOperationException {
+        if (iconCacheRef == null) {
+            ClassLoader loader = recycler.getClassLoader();
+            Class<?> state = Class.forName("com.android.launcher3.LauncherAppState", false, loader);
+            Object singleton = state.getField("INSTANCE").get(null);
+            Object app = singleton.getClass().getMethod("get", Context.class).invoke(singleton, context);
+            iconCacheRef = state.getField("iconCache").get(app);
+        }
+        return iconCacheRef;
+    }
+
+    private boolean readSystemTheme() {
+        try {
+            Object manager = themeGet.invoke(themeSingleton, context);
+            Object state = manager == null ? null : themeState.get(manager);
+            return state != null && themeController.get(state) != null;
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            return false;
+        }
+    }
+
+    private void refreshSystemTheme() {
+        if (context == null || worker == null) return;
+        boolean themed = readSystemTheme();
+        main.post(() -> { systemThemed = themed; apply(); });
+        worker.post(() -> {
+            if (Boolean.valueOf(themed).equals(reportedThemed)) return;
+            try {
+                Bundle report = new Bundle(); report.putBoolean("systemThemed", themed);
+                context.getContentResolver().call(IconLayerStore.URI, "report", null, report);
+                reportedThemed = themed;
+            } catch (RuntimeException failure) { android.util.Log.w("NcDrawerMonet", "theme report failed", failure); }
+        });
+    }
+
+    private void apply() {
+        boolean next = userEnabled && systemThemed;
+        if (enabled == next) return;
+        enabled = next;
+        android.util.Log.i("NcDrawerMonet", "enabled=" + next + " user=" + userEnabled + " systemThemed=" + systemThemed);
+        if (!next) upgraded.clear();
+        rebind();
+    }
 
     static Method itemNewIcon(Class<?> item) throws NoSuchMethodException {
         try { return item.getDeclaredMethod("newIcon", Context.class, int.class); }
@@ -146,6 +262,7 @@ final class DrawerMonet {
             @Override public void onReceive(Context c, Intent intent) { worker.post(DrawerMonet.this::reload); }
         }, new IntentFilter(ShadeStore.CHANGED), IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED);
         worker.post(this::reload);
+        main.post(this::refreshSystemTheme);
     }
 
     void artworkChanged() { main.post(this::rebind); }
@@ -156,12 +273,7 @@ final class DrawerMonet {
                 Uri.parse("content://" + ShadeStore.AUTHORITY), "drawer", null, null));
         // A failed opt-in read must leave the native renderer untouched.
         boolean next = read.live() && read.config() != null && read.config().getBoolean("drawerMonet", false);
-        main.post(() -> {
-            if (enabled == next) return;
-            enabled = next;
-            android.util.Log.i("NcDrawerMonet", "config enabled=" + next);
-            rebind();
-        });
+        main.post(() -> { userEnabled = next; apply(); });
         if (!read.live()) worker.postDelayed(this::reload, settings.retryDelay(3000));
     }
 }

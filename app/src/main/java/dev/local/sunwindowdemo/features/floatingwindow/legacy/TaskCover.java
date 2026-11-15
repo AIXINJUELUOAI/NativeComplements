@@ -76,11 +76,13 @@ final class TaskCover {
         if(iconDrawn)return;
         // An unknown snapshot is not an explicit choice to use the application original.
         if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return;
-        Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(iconContext,pkg);
-        if(drawable==null){
-            try{drawable=iconContext.getPackageManager().getApplicationIcon(pkg);}
-            catch(android.content.pm.PackageManager.NameNotFoundException missing){drawable=iconContext.getPackageManager().getDefaultActivityIcon();}
-        }
+        Drawable original;
+        try{original=iconContext.getPackageManager().getApplicationIcon(pkg);}
+        catch(android.content.pm.PackageManager.NameNotFoundException missing){original=iconContext.getPackageManager().getDefaultActivityIcon();}
+        // Monet first when enabled (and the system uses themed icons), then module colour artwork.
+        Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.cover(iconContext,pkg,original);
+        if(drawable==null)drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(iconContext,pkg);
+        if(drawable==null)drawable=original;
         Surface canvasSurface=new Surface(icon);
         try{
             Canvas canvas=canvasSurface.lockCanvas(null);

@@ -73,6 +73,14 @@ final class NavbarSystem {
     }
     private final Class<?> insetsClass;
     private final NavbarInsets stateTools;
+    static final String AUTO_SOURCE = "自动";
+    /** Per-window classifier decision (COLOR or FLOATING); absent until the first classification. */
+    private final Map<Object, Integer> autoModes = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
+    /** Last decision per component, so a revisited page starts in its previous mode without a jump. */
+    private final java.util.concurrent.ConcurrentHashMap<String, Integer> autoCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private Object autoWindow;
+    private long autoAt;
+    private int autoPending = -1, autoVotes;
     private final Method sourceSize, sourceAt, sourceType, sourceVisible;
     private final Method capture, build, crop, scale;
     private final Method broadcast;
@@ -179,33 +187,56 @@ final class NavbarSystem {
             installed.add(module.hook(layoutWindow).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 NavbarRules.Choice previous = layoutChoice.get();
                 NavbarRules.Choice selected = null;
-                try {
-                    Object target = chain.getArg(0);
-                    if (enabled && !suspended && gestures && context != null) {
-                        Object display = NavbarReflect.call(target, "getDisplayContent");
-                        Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
-                        NavbarRules.Choice candidate = choice(target, false);
-                        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(target, "mAttrs");
-                        Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
-                        if (candidate.mode() == NavbarStore.FLOATING
-                                && attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION
-                                && attrs.width == WindowManager.LayoutParams.MATCH_PARENT && attrs.height == WindowManager.LayoutParams.MATCH_PARENT
-                                && (Integer) NavbarReflect.call(target, "getDisplayId") == 0
-                                && bounds.height() >= bounds.width()
-                                && eligible(target, display, raw)) selected = candidate;
-                    }
-                } catch (ReflectiveOperationException | RuntimeException failure) {
+                try { selected = floatingFor(chain.getArg(0)); }
+                catch (ReflectiveOperationException | RuntimeException failure) {
                     // Exact layout context could not be established: leave the native input untouched.
                 }
                 layoutChoice.set(selected);
                 try { return chain.proceed(); }
                 finally { if (previous == null) layoutChoice.remove(); else layoutChoice.set(previous); }
             }));
+            // The frame alone is not enough: an application outside the LSPosed scope still sees the
+            // navigation source, so its DecorView paints a (usually black) bar and pads its content.
+            // Removing only the navigation-bar source from the state sent to that window makes the
+            // native client lay out edge to edge itself; gesture sources and the IME are untouched.
+            Class<?> insetsPolicy = Class.forName("com.android.server.wm.InsetsPolicy", false, loader);
+            Method adjust = insetsPolicy.getDeclaredMethod("adjustInsetsForWindow", window(loader), insetsClass, boolean.class);
+            installed.add(module.hook(adjust).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Object result = chain.proceed();
+                try {
+                    NavbarRules.Choice selected = result == null ? null : floatingFor(chain.getArg(0));
+                    if (selected != null && selected.consumesNavigationInsets()) return stateTools.strip(result);
+                } catch (ReflectiveOperationException | RuntimeException failure) {
+                    // Keep the native state when the window context cannot be established.
+                }
+                return result;
+            }));
             android.util.Log.i("NativeNavbar", "TRANSPARENT_LAYOUT_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             installed.forEach(XposedInterface.HookHandle::unhook);
             android.util.Log.w("NativeNavbar", "Transparent server layout unavailable", error);
         }
+    }
+
+    private static Class<?> window(ClassLoader loader) throws ClassNotFoundException {
+        return Class.forName("com.android.server.wm.WindowState", false, loader);
+    }
+
+    /** Floating choice for a full-screen portrait application window, or null for native handling. */
+    private NavbarRules.Choice floatingFor(Object target) throws ReflectiveOperationException {
+        if (!enabled || suspended || !gestures || context == null) return null;
+        Object display = NavbarReflect.call(target, "getDisplayContent");
+        if (display == null) return null;
+        Object raw = NavbarReflect.call(NavbarReflect.call(display, "getInsetsStateController"), "getRawInsetsState");
+        NavbarRules.Choice candidate = choice(target, false);
+        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(target, "mAttrs");
+        Rect bounds = (Rect) NavbarReflect.call(display, "getBounds");
+        return candidate.mode() == NavbarStore.FLOATING
+                && attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION
+                && attrs.width == WindowManager.LayoutParams.MATCH_PARENT && attrs.height == WindowManager.LayoutParams.MATCH_PARENT
+                && (Integer) NavbarReflect.call(target, "getDisplayId") == 0
+                && bounds.height() >= bounds.width()
+                && eligible(target, display, raw) ? candidate : null;
     }
 
     static WindowManager.LayoutParams transparentLayout(WindowManager.LayoutParams original, NavbarRules.Choice selected) throws ReflectiveOperationException {
@@ -329,8 +360,90 @@ final class NavbarSystem {
             versions.put(pkg, version);
         }
         WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
-        return rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
+        NavbarRules.Choice resolved = rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
                 attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION);
+        if (resolved.mode() != NavbarStore.AUTO) return resolved;
+        // Until the classifier has seen this window it keeps the native layout with sampled color.
+        Integer mode = autoModes.get(window);
+        if (mode == null) mode = autoCache.get(component.flattenToShortString());
+        return new NavbarRules.Choice(mode == null ? NavbarStore.COLOR : mode, null, AUTO_SOURCE, 0);
+    }
+
+    /**
+     * Single-frame layout classification of the app layer: 320dp above the navigation boundary plus the
+     * window's own rows inside the navigation area. Runs on the worker outside the WM lock, at most every
+     * 700ms per window. COLOR -> FLOATING needs two agreeing frames; FLOATING is kept for the window's
+     * lifetime because the edge-to-edge layout it causes can no longer be judged against the boundary.
+     * @return true when the decision changed and the window was asked to relayout.
+     */
+    private boolean classify(Object window, SurfaceControl surface, Rect frame, int navTop, int navHeight, String component)
+            throws ReflectiveOperationException {
+        if (component == null) return false;
+        long now = SystemClock.uptimeMillis();
+        Integer current = autoModes.get(window);
+        if (current != null && current == NavbarStore.FLOATING) return false;
+        if (window == autoWindow && now - autoAt < 700) return false;
+        if (window != autoWindow) { autoWindow = window; autoPending = -1; autoVotes = 0; }
+        autoAt = now;
+        android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
+        float density = config == null ? 0 : config.densityDpi / 160f;
+        if (density <= 0 || navTop <= 0) return false;
+        int top = Math.max(0, navTop - (int) Math.ceil(320 * density));
+        int width = frame.width(), navRows = Math.max(0, Math.min(frame.height(), navTop + navHeight) - navTop);
+        int[] roi = pixels(surface, new Rect(0, top, width, navTop));
+        int[] nav = navRows == 0 ? new int[0] : pixels(surface, new Rect(0, navTop, width, navTop + navRows));
+        if (roi == null || nav == null) return false;
+        Bundle verdict = NavbarLayout.analyze(roi, width, navTop - top, density, nav, width, navRows);
+        String decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
+        int next = "EXTEND".equals(decision) ? NavbarStore.COLOR : "NATIVE".equals(decision) ? NavbarStore.FLOATING : -1;
+        if (next < 0) return false;
+        int previous = current != null ? current : autoCache.getOrDefault(component, -1);
+        if (next == autoPending) autoVotes++; else { autoPending = next; autoVotes = 1; }
+        boolean first = current == null && previous < 0;
+        if (next == previous || (!first && next == NavbarStore.FLOATING && autoVotes < 2)) {
+            if (current == null && next == previous) autoModes.put(window, next);
+            return false;
+        }
+        autoModes.put(window, next);
+        if (autoCache.size() > 256) autoCache.clear();
+        autoCache.put(component, next);
+        android.util.Log.i("NativeNavbar", "AUTO " + component + " -> " + (next == NavbarStore.FLOATING ? "floating" : "extend")
+                + " reason=" + verdict.getString("reviewReason"));
+        if (previous != next) synchronized (lock) {
+            NavbarReflect.call(window, "notifyInsetsChanged");
+            NavbarReflect.call(wm, "requestTraversal");
+        }
+        return previous != next;
+    }
+
+    /** Opaque app-layer pixels of a window-local rectangle, or null when unavailable or protected. */
+    private int[] pixels(SurfaceControl surface, Rect rect) {
+        HardwareBuffer hardware = null;
+        Bitmap bitmap = null, software = null;
+        try {
+            if (surface == null || !surface.isValid() || rect.isEmpty()) return null;
+            Object builder = captureBuilder.newInstance(surface);
+            crop.invoke(builder, rect);
+            scale.invoke(builder, 1f, 1f);
+            Object buffer = capture.invoke(null, build.invoke(builder));
+            if (buffer == null) return null;
+            hardware = (HardwareBuffer) NavbarReflect.call(buffer, "getHardwareBuffer");
+            if ((Boolean) NavbarReflect.call(buffer, "containsSecureLayers")) return null;
+            bitmap = (Bitmap) NavbarReflect.call(buffer, "asBitmap");
+            if (bitmap == null) return null;
+            software = bitmap.copy(Bitmap.Config.ARGB_8888, false);
+            if (software == null || software.getWidth() != rect.width() || software.getHeight() != rect.height()) return null;
+            int[] out = new int[rect.width() * rect.height()];
+            software.getPixels(out, 0, rect.width(), 0, 0, rect.width(), rect.height());
+            for (int pixel : out) if ((pixel >>> 24) != 255) return null;
+            return out;
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            return null;
+        } finally {
+            if (software != null) software.recycle();
+            if (bitmap != null) bitmap.recycle();
+            if (hardware != null) hardware.close();
+        }
     }
 
     private boolean eligible(Object window, Object display, Object raw) throws ReflectiveOperationException {
@@ -524,6 +637,9 @@ final class NavbarSystem {
                 publish(true, 0, NavbarStore.FLOATING);
                 return;
             }
+            if (AUTO_SOURCE.equals(selected.source())
+                    && classify(window, surface, frame, navigationTop(frame, bounds, nav.bottom), nav.bottom, snapshot.component()))
+                selected = choice(window, true);
             if (selected.mode() == NavbarStore.FLOATING) { runtime("悬浮中 · " + selected.source()); publish(true, 0, NavbarStore.FLOATING); return; }
             if (snapshot.screenshot() && lastGood != null && lastGood.matches(window, selected.mode(), nav.bottom)) {
                 lastGood = new Frame(window, lastGood.color(), lastGood.mode(), nav.bottom, SystemClock.uptimeMillis());

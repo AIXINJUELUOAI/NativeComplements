@@ -24,7 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
-private val modes = listOf("保留系统原有", "取色", "悬浮")
+private val modes = listOf("保留系统原有", "取色", "悬浮", "自动")
 private fun modeLabel(mode: Int) = modes.getOrElse(mode) { modes[0] }
 
 internal fun navbarSearchMatches(query: String, label: String, packageName: String, activity: String = ""): Boolean {
@@ -98,7 +98,7 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
                 ToggleRow("横屏导航条透明", "移除手势导航条背后的系统阴影", settings.getBoolean("landscape_clear", true)) {
                     NavbarStore.setLandscapeClear(context, it)
                 }
-                SettingRow("通用默认模式", modeLabel(settings.getInt("default_mode", NavbarStore.COLOR)), onClick = { showDefault = true })
+                SettingRow("通用默认模式", modeLabel(settings.getInt("default_mode", NavbarStore.AUTO)), onClick = { showDefault = true })
             }
             Hint("竖屏按应用或 Activity 选择模式，横屏可保持导航条透明。推荐作用域不等于已授权：请在 LSPosed 中确认系统框架、SystemUI、Pixel 桌面及需要适配的推荐应用作用域，变更后手动重启生效；规则由本页总开关统一控制。")
             GroupTitle("逐应用设置")
@@ -112,7 +112,7 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
             val source = when {
                 packageMode >= 0 -> "应用默认 · ${modeLabel(packageMode)}"
                 templates?.optJSONObject(app.packageName) != null -> "内置适配名单"
-                else -> "通用 · ${modeLabel(settings.getInt("default_mode", NavbarStore.COLOR))}"
+                else -> "通用 · ${modeLabel(settings.getInt("default_mode", NavbarStore.AUTO))}"
             }
             SettingsGroup {
                 SettingRow(app.label, source + if (activityRules > 0) " · $activityRules 条独立规则" else "",
@@ -142,7 +142,7 @@ fun NavbarScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp, on
     if (showDefault) ModalBottomSheet(onDismissRequest = { showDefault = false }) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             Text("通用默认模式", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(bottom = 14.dp))
-            NavbarModeRows(settings.getInt("default_mode", NavbarStore.COLOR), null) {
+            NavbarModeRows(settings.getInt("default_mode", NavbarStore.AUTO), null) {
                 NavbarStore.setDefaultMode(context, it)
                 showDefault = false
             }

@@ -40,6 +40,10 @@ public final class IconLayerStore {
         b.putInt("loaded", p.getInt("loaded", 0));
         b.putInt("loadFailures", p.getInt("loadFailures", 0));
         b.putLong("seen", p.getLong("seen", 0));
+        // Launcher-reported system themed-icon state gates every Monet surface outside the desktop.
+        b.putBoolean("systemThemed", p.getBoolean("system_themed", false));
+        b.putBoolean("coverMonet", dev.local.sunwindowdemo.features.shade.ShadeStore.coverMonet(c));
+        b.putBoolean("windowMonet", dev.local.sunwindowdemo.features.shade.ShadeStore.windowMonet(c));
         return b;
     }
 
@@ -73,7 +77,14 @@ public final class IconLayerStore {
         prefs(c).edit().putStringSet("originals", set).apply(); refresh(c);
     }
 
+    public static boolean systemThemed(Context c) { return prefs(c).getBoolean("system_themed", false); }
+
     static void report(Context c, Bundle b) {
+        if (b.containsKey("systemThemed")) {
+            boolean themed = b.getBoolean("systemThemed");
+            if (themed != systemThemed(c)) { prefs(c).edit().putBoolean("system_themed", themed).commit(); refresh(c); }
+            if (b.size() == 1) return;
+        }
         prefs(c).edit().putString("version", b.getString("version", ""))
             .putString("status", limit(b.getString("status", "")))
             .putString("error", limit(b.getString("error", "")))

@@ -57,17 +57,18 @@ fun SettingRow(title: String, subtitle: String? = null, onClick: (() -> Unit)? =
 }
 
 @Composable
-fun ToggleRow(title: String, subtitle: String? = null, value: Boolean, onChange: (Boolean) -> Unit) {
+fun ToggleRow(title: String, subtitle: String? = null, value: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp))
         .background(MaterialTheme.colorScheme.surfaceContainerLow)
-        .toggleable(value, role = Role.Switch, onValueChange = onChange)
+        .toggleable(value, enabled = enabled, role = Role.Switch, onValueChange = onChange)
         .padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        val alpha = if (enabled) 1f else 0.38f
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = alpha))
+            if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = alpha))
         }
-        Switch(checked = value, onCheckedChange = null)
+        Switch(checked = value, onCheckedChange = null, enabled = enabled)
     }
 }
 

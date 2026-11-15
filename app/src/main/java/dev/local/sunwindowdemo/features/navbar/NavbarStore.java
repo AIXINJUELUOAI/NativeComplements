@@ -7,7 +7,8 @@ import android.os.Bundle;
 /** Activity rules are private to the manager and readable only by their owning UID. */
 public final class NavbarStore {
     public static final String AUTHORITY = "dev.nativecomplements.module.navbar";
-    public static final int ORIGINAL = 0, COLOR = 1, FLOATING = 2;
+    /** AUTO: the single-frame layout classifier picks COLOR (extend) or FLOATING per window. */
+    public static final int ORIGINAL = 0, COLOR = 1, FLOATING = 2, AUTO = 3;
     private NavbarStore() {}
     private static String templates;
 
@@ -36,7 +37,7 @@ public final class NavbarStore {
     }
 
     public static void setMode(Context context, String packageName, String activity, int mode) {
-        if (mode < ORIGINAL || mode > FLOATING) throw new IllegalArgumentException("mode");
+        if (mode < ORIGINAL || mode > AUTO) throw new IllegalArgumentException("mode");
         preferences(context).edit().putInt(packageName + "/" + activity, mode).apply();
         changed(context);
     }
@@ -47,7 +48,7 @@ public final class NavbarStore {
     }
 
     public static void setDefaultMode(Context context, int mode) {
-        if (mode < ORIGINAL || mode > FLOATING) throw new IllegalArgumentException("mode");
+        if (mode < ORIGINAL || mode > AUTO) throw new IllegalArgumentException("mode");
         preferences(context).edit().putInt("default_mode", mode).apply();
         changed(context);
     }
@@ -64,7 +65,7 @@ public final class NavbarStore {
     public static Bundle read(Context context, String packageName) {
         Bundle snapshot = systemSnapshot(context);
         Bundle result = new Bundle();
-        result.putInt("*", snapshot.getInt("default_mode", COLOR));
+        result.putInt("*", snapshot.getInt("default_mode", AUTO));
         String prefix = packageName + "/";
         for (String key : snapshot.keySet()) {
             Object value = snapshot.get(key);
@@ -74,7 +75,7 @@ public final class NavbarStore {
             }
         }
         result.putBoolean("enabled", snapshot.getBoolean("enabled", false));
-        result.putInt("default_mode", snapshot.getInt("default_mode", COLOR));
+        result.putInt("default_mode", snapshot.getInt("default_mode", AUTO));
         org.json.JSONObject packages = new org.json.JSONObject();
         try {
             org.json.JSONObject all = new org.json.JSONObject(snapshot.getString("templates", "{}"))

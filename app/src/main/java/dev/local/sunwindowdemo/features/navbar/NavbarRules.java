@@ -59,10 +59,10 @@ public final class NavbarRules {
                         rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));
             }
         }
-        return new Choice(valid(settings.getInt("default_mode", NavbarStore.COLOR)), null, "通用策略");
+        return new Choice(valid(settings.getInt("default_mode", NavbarStore.AUTO)), null, "通用策略");
     }
 
-    private static int valid(int mode) { return mode >= 0 && mode <= 2 ? mode : 0; }
+    private static int valid(int mode) { return mode >= 0 && mode <= NavbarStore.AUTO ? mode : 0; }
 
     private static String bestMatch(JSONObject rules, String activity) {
         if (rules.has(activity)) return activity;

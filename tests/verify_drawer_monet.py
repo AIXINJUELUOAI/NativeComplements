@@ -93,12 +93,16 @@ assert 'if (!"read".equals(method)) throw new IllegalArgumentException' in provi
 assert 'Map<View, java.lang.ref.WeakReference<View>> gridIcons = new WeakHashMap<>()' in drawer
 assert 'gridIcons.get(view)' in drawer and 'searchRecycler.isInstance(parent)' in drawer
 assert 'view.getParent() == null' in drawer and '!searchRecycler.isInstance(createdFor)' in drawer
-assert 'eligibleItem(view, chain.getArg(0))' in drawer
+assert 'eligibleItem(view, info)' in drawer and 'Object info = chain.getArg(0);' in drawer
+# Drawer lookups request themed cache entries; loaded items are upgraded through the native background reload.
+assert 'updateIconInBackground' in drawer and 'THEMED_LOOKUP = 8' in drawer and 'userEnabled && systemThemed' in drawer
 assert 'predictionParent(view)' in drawer and 'PredictionRowView' in drawer
 assert not (src / 'features/iconlayers/DrawerMonetAssets.java').exists()
 for forbidden in ['Bitmap.createBitmap', 'MaterialKey', 'loadMaterial', 'createThemedBitmap', 'safeMonochrome',
-                  'IconAssets.', 'create.invoke', 'getIcon(', 'getField("bitmap")']:
+                  'IconAssets.', 'create.invoke', 'getIcon(']:
     assert forbidden not in drawer, 'drawer must reuse native cached material without a second pipeline: ' + forbidden
+# Reading item.bitmap is allowed only to detect a cache entry stripped of its themed layer.
+assert drawer.count('bitmapField.get(') == 1 and 'themedField.get(bitmap) != null' in drawer
 renderer = drawer.split('module.hook(create)', 1)[1].split('}));', 1)[0]
 assert 'chain.proceed(args)' in renderer and 'worker.post' not in renderer
 assert 'args[1] = themedFlags((Integer) args[1]);' in renderer
@@ -110,7 +114,8 @@ assert 'readingOriginal' not in module
 assert module.index('drawerMonet.artworkChanged();', module.index('if (!IconAssets.load')) > module.index('if (!IconAssets.load')
 assert 'Intent.ACTION_MANAGED_PROFILE_AVAILABLE' in module and 'Intent.ACTION_USER_UNLOCKED' in module
 assert 'read.live() && read.config() != null' in drawer, "failed read must restore native, not stale enable"
-assert 'main.post(() -> {' in drawer and 'standard.invoke(view, view.getTag())' in drawer
+assert 'main.post(() -> {' in drawer or 'main.post(() -> { userEnabled = next; apply(); });' in drawer
+assert 'standard.invoke(view, view.getTag())' in drawer
 assert 'IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED' in drawer
 assert 'getDeclaredMethod("onBindViewHolder"' not in drawer, "avoid obfuscated bridge/overload hook"
 for page in ["home/HomeScreen.kt", "navigation/ModuleApp.kt"]:

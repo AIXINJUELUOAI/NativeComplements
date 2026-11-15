@@ -42,6 +42,12 @@ final class AppCatalog {
         Drawable adapted=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(c,pkg);
         return normalized(c,adapted!=null?adapted:original);
     }
+    /** Floating menu, sector and open-wait icons: Monet when the window Monet switch is effective. */
+    static Drawable windowIcon(Context c,String pkg,Drawable original){
+        if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return new ColorDrawable(Color.TRANSPARENT);
+        Drawable themed=dev.local.sunwindowdemo.features.iconlayers.IconAssets.window(c,pkg,original);
+        return themed!=null?normalized(c,themed):icon(c,pkg,original);
+    }
     private static Drawable raster(Context c,Drawable icon){
         Bitmap bitmap=Bitmap.createBitmap(192,192,Bitmap.Config.ARGB_8888);
         Rect saved=new Rect(icon.getBounds());int alpha=icon.getAlpha();
@@ -56,7 +62,7 @@ final class AppCatalog {
         for (var activity : launcher.getActivityList(null,android.os.Process.myUserHandle())) {
             String pkg = activity.getComponentName().getPackageName();
             if (pkg.equals(Wire.PKG) || !seen.add(pkg)) continue;
-            try { result.add(new App(pkg, activity.getLabel().toString(), icon(c,pkg,activity.getIcon(c.getResources().getDisplayMetrics().densityDpi)))); }
+            try { result.add(new App(pkg, activity.getLabel().toString(), windowIcon(c,pkg,activity.getIcon(c.getResources().getDisplayMetrics().densityDpi)))); }
             catch (RuntimeException ignored) { }
         }
         result.sort(Comparator.comparing((App a)->a.section.equals("#")?"~"+a.sortKey:a.sortKey)

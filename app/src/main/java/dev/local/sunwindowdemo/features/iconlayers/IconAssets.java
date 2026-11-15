@@ -19,6 +19,8 @@ public final class IconAssets {
     private static final AtomicInteger epoch=new AtomicInteger();
     private static volatile Handler worker;
     private static volatile boolean ready;
+    // Effective switches: the user's choice AND the launcher-reported system themed-icon state.
+    private static volatile boolean coverMonet, windowMonet;
     private static Context host;
     private static dev.local.sunwindowdemo.core.HostSnapshot settings;
     private static final List<Runnable> listeners=new ArrayList<>();
@@ -108,6 +110,8 @@ public final class IconAssets {
             }
         }
         if(stale.getAsBoolean())return false;
+        boolean themed=config.getBoolean("systemThemed");
+        coverMonet=themed&&config.getBoolean("coverMonet");windowMonet=themed&&config.getBoolean("windowMonet");
         snapshot=new Snapshot(Map.copyOf(entries),generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));ready=true;return true;
     }
     static Snapshot snapshot(){return snapshot;}
@@ -128,6 +132,33 @@ public final class IconAssets {
             }else return new ImportedIcon(c.getResources(),entry.background,entry.foreground,entry.mono);
         }
         return IconLayerStore.TARGET.equals(pkg)&&current.demo!=0?new LayeredTestIcon(c.getResources(),current.demo):null;
+    }
+    /** Monet icon for the launch/floating-window cover, or null to keep the current artwork. */
+    public static Drawable cover(Context c,String pkg,Drawable original){return coverMonet?themed(c,pkg,original):null;}
+    /** Monet icon for the floating-window menu and sector, or null to keep the current artwork. */
+    public static Drawable window(Context c,String pkg,Drawable original){return windowMonet?themed(c,pkg,original):null;}
+    /**
+     * Same monochrome source precedence as the desktop (module artwork first, then the app's own
+     * monochrome layer) and the launcher's themed colours. Apps without any monochrome stay original.
+     */
+    static Drawable themed(Context c,String pkg,Drawable original){
+        Entry entry=snapshot.entries.get(pkg);Drawable mono=null;
+        if(entry!=null&&entry.mono!=null)mono=drawable(c,entry.mono);
+        else if(original instanceof AdaptiveIconDrawable adaptive&&adaptive.getMonochrome()!=null){
+            Drawable.ConstantState state=adaptive.getMonochrome().getConstantState();
+            mono=state!=null?state.newDrawable(c.getResources()).mutate():adaptive.getMonochrome().mutate();
+        }
+        if(mono==null)return null;
+        int[] colors=themedColors(c);
+        mono.setTintList(null);mono.setTint(colors[1]);mono.setTintMode(PorterDuff.Mode.SRC_IN);
+        return new AdaptiveIconDrawable(new ColorDrawable(colors[0]),mono);
+    }
+    /** {background, foreground}, as Launcher3 MonoIconThemeController.getColors. */
+    static int[] themedColors(Context c){
+        boolean dark=(c.getResources().getConfiguration().uiMode&android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+            ==android.content.res.Configuration.UI_MODE_NIGHT_YES;
+        return dark?new int[]{c.getColor(android.R.color.system_neutral1_800),c.getColor(android.R.color.system_accent1_100)}
+            :new int[]{c.getColor(android.R.color.system_accent1_100),c.getColor(android.R.color.system_neutral2_700)};
     }
     public static Drawable notification(Context c,String pkg){
         Entry entry=snapshot.entries.get(pkg);
