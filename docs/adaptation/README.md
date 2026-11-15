@@ -39,6 +39,8 @@
 | [主版 APK](<../../deliverables/NativeComplements-0.11.0.apk>) | `e809948b3b7f9b44cf7267b92343627789a8679dd7146629fce8b79a3c6b2512` |
 | [独立小窗 APK](<../../deliverables/NativeComplements-Window-0.11.0.apk>) | `15478f52572dc36f8cd2949aadaf9a35be234ceba8e7de2c0a5a0ef62a87e51e` |
 
+Alive 实现提交 `a5543ce` 已推送，远端回执 `5ee8e95..a5543ce main -> main`；与前序全部解耦提交的顺序可在 main 历史直接核对。发布标签为 `v0.11.0`（只包含已核验的源代码/说明，不打包官方资源）。
+
 证书 SHA-256 仍为 `28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104`。**真机启动、桌面与 GPU/JNI、五效果、锁屏/PIN/生物识别、切回普通壁纸均尚未执行，主机检查不能据此称全部真机可用或保证不会出错；AOD 未支持，LOS 亦未经适配验证。** 快速隐藏会释放资源，重新可见时从唤醒 seed 重建，不承诺跨隐藏周期视觉连续。
 
 ## 已交付：0.10.0 / code139 第一轮代码闭环完成
