@@ -221,7 +221,7 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit, onNavbar: 
     SettingsGroup {
         SettingRow("小窗诊断与恢复", onClick = onWindow)
         SettingRow("图标实验与诊断", onClick = onIcons)
-        SettingRow("导航栏诊断与标注", "标注模式、导出／清除学习结果", onClick = onNavbar)
+        SettingRow("导航栏诊断与标注", "运行状态与人工标注", onClick = onNavbar)
     }
     GroupTitle("其他服务")
     SettingsGroup {

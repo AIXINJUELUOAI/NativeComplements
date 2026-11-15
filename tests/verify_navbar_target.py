@@ -1,4 +1,4 @@
-"""Read-only API37 preflight for the system-only navigation backend."""
+"""Read-only API37 preflight for navigation hosts and scoped-app container reporting."""
 from pathlib import Path
 import hashlib
 import json
@@ -17,6 +17,8 @@ checks = {
     "com.android.server.wm.ConfigurationContainer": [("getWindowingMode", "()I"), ("getBounds", "()Landroid/graphics/Rect;")],
     "android.app.BroadcastOptions": [("makeBasic", "()Landroid/app/BroadcastOptions;"), ("setShareIdentityEnabled", "(Z)Landroid/app/BroadcastOptions;"), ("setDeliveryGroupPolicy", "(I)Landroid/app/BroadcastOptions;"), ("toBundle", "()Landroid/os/Bundle;")],
     "android.content.ComponentName": [("flattenToShortString", "()Ljava/lang/String;")],
+    "android.view.View": [("getViewRootImpl", "()Landroid/view/ViewRootImpl;")],
+    "android.view.ViewGroup": [("getChildDrawingOrder", "(I)I")],
     "com.android.server.wm.WindowState": [("getConfiguration", "()Landroid/content/res/Configuration;"), ("getInsetsState", "(Z)Landroid/view/InsetsState;"), ("getFrame", "()Landroid/graphics/Rect;"), ("notifyInsetsChanged", "()V"), ("isRequestedVisible", "(I)Z"), ("isVisible", "()Z"), ("finishDrawing", "(Landroid/view/SurfaceControl$Transaction;I)Z")],
     "android.view.InsetsState": [("<init>", "(Landroid/view/InsetsState;Z)V"), ("sourceSize", "()I"), ("sourceAt", "(I)Landroid/view/InsetsSource;"), ("removeSourceAt", "(I)V"), ("calculateInsets", "(Landroid/graphics/Rect;Landroid/graphics/Rect;IZ)Landroid/graphics/Insets;")],
     "android.view.InsetsSource": [("getType", "()I"), ("isVisible", "()Z")],
@@ -43,6 +45,7 @@ checks["android.view.Window"] = [("getAttributes", "()Landroid/view/WindowManage
 checks["android.view.WindowInsetsController"] = [("getRequestedVisibleTypes", "()I")]
 checks["android.view.WindowInsets$Builder"] = [("setInsets", "(ILandroid/graphics/Insets;)Landroid/view/WindowInsets$Builder;"), ("setInsetsIgnoringVisibility", "(ILandroid/graphics/Insets;)Landroid/view/WindowInsets$Builder;")]
 checks["com.android.internal.policy.DecorView"] = []
+checks["android.view.ViewRootImpl"] = []
 dex.TARGETS = ["L" + name.replace(".", "/") + ";" for name in checks]
 classes = {}
 for relative, expected_hash in [
@@ -72,6 +75,8 @@ for name, methods in checks.items():
 for owner, name, descriptor in [
     ("Lcom/android/server/wm/DisplayPolicy;", "mNavBarBackgroundWindowCandidate", "Lcom/android/server/wm/WindowState;"),
     ("Lcom/android/server/wm/WindowState;", "mGlobalScale", "F"),
+    ("Lcom/android/server/wm/WindowState;", "mClient", "Landroid/view/IWindow;"),
+    ("Landroid/view/ViewRootImpl;", "mWindow", "Landroid/view/ViewRootImpl$W;"),
     ("Landroid/view/WindowManager$LayoutParams;", "surfaceInsets", "Landroid/graphics/Rect;"),
 ]:
     assert any(f["name"] == name and f["type"] == descriptor for f in classes[owner]["fields"]), (owner, name)
@@ -97,5 +102,5 @@ assert all(rule["mode"] in (0, 1, 2) and rule["source"] == "学习规则" and is
            and rule["samples"] >= 3 and rule["agreement"] >= 0.9 for rule in learned)
 assert all(app["enabled"] and "translucent_rules" not in app for app in templates["packages"].values())
 assert all(word not in json.dumps(templates, ensure_ascii=False) for word in ("ColorOS", "HyperOS", "HyperNavBar"))
-print(f"PASS: {count} exact public API37 methods; {len(whitelist)} whitelist applications plus com.google.android.*, {len(learned)} learned rules, "
+print(f"PASS: {count} exact public API37 methods; {len(whitelist)} whitelist applications plus com.google.android.*, {len(learned)} ignored historical learned rules, "
       "everything else AUTO; device behavior awaits verification")

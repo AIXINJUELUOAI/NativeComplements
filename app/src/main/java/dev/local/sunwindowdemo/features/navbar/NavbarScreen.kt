@@ -3,9 +3,6 @@ package dev.local.sunwindowdemo.features.navbar
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -26,7 +23,6 @@ import androidx.core.graphics.drawable.toBitmap
 import dev.local.sunwindowdemo.LaunchableApp
 import dev.local.sunwindowdemo.core.ui.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
@@ -284,40 +280,15 @@ fun NavbarDiagnosticsScreen() {
     }
     val snapshot = remember(revision) { status.all }
     val settings = rememberNavbarSettings()
-    var confirmClear by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val exportLearned = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
-        if (uri != null) scope.launch {
-            val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openOutputStream(uri, "wt")!!.use {
-                        it.write(NavbarStore.exportLearned(context).toByteArray(Charsets.UTF_8))
-                    }
-                }
-            }
-            Toast.makeText(context, if (result.isSuccess) "学习结果已导出" else "导出失败", Toast.LENGTH_SHORT).show()
-        }
-    }
     Column {
         SettingsGroup {
             SettingRow("系统宿主", snapshot["host"] as? String ?: "系统宿主尚未连接")
             SettingRow("最近运行状态", snapshot["runtime"] as? String ?: "等待应用窗口")
         }
-        GroupTitle("标注与学习")
+        GroupTitle("人工标注")
         SettingsGroup {
-            ToggleRow("标注模式", "屏幕上常驻一个可拖动的面板，显示当前页面的模式；点模式即写入该 Activity 的规则，可撤销",
+            ToggleRow("标注模式", "常驻面板显示底部容器、边界、检查耗时及建议／实际模式；需授权应用作用域，未知时保留原有。点模式写入当前页面规则，可撤销",
                 settings?.getBoolean("label_mode", false) ?: false) { NavbarStore.setLabelMode(context, it) }
-            SettingRow("导出学习结果", "自动模式记下的判断与手动规则，可合并进内置规则",
-                onClick = { exportLearned.launch("navbar-learned-${System.currentTimeMillis() / 1000}.json") })
-            SettingRow("清除学习结果", onClick = { confirmClear = true })
         }
     }
-    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false },
-        title = { Text("清除学习结果？") },
-        text = { Text("已记下的页面判断会全部删除，重启后自动模式从头学习。") },
-        confirmButton = { TextButton(onClick = {
-            NavbarStore.clearLearned(context); confirmClear = false
-            Toast.makeText(context, "已清除", Toast.LENGTH_SHORT).show()
-        }) { Text("清除") } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
 }

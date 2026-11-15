@@ -46,7 +46,8 @@ final class NavbarLabelHost {
     private static LinearLayout panel, row;
     private static TextView text, undoButton, fold;
     private static String pkg, activity, label = "", source = "", idle = "";
-    private static String note = "";
+    private static String note = "", container = "无结构信息";
+    private static int suggested;
     private static int shown = -1, rule = -1;
     private static boolean folded;
 
@@ -59,6 +60,9 @@ final class NavbarLabelHost {
             @Override public void onReceive(Context context, Intent intent) {
                 if (getSentFromUid() != 1000) { android.util.Log.w("NativeNavbar", "label from uid " + getSentFromUid() + " ignored"); return; }
                 if (!intent.getBooleanExtra("on", false)) { remove(); return; }
+                container = intent.getStringExtra("container");
+                if (container == null || container.length() > 600) container = "无结构信息";
+                suggested = intent.getIntExtra("suggested", NavbarStore.ORIGINAL);
                 state(intent.getStringExtra("package"), intent.getStringExtra("activity"), intent.getIntExtra("mode", -1),
                         intent.getStringExtra("source"), intent.getStringExtra("idle"));
             }
@@ -87,7 +91,7 @@ final class NavbarLabelHost {
     }
 
     private static String modeName(int value) {
-        return value == NavbarStore.FLOATING ? "悬浮" : value == NavbarStore.COLOR ? "延伸"
+        return value == NavbarStore.FLOATING ? "悬浮" : value == NavbarStore.COLOR ? "取色"
                 : value == NavbarStore.AUTO ? "自动" : "保留";
     }
 
@@ -101,9 +105,11 @@ final class NavbarLabelHost {
                 String name = hash < 0 ? activity : activity.substring(0, hash);
                 String page = name.substring(name.lastIndexOf('.') + 1) + (hash < 0 ? "" : " · 页面 " + activity.substring(hash + 1, Math.min(activity.length(), hash + 5)));
                 line = label + " · " + page;
-                if (!folded) line += "\n当前：" + modeName(shown) + " · " + source
+                if (!folded) line += "\n底部容器：" + container + "\n建议：" + modeName(suggested)
+                        + " · 当前：" + modeName(shown) + " · " + source
                         + (rule >= 0 ? " · 规则=" + modeName(rule) : "") + (note.isEmpty() ? "" : "\n" + note);
-                else line += " · " + modeName(shown);
+                else line += " · " + container.substring(0, container.indexOf('\n') < 0 ? container.length() : container.indexOf('\n'))
+                        + " → " + modeName(shown);
             }
             text.setText(line);
             row.setVisibility(folded || pkg == null ? View.GONE : View.VISIBLE);

@@ -80,52 +80,21 @@ final class NavbarSystem {
     private final Class<?> insetsClass;
     private final NavbarInsets stateTools;
     static final String AUTO_SOURCE = "自动";
-    /** Per-window classifier decision (COLOR or FLOATING); absent until the first classification. */
-    private final Map<Object, Integer> autoModes = java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
-    /** Last decision per component, so a revisited page starts in its previous mode without a jump. */
-    private final java.util.concurrent.ConcurrentHashMap<String, Integer> autoCache = new java.util.concurrent.ConcurrentHashMap<>();
-    private Object autoWindow;
-    /** Last content thumbnail of the tracked window; a large change followed by a quiet frame is a refresh. */
-    private int[] autoThumb, autoReference;
-    /**
-     * Some windows (Douyin: SurfaceView/video children) return an all-black image for any partial source
-     * crop, while a crop of the whole window is correct. Every capture therefore takes the whole window at a
-     * reduced scale and cuts regions in software. One 1/8 capture per tick serves the refresh thumbnail and
-     * the colour row; the classifier takes one 1/2 capture per refresh.
-     */
+    private final java.util.concurrent.ConcurrentHashMap<IBinder, NavbarStructure> structures = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile Object stickyFloating;
+    private final java.util.concurrent.ConcurrentHashMap<String, String> pageSignature = new java.util.concurrent.ConcurrentHashMap<>();
     private record Lowres(int[] px, int w, int h, float f) {}
-    private static final float TICK_SCALE = 1 / 8f, CLASSIFY_SCALE = 1 / 2f;
+    private static final float TICK_SCALE = 1 / 8f;
     private Lowres tickLow;
-    /** Our own fill child of the tracked window, excluded from every capture so it never judges itself. */
+    private boolean tickLowTried;
     private SurfaceControl[] captureExclude = new SurfaceControl[0];
     private Method excludeLayers;
-    /**
-     * The last floating application window keeps floating while home/recents has focus, so its recents card
-     * and the live tile never show the black navigation background it draws once insets come back.
-     */
-    private volatile Object stickyFloating;
-    /** uid/Activity -> the page currently draws its own navigation area (reported by the scoped app). */
-    private final java.util.concurrent.ConcurrentHashMap<String, Boolean> pageAdapted = new java.util.concurrent.ConcurrentHashMap<>();
-    /** Page signature inside an Activity reported by the app side (uid/activity -> signature). */
-    private final java.util.concurrent.ConcurrentHashMap<String, String> pageSignature = new java.util.concurrent.ConcurrentHashMap<>();
-    private Object pageWindow;
-    private String pageKey;
-    /** Startup: the first STARTUP_MS of a window (splash, open-screen ad, loading) is neither learned nor allowed to override a known page. */
-    private static final long STARTUP_MS = 1500;
-    private long autoSince;
-    private boolean autoSeeded, autoStartupRecheck;
-    private NavbarSampling sampling;
-    private boolean samplingTried;
-    /** Fill history for automatic flicker marks. */
-    private long fillChangedAt, fillPrevChangedAt;
-    private String fillState = "", fillPrevState = "";
-    private boolean tickLowTried;
-    /** Colour row just above the navigation area from this tick's capture, for the stretched fill. */
     private volatile int[] stretchRow;
     private volatile int stretchColor;
-    private boolean autoDirty;
-    private long autoQuietUntil, autoThumbNanos;
-    private int autoPending = -1, autoThumbs;
+    private long fillChangedAt, fillPrevChangedAt;
+    private String fillState = "", fillPrevState = "";
+    private String containerSummary = "无结构信息 · 等待作用域内应用报告";
+    private int containerSuggestion;
     private final Method sourceSize, sourceAt, sourceType, sourceVisible;
     private final Method capture, build, crop, scale;
     private final Method securePolicy, protectedPolicy;
@@ -190,7 +159,7 @@ final class NavbarSystem {
                 }
                 return chain.proceed();
             });
-            // Preserve raw navigation sources for app Decor/IME visibility. Consumption is app-side only.
+            // Raw display Insets remain intact; qualified floating clients receive a stripped copy.
             module.hook(ready)
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                         Object result = chain.proceed();
@@ -331,32 +300,38 @@ final class NavbarSystem {
             }, screen, null, worker, Context.RECEIVER_NOT_EXPORTED);
             context.registerReceiver(new BroadcastReceiver() {
                 @Override public void onReceive(Context c, Intent i) {
+                    try {
                     int uid = getSentFromUid();
                     String activity = i.getStringExtra("activity");
                     if (uid < android.os.Process.FIRST_APPLICATION_UID || activity == null || activity.length() > 300) return;
-                    String key = uid + "/" + activity;
-                    String page = i.getStringExtra("page");
-                    boolean pageChanged = false;
-                    if (page != null && page.matches("[0-9a-f]{0,8}")) {
-                        pageChanged = !page.equals(pageSignature.put(key, page));
-                        if (pageSignature.size() > 512) pageSignature.clear();
-                    }
-                    boolean adaptedChanged = false;
-                    boolean adapted = i.getBooleanExtra("adapted", false);
-                    if (i.hasExtra("adapted")) {
-                        Boolean before = pageAdapted.put(key, adapted);
-                        if (pageAdapted.size() > 512) pageAdapted.clear();
-                        adaptedChanged = before == null || before != adapted;
-                    }
-                    if (!pageChanged && !adaptedChanged) return;
-                    NavbarTrace.i("PAGE " + key + " page=" + page + " adapted=" + (i.hasExtra("adapted") ? adapted : "?"));
+                    NavbarStructure observation = NavbarStructure.read(i.getExtras(), SystemClock.uptimeMillis());
+                    if (observation == null) return;
                     Object window = previousWindow;
-                    if (window != null) synchronized (lock) {
-                        try { NavbarReflect.call(window, "notifyInsetsChanged"); }
-                        catch (ReflectiveOperationException | RuntimeException ignored) {}
-                    }
+                    // The shared sender UID and exact IWindow binder must match the tracked server window.
+                    // Never use an arbitrary app report as authority for another window / process.
+                    try {
+                        if (window == null) return;
+                        synchronized (lock) {
+                            Object record = NavbarReflect.field(window, "mActivityRecord");
+                            ComponentName current = record == null ? null : (ComponentName) NavbarReflect.field(record, "mActivityComponent");
+                            if ((Integer) NavbarReflect.call(window, "getOwningUid") != uid || current == null
+                                    || !activity.equals(current.getClassName()) || !observation.token.equals(windowToken(window))) return;
+                            String page = i.getStringExtra("page");
+                            if (page != null && !page.matches("[0-9a-f]{0,8}")) return;
+                            String key = uid + "/" + activity;
+                            boolean pageChanged = page != null && !page.equals(pageSignature.put(key, page));
+                            if (pageSignature.size() > 512) pageSignature.clear();
+                            NavbarStructure old = structures.put(observation.token, observation);
+                            if (structures.size() > 64) { structures.clear(); structures.put(observation.token, observation); }
+                            if (old == null || old.mode != observation.mode || pageChanged) {
+                                NavbarReflect.call(window, "notifyInsetsChanged");
+                                NavbarReflect.call(wm, "requestTraversal");
+                            }
+                        }
+                    } catch (ReflectiveOperationException | RuntimeException invalid) { return; }
                     worker.removeCallbacks(tick);
                     worker.post(tick);
+                    } catch (RuntimeException malformed) { /* exported input is untrusted */ }
                 }
             }, new IntentFilter(NavbarApp.PAGE), null, worker, Context.RECEIVER_EXPORTED);
             IntentFilter packages = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
@@ -452,145 +427,50 @@ final class NavbarSystem {
         Object owner = NavbarReflect.call(window, "getOwningUid");
         String signature = pageSignature.get(owner + "/" + component.getClassName());
         String page = signature == null || signature.isEmpty() ? null : component.getClassName() + "#" + signature;
-        // A page inside the Activity has its own rule (labelled or learned) before the Activity's.
+        // A page inside the Activity has its own rule (explicitly labelled) before the Activity's.
         NavbarRules.Choice resolved = page == null ? null : rules.page(pkg, page, version == null ? -1 : version);
         if (resolved == null) resolved = rules.resolve(pkg, component.getClassName(), version == null ? -1 : version,
                 attrs.type == WindowManager.LayoutParams.TYPE_BASE_APPLICATION);
         if (resolved.mode() != NavbarStore.AUTO) return resolved;
-        // The app says this page draws its own navigation area: leave it exactly as the app made it.
-        if (Boolean.TRUE.equals(pageAdapted.get(owner + "/" + component.getClassName())))
-            return new NavbarRules.Choice(NavbarStore.ORIGINAL, null, "页面自适配", 0);
-        // Until the classifier has seen this window it keeps the native layout with sampled color.
-        Integer mode = autoModes.get(window);
-        String shortName = component.flattenToShortString();
-        if (mode == null) mode = autoCache.get(page == null ? shortName : shortName + "#" + signature);
-        if (mode == null && page != null) mode = rules.seed(pkg, page);
-        if (mode == null) mode = rules.seed(pkg, component.getClassName());
-        return new NavbarRules.Choice(mode == null ? NavbarStore.COLOR : mode, null, AUTO_SOURCE, 0);
+        NavbarStructure observation = structure(window);
+        return new NavbarRules.Choice(observation == null ? NavbarStore.ORIGINAL : observation.mode, null, AUTO_SOURCE, 0);
     }
 
-    /**
-     * Refresh-triggered single-frame layout classification. Every tick takes a 1/16 thumbnail of the content
-     * above the navigation area; the full 320dp classification runs only on the window's first frame and after
-     * a large content change has settled (page switch inside the same Activity, scroll end). A change of the
-     * decision needs two agreeing classifications, except the window's first one. The relayout caused by our
-     * own switch is ignored for 600ms. FLOATING windows are judged against the screen bottom, where their own
-     * bottom bar now sits.
-     * @return true when the decision changed and the window was asked to relayout.
-     */
-    private boolean classify(Object window, SurfaceControl surface, Rect frame, int navTop, int navHeight,
-                             String component, int mode) throws ReflectiveOperationException {
-        if (component == null) return false;
-        android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
-        float density = config == null ? 0 : config.densityDpi / 160f;
-        int width = frame.width();
-        if (density <= 0 || navTop <= 0 || width < 64) return false;
-        long now = SystemClock.uptimeMillis();
-        if (window != autoWindow) {
-            autoWindow = window; autoThumb = null; autoReference = null; autoDirty = true; autoPending = -1; autoQuietUntil = 0;
-            autoSince = now; autoStartupRecheck = true;
-            ComponentName name = ComponentName.unflattenFromString(component);
-            autoSeeded = autoModes.get(window) == null && name != null
-                    && (autoCache.containsKey(component) || rules.seed(name.getPackageName(), name.getClassName()) != null);
-            NavbarTrace.i("AUTO window " + component + " mode=" + label(mode));
-        }
-        long t0 = System.nanoTime();
-        Lowres low = low(surface, frame);
-        int[] thumb = low == null ? null : rows(low, 0, Math.min(low.h(), (int) (navTop * low.f())));
-        autoThumbNanos += System.nanoTime() - t0;
-        if (++autoThumbs >= 64) {
-            NavbarTrace.i("AUTO thumb avg="
-                    + String.format(java.util.Locale.ROOT, "%.2f", autoThumbNanos / 1e6 / autoThumbs) + "ms");
-            autoThumbs = 0; autoThumbNanos = 0;
-        }
-        if (thumb == null) { autoLog("AUTO thumb unavailable " + component); return false; }
-        int[] previousThumb = autoThumb;
-        autoThumb = thumb;
-        if (now < autoQuietUntil) { autoDirty = false; autoReference = thumb; return false; }
-        boolean startup = now - autoSince < STARTUP_MS;
-        if (!startup && autoStartupRecheck) { autoStartupRecheck = false; autoDirty = true; }
-        // Only a quiet frame is judged; a refresh is a settled frame that differs from the last judged one,
-        // so slow or dark-on-dark transitions are caught however gradually they animate.
-        if (previousThumb == null || previousThumb.length != thumb.length || changed(previousThumb, thumb) > 0.08) return false;
-        if (!autoDirty) {
-            double change = autoReference == null || autoReference.length != thumb.length ? 1 : changed(autoReference, thumb);
-            if (change <= 0.25) return false;
-            NavbarTrace.i("AUTO refresh " + component
-                    + " change=" + String.format(java.util.Locale.ROOT, "%.2f", change));
-            autoDirty = true;
-        }
+    private long windowReportAt;
+    private IBinder windowReportToken;
+    private boolean windowReportFloating;
+    private int windowReportHeight, windowReportBottom;
 
-        long t1 = System.nanoTime();
-        boolean floating = mode == NavbarStore.FLOATING;
-        int bottom = floating ? frame.height() : navTop;
-        int top = Math.max(0, bottom - (int) Math.ceil(320 * density));
-        int navRows = floating ? 0 : Math.max(0, Math.min(frame.height(), navTop + navHeight) - navTop);
-        Lowres half = capture(surface, frame, CLASSIFY_SCALE);
-        if (half == null || !opaque(half.px())) {
-            autoLog("AUTO pixels unavailable " + component + (half == null ? " capture" : " nonopaque"));
-            return false;
-        }
-        float hd = density * half.f();
-        int hBottom = Math.min(half.h(), Math.round(bottom * half.f()));
-        int hTop = Math.max(0, hBottom - (int) Math.ceil(320 * hd));
-        int hNavTop = Math.round(navTop * half.f());
-        int hNavRows = floating ? 0 : Math.max(0, Math.min(half.h(), Math.round((navTop + navRows) * half.f())) - hNavTop);
-        int[] roi = rows(half, hTop, hBottom);
-        int[] nav = hNavRows == 0 ? new int[0] : rows(half, hNavTop, hNavTop + hNavRows);
-        Bundle verdict = NavbarLayout.analyze(roi, half.w(), hBottom - hTop, hd, nav, half.w(), hNavRows);
-        String decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
-        if ("app_draws_under_navigation".equals(verdict.getString("reviewReason")) && busyRows(nav, half.w(), hNavRows) < 0.3) {
-            // A divider line or a few stray pixels: judge the content above the boundary alone.
-            verdict = NavbarLayout.analyze(roi, half.w(), hBottom - hTop, hd, new int[0], half.w(), 0);
-            decision = verdict.getString("reviewDecision", "INCONCLUSIVE");
-        }
-        int next = "app_draws_under_navigation".equals(verdict.getString("reviewReason")) ? NavbarStore.ORIGINAL
-                : "EXTEND".equals(decision) ? NavbarStore.COLOR : "NATIVE".equals(decision) ? NavbarStore.FLOATING : -1;
-        long ms = (System.nanoTime() - t1) / 1_000_000;
-        Integer current = autoModes.get(window);
-        NavbarTrace.i("AUTO check " + component + " mode=" + label(mode) + " -> " + decision
-                + " reason=" + verdict.getString("reviewReason") + " pending=" + autoPending + " ms=" + ms);
-        if (next < 0) { autoDirty = false; autoPending = -1; autoReference = thumb; return false; }
-        if (!startup) learn(component, next);
-        if (startup && autoSeeded && next != mode) {
-            // A known page keeps its learned mode while splash/ads/loading frames are on screen.
-            autoDirty = false; autoPending = -1; autoReference = thumb;
-            NavbarTrace.i("AUTO startup keep " + component + " " + label(mode) + " (saw " + label(next) + ")");
-            return false;
-        }
-        if (next == mode) {
-            autoDirty = false; autoPending = -1; autoReference = thumb;
-            if (current == null) {
-                autoModes.put(window, next); autoCache.put(component, next);
-                NavbarTrace.i("AUTO " + component + " = " + label(next)
-                        + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
-            }
-            return false;
-        }
-        if (current != null && autoPending != next) {
-            autoPending = next;        // stay dirty: confirm on the next quiet tick
-            return false;
-        }
-        autoDirty = false; autoPending = -1; autoQuietUntil = now + 600; autoReference = thumb;
-        autoModes.put(window, next);
-        if (autoCache.size() > 256) autoCache.clear();
-        autoCache.put(component, next);
-        NavbarTrace.i("AUTO " + component + " " + label(mode) + " -> " + label(next)
-                + " reason=" + verdict.getString("reviewReason") + " ms=" + ms);
-        synchronized (lock) {
-            NavbarReflect.call(window, "notifyInsetsChanged");
-            NavbarReflect.call(wm, "requestTraversal");
-        }
-        return true;
+    /** Raw system geometry survives the navigation source stripped from the client's Insets. */
+    private void reportWindow(Object window, int height, boolean floating) throws ReflectiveOperationException {
+        if (height <= 0) return;
+        IBinder token = windowToken(window);
+        long now = SystemClock.uptimeMillis();
+        Rect frame = (Rect) NavbarReflect.call(window, "getFrame");
+        Object display = NavbarReflect.call(window, "getDisplayContent");
+        Rect displayBounds = (Rect) NavbarReflect.call(display, "getBounds");
+        int contentBottom = floating ? frame.height() : navigationTop(frame, displayBounds, height);
+        if (token.equals(windowReportToken) && contentBottom == windowReportBottom && height == windowReportHeight && floating == windowReportFloating
+                && now - windowReportAt < 750) return;
+        WindowManager.LayoutParams attrs = (WindowManager.LayoutParams) NavbarReflect.field(window, "mAttrs");
+        if (attrs.packageName == null) return;
+        Bundle data = new Bundle(); data.putBinder("window", token);
+        Intent intent = new Intent(NavbarApp.PAGE + ".WINDOW").setPackage(attrs.packageName).putExtras(data)
+                .putExtra("height", height).putExtra("contentBottom", contentBottom).putExtra("floating", floating);
+        broadcast.invoke(context, intent, UserHandle.getUserHandleForUid((Integer) NavbarReflect.call(window, "getOwningUid")), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+        windowReportAt = now; windowReportToken = token; windowReportHeight = height; windowReportBottom = contentBottom; windowReportFloating = floating;
     }
 
-    private long autoLogAt;
-    /** At most one repeated failure line per 2s. */
-    private void autoLog(String message) {
-        long now = SystemClock.uptimeMillis();
-        if (now - autoLogAt < 2000) return;
-        autoLogAt = now;
-        NavbarTrace.i(message);
+    private static IBinder windowToken(Object window) throws ReflectiveOperationException {
+        return ((IInterface) NavbarReflect.field(window, "mClient")).asBinder();
+    }
+
+    private NavbarStructure structure(Object window) throws ReflectiveOperationException {
+        IBinder token = windowToken(window);
+        NavbarStructure observation = structures.get(token);
+        if (observation != null && observation.matches(token, SystemClock.uptimeMillis())) return observation;
+        return null;
     }
 
     /**
@@ -601,7 +481,7 @@ final class NavbarSystem {
         if (context == null) return;
         String component = labelMode ? labelComponent : null;
         int mode = !publishedActive ? NavbarStore.ORIGINAL : publishedMode == NavbarStore.FLOATING ? NavbarStore.FLOATING : NavbarStore.COLOR;
-        String key = !labelMode ? "off" : component == null ? "idle:" + labelIdle : component + "=" + mode + "/" + labelSource;
+        String key = !labelMode ? "off" : component == null ? "idle:" + labelIdle : component + "=" + mode + "/" + labelSource + "/" + containerSummary + "/" + containerSuggestion;
         long now = SystemClock.uptimeMillis();
         if (!force && key.equals(labelLast) && now - labelAt < 5000) return;
         if (!labelMode && "off".equals(labelLast)) return;
@@ -609,32 +489,17 @@ final class NavbarSystem {
         Intent intent = new Intent(NavbarLabelHost.LABEL).setPackage("com.android.systemui").putExtra("on", labelMode);
         ComponentName name = component == null ? null : ComponentName.unflattenFromString(component);
         if (name != null) intent.putExtra("package", name.getPackageName()).putExtra("activity", name.getClassName())
-                .putExtra("mode", mode).putExtra("source", labelSource);
+                .putExtra("mode", mode).putExtra("source", labelSource)
+                .putExtra("container", containerSummary).putExtra("suggested", containerSuggestion);
         else intent.putExtra("idle", labelIdle);
         try {
             // SystemUI accepts the panel state only from uid 1000, which it can see only when identity is shared.
             broadcast.invoke(context, intent, android.os.Process.myUserHandle(), "android.permission.STATUS_BAR_SERVICE",
                     BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
-            if (!key.equals(labelLogged)) { labelLogged = key; NavbarTrace.i("LABEL " + key); }
+            String event = (component == null ? "idle=" + labelIdle : component + "=" + mode + "/" + labelSource
+                    + "/" + containerSummary.split("\\n", 2)[0]);
+            if (!event.equals(labelLogged)) { labelLogged = event; NavbarTrace.i("CONTAINER " + event); }
         } catch (ReflectiveOperationException | RuntimeException failure) { NavbarTrace.w("label state failed", failure); }
-    }
-
-    /** One stable vote per classification, persisted by the module (never during startup). */
-    private void learn(String component, int mode) {
-        ComponentName name = ComponentName.unflattenFromString(component);
-        if (name == null || context == null) return;
-        Long version = versions.get(name.getPackageName());
-        String key = name.getPackageName() + "/" + name.getClassName();
-        long code = version == null ? -1 : version;
-        statusWriter.execute(() -> {
-            try {
-                Bundle vote = new Bundle();
-                vote.putString("component", key);
-                vote.putLong("version", code);
-                vote.putInt("mode", mode);
-                context.getContentResolver().call(Uri.parse("content://" + NavbarStore.AUTHORITY), "learn", null, vote);
-            } catch (RuntimeException unavailable) { /* module stopped: the vote is simply lost */ }
-        });
     }
 
     /** Marks fill changes that revert within a short time: active gaps, mode ping-pong and layer rebuilds. */
@@ -650,44 +515,8 @@ final class NavbarSystem {
         fillState = state; fillChangedAt = now;
     }
 
-    private void follow(Rect area) {
-        if (!samplingTried) {
-            samplingTried = true;
-            try { sampling = new NavbarSampling(); } catch (LinkageError unavailable) { sampling = null; }
-        }
-        if (sampling != null) sampling.follow(area, worker::post);
-    }
-
     private static String label(int mode) {
         return mode == NavbarStore.FLOATING ? "floating" : mode == NavbarStore.ORIGINAL ? "original" : "extend";
-    }
-
-    /** Share of navigation-area rows the app itself paints non-uniformly (content, gradient, blur). */
-    static double busyRows(int[] nav, int width, int rows) {
-        if (rows <= 0 || width <= 0) return 0;
-        int busy = 0;
-        for (int r = 0; r < rows; r++) {
-            int base = nav[r * width], near = 0;
-            for (int x = 0; x < width; x++) {
-                int c = nav[r * width + x];
-                if (Math.abs(((c >> 16) & 255) - ((base >> 16) & 255)) <= 12 && Math.abs(((c >> 8) & 255) - ((base >> 8) & 255)) <= 12
-                        && Math.abs((c & 255) - (base & 255)) <= 12) near++;
-            }
-            if (near < width * 0.9) busy++;
-        }
-        return busy / (double) rows;
-    }
-
-    /** Fraction of thumbnail pixels whose largest channel moved by more than 16 (dark pages differ by ~30). */
-    static double changed(int[] a, int[] b) {
-        int moved = 0;
-        for (int i = 0; i < a.length; i++) {
-            int x = a[i], y = b[i];
-            int d = Math.max(Math.abs(((x >> 16) & 255) - ((y >> 16) & 255)),
-                    Math.max(Math.abs(((x >> 8) & 255) - ((y >> 8) & 255)), Math.abs((x & 255) - (y & 255))));
-            if (d > 16) moved++;
-        }
-        return a.length == 0 ? 0 : moved / (double) a.length;
     }
 
     private static Method optional(Class<?> type, String name) {
@@ -899,6 +728,8 @@ final class NavbarSystem {
         runtimePage = "";
         labelComponent = null;
         labelIdle = "";
+        containerSummary = "无结构信息 · 当前没有可检查的应用窗口";
+        containerSuggestion = NavbarStore.ORIGINAL;
         try {
             int navigationMode = navigationMode(context);
             gestures = navigationMode == 2;
@@ -915,6 +746,11 @@ final class NavbarSystem {
                 runtime("已暂停 · " + reason);
                 publish(false, 0, 0);
                 return;
+            }
+            boolean expired = structures.entrySet().removeIf(entry -> !entry.getValue().matches(entry.getKey(), SystemClock.uptimeMillis()));
+            if (expired && previousWindow != null) synchronized (lock) {
+                NavbarReflect.call(previousWindow, "notifyInsetsChanged");
+                NavbarReflect.call(wm, "requestTraversal");
             }
             Snapshot snapshot = snapshot();
             if (snapshot == null) {
@@ -946,14 +782,9 @@ final class NavbarSystem {
                 stickyFloating = null;
                 synchronized (lock) { NavbarReflect.call(sticky, "notifyInsetsChanged"); }
             }
-            if (window == pageWindow && !java.util.Objects.equals(pageKey, snapshot.component())) {
-                // Another page inside the same Activity: start from what is known about that page.
-                autoModes.remove(window);
-                autoDirty = true; autoPending = -1; autoReference = null;
-                NavbarTrace.i("AUTO page " + pageKey + " -> " + snapshot.component());
-                synchronized (lock) { NavbarReflect.call(window, "notifyInsetsChanged"); }
-            }
-            pageWindow = window; pageKey = snapshot.component();
+            NavbarStructure observation = structure(window);
+            containerSummary = observation == null ? "无结构信息 · 未授权应用作用域／报告未到达或已过期" : observation.summary();
+            containerSuggestion = observation == null ? NavbarStore.ORIGINAL : observation.mode;
             NavbarRules.Choice selected = choice(window, true);
             runtimePage = snapshot.component() + " · 模式=" + selected.mode() + " · " + selected.source();
             if (!"系统宿主".equals(selected.source()) && !"系统窗口".equals(selected.source())) {
@@ -982,19 +813,11 @@ final class NavbarSystem {
                 publish(true, 0, NavbarStore.FLOATING);
                 return;
             }
-            if (AUTO_SOURCE.equals(selected.source()) && selected.mode() == NavbarStore.ORIGINAL && !landscape) {
-                Insets own = (Insets) insetsClass.getMethod("calculateInsets", Rect.class, Rect.class, int.class, boolean.class)
-                        .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), false);
-                if (own.bottom > 0 && classify(window, surface, frame, navigationTop(frame, bounds, own.bottom), own.bottom,
-                        snapshot.component(), NavbarStore.ORIGINAL)) selected = choice(window, true);
-                if (selected.mode() == NavbarStore.ORIGINAL) {
-                    runtime("页面已自行适配 · 保留原有");
-                    publish(false, 0, 0);
-                    return;
-                }
-            }
+            Insets physical = (Insets) insetsClass.getMethod("calculateInsets", Rect.class, Rect.class, int.class, boolean.class)
+                    .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), false);
+            reportWindow(window, physical.bottom, selected.mode() == NavbarStore.FLOATING);
             if (keepsOriginal(selected.mode(), landscape, selected.source(), snapshot.component())) {
-                if (!"系统宿主".equals(selected.source())) runtime("保留系统原有 · " + selected.source());
+                if (!"系统宿主".equals(selected.source())) runtime("保留系统原有 · " + selected.source() + " · " + containerSummary.split("\\n", 2)[0]);
                 publish(false, 0, 0);
                 return;
             }
@@ -1003,12 +826,6 @@ final class NavbarSystem {
                     .invoke(raw, bounds, bounds, WindowInsets.Type.navigationBars(), landscape);
             frameNavHeight = nav.bottom;
             if (nav.bottom <= 0) { runtime("当前窗口没有底部导航区域"); publish(false, 0, 0); return; }
-            if (!landscape && AUTO_SOURCE.equals(selected.source())) {
-                int boundary = bounds.bottom - nav.bottom;
-                android.content.res.Configuration config = (android.content.res.Configuration) NavbarReflect.call(window, "getConfiguration");
-                int span = config == null ? 0 : (int) Math.ceil(320 * config.densityDpi / 160f);
-                follow(span <= 0 ? null : new Rect(bounds.left, Math.max(bounds.top, boundary - span), bounds.right, boundary));
-            } else follow(null);
             if (landscape) {
                 adapting = false;
                 labelComponent = null; labelIdle = "横屏";
@@ -1016,10 +833,6 @@ final class NavbarSystem {
                 publish(true, 0, NavbarStore.FLOATING);
                 return;
             }
-            if (AUTO_SOURCE.equals(selected.source())
-                    && classify(window, surface, frame, navigationTop(frame, bounds, nav.bottom), nav.bottom, snapshot.component(),
-                        selected.mode()))
-                selected = choice(window, true);
             if (selected.mode() == NavbarStore.ORIGINAL) { runtime("页面已自行适配 · 保留原有"); publish(false, 0, 0); return; }
             if (selected.mode() == NavbarStore.FLOATING) { stickyFloating = window; runtime("悬浮中 · " + selected.source()); publish(true, 0, NavbarStore.FLOATING); return; }
             if (snapshot.screenshot() && lastGood != null && lastGood.matches(window, selected.mode(), nav.bottom)) {
@@ -1132,7 +945,7 @@ final class NavbarSystem {
         }
     }
 
-    /** Activity component plus the page signature inside it ("pkg/.Activity#1a2b3c4d"), used for learning and labels. */
+    /** Activity component plus the page signature inside it ("pkg/.Activity#1a2b3c4d"), used only for explicit page rules and labels. */
     private String pageOf(Object window, ComponentName component) throws ReflectiveOperationException {
         String signature = pageSignature.get(NavbarReflect.call(window, "getOwningUid") + "/" + component.getClassName());
         String name = component.flattenToShortString();
@@ -1267,7 +1080,6 @@ final class NavbarSystem {
         }
         if (!active) { stability.reset(); lastGood = null; }
         watchFill(active, mode, windowOwned);
-        if (!active) follow(null);
         int height = active ? frameNavHeight : 0;
         long now = SystemClock.uptimeMillis();
         if (publishedActive == active && publishedColor == color && publishedMode == mode

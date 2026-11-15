@@ -93,13 +93,13 @@ class NavigationTest {
 
     @Test fun landscapeShadeHasIndependentSettingsAndNativeNavigation() {
         val (homeScenario, home) = launch(intent())
-        compose.onNodeWithText("通知与控制中心").performScrollTo().performClick()
+        compose.onNodeWithText("外观与控制").performScrollTo().performClick()
         val shadeIntent = nextPage(home, Page.Shade)
         homeScenario.moveToState(Lifecycle.State.CREATED)
         val (_, shade) = launch(shadeIntent)
-        compose.onNodeWithTag("page-title-通知与控制中心").assertIsDisplayed()
+        compose.onNodeWithTag("page-title-外观与控制").assertIsDisplayed()
         compose.onNodeWithText("横屏双栏").assertIsDisplayed()
-        compose.onNodeWithText("图标垂直位置").assertIsDisplayed()
+        compose.onNodeWithText("图标垂直位置").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.runOnIdle { assertTrue(shade.isFinishing) }
     }

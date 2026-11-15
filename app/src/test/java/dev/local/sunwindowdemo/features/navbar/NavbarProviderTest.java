@@ -59,13 +59,15 @@ public class NavbarProviderTest {
                 .putInt("com.tencent.mm/com.tencent.mm.framework.app.UIPageFragmentActivity", 1)
                 .putInt("com.tencent.mobileqq/secret.Activity", 2)
                 .putInt("com.tencent.mm.other/prefixCollision", 2)
-                .putBoolean("landscape_clear", false).commit();
+                .putBoolean("landscape_clear", false).putBoolean("label_mode", true).commit();
         var before = new java.util.HashMap<>(preferences.getAll());
         caller("com.tencent.mm", 12345);
         var extras = new android.os.Bundle();
         extras.putBoolean("enabled", false);
         var snapshot = provider().call("read", "com.tencent.mm", extras);
         assertTrue(snapshot.getBoolean("enabled"));
+        assertTrue(snapshot.getBoolean("label_mode"));
+        assertFalse(snapshot.containsKey("learned"));
         assertFalse(snapshot.containsKey("default_mode"));
         assertEquals(2, snapshot.getInt("com.tencent.mm/*"));
         assertEquals(2, snapshot.getInt("*")); // Legacy package override remains effective.
@@ -108,6 +110,44 @@ public class NavbarProviderTest {
     @Test(expected = SecurityException.class) public void ordinaryUidCannotWriteStatus() {
         caller("sample.own", 12345);
         provider().call("status", null, new android.os.Bundle());
+    }
+    @Test public void retiredLearnMethodIsRejectedEvenForSystemUid() {
+        var extras = new android.os.Bundle();
+        extras.putString("component", "sample/sample.Page");
+        extras.putLong("version", 7);
+        extras.putInt("mode", NavbarStore.COLOR);
+        var provider = provider();
+        for (int uid : new int[]{1000, 12345}) {
+            ShadowBinder.setCallingUid(uid);
+            assertThrows(IllegalArgumentException.class, () -> provider.call("learn", null, extras));
+        }
+        assertTrue(NavbarStore.preferences(RuntimeEnvironment.getApplication()).getAll().isEmpty());
+    }
+    @Test(expected = SecurityException.class) public void ordinaryUidCannotLabelPages() {
+        caller("com.android.systemui", 10001);
+        caller("sample.own", 12345);
+        provider().call("label", null, new android.os.Bundle());
+    }
+    @Test public void systemUiAndManagerCanLabelQueryAndUndoPageRules() {
+        var preferences = NavbarStore.preferences(RuntimeEnvironment.getApplication());
+        preferences.edit().clear().commit();
+        caller("com.android.systemui", 10001);
+        var provider = provider();
+        var extras = new android.os.Bundle();
+        extras.putString("package", "sample");
+        extras.putString("activity", "sample.Page#beef");
+        extras.putInt("mode", NavbarStore.FLOATING);
+        assertEquals(-1, provider.call("label", null, extras).getInt("previous"));
+        extras.putInt("mode", -3);
+        assertEquals(NavbarStore.FLOATING, provider.call("label", null, extras).getInt("previous"));
+        assertEquals(NavbarStore.FLOATING, preferences.getInt("sample/sample.Page#beef", -1));
+        ShadowBinder.setCallingUid(RuntimeEnvironment.getApplication().getApplicationInfo().uid);
+        extras.putInt("mode", NavbarStore.AUTO);
+        assertEquals(NavbarStore.FLOATING, provider.call("label", null, extras).getInt("previous"));
+        assertEquals(NavbarStore.AUTO, preferences.getInt("sample/sample.Page#beef", -1));
+        extras.putInt("mode", -1);
+        assertEquals(NavbarStore.AUTO, provider.call("label", null, extras).getInt("previous"));
+        assertFalse(preferences.contains("sample/sample.Page#beef"));
     }
     @Test(expected = IllegalArgumentException.class) public void nullPackageCannotRead() {
         provider().call("read", null, null);

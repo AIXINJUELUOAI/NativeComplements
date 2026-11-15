@@ -95,30 +95,79 @@ public class NavbarRulesTest {
         snapshot.putInt("default_mode", 0);   // retired preference is ignored
         assertEquals(NavbarStore.AUTO, new NavbarRules(snapshot).resolve("unknown", "unknown.Page", 1).mode());
     }
-    @Test public void learnedRulesAreFixedOnlyForTheirVersionAndSeedOtherwise() {
+    @Test public void learnedTemplatesAndLegacySnapshotAreIgnoredAtEveryVersion() {
         Bundle snapshot = new Bundle();
         snapshot.putBoolean("enabled", true);
         snapshot.putString("templates", """
             {"packages":{"app":{"enabled":true,"rules":{
-            "app.Home":{"mode":2,"source":"学习规则","base_only":true,"learned":true,"versionCode":7,"samples":5,"agreement":1.0}}}}}
+            "app.Home":{"mode":2,"learned":true,"versionCode":7},
+            "app.Home#beef":{"mode":1,"learned":true,"versionCode":7},
+            "app.Manual":{"mode":2,"source":"人工确认","manual":true}}}}}
             """);
-        snapshot.putString("learned", "{\"other/other.Page\":1}");
+        snapshot.putString("learned", "{\"other/other.Page\":1,\"app/app.Home#cafe\":2}");
         NavbarRules rules = new NavbarRules(snapshot);
-        assertEquals(NavbarStore.FLOATING, rules.resolve("app", "app.Home", 7).mode());
-        assertEquals("学习规则", rules.resolve("app", "app.Home", 7).source());
-        assertEquals(NavbarStore.AUTO, rules.resolve("app", "app.Home", 8).mode());
-        assertEquals(Integer.valueOf(NavbarStore.FLOATING), rules.seed("app", "app.Home"));
-        assertEquals(Integer.valueOf(NavbarStore.COLOR), rules.seed("other", "other.Page"));
-        assertNull(rules.seed("other", "other.Unknown"));
+        for (long version : new long[]{7, 8}) {
+            assertEquals(NavbarStore.AUTO, rules.resolve("app", "app.Home", version).mode());
+            assertEquals("自动", rules.resolve("app", "app.Home", version).source());
+            assertNull(rules.page("app", "app.Home#beef", version));
+            assertNull(rules.page("app", "app.Home#cafe", version));
+            assertEquals(NavbarStore.AUTO, rules.resolve("other", "other.Page", version).mode());
+            assertEquals(NavbarStore.FLOATING, rules.resolve("app", "app.Manual", version).mode());
+        }
+        snapshot.putInt("app/app.Home", NavbarStore.COLOR);
+        snapshot.putInt("app/app.Home#beef", NavbarStore.ORIGINAL);
+        rules = new NavbarRules(snapshot);
+        assertEquals(NavbarStore.COLOR, rules.resolve("app", "app.Home", 7).mode());
+        assertEquals(NavbarStore.ORIGINAL, rules.page("app", "app.Home#beef", 7).mode());
     }
-    @Test public void learnedVotesNeedThreeAndNinetyPercent() {
-        assertEquals(-2, NavbarStore.learnedMode(1, 1, 0));
-        assertEquals(NavbarStore.COLOR, NavbarStore.learnedMode(9, 1, 0));
-        assertEquals(NavbarStore.FLOATING, NavbarStore.learnedMode(0, 3, 0));
-        assertEquals(NavbarStore.ORIGINAL, NavbarStore.learnedMode(0, 0, 4));
-        assertEquals(-1, NavbarStore.learnedMode(6, 4, 0));
-        assertArrayEquals(new long[]{1, 2, 0}, NavbarStore.votes("5,1,2", 5));
-        assertNull(NavbarStore.votes("5,1,2,3", 6));
+    @Test public void persistedLegacyHostSnapshotCannotRestoreLearnedModes() throws Exception {
+        var context = RuntimeEnvironment.getApplication();
+        var directory = dev.local.sunwindowdemo.core.HostSnapshot.directory(context);
+        java.nio.file.Files.createDirectories(directory.toPath());
+        var file = new java.io.File(directory, "navbar_legacy_learning_test.json");
+        var values = new org.json.JSONObject()
+                .put("enabled", new org.json.JSONArray().put("b").put(true))
+                .put("learned", new org.json.JSONArray().put("s").put("{\"app/app.Home\":2}"))
+                .put("templates", new org.json.JSONArray().put("s").put("""
+                    {"packages":{"app":{"enabled":true,"rules":{
+                    "app.Home":{"mode":2,"learned":true,"versionCode":7}}}}}
+                    """));
+        try {
+            java.nio.file.Files.writeString(file.toPath(), new org.json.JSONObject()
+                    .put("format", 1).put("feature", "navbar_legacy_learning_test").put("values", values).toString());
+            Bundle cached = dev.local.sunwindowdemo.core.HostSnapshot.open(context, "navbar_legacy_learning_test")
+                    .read(() -> null).config();
+            assertNotNull(cached);
+            assertTrue(cached.containsKey("learned"));
+            NavbarRules.Choice choice = new NavbarRules(cached).resolve("app", "app.Home", 7);
+            assertEquals(NavbarStore.AUTO, choice.mode());
+            assertEquals("自动", choice.source());
+        } finally { java.nio.file.Files.deleteIfExists(file.toPath()); }
+    }
+    @Test public void ignoredLearnedMatchDoesNotHideManualWildcard() {
+        Bundle snapshot = new Bundle();
+        snapshot.putBoolean("enabled", true);
+        snapshot.putString("templates", """
+            {"packages":{"app":{"enabled":true,"rules":{
+            "app.Home":{"mode":1,"learned":true},
+            "app.Detail*":{"mode":1,"learned":true},
+            "*":{"mode":2,"source":"手写规则"}}}}}
+            """);
+        NavbarRules rules = new NavbarRules(snapshot);
+        assertEquals("手写规则", rules.resolve("app", "app.Home", 7).source());
+        assertEquals("手写规则", rules.resolve("app", "app.Details", 7).source());
+    }
+    @Test public void learnedTransparencyIsIgnoredButManualPageRuleRemains() {
+        Bundle snapshot = new Bundle();
+        snapshot.putBoolean("enabled", true);
+        snapshot.putString("templates", """
+            {"packages":{"app":{"enabled":true,"translucent_rules":{
+            "app.Home":{"policy_flag":6,"learned":true}},"rules":{
+            "app.Home#beef":{"mode":2,"source":"人工确认","manual":true}}}}}
+            """);
+        NavbarRules rules = new NavbarRules(snapshot);
+        assertEquals(NavbarStore.AUTO, rules.resolve("app", "app.Home", 7).mode());
+        assertEquals("人工确认", rules.page("app", "app.Home#beef", 7).source());
     }
     @Test public void labelWritesLatestModeAndReturnsPreviousForUndo() {
         android.content.Context context = RuntimeEnvironment.getApplication();

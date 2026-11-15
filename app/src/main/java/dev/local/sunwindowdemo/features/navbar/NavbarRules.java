@@ -12,8 +12,6 @@ public final class NavbarRules {
         }
     }
     private final JSONObject packages;
-    /** This device's learned pages: "package/Activity" -> ORIGINAL, COLOR or FLOATING (mixed pages are absent). */
-    private final JSONObject learned;
     private final Bundle settings;
     private final java.util.concurrent.ConcurrentHashMap<String, Choice> resolved = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -23,26 +21,6 @@ public final class NavbarRules {
         try { parsed = new JSONObject(snapshot.getString("templates", "{}")).optJSONObject("packages"); }
         catch (org.json.JSONException invalid) { parsed = null; }
         packages = parsed == null ? new JSONObject() : parsed;
-        JSONObject local;
-        try { local = new JSONObject(snapshot.getString("learned", "{}")); }
-        catch (org.json.JSONException invalid) { local = null; }
-        learned = local == null ? new JSONObject() : local;
-    }
-
-    /**
-     * Initial AUTO mode for a page without an in-memory decision: a bundled learned rule (any app version),
-     * else this device's learned result. null = unknown, start with the native layout.
-     */
-    public Integer seed(String packageName, String activity) {
-        JSONObject app = packages.optJSONObject(packageName);
-        JSONObject rules = app == null ? null : app.optJSONObject("rules");
-        JSONObject rule = rules == null ? null : rules.optJSONObject(activity);
-        if (rule != null && rule.optBoolean("learned")) {
-            int mode = rule.optInt("mode", -1);
-            if (mode >= NavbarStore.ORIGINAL && mode <= NavbarStore.FLOATING) return mode;
-        }
-        int mode = learned.optInt(packageName + "/" + activity, -1);
-        return mode >= NavbarStore.ORIGINAL && mode <= NavbarStore.FLOATING ? mode : null;
     }
 
     /**
@@ -59,7 +37,7 @@ public final class NavbarRules {
         JSONObject app = packages.optJSONObject(packageName);
         JSONObject rules = app == null || !app.optBoolean("enabled") ? null : app.optJSONObject("rules");
         JSONObject rule = rules == null ? null : rules.optJSONObject(page);
-        if (rule == null || rule.optBoolean("learned") && version != rule.optLong("versionCode", -2)) return null;
+        if (rule == null || rule.optBoolean("learned")) return null;
         return new Choice(valid(rule.optInt("mode", 0)), rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));
     }
 
@@ -87,7 +65,8 @@ public final class NavbarRules {
                 && version > app.optLong("disableVersionCode", -1)) {
             JSONObject translucent = app.optJSONObject("translucent_rules");
             JSONObject transparent = translucent == null ? null : translucent.optJSONObject(activity);
-            if (transparent != null && (isBaseApplication || !transparent.optBoolean("base_only", true))) {
+            if (transparent != null && !transparent.optBoolean("learned")
+                    && (isBaseApplication || !transparent.optBoolean("base_only", true))) {
                 int flags = transparent.optInt("policy_flag", 4);
                 if ((flags & 4) != 0) return new Choice(NavbarStore.FLOATING, null,
                         transparent.optString("source", "ColorOS 透明策略"), flags);
@@ -96,8 +75,6 @@ public final class NavbarRules {
             if (rules != null) {
                 String match = bestMatch(rules, activity);
                 JSONObject rule = match == null ? null : rules.optJSONObject(match);
-                // A learned rule is fixed only for the app version it was learned on; otherwise it seeds AUTO.
-                if (rule != null && rule.optBoolean("learned") && version != rule.optLong("versionCode", -2)) rule = null;
                 if (rule != null && (isBaseApplication || !rule.optBoolean("base_only", true)))
                     return new Choice(valid(rule.optInt("mode", 0)),
                         rule.has("color") ? rule.optInt("color") : null, rule.optString("source"));
@@ -109,11 +86,14 @@ public final class NavbarRules {
     private static int valid(int mode) { return mode >= 0 && mode <= NavbarStore.AUTO ? mode : 0; }
 
     private static String bestMatch(JSONObject rules, String activity) {
-        if (rules.has(activity)) return activity;
+        JSONObject exact = rules.optJSONObject(activity);
+        if (exact != null && !exact.optBoolean("learned")) return activity;
         String best = null;
         int specificity = -1;
         for (var keys = rules.keys(); keys.hasNext();) {
             String key = keys.next();
+            JSONObject rule = rules.optJSONObject(key);
+            if (rule == null || rule.optBoolean("learned")) continue;
             int length = key.replace("*", "").length();
             if (matches(key, activity) && (length > specificity
                     || (length == specificity && best != null && key.compareTo(best) < 0))) {
