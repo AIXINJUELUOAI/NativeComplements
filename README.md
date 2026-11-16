@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前运行源码版本：**0.12.0-community1**（versionCode 166），仅维护主模块；保留 code165 Alive Beta，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前进度与验证见[接入索引](<docs/adaptation/README.md>)、[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前运行源码版本：**0.12.0-community1**（versionCode 166），仅维护主模块；保留 code165 Alive Beta，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前架构与边界见[接入索引](<docs/adaptation/README.md>)、[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 
@@ -49,7 +49,7 @@
 按场景提供手电筒、本次常亮、蓝牙连接、验证码、链接口令、地点与屏幕旋转等建议按钮。
 
 - 支持调整按钮大小、位置和显示时长，长按拖至关闭区域可隐藏本次提示。
-- 验证码可逐位输入；链接和地图可按设置使用小窗打开。
+- 验证码可逐位输入；链接口令按系统应用路由处理。
 - 旋转建议沿用系统原生目标方向、点击及撤销逻辑。
 
 部分建议和应用输入框仍需更多实机测试；纯口令仅打开对应应用，不保证直达内容。
@@ -87,8 +87,9 @@
 
 这是固定区域触摸屏蔽，不是智能手掌识别。实际效果和多指兼容性因场景而异，区域内正常点击也可能被屏蔽，建议按需尝试。
 
-### 通知与控制中心
+### 外观与控制
 
+- **小白条沉浸**：在支持的原生导航宿主上调整导航栏占位，保留系统手势与横条，不读取应用内容或取色。
 - **横屏双栏**：在已适配的原生面板上调整通知与控制中心横屏布局，不改 DPI。
 - **状态栏位置**：在 −32～+32 dp 范围内调整图标垂直位置，不改变状态栏高度或刘海参数。
 - **信号显示调整**：按指定分档调整适用的 5G 信号格，**只改变显示，不增强信号，不提高网速，也不修改网络策略**。
@@ -99,14 +100,11 @@
 
 “关于 → 诊断日志”支持主动开始记录、复现、停止并导出有限的模块事件，不是完整系统日志，也不会自动上传。反馈时请说明机型、ROM／Android 版本、模块版本和复现步骤，公开日志前注意检查个人信息。
 
-## 最近更新
+## 当前版本
 
-**0.9.48-fixes-test2**
+**0.12.0-community1** 集成社区 LOS24 差异接入，保留主模块现有小窗与 Alive Beta。系统归属只显示一次维护者提示和关于页署名，不用 ROM 名称代替实际 Hook 检查。
 
-- 按用户授权为小窗任务增加低层白色背板，填充透明内容区，继承任务圆角和裁剪，不猜顶部高度或覆盖真实内容。整个任务透到外部的透明区都会变白，深色模式仍白，实际效果待用户验证。
-- 小窗菜单及启动／变换遮罩在缺少模块和原生 mono 时后台强制转换图标，照片保留明暗；不改变抽屉图标策略。
-- 保留 0.9.47 用户已反馈正常的沉浸、安全确认优先级与重叠触控修复。新版针对性测试、原签名 Release 与三个系统作用域检查通过；全量 311 项中 4 项既有 SurfaceFrameTest 失败，未宣称全量通过。
-- 当前仅推进[项目接入梳理](<docs/adaptation/README.md>)，尚未实现独立小窗版、Freeform 总开关前置校验或 Alive 适配；后续功能版本计划进入 0.10.0。
+Alive 使用自有动态壁纸提供锁屏／桌面照片效果及实验性 AOD 过渡；官方 native、shader 和 mask 不随模块分发，需要用户按[资源说明](<docs/adaptation/alive-assets.md>)本地导入。当前保留资源与睡眠预绘是效果／资源取舍，不代表零后台开销或所有设备兼容，详见 [Alive 边界](<docs/adaptation/alive-systemui.md>)。
 
 历史变更可查看 [Git 提交记录](https://github.com/AIXINJUELUOAI/NativeComplements/commits/main) 和 [版本标签](https://github.com/AIXINJUELUOAI/NativeComplements/tags)。
 
@@ -115,18 +113,21 @@
 单 app Gradle 模块，Kotlin／Java + Jetpack Compose Material 3。需要 JDK 17+、Android SDK `android-37.0`、Gradle Wrapper 8.14.4。源码命名空间保留 `dev.local.sunwindowdemo`，应用 ID 为 `dev.nativecomplements.module`。
 
 ```powershell
-.\gradlew.bat --no-daemon --console=plain :app:assembleRelease
+.\gradlew.bat --no-daemon --console=plain :app:assembleFullRelease
+python -X utf8 tests/verify_adaptation_docs.py
 python -X utf8 tests/verify_runtime.py
 python -X utf8 tests/verify_target.py
 python -X utf8 tests/verify_stacked_signal.py
 python -X utf8 tests/package_release.py
 ```
 
-归档目标检查依赖本地系统文件，不随源码发布；缺少归档时不代表检查已通过。打包脚本沿用本地升级签名，校验身份与作用域，仅输出 APK，不安装或操作设备；签名不提交 Git，新开发环境需自行配置。APK 不随源码仓库保存。
+仅构建 `full` 主产品。部分接口检查读取仓库内的签名快照，另一些需要本地系统归档或固定上游源码；缺少资料不代表检查已通过。正式打包脚本沿用维护者本地升级签名，校验身份与作用域，仅输出 APK，不安装或操作设备；签名不提交 Git，社区开发环境需自行配置本地测试签名，不能覆盖正式签名安装。发布 APK 不随源码仓库保存。
 
 管理界面按功能组织，小窗运行代码保留 Demo8.2 包路径；不可变原始基线及变更登记用于回归检查，不能当作临时文件清理。开发约定见 [AGENTS.md](<AGENTS.md>)，小窗实机检查要点见 [DEVICE_ACCEPTANCE.md](<DEVICE_ACCEPTANCE.md>)。
 
-准备适配 LineageOS 等其他系统或拆分小窗时，请先读[跨系统接入索引](<docs/adaptation/README.md>)与[现有架构](<docs/adaptation/architecture.md>)，再按[小窗 Hook 边界](<docs/adaptation/floating-window.md>)、[其他系统功能](<docs/adaptation/system-features.md>)和[独立产物依赖](<docs/adaptation/standalone-window.md>)提交小步 PR。本轮文档不表示已经完成解耦或增加 ROM 支持。
+参与其他系统适配前，请读[接入索引](<docs/adaptation/README.md>)、[现有架构](<docs/adaptation/architecture.md>)与[社区协作约定](<docs/community-adaptation-plan.md>)。保留共同规则，只隔离真正不同的宿主接口；不要求补测试报告，不凭构建成功宣称设备兼容。旧独立小窗包已退役，迁回主版见[兼容说明](<docs/adaptation/standalone-window.md>)。
+
+公开仓库保留当前源码、必要依赖／测试／基线及正式维护说明；内部讨论、设备现场、实验 Demo、一次性评审包和发布草稿不进入主线。历史变更由 Git 保留，不在文档重复记录逐轮会话。
 
 ## 授权与致谢
 

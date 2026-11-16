@@ -1,152 +1,57 @@
-# Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
+# Alive SystemUI 能力与有界视觉交接合同
 
-## code165 / 0.11.7-aod-fix1：当前收口
+[AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)只对用户实际选中的精确 ambient Alive 锁屏组件增加局部能力。当前行为保持 code165/166 运行合同；ROM署名不参与授权。普通壁纸/普通 Alive 保原生。绑定签名检查例外独立见[绑定合同](<alive-module.md>)，数据与生命周期见[平台合同](<alive-platform.md>)、[渲染合同](<alive-renderer.md>)。
 
-- 收录此前本地 Alive 增量：睡眠内容抑制上限 2000ms，首帧就绪后最多再等待 250ms，再以 300ms 装饰淡入恢复时钟/通知；wake 同步建立视觉交接，既有已呈现 sleep 可有条件继承壁纸遮罩资格。仅同 root、有界视觉期裁指纹装饰涟漪，不改认证或 UDFPS 输入。
-- 应用遮住壁纸时保留非 preview 的 idle scene（停止帧与传感器），睡眠信号可预绘 awake 起始帧以替换旧 buffer；Surface 销毁、资源重载及 Engine 销毁仍释放。隐藏 grace 为 150ms，真正隐藏后返回只恢复当前端点；静态 AMBIENT 回执仍等待真实 swap。该资源保留/预绘是本版本的明确取舍，不沿用历史“隐藏绝不初始化/绘制”的描述，不保证零额外内存或所有设备功耗表现。
-- `debug.nc.alive_native=1` 仅在 SystemUI 启动时读取，用于跳过 handoff/doze blur 实验；默认关闭，不由模块自动写入。首页 Alive 保留 Beta 标记。
-- 修复开发者工具加载全景 AOD 开关时直接读取受限 Secure 键导致的 SecurityException。现在进入页面不自动提权；显式 root 读取/切换在后台执行，校验系统能力和设置读回，异常明确未知。壁纸设置已开而能力未开时可关闭或重试。临时 fabricated overlay 整机重启后需重新开启，不自动重启 SystemUI/手机；不修复 LTPO，也不新增暗光/遮挡自动暂停策略。
-- 2026-11-17 用户手动试用反馈：当前暂未再发现 Alive 问题；此前“锁屏有特效、桌面无特效时桌面继承锁屏效果”本次未复现，按用户要求不追改。此为用户反馈，不等于所有配置/ROM/长期运行已验证；照片防烧屏位移仍未实现，仅短时测试。
-- 当前源码 13 项最小定向通过：Phase 3、AmbientAccess 5、Trace 1、SceneMotion 2、全景开关解析/命令 1、开发者入口 1。覆盖值状态、身份拒绝、轨道及页面，不覆盖真实 GPU/Xposed/面板功耗或 root 实机切换。原签名 release/R8、code165 身份、7 入口/3 scope、Direct Boot 与退役边界打包核验通过，APK SHA-256 `6a561d9fb1b5218814ab2e334bed6519a9d53665a4bc78ffaa7e041612fb6313`。本轮未自动安装、重启或写设备设置；社区 PR 未合并。
+## 宿主能力投影
 
-## 历史 code155 / 0.11.6-alive-takeover2
-
-- 自有PREPARE/CANCEL不再走wallpaperTarget依赖的WindowSession命令。[直达传输](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveHandoffTransport.java>)为显式本包、shareIdentity广播，仅同用户SystemUI实际UID+包名接收，非preview已存在Engine动态注册；公开壁纸onCommand只保原生事件，不能转入自有控制。回执仍校真实Engine UID/nonce/defaultdisplay，receiver不创建/唤醒Engine、不改wallpaper flags或授权限。
-- sleep在原系统回调前建立内容episode，精确clockface/通知装饰在安全非interactive门内立即停止输出，不等壁纸ACK或双showing；capture原生更新后同步刷新gate/父invalidate，避免同View重用及缓存父DL漏过。纯LightReveal仍必须实际visible+有效surface成功swap，sleep window flag与native admission继续严格双showing/无认证过渡，不借内容门放宽系统布局。
-- wake纯装饰资格不再要求locked/双showing/非going/fading，真实指纹状态可正常AOD→GONE→应用；真实locked?LOCK:HOME选目标，重复wake的LOCK→HOME沿当前三轨切换、不重seed不续2500ms。遮挡/bouncer/组件用户AOD/ON/interactive/同root/实际首swap/epoch仍受控，原认证/输入/opaque/电源/亮度均未改，不强开应用/壁纸或藏root/UDFPS。普通hidden恢复仍不借旧wake冷seed。
-- 仅原有最小定向及原签名release核验，实机物理呈现不由主机测试冒充；不自动安装/重启/改设置，无手势改动。
-
-## 历史实机结果：code154 未解决目标问题
-
-用户安装完整重启后仍报告按电源闪一帧（未确认是锁屏还是壁纸），应用内息屏马上指纹解锁仍原生动画。22:10只读现机确认154已运行，不能以‘未重启/未加载’解释；不要求再复现。
-
-- 已存本地现场 `takeover154-failure-native.txt` / `takeover154-failure-lspd.txt`。22:10:02.614 native goingtosleep、.617 renderer sleep-presented；.634原生clock doze=1、GONE→AOD与PowerButtonReveal已开始，.638通知alpha=.915；到.726才ACK并开内容门、.733才LightReveal clip。因此约百毫秒的原生早帧未接管，日志不能识别用户看到的具体像素，更不能说只有一帧。
-- 22:10:03.616亮屏，.617旧sleep门撤；.640发wake PREPARE、.652 Engine native ambient-exit、.697 AOD→GONE，.752真实unlocked、renderer1→2；本轮没有任何wake FIRST_SWAP/VISUAL，直到06.139 Host timeout。整个保存的LSPosed样本也无wake FIRST_SWAP。故新wake握手至少在这些样本没有建立，不能仅解释为‘完成认证后正常撤回’或把代码就绪当实机接管成功；Engine未见相应system-wake接收日志。进一步直接解精确services归档DEX证实实际检查在Session.sendWallpaperCommand而非WallpaperController：windowForClient取本Session真实WindowState，非空后只有mCanAlwaysUpdateWallpaper或window==当前getWallpaperTarget才调用unchecked，否则静默return；Session构造由ALWAYS_UPDATE_WALLPAPER权限决定该bool，精确a4bf SystemUI manifest未声明此权限。154wake不保持sleep flag/target，因此该命令通道不能保证送达，吻合PREPARE后无接收/ACK的现场；未直接记录失败瞬间服务端target，故不把单次丢弃条件称已动态截获。精确ControllerUnchecked本体确实无检查、无prevTarget例外，不沿旧版源码猜测。
-- 设计本身还将wake限定locked且Host双showing/!going/!fading，未覆盖AOD→GONE快速认证直达应用。认证状态/输入/遮挡等必须保持系统权威，但‘不修改认证’不等于‘所有认证期间的纯装饰绘制都必须原生’；后续要将纯视觉资格与真实认证状态区分，而非删除安全门或藏root/UDFPS。
-- 154实际只是有条件首swap后抑制部分原生输出，不是用户所要从起始到反向唤醒的完整视觉替换。9项定向/签名构建结果仍成立，但不构成效果通过。未修改运行源码、未自动安装/重启/设置。
-
-## code154 接管尝试的实现（保留，不视为效果验证）
-
-用户要求从减少偶发混播转为视觉接管。153实机21:33:56.430唤醒，.431原sleep clip退出，.440旧episode撤回，.460已有scene真实`0→1 animate=true`；此前hidden约24ms已保scene，因此该样本不是冷wake，确认现有设计在wake主动撤视觉门。原500ms状态/电源链不是要禁掉的对象。
-
-154将睡眠window flag权限与唤醒绘制权限分开：[Handoff](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)原sleep `safe`不向interactive放宽；wake新`PREPARE_WAKE`，独立UID/nonce/defaultdisplay握手及首事件固定≤2500ms绝限，不续期、不沿用7800ms旧sleep令牌。只有[Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)真实可见/有效surface/ON/interactive/locked、实际成功swap的回执后，才能裁同root LightReveal输出；不强制wake `FLAG_SHOW_WALLPAPER`、不改原生setAlpha/reveal/opaque回调。Alive端点真实swap且同root原生reveal已到1后才撤wake门（两者可能分别约400/500ms，不按通常时长猜先后），等待原生端点仍受原2500ms硬上限约束，不停原生animator；失败/隐藏/认证/occluded/用户/组件/设置/配置/期限全部回原生。新sleep撤旧wake，重复wake不续期；冷wake仅明确本次真实wake可从AMBIENT起始，普通隐藏恢复仍只当前端点。
-
-新增[内容输出门](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveVisualContent.java>)仅睡眠已ACK、严格真实showing且非interactive期间，精确clockface小/大View与NotificationStackScrollLayout的父`ViewGroup.drawChild`空clip；原链恰一次/finally恢复canvas，原时钟doze/tick及通知多贡献alpha全部照常，不写alpha/visibility或藏root/UDFPS/auth。实际父类覆盖drawChild、未知布局或ABI时目标原生回退；睡眠真实动画done/status2、cancel或cap触发父/child invalidate，重新呈现最新native状态，不硬restore1。**wake时钟/通知仍走原生交互，本版不是自制Alive时钟动画，也不宣称所有原生像素已替换。** READY前也必须保原生，不能为了零闪提前露出未成功swap的壁纸。
-
-系统AOD值由本用户设置observer缓存，关闭或未知禁止Alive的AMBIENT进出动画及sleep准入（LOCK→HOME仍Alive），不写系统设置；开回再按真实事件重新准入，不复活旧nonce。主包身份/签名/作用域不变。不实现长侧滑：用户本轮已取消，后续上滑变小窗另行接入，无手势修改。
-
-主机最小检查与release证据由本轮收口，硬件RenderNode裁剪/native Hook命中及用户观感仍需测试版安装后验证；不能以编译证明所有ROM/所有动画已替换。不再要求用户泛泛反复抓日志，不自动安装/重启/改设置。
-
-## 历史定位包：code153 / 0.11.5-alive-trace1
-
-本轮只增加可撤销的只读诊断，不替换视觉、不统一AOD开关行为。用户已确认后续目标为系统AOD开时Alive主导亮灭屏、关时保原生；当前壁纸服务仅按组件能力启动sleep的条件仍待修复，不能以本定位包宣称目标已实现。锁屏→AOD原生500ms状态链与电源控制必须保留；原生遮罩、clock doze形变、通知alpha是独立视觉路径，不存在可安全全局关闭的单一动画开关。
-
-153观测[诊断类](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveTransitionTrace.java>)与[原交接](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)同一有界episode：`ALIVE_TRACE`和PREPARE/FIRST_SWAP/VISUAL/END共用8位`ep`（独立随机诊断标识，不从握手nonce派生、不输出Binder凭证）；只选中精确自有ambient壁纸、默认屏已附着宿主且未过期时在主线程记录；若transition回调来自其他线程，仅转交枚举/进度快照并重验独立episode，超100ms或代际不符即丢弃。遮罩与通知View另验同root；不逐帧、不记录通知正文/包名，不截图、不读应用内容。每组ABI独立预检/deopt；失败只撤本组诊断，不改变现有handoff及原函数参数、返回或Flow值。日志仅沿用既有LSPosed模块日志通道，无网络上传；诊断记录不能当握手凭证。
-
-目标记录为原生transition开始/完成/取消、LightReveal效果/数值边沿、clock doze和通知alpha有限边沿、clip有限进出。它们是执行事实而非物理屏幕可见证明；缺某组日志先查该组READY/UNAVAILABLE与门条件，不能直接判该原生效果不存在。wake、超时、用户/壁纸/设置/配置变化仍沿原有cancel收尾，不为了日志延长接管期限或暂停系统状态。
-
-只读现机样本20:52:24.105已锁定后sleep，.111提交Alive起始帧，.113safe ACK，.123clip进入；该轮不是scene0冷wake。20:52:31/34是locked=false的另外两轮，不混入锁屏结论。长期AOD并不必然释放scene；只有实际发生hidden/surface失效/reload后scene0的冷wake静态重建是已证条件性缺口，尚需失败轮次对应证据。用户确认观察到的原生效果同时包含壁纸和时钟/通知，因此不把仅裁LightReveal当完整修复。
-
-定位包完成后的手动验证：用户安装并完整重启使SystemUI载入新代码；保持系统AOD开启，先只在锁屏按电源息屏一次，标记异常时刻。随后分别记录应用内息屏、长AOD唤醒和AOD关开对照，避免混轮。不自动安装、重启或改设备设置。构建/最小检查由交付收口，不作为宿主ABI或设备视觉已验证声明。
-
-## 历史诊断：code152（未新增内容层Hook）
-
-151用户仍报熄屏闪真实时钟/日期/通知；152仅编辑卡片确认窄修，不是此问题已解决。真实树中LightRevealScrim与KeyguardRootView为兄弟，SharedNotificationContainer在root外，当前scrim空clip不会裁内容。root内同时含DeviceEntry/UDFPS/auth视觉，不可整root或Shade强alpha0/visibility隐藏；这两个容器继承ConstraintLayout且无自有draw/dispatchDraw，不能以getDeclaredMethod假称已适配。Root alpha Flow与通知原生多贡献min为真实候选，不能覆盖值后硬restore1，撤门必须让原生最新状态重算。将shouldDelayKeyguardShow复回true又会阻断当前ACK要求的真实locked/双showing，不能恢复旧1300ms猜改。尚无安全闭合的内容门实现；需同nonce/user/root下真实alpha/认证/转场边沿证据，再决定内容门与ACK/稳定AOD的撤门时机。不提前clip未swap壁纸、不修改认证/电源/亮度，timeout/wake/配置/用户/组件变化仍原生回退。
-
-## 历史增量：0.11.5-alive-test1 / code149（不改SystemUI Hook）
-
-本轮[固定AMBIENT下移与单页UI](<alive-platform.md>)只改应用编辑与motion默认锚点。系统AOD值仍只读本用户设置，实际常亮/省电/遮挡仍遵守原生；没有动态时钟bounds输入，不改本篇147睡眠准入/UID/nonce/期限/认证/亮度边界。三种解锁现象仍未解决，不能用本轮位置修改宣称认证或系统涟漪修复。
-
-## 历史增量：0.11.4-alive-test1 / code148（数据准备，不改认证）
-
-code148不新增SystemUI认证或解锁Hook，保留147下述入场选择、FIRST_SWAP UID/nonce/期限校验与双真实showing安全门。[Direct Boot准备](<alive-platform.md#code148direct-boot-数据边界>)只将核心资源及当前已应用照片/AtomicFile配置快照放入本用户应用私有DE，使系统所选且directBootAware的普通/实验壁纸service有机会在首次解锁前读取；不强选、重绑或启动壁纸，不使草稿/编辑预览在锁前可读。
-
-迁移仅在已解锁worker访问CE，核心资源完整hash/白名单复制、只读暂存/fsync/rename，不覆盖已发布代、不删除CE源。已应用照片先发布、再提交并读回核验AtomicFile快照，revision偏好不作权威。失败或未准备仍安全回退；新安装先应用一次、旧版先已解锁迁移，之后下一次开机才具备数据。DE已应用照片以及保留的历史已应用/确认应用中断候选在首次解锁前对本应用可读是明确隐私取舍，不是系统认证放宽；本轮不自动回收或限制其总量，不能声称DE只存当前一张。
-
-本轮编译/打包及首解锁前行为由Lead收口，本文不预报PASS。三种解锁现象仍在诊断，时钟下移/避让、照片burn-in及通知/跨应用扩展未实现；Direct Boot不作为这些问题已修复的证据。
-
-## 保留实现：0.11.3-alive-test2 / code147
-
-146真机只读证据确认GONE→AOD原生shouldDelayKeyguardShow约1300ms，首帧已有但真实锁屏/视觉交接必须等待；不是首swap本身延迟。147新增下列精确ABI，并与原Handoff同组安装/deopt，任一失败unhook整组：
-
-- `ScreenOffAnimationController.onStartedGoingToSleep():void` 与 `animations:java.util.List`；主线程原动画循环前准备本次episode（重复不续期），循环及Fold候选保留。
-- `UnlockedScreenOffAnimationController.startAnimation():boolean`、`shouldPlayUnlockedScreenOffAnimation():boolean`；字段 `notifShadeWindowControllerLazy:dagger.Lazy`、`lightRevealScrim:LightRevealScrim`、`lightRevealAnimationPlaying:boolean`、`lightRevealAnimator:ValueAnimator`、`decidedToAnimateGoingToSleep:Boolean`。
-- 仅本次active未绝限、精确自有选中令牌/当前用户/AOD、默认屏ON且非interactive、同native窗口/root、实例确在动画列表、无occlusion/goingaway/fading/bouncer且原生未动画/decision仍null，进入原start同步动态ThreadLocal；原谓词先proceed，只有原true且重验上述门成立才投影false。原start自身走FALSEcache分支，不手写字段/强制showKeyguard。原 `maybeHandlePendingLock` 仍检查认证过渡并调用原 `doKeyguardLocked`。
-- 不全局改predicate/DozeParameters/PowerManager，也不改原1300ms状态流或亮度；原生后续查询自然读其FALSEcache并可能早DOZE。原wake清cache/handler/animator仍运行，ThreadLocal finally清理，不带到其他查询。取消后的“回原生”只指恢复窗口flag与绘制，不重放已选择不播放的旧动画；不能承诺原动画自动补播或完整1800ms。
-- admission是锁屏前的动画入场选择，故不要求already showing；**视觉safe仍要求两处真实showing且所有原安全门，FIRST_SWAP UID/nonce/期限/Surface验证不放宽**，没有准备好的可见帧就不透出。Service duration0只保已有未过期PREPARE/active/defaultON/noninteractive有界等待，不要求等待时已经可见/locked/Surface有效；绘制与ACK仍要求这些事实，命令schema不当发送者认证；DOZE回执只允许已start成功帧，OFF/SUSPEND仍撤回，不强保ON。
-
-新147尚未真机验证，其他scrim/opaque/原生亮度仍可能影响观感；不把ADMISSION/VISUAL日志当物理可见证据。
-
-## 历史实现：code146
-
-历史为0.11.3-alive-test1/code146，覆盖145仅跳额外淡出的实现。此为用户追加授权的模块例外，不是普通应用获得签名权限；新Handoff尚未真机验证。仅主版安装 [AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)。明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通Alive仍为ambient=false回退。不新增全局enable偏好或Provider。
-
-## 已核宿主与事件输入
-
-离线依据为 current SystemUI SHA-256 `a4bf853b529f6ec7480409fa4f6ba53044a2e409f84c8f20bd320e928c883972`，不把其他 Android/OEM ABI 当作已验证目标。
-
-`com.android.systemui.wallpapers.data.repository.WallpaperRepositoryImpl` 构造参数依次为 `CoroutineScope, CoroutineDispatcher, BroadcastDispatcher, UserRepository, WallpaperManager, Context, SecureSettings, ConfigurationInteractorImpl`。原构造先完成，再把本实例的 `wallpaperSupportsAmbientMode: Flow` 投影为：
+精确预检 `WallpaperRepositoryImpl` 构造与字段、宿主 FlowKt 四流 combine(Function5)/flowOn、StateFlow 用户模型、设置 getter及 per-user WallpaperManager 接口。构造先运行原生，再仅替换新 repository 的 cold `wallpaperSupportsAmbientMode: Flow` 投影：
 
 ```
-host FlowKt.combine(nativeAmbient, lockscreenWallpaperInfo, wallpaperInfo,
-                    UserRepositoryImpl.selectedUser, host Function5)
-    .flowOn(native bgDispatcher)
+combine(nativeAmbient, lockscreenWallpaperInfo, wallpaperInfo, selectedUser, hostFunction5)
+    .flowOn(nativeBackgroundDispatcher)
 ```
 
-所有 Kotlin/coroutines 类都从宿主 ClassLoader 解析，Function5 是该 loader 的动态代理，transform 不挂起、不处理 continuation，仅返回 bootstrap Boolean。没有把模块 Kotlin/Flow 实例交给宿主，也不重写原生 readonly StateFlow、修改共享发射值或全局 Resources。组合保留原生 cold Flow 的收集/取消生命周期，不启动轮询、永久 worker 或新广播接收器。
+Kotlin/coroutines/代理均来自宿主 ClassLoader，不混入模块 Flow，不写 readonly StateFlow、共享发射值或全局资源；沿用宿主收集/取消生命周期。
 
-原生 ambient Flow 在该 APK 中由两个 SecureSettings observer（`doze_always_on`、`doze_always_on_wallpaper_enabled`）与配置流 combine，经 unsafe map 读设置/资源后 flowOn；已读构造及 map/emit 链，**没有 distinctUntilChanged 或 stateIn**，因此同为 false 的 AOD 设置变化仍能触发重新判断，无需再搭一套 ContentObserver。两个壁纸 readonly 流已有 wallpaper-changed 与用户完成切换输入；另外组合用户仓库的原始 selectedUser StateFlow，切换开始也可撤回本模块额外能力，而不是等待过滤后的 SELECTION_COMPLETE 流。
+额外能力须用户选择完成、本用户 `doze_always_on==1`，后台实查锁屏壁纸ID/info/完整组件及真实 ambient metadata。独立静态锁屏不能回退主屏；仅 LOCK ID负值且 info为空才允许查 SYSTEM。返回前再验壁纸ID、AOD与选中用户身份。其他壁纸始终保 native 结果，读取失败不添加能力。
 
-**额外分支的 opt-in 是用户选用独立实验组件，不再以 `doze_always_on_wallpaper_enabled` 作为第二道开关。** 此设备该项为空且原生 wallpaper capability=false，没有可用的原生壁纸 AOD 入口；本模块不替用户写它。即使该项为 0，主动选择实验组件仍表示开启本组件的 AOD 壁纸；真正 `doze_always_on` 总开关始终有效。撤回该选择须切回普通 Alive 或其他壁纸；若系统另提供“息屏壁纸”开关，本实验不把它当自身的关闭入口。
+opt-in 是实际选用 ambient 组件，不额外以 `doze_always_on_wallpaper_enabled` 作模块开关；本路径不写这两个设置。用户/AOD/组件变化由原生 Flow 撤销额外分支，非跨进程事务级零延迟。constructor/deopt失败撤本组Hook；单实例投影失败保原 field，不能热修已创建实例。
 
-## 仅额外分支的核验
+## doze 模糊贡献
 
-1. 其他壁纸始终保留 native 能力结果。code144即使 native=true 也需在后台核验自有组件以建立窄 blur gate；不能再沿用历史“不新增 Binder 查询”的断言，核验失败仍返回 native 值。
-2. native 为 false 时，当前 SelectedUserModel 必须仍是 StateFlow 的同一对象且 `selectionStatus == SELECTION_COMPLETE`，用户 ID 必须有效。用户切换中不添加能力。
-3. 通过宿主 `UserSettingsProxy.getIntForUser(int defaultValue, int userId, String key)` 读取该用户 `doze_always_on == 1`，不写系统设置；该 APK 参数顺序已按 DEX 指令核对。
-4. 在 native bgDispatcher 上重新查询 `WallpaperManager.getWallpaperIdForUser(which,userId)` 与 `getWallpaperInfo(which,userId)`，不把跨用户期间可能仍旧的 wallpaperInfo 缓存直接当授权。仅锁屏组件精确匹配实验服务、实际 metadata `supportsAmbientMode()` 为 true 时允许额外 true。
-5. 独立静态锁屏的 info 也为 null，**不能直接回退主屏**。仅 LOCK ID 为负（没有单独配置）且 info 为 null 才查询 SYSTEM；ID 为 0/不一致、独立静态锁屏、未知异常均不添加能力。成功返回前再次核验实际壁纸 ID、LOCK ID、AOD 设置与当前 SelectedUserModel，降低查询过程切换造成的旧值复用。
+只标记 `NotificationShadeDepthController` 两个已预检 producer 的同步 ThreadLocal 范围：`statusBarStateCallback.onDozeAmountChanged`及 classId1能力 collector的 `emit`。仅同 owner、ambient能力 true、doze量>0、当前自有 MatchToken仍有效时，把其 `setWakeAndUnlockBlurRadius` 本次贡献投影为0。
 
-读取到明确新组件后，切普通 Alive/其他壁纸、设独立静态锁屏、切用户或关 AOD，额外分支均恢复 native 结果。恢复是原生事件流的异步传播，不承诺跨进程事务级零延迟；系统原生壁纸/Doze 生命周期继续决定真实显示。
+setter内不新增Binder查询；认证动画、QS、brightness mirror、应用启动等其他贡献保持原计算。读取失败保 native 参数；三处Hook/deopt失败只撤该组。不是全局setter清零、资源min/max修改或所有样式去模糊。
 
-## ABI 与失败恢复
+## 控制传输与回执
 
-运行时精确预检构造、字段类型、host FlowKt 的四流 combine(Function5)/flowOn、host StateFlow.getValue、SelectedUserModel/UserInfo/SelectionStatus、设置 getter、两个 per-user WallpaperManager getter 与 WallpaperInfo.supportsAmbientMode。缺项不安装；constructor deopt 失败撤销 hook。单实例投影构建失败保持原 field，运行期间任何额外分支读取失败返回该次 native 值，不改变只读状态。当前构造期替换不用于热修已创建的 repository，模块由正常 SystemUI 启动安装。
+[AliveHandoffTransport](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveHandoffTransport.java>)采用显式本包、`shareIdentity`广播传送 PREPARE_SLEEP/PREPARE_WAKE/CANCEL。仅已存在非preview Engine动态注册，验同用户 SystemUI实际UID及精确包名；不唤醒/创建Engine，不授权限。公开 wallpaper `onCommand`只保原生事件，不能接入自有控制。**自有控制不再经依赖 wallpaperTarget 的 WallpaperCommand。**
 
-本机 Android 36 SDK 源码可核 `getWallpaperIdForUser(int which,int userId):int` 的负值缺省语义以及 `getWallpaperInfo(int which,int userId):WallpaperInfo`；实际运行框架仍逐项预检，SDK 源码不是当前设备实现证据。
+[AliveSleepHandoff](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)每episode创建随机nonce、实际Engine UID、default display及固定 uptime期限。消息结构校验不是发送者认证的替代。raw Binder回执核实际调用UID、interface descriptor、nonce、display0、完整Parcel且无多余数据，主线程再验当前episode/期限；状态0取消、1首swap、2真实端点swap。旧nonce/旧render epoch或重复回执不重开内容门、不续期限。
 
-## code144：只消除两个 doze producer 的模糊贡献
+Engine只有自有ambient/AOD开启、非preview、未销毁、native visible、default display、有效Surface、对应交互/显示状态下的真实 `eglSwapBuffers` 成功才能确认。sleep可在ON，或真实ambient且已成功sleep的DOZE确认；wake须ON/interactive。成功swap不等于物理屏幕已经显示。
 
-code143只读现场显示：所选留光自身blur0，但系统稳定doze的 `wakeAndUnlockBlurRadius=52`、`lastAppliedBlur=52`。归档代码按 `lerp(minBlur,maxBlur/2,easedDoze)` 计算，现场min1/max104/doze1吻合；这不是证明所有样式模糊都来自系统，照片样式2..5仍有上游内容模糊。
+## 睡眠与唤醒边界
 
-新增投影只标记两个已核真实producer的同步调用范围：`NotificationShadeDepthController$statusBarStateCallback$1.onDozeAmountChanged(FF)` 与 `NotificationShadeDepthController$2$1.emit` 的classId1能力collector。ThreadLocal标记同一owner，只有它们调用 `setWakeAndUnlockBlurRadius`、ambient能力为true且doze量>0、当前repository仍匹配精确自有实验锁屏组件/当前已完成选择的用户/AOD条件时，才把**本次贡献参数**投影为0。不是全局setter清零，也不改BlurUtils、资源min/max或整个ambient Flow。
+- sleep在原系统睡眠回调前建立一次episode，首信号起绝限7800ms；重复不续期。wake独立PREPARE_WAKE及2500ms绝限，不复用sleep nonce。
+- MatchToken包含实际选中用户/组件/AOD/壁纸身份；只在default display附着的同native shade window/root工作。occlusion、bouncer、用户/组件/设置失配、配置/尺寸/旋转变化、detach、超时与未知异常撤回。
+- sleep `applyWindowLayoutParams`提交期间临时OR `FLAG_SHOW_WALLPAPER`，原方法继续，随后恢复原pending flags。当前 `beforeLayout`使用非interactive安全门，不要求已showing；不把该早期布局资格当作壁纸首帧/认证证明。wake不强加此flag。
+- `ScreenOffAnimationController`保原动画循环/Fold候选；仅同episode、精确native窗口/动画实例、默认ON/非交互、无遮挡/认证过渡且原生尚未动画/decision为空时，在原 `UnlockedScreenOffAnimationController.startAnimation`同步范围内将原true谓词投影false。由原start写自身FALSEcache，不手写认证/电源状态、不global禁动画。取消后恢复绘制/布局，不重放已被原生选择不播放的旧动画。
+- 同root `LightRevealScrim.onDraw`仅在当前视觉安全门及已确认帧后临时空clip，仍调用原方法并finally还原Canvas。保原alpha、opaque/reveal/controller、animator及亮度/电源。既有已呈现sleep视觉可有条件继承到wake，随后仍受新episode的身份/状态/期限约束。
+- wake只控制纯装饰输出，不要求locked/双showing/非going/fading；真实指纹可AOD→GONE→应用，Engine按真实锁定选择LOCK/HOME。occlusion/bouncer/用户/AOD/root/display等门仍在；不修改认证、输入或强开应用。wake端点swap且原生reveal到1才撤门，仍受2500ms上限，不按通常动画时长猜测完成。
 
-该匹配由前述后台Flow的实查结果建立，并在setter上核对当前用户及锁屏/主屏流对象身份；不在高频setter内作Binder查询。组件/用户/AOD变化由原生流撤销匹配，后续producer恢复原值；不承诺跨进程零延迟。setter的认证动画直接调用不在producer作用域，不投影；QS/shade/brightness mirror/应用启动及其他原生贡献仍由原计算合成。读取失败保留native参数；三处hook/逐个deopt失败撤销这组blur hook，不扩大作用域或阻止原生能力路径。
+## 精确内容绘制与恢复
 
-## code145历史：只跳额外淡出不足以接管视觉交接
+[AliveVisualContent](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveVisualContent.java>)只在sleep安全非interactive门内抑制精确clockface小/大View与通知目标，不等待首帧ACK或双showing；这不提前透出未确认壁纸。捕获后刷新gate并invalidate父/child，防重用View/父DisplayList漏刷新。
 
-[code144日志](<../../verification/alive-live-20261116-1400/manual-transition-logcat.txt>)曾定位scene释放至DOZE的1.913秒断层，145随后增加7800ms绝限内静态holding及额外fade投影。[145新只读证据](<../../verification/alive-live-20261116-1440/logcat-all.txt>)进一步显示14:38:52.987 sleep、53.029首swap、54.830窗口到期、57.066 DOZE，期间visible/draw=true；用户仍报告软件内/桌面都先原生熄屏动画/黑场再Alive。这排除了“只需晚释放”作为完整答案，但不凭日志武断认定每帧具体遮挡层。
+父必须走已核基类 `ViewGroup.drawChild`，未知override/布局目标保持原生。空clip仍原链恰一次/finally恢复，不写时钟doze/tick、通知多贡献alpha、visibility，不藏整root/UDFPS/auth。sleep内容抑制最多2000ms，首帧ready后最多再等250ms，端点完成可更早释放；正常sleep释放以300ms局部绘制淡入恢复，wake/cancel/失败立即恢复。wake时钟/通知仍原生，不是自制Alive时钟。
 
-code145曾对已核 `LightRevealScrimViewBinder$bind$1$1$2$1.emit(Object,Continuation)` 仅作host `Pair(nativeTarget,true)`→`Pair(同一个nativeTarget,false)`，跳额外333ms等待与733ms淡出，保留0.4/0.64原生目标暗度。以下门控记录为历史；**code146已删除这组投影，不与新Handoff叠加。**
+仅同root有界视觉期裁指纹装饰涟漪，不改UDFPS输入/认证。无帧确认不启用新的壁纸clip；renderer失败、Surface销毁、实际隐藏超150ms grace等取消交接并请求原生重算。隐藏idle保留与睡眠起始预绘的资源取舍见[渲染合同](<alive-renderer.md>)，不能沿用“所有隐藏路径绝不初始化/绘制”的断言。
 
-当时门控必须全部成立：view所属默认显示器且ON/DOZE、非交互、后台已实查的精确自有实验锁屏组件/当前完成选择用户/AOD匹配仍有效；只在binder主线程收集中识别原生target=1开启一次identity-scoped episode，期限≤7800ms。随后0<target<1且原生animate=true时，还需真实KeyguardStateController showing、未occluded/goingAway/bouncer/fadingAway；user/lock/home对象身份仍相同才投影。该次分支无论安全与否都消耗token，不延后解锁后补播；唤醒、其他target、用户/组件失配与读取失败清理episode，过期不重放。不是逐帧hook，也不在binder里新增Binder查询。
+## 失败、诊断与非目标
 
-当时该组ABI/deopt失败独立撤销，不影响能力Flow/doze blur；这段仅保留145实现历史，不再描述146为Hook LightReveal binder。两版都不打开全局AOD资源，不绕过 `DozeParameters.getAlwaysOn`、省电、接近保护或显示器暂停；system_server绑定例外与视觉交接是不同边界。
+各组精确ABI/deopt预检、保护执行，失败撤本组Hook并保原生，能力/blur/handoff/只读诊断互不冒充成功。`debug.nc.alive_native=1`在SystemUI启动时读一次，仅跳过handoff/doze blur，保能力投影；模块不自动写此属性。
 
-## code146：共用睡眠入口、首swap确认后才透出Alive
+[AliveTransitionTrace](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveTransitionTrace.java>)只在同一有界episode记录白名单转场/数值边沿，独立随机诊断短标识，不输出nonce/Binder凭证，不逐帧、不记录通知内容或截图，不网络上传；后台事件转主线程后重验身份/时效。诊断失败不改变原参数/Flow或交接。
 
-[AliveSleepHandoff](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)替代145额外fade投影，接已核 `KeyguardService$2.onStartedGoingToSleep`，软件内与桌面共用同一个入口，而非桌面补丁。原方法先执行，再开启一次episode，经原生 `WallpaperManager.sendWallpaperCommand` 向实际壁纸发PREPARE；重复睡眠信号不续期，绝对期限7800ms，不持wake lock。
-
-1. 复用能力投影的实查MatchToken：当前完成选择用户、精确实验锁屏组件、AOD开关、真实壁纸ID及本包实际UID。仅默认显示器ON/DOZE、非交互、同一个native shade window/root且真实Keyguard showing、未occluded/goingAway/fading/bouncer时有效；窗口state也须一致。未知一律原生。
-2. 在该窗口原生 `applyWindowLayoutParams` 提交范围临时OR `FLAG_SHOW_WALLPAPER`，原方法继续执行，随后恢复原pending flags；不提前空画系统遮罩，不改窗口输入/认证属性。
-3. [Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)只在自有非预览实验服务、默认显示器ON、非交互、真实锁定、native visible且surface有效时，向 [renderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)请求一次真实成功swap回执。经raw Binder返回；接收端核 `Binder.getCallingUid()` 为该用户本包实际UID、interface descriptor、episode nonce、display0、状态/Parcel无多余数据及期限。旧回执不能启用新episode；成功swap不等于物理屏幕已呈现。
-4. 回执之后且上述同一安全scope仍有效，才在同root `LightRevealScrim.onDraw` 临时空Canvas clip，**仍执行原onDraw并finally恢复clip**。不改native alpha、opaque回调、LightReveal controller或Keyguard认证，不吞原方法、不全局透明；也不修改显示器电源、亮度或输入。
-5. timeout、wake、Engine取消/renderer失败/已确认后不可绘或隐藏、surface销毁、窗口detach、配置/尺寸/旋转、用户/壁纸/AOD切换、OFF/SUSPEND/移除或未知失败均停止局部呈现并请求原生重算。surface挂载后重新安排首swap确认，不复用被attach释放掉的旧回调。ABI/deopt安装失败撤销本组Hook，能力Flow与doze blur独立回退。无首swap则不clip，重复命令/回执不延长绝限，不能解锁后补开视觉scope。
-
-这里控制的是自有Alive在一段安全睡眠窗口内的**壁纸可见与局部LightReveal绘制**，并未替换所有原生锁屏/熄屏动画，也未照搬OpenAlive的ColorOS专用屏幕/CPU窗口或全包权限例外。系统仍控制软件退出、认证、功耗/接近保护和最终DOZE；新交接尚未真机验证。
-
-## 验证范围
-
-目标ABI依据归档DEX；145只读现场不是146 Handoff实际生效或普遍连续性的证明。按用户少测试要求仅保留必要启动/Hook失败恢复、生命周期与构建/R8/原签名/身份/资源/产品边界核验，由Lead收口；本文不预报执行中的PASS/hash，不跑full suite或全功能回归，不自动安装、重启或写设置。
-
-软件内与桌面熄屏交接、组件/用户/AOD/配置切换回退、省电/遮挡、指纹直达HOME、球体色块与补播修正仍交用户真机验证。照片burn-in位移未做、时钟避让延期，限短时测试；构建、单测及全屏预览不能代替物理DOZE/GPU/视觉验证，不称所有原生动画已替换、全面连续/无闪或其他ROM兼容已通过。
+不改系统认证、root/UDFPS、输入、电源、亮度或接近保护，不加wake lock；开发者工具显式设置操作不属于自动壁纸路径。无照片防烧屏位移、无动态时钟避让。主机/打包检查不证明硬件裁剪、真实Hook命中、GPU/功耗或全ROM视觉验收，不声称全部原生像素已替换或零闪。

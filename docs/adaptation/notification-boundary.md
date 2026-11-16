@@ -9,9 +9,11 @@
 
 ## 安全与失败恢复
 
-- [BarrageProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageProvider.java>)与 [SuggestionProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionProvider.java>)保留实际调用 UID 校验；历史仅 SystemUI 写入。存储、Bundle、通知监听与设备保护偏好不进纯层。
+- [BarrageProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageProvider.java>)与 [SuggestionProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionProvider.java>)只向管理器／实际 SystemUI UID 提供对应数据；弹幕历史仅 SystemUI 写入，建议状态上报只接受固定短字段，不提供任意远端偏好写入。存储、Bundle、通知监听与设备保护偏好不进纯层。
 - 弹幕 `addView` 成功登记在播 → 历史 `commit` 返回成功 → 主线程确认仍在播且为同 key/postTime/投递内容 → 调原生取消。显示/保存/取消失败不吞原通知；旧版本保存或移除不能影响新版本，保存失败可由同投递重试。配置或宿主失败保留原有快照退避/原生清理路径。
 - 旋转由 [SystemUI 适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/RotationSuggestion.java>)与 [Launcher 适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/LauncherRotationSuggestion.java>)持有原生提议/按钮/Binder；只在用户点击且当前提议仍匹配时调用原生动作，不改自动旋转总开关。关闭恢复原生；Hook、窗口或主机确认失败放回原生展示，不吞原生按钮。
 - [SuggestionInput](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionInput.java>)复用纯数字/延迟校验；token、应用窗口类型与 UID、原生焦点同对象、IME 可见性、锁屏、WM 锁及定向 DOWN/UP 注入留原生，保持逐步短路重验；每个已提交 DOWN 始终配对 UP。
 
-这里只记录代码边界；既有针对性检查不代替真机效果或跨系统兼容验证。
+原生通知观察由共享 BackBridge 在已投递／移除回调之后转发，不拦截普通应用发送或 NMS 投递前路径。短信需用户授予 RECEIVE_SMS，标准接收器仅向 SystemUI 定向发送命中 OTP 的有界内容并共享发送身份，不记录正文。两类功能独立于小窗总开关，但仍依赖 SystemUiHost；退役的快捷建议小窗动作不重新提供。
+
+Launcher 旋转桥接使用实际 SystemUI UID、Binder 租约及逐提议 ACK；超时／死亡恢复原生，Launcher 目标须为已知系统实际 HOME／本用户 UID。原生 Hook 可能局部安装，不承诺统一动态卸载；既有针对性检查不代替设备或跨系统兼容验证。

@@ -1,6 +1,6 @@
 # 社区适配与短期任务分支
 
-更新：2026-11-17。本轮已获授权实施，以 LOS24 [PR #4](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4) 为首个集成样本；先前的“仅留档、不合 PR”已被本次决定取代。
+用于主项目与社区适配的轻量协作约定。已集成的 LOS24 [PR #4](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4) 是差异接入示例。
 
 ## 协作保持轻量
 
@@ -26,4 +26,4 @@
 - 管理界面不能代替其他进程扫描 Hook；不因为 ROM 名称、测试资料缺失或未收到结果就关闭功能。Hook 安装成功也不表示视觉、性能和恢复均已实机验证。
 - 新增作用域、权限、协议以及认证／电源行为变化仍需审阅，不以适配为由放宽安全边界。
 
-首轮整理范围与验证结果在[接入索引](<adaptation/README.md>)和 [LOS24 接入说明](<adaptation/lineageos-24.0.md>)随实际收口更新。
+当前架构见[接入索引](<adaptation/README.md>)，差异接入取舍见 [LOS24 接入说明](<adaptation/lineageos-24.0.md>)。

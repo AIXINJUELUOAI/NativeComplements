@@ -12,9 +12,9 @@
 ## 配置快照与产品组成
 
 - [HostSnapshot](<../../app/src/main/java/dev/local/sunwindowdemo/core/HostSnapshot.java>)是共用 Android 存储/传输适配器，处理 Bundle、AtomicFile、Provider 和宿主存储目录；不是系统兼容业务接口。Provider 不可达可保留最近完整快照，必须保留每个功能的失败语义，不能一律强制关闭或继续启用。
-- [ModuleIdentity](<../../app/src/main/java/dev/local/sunwindowdemo/core/ModuleIdentity.java>)与[WindowBackendOwnership](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendOwnership.java>)分别保留 full/window 身份隔离与小窗进程内先到所有权。非小窗功能不应借用小窗的接管权或总开关。
-- [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>)与[window ProductFeatures](<../../app/src/window/java/dev/local/sunwindowdemo/ProductFeatures.java>)是实际编译源集边界，负责组合各自宿主适配器；window 不安装其他功能 Hook，不能仅依赖管理页隐藏。新增功能需显式确定属于哪一产品，不能无意穿透此边界。
+- [ModuleIdentity](<../../app/src/main/java/dev/local/sunwindowdemo/core/ModuleIdentity.java>)与[WindowBackendOwnership](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendOwnership.java>)保留主包／旧独立包身份隔离和跨 ClassLoader first-claim；当前仅构建 full，不重新发布 window。非小窗功能不应借用小窗接管权或总开关，旧包兼容见[退役合同](<standalone-window.md>)。
+- [ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>)组合正式主模块宿主适配器，不把全部能力安装放进小窗 owner 分支。隐藏管理页不等于卸载 Hook，停止独立产物不等于可以删其身份／恢复墓碑。
 
-## 最低必要核验
+## 核验边界
 
-复用现有诊断 Provider 授权和批次原子性检查，不为此次提取新增测试套件。构建和本地规则检查不能证明设备可开机、桌面可用或目标 ROM 全兼容；仍须用户安装回归，模块不自动重启或修改 LSPosed 配置。
+复用现有 Provider 授权和批次原子性检查；缺资料不记通过，构建和本地规则不证明设备启动、桌面或目标 ROM 全兼容。模块不自动安装、重启或修改 LSPosed 配置，也不把诊断内容及设备现场写入公开文档。

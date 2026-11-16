@@ -1,23 +1,26 @@
-# 图标：规则输入与 Android 执行边界
+# 图标接入边界
 
-## 真实入口
+## 素材与规则
 
-- [IconRenderPolicy](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconRenderPolicy.java) 是无 Android 依赖的值规则：沿用原 mode 编号，接收彩色／莫奈／通知选择、库是否匹配、生成前后景是否齐全，输出素材来源、两路 mask 选择和是否需要解析。`themed(userEnabled, systemThemed)` 共用于抽屉、遮罩和小窗；三者仍独立开关。
-- [IconPolicy](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconPolicy.java) **不是纯规则层**：它继续承接既有 JSON、偏好迁移／批量保存与素材剪枝，公开常量沿用值规则编号。未增加另一套配置或持久化协议。
-- [IconAssets](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconAssets.java) 的 `resolve` 在原 PackageManager 原图查询后使用 plan；UI 预览与宿主 worker 共用此入口。手动双层、匹配库、已生成双层互斥；缺文件或缺层保持原图，不自动改走算法。mask 的跟随决策仍以真实素材解析后的 `nativeColor` 为准，原平面图不伪造独立 themed 槽。
+[IconRenderPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconRenderPolicy.java>)沿用已有 mode 编号，按彩色／莫奈／通知选择、匹配库及生成前后景完整性输出素材来源和 mask 计划。[IconPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconPolicy.java>)继续承载 JSON、偏好迁移、批量保存和剪枝，不是纯规则类。
 
-## 宿主 ABI 与资源
+[IconAssets](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconAssets.java>)在原 PackageManager 查询后解析计划，UI 预览与宿主 worker共用入口。手动双层、匹配库、已生成双层互斥；缺文件／层保原图，不静默换算法。mask跟随真实解析结果，不把平面图伪造成独立 themed 槽。
 
-[IconLayerModule](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java) 保留 Launcher `IconProvider`、`LauncherActivityInfo`、`FloatingIconView`、模型缓存刷新 ABI；同用户检查先于替换，原生 themed 动画不被彩色替换。[DrawerMonet](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/DrawerMonet.java) 保留 drawer／prediction 与 search 区分、原 `BitmapInfo`、CacheLookupFlag 的 8 位及绑定 ThreadLocal 的 finally 恢复；关闭重绑，不全局开启主题、不写共享 BitmapInfo。
+“外观与控制”中的莫奈开关仅保留抽屉，受原生系统主题状态门控；图标适配页逐应用“莫奈图标”及“状态栏通知小图标”模式不受退役影响。窗口／遮罩莫奈已退役，[ShadeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeStore.java>)恒关并忽略旧值，不能因共用素材方法或旧字段仍存在而宣传为当前功能。批量设置从图标页菜单选择应用，再独立选择各路模式，未选路保持原值，一次发布。
 
-[SystemIconModule](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java) 保留同用户非会话通知、原生画布缩放和 splash 类型／用户判断；临时替换 splash 属性后无论成功失败均 finally 恢复。Drawable、Bitmap、Surface 之外的 Hook 对象身份、URI、Provider UID 权限与所有反射成员名仍归 Android 适配侧，本次不改 Provider。
+## 宿主与 ABI
 
-## 失败、恢复与上限
+[IconLayerModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java>)仅匹配已知 Launcher 主进程，保留 IconProvider／LauncherActivityInfo、FloatingIconView及模型缓存刷新链。同用户校验先于替换，原生 themed 动画不被彩色素材覆盖。[LauncherIconAccess](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherIconAccess.java>)只解析 Kotlin 字段／getter、缓存移除参数次序等真实差异，不改变缓存或渲染策略。
 
-- [LauncherThemeReporter](../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java) 独立观察 ThemeManager，读取失败回 false；IPC 成功才去重。连接／上报失败不会主动抹去 Provider 之前的 systemThemed 快照，不能称全故障实时 fail-closed。
-- 配置刷新失败保留已发布 bitmap 快照；旧 worker 被新 epoch 取消后不发布。素材私有缓存及原 AtomicFile、库 generation 发布／ack 剪枝继续留平台侧。
-- 遮罩／小窗素材顺序保持模块 mono → 原生 monochrome → worker 转换缓存 → 原图。仅转换缓存使用 128px／32MiB；桌面素材快照 96MiB、私有 URI 字节缓存 64MiB 边界不变。绘制路径不执行 Binder、磁盘或解码。
+[DrawerMonet](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/DrawerMonet.java>)限定 AllApps 网格／预测，区分 search／workspace。查询补 CacheLookupFlag 的 bit 8，缺 themed 位的已绑定 AppInfo在后台升级一次；仅绑定 ThreadLocal 范围请求原生主题绘制，finally 恢复。不全局开主题、不写共享 BitmapInfo；关闭重绑原生。系统主题由[LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>)观察 ThemeManager上报，不自动切换 Minimal 或修改用户桌面偏好。
 
-## 最小证据
+[SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>)只在 SystemUI处理同用户非会话通知标识图标及合格 splash。splash 临时属性必须 finally恢复；素材缺失保原生，不在 build／draw热路径查包、解码或 Binder。模型缓存更新在原 worker、可见 View刷新在 main；热恢复失败不保证无需重启桌面。
 
-复用 [IconAssetsTest](../../app/src/test/java/dev/local/sunwindowdemo/features/iconlayers/IconAssetsTest.java) 的失败快照、过期取消、素材缓存检查，仅补一组原模式路由等价与主题 gate 断言；像素、抽屉 finally、Reporter 和 ABI 检查沿用已有验证。本轮变更等待集成方必要编译／检查，不沿用旧版本通过结果，不声明其他 Launcher／ROM ABI 或真机效果兼容。
+## 授权、缓存与失败
+
+- [IconLayerProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerProvider.java>)按自身、实际 SystemUI、system、已知系统实际 HOME／本用户 UID分权；素材读取只给已授权消费者，`report`限 Launcher、`started`限 system。它的授权不能和 ShadeProvider的“只给 Launcher一个抽屉布尔”混为一谈。
+- 配置刷新失败保已发布 bitmap快照，新 epoch取消旧 worker发布。素材 generation／ack、AtomicFile及剪枝留平台侧，不把未完成导入当 ready。
+- 系统主题读取失败返回 false；报告只有 IPC成功才去重，上报失败重试但不主动抹去 Provider旧快照，不承诺全故障实时 fail-close。
+- 绘制只读宿主快照；桌面素材快照 96MiB、私有 URI字节缓存 64MiB。旧表面转换缓存保留 128px／32MiB边界，不表示退役入口重新可用。
+
+规则、缓存、原生绑定及 ABI定向检查只覆盖各自层次，不证明任意 Launcher或 ROM设备效果；预检／安装失败按局部链回原生，不通过放松 HOME／UID检查绕过接入问题。
