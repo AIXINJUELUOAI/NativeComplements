@@ -34,7 +34,7 @@ fun HomeScreen(
         FeatureRow("加速度传感器控制", "shake", onMotion)
         FeatureRow("边缘防误触", "edge", onEdgeTouch)
         FeatureRow("外观与控制", "window", onShade)
-        onAlive?.let { FeatureRow("Alive 壁纸", "window", it) }
+        onAlive?.let { FeatureRow("Alive 壁纸", "alive", it) }
     }
     Spacer(Modifier.height(16.dp))
     SettingsGroup {
