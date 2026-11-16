@@ -2,9 +2,14 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前实机反馈：code154 未解决息屏闪帧及快速指纹原生动画
+### 当前增量：code155 / 0.11.6-alive-takeover2
 
-- 只读确认154已加载；本次现场sleep native视觉先动约百毫秒后才ACK/clip，wake请求无任何FIRST_SWAP/VISUAL至超时，快速AOD→GONE原生视觉仍完整运行。不是用户未重启，不再把主机构建/定向检查当效果闭环；闪出的具体像素未捕获，不猜是壁纸还是锁屏。精确services Session DEX已核命令需当前wallpaperTarget或ALWAYS_UPDATE_WALLPAPER，当前wake通道不保证可达；设计另排除认证直达app。详见[实机失败与边界](<alive-systemui.md#当前实机结果code154-未解决目标问题>)。此轮只保存现有日志/核路径/纠正文档，未改运行源码或发新包，不要求用户反复复现。
+- 自有交接改显式本包shareIdentity可信广播，不再依赖SystemUI当前wallpaperTarget；动态receiver只同用户SystemUI UID/包，旧公开onCommand不接自有控制。Binder回执UID/nonce/defaultdisplay、真实成功swap及epoch保留，不新授权限或强保布局。
+- 息屏精确时钟/通知从原系统sleep事件及安全非交互起始门抑制，不再等ACK/showing，原生更新后刷新父DL；纯壁纸遮罩仍实际首swap才裁，sleep布局/原生admission仍双showing严格门。快速指纹真实AOD→GONE可完成纯装饰交接，awake按真实LOCK/HOME沿当前三轨、不重播/续期；不改认证状态、电源、root/UDFPS及bouncer/遮挡安全。详细[实现与边界](<alive-systemui.md>)。最终原有Phase3/Access5/Trace1共9项定向通过，覆盖纯装饰方向/display条件与传输UID/包/user拒绝；不是GPU/Xposed/实际广播投递覆盖。独立review修正capture同身份早return不刷新父DL的一项问题，冻结后无剩余可证P1/P2；Lead复核最终diff。release/R8/原签名/155身份7入口3scope/Direct Boot/退役边界/新Transport DEX核验通过；[主APK](<../../deliverables/NativeComplements-0.11.6-alive-takeover2.apk>) SHA256 `e04b3a5af3c2359a36fe31742f99f8e5cfdb6e6f4390e313e598f14e9e42923c`。真机效果不由构建代替，不自动安装重启改设置，无手势改动。
+
+### 历史实机反馈：code154 未解决息屏闪帧及快速指纹原生动画
+
+- 只读确认154已加载；本次现场sleep native视觉先动约百毫秒后才ACK/clip，wake请求无任何FIRST_SWAP/VISUAL至超时，快速AOD→GONE原生视觉仍完整运行。不是用户未重启，不再把主机构建/定向检查当效果闭环；闪出的具体像素未捕获，不猜是壁纸还是锁屏。精确services Session DEX已核命令需当前wallpaperTarget或ALWAYS_UPDATE_WALLPAPER，当前wake通道不保证可达；设计另排除认证直达app。详见[实机失败与边界](<alive-systemui.md#历史实机结果code154-未解决目标问题>)。此轮只保存现有日志/核路径/纠正文档，未改运行源码或发新包，不要求用户反复复现。
 
 ### code154尝试实现：0.11.6-alive-takeover1（不视为效果通过）
 

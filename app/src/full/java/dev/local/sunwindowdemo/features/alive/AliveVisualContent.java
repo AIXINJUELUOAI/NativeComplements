@@ -103,6 +103,7 @@ public final class AliveVisualContent {
                 Object result=chain.proceed();
                 if(enabled&&Looper.myLooper()==Looper.getMainLooper())try{
                     probe.inspect(chain.getThisObject(),chain.getArgs().toArray());
+                    safeRefresh();
                 }catch(Throwable failure){fail(failure);}
                 return result;
             });

@@ -1,6 +1,13 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## 当前实机结果：code154 未解决目标问题
+## code155 / 0.11.6-alive-takeover2
+
+- 自有PREPARE/CANCEL不再走wallpaperTarget依赖的WindowSession命令。[直达传输](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveHandoffTransport.java>)为显式本包、shareIdentity广播，仅同用户SystemUI实际UID+包名接收，非preview已存在Engine动态注册；公开壁纸onCommand只保原生事件，不能转入自有控制。回执仍校真实Engine UID/nonce/defaultdisplay，receiver不创建/唤醒Engine、不改wallpaper flags或授权限。
+- sleep在原系统回调前建立内容episode，精确clockface/通知装饰在安全非interactive门内立即停止输出，不等壁纸ACK或双showing；capture原生更新后同步刷新gate/父invalidate，避免同View重用及缓存父DL漏过。纯LightReveal仍必须实际visible+有效surface成功swap，sleep window flag与native admission继续严格双showing/无认证过渡，不借内容门放宽系统布局。
+- wake纯装饰资格不再要求locked/双showing/非going/fading，真实指纹状态可正常AOD→GONE→应用；真实locked?LOCK:HOME选目标，重复wake的LOCK→HOME沿当前三轨切换、不重seed不续2500ms。遮挡/bouncer/组件用户AOD/ON/interactive/同root/实际首swap/epoch仍受控，原认证/输入/opaque/电源/亮度均未改，不强开应用/壁纸或藏root/UDFPS。普通hidden恢复仍不借旧wake冷seed。
+- 仅原有最小定向及原签名release核验，实机物理呈现不由主机测试冒充；不自动安装/重启/改设置，无手势改动。
+
+## 历史实机结果：code154 未解决目标问题
 
 用户安装完整重启后仍报告按电源闪一帧（未确认是锁屏还是壁纸），应用内息屏马上指纹解锁仍原生动画。22:10只读现机确认154已运行，不能以‘未重启/未加载’解释；不要求再复现。
 

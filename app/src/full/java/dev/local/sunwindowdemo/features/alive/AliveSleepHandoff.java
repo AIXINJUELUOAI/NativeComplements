@@ -1,6 +1,5 @@
 package dev.local.sunwindowdemo.features.alive;
 
-import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.ComponentCallbacks;
 import android.content.BroadcastReceiver;
@@ -88,10 +87,11 @@ public final class AliveSleepHandoff {
                 try{canvas.clipRect(0,0,0,0);return chain.proceed();}finally{canvas.restoreToCount(saved);}
             }));
             hooks.add(module.hook(h.sleep).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object result=chain.proceed();h.main.post(h::begin);return result;
+                if(Looper.myLooper()==Looper.getMainLooper())h.begin();else h.main.post(h::begin);
+                return chain.proceed();
             }));
             hooks.add(module.hook(h.wake).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object result=chain.proceed();h.main.post(h::wakingUp);return result;
+                h.main.post(h::wakingUp);return chain.proceed();
             }));
             hooks.add(module.hook(h.sleepAnimations).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 if(Looper.myLooper()!=Looper.getMainLooper())return chain.proceed();
@@ -278,12 +278,14 @@ public final class AliveSleepHandoff {
                 &&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
         }
         String contentEpisode(){
-            try{return !waking&&ready&&!contentDone&&safe()?episode():null;}
+            // These exact decorative children can be withheld before wallpaper readiness; this never exposes another surface.
+            try{return !waking&&!contentDone&&safe(false,false)?episode():null;}
             catch(ReflectiveOperationException|RuntimeException unknown){return null;}
         }
-        boolean visualSafe()throws ReflectiveOperationException {return waking?safe(true):safe();}
+        boolean visualSafe()throws ReflectiveOperationException {return safe(waking,false);}
         boolean safe()throws ReflectiveOperationException {return !waking&&safe(false);}
-        boolean safe(boolean awake)throws ReflectiveOperationException {
+        boolean safe(boolean awake)throws ReflectiveOperationException {return safe(awake,!awake);}
+        boolean safe(boolean awake,boolean requireShowing)throws ReflectiveOperationException {
             if(Looper.myLooper()!=Looper.getMainLooper())return false;
             Object owner=window.get();View view=view();
             if(!enabled||!active||SystemClock.uptimeMillis()>=expires||owner==null||view==null||!view.isAttachedToWindow())return false;
@@ -294,8 +296,10 @@ public final class AliveSleepHandoff {
             Object now=selection.token(repo(owner));
             if(!(identity instanceof AliveSystemUi.MatchToken old)||!(now instanceof AliveSystemUi.MatchToken current)||!old.same(current))return false;
             Object guard=keyguard.get(owner),snapshot=state.get(owner);
-            return showing.getBoolean(guard)&&!occluded.getBoolean(guard)&&!going.getBoolean(guard)&&!fading.getBoolean(guard)&&!bouncer.getBoolean(guard)
-                &&stateShowing.getBoolean(snapshot)&&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
+            if(occluded.getBoolean(guard)||stateOccluded.getBoolean(snapshot)||bouncer.getBoolean(guard)||stateBouncer.getBoolean(snapshot))return false;
+            // Wake clips only a decorative reveal, never keyguard/input. Actual authenticated going/fading remains native.
+            if(!awake&&(going.getBoolean(guard)||fading.getBoolean(guard)||stateGoing.getBoolean(snapshot)))return false;
+            return !requireShowing||showing.getBoolean(guard)&&stateShowing.getBoolean(snapshot);
         }
         void wakingUp(){
             if(wakeSignalled)return;
@@ -312,7 +316,7 @@ public final class AliveSleepHandoff {
             try{
                 Object owner=window.get();View view=view();if(owner==null||view==null||view.getDisplay()==null||view.getDisplay().getDisplayId()!=0)return;
                 Object repo=repo(owner);Object token=selection.token(repo);int expected=selection.uid(repo);
-                if(token==null||expected<0)return;
+                if(token==null||expected<0||expected/100000!=android.os.Process.myUid()/100000)return;
                 identity=token;uid=expected;nonce=UUID.randomUUID().toString();expires=SystemClock.uptimeMillis()+(awake?WAKE_MS:MAX_MS);active=true;ready=false;resent=false;waking=awake;contentDone=false;
                 traceId=UUID.randomUUID().toString().substring(0,8);clipEdges=0;clipKnown=false;
                 rotation=view.getDisplay().getRotation();width=view.getWidth();height=view.getHeight();
@@ -345,7 +349,7 @@ public final class AliveSleepHandoff {
                 WindowManager.LayoutParams value=(WindowManager.LayoutParams)params.get(owner);
                 layoutOriginal=value.flags;layoutPending=true;value.flags|=WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
                 View overlay=scrim.get();if(ready&&overlay!=null)overlay.invalidate();
-            }else if(visual)cancelLater("state");
+            }else if(visual&&!visualSafe())cancelLater("state");
         }
         void afterLayout(Object owner){
             if(!layoutPending)return;
@@ -390,9 +394,9 @@ public final class AliveSleepHandoff {
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("selection-failed");}
         }
         void send(String action,IBinder reply)throws ReflectiveOperationException {
-            View view=view();if(view==null||view.getWindowToken()==null)return;
+            View view=view();if(view==null)return;
             Bundle extras=new Bundle();extras.putLong("expires",expires);extras.putString("token",nonce);if(reply!=null)extras.putBinder("reply",reply);
-            WallpaperManager.getInstance(view.getContext()).sendWallpaperCommand(view.getWindowToken(),action,0,0,0,extras);
+            AliveHandoffTransport.send(view.getContext(),action,extras);
         }
         void refresh(){
             Object owner=window.get();if(owner==null)return;

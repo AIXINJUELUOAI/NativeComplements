@@ -11,6 +11,12 @@ import static org.junit.Assert.*;
 @Config(sdk=35,manifest=Config.NONE)
 public class AliveAmbientAccessTest {
     @Test public void handoffRequestsHaveSeparateWakeDeadlineAndOrderedNonceReplies()throws Exception{
+        assertTrue(AliveHandoffTransport.acceptsSender(10123,10082,10082,"com.android.systemui"));
+        assertFalse(AliveHandoffTransport.acceptsSender(10123,10082,10123,"com.android.systemui"));
+        assertFalse(AliveHandoffTransport.acceptsSender(10123,10082,10082,"example.sender"));
+        assertFalse(AliveHandoffTransport.acceptsSender(10123,10082,-1,null));
+        assertFalse(AliveHandoffTransport.acceptsSender(10123,110082,110082,"com.android.systemui"));
+        assertTrue(AliveHandoffTransport.acceptsSender(110123,110082,110082,"com.android.systemui"));
         java.util.List<Integer> replies=new java.util.ArrayList<>();String token=java.util.UUID.randomUUID().toString();
         android.os.Binder reply=new android.os.Binder(){
             @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel result,int flags){

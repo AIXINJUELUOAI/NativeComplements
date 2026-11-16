@@ -70,6 +70,10 @@ public final class AlivePhase {
     public static int phase(boolean ownAmbient,boolean interactive,boolean ambient,boolean locked,boolean sleeping){
         return ownAmbient&&(sleeping||!interactive||ambient)?AMBIENT:locked?LOCK:HOME;
     }
+    /** Decorative output only; the Host separately enforces strict lock admission for layout flags. */
+    public static boolean handoffState(boolean waking,boolean interactive,DisplayState display,boolean sleepDisplayReady){
+        return waking?interactive&&display==DisplayState.ON:!interactive&&sleepDisplayReady;
+    }
     public static boolean animate(boolean ownAmbient,int previous,int next){
         return ownAmbient||previous!=AMBIENT&&next!=AMBIENT;
     }

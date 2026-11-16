@@ -113,6 +113,9 @@ public final class AliveRenderer implements AutoCloseable {
                 wakeStarted=true;deferredSleep=false;sleepPresented=sleepFinished=null;
                 mode=target;animateMode=true;deferredWake=true;lensUntil=0;sample.clear();endpointPending=true;
                 seed=scene==0?0:-1;seedAnimate=scene==0;
+            }else if(mode!=target){
+                if(deferredWake){mode=target;sample.clear();endpointPending=true;}
+                else changeMode(target,true);
             }
             if(visible){if(scene==0)start();else schedule();}
         });

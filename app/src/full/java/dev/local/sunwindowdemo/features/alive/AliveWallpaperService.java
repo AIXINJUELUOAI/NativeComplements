@@ -18,6 +18,7 @@ public class AliveWallpaperService extends WallpaperService {
         private AliveRenderer renderer;
         private boolean ambient,visible,registered,destroyed,displayRegistered,displayRemoved;
         private DisplayManager displays;
+        private BroadcastReceiver handoffReceiver;
         private int displayId=Display.INVALID_DISPLAY;
         private final AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
         private final AlivePhase.WakeWindow wakeWindow=new AlivePhase.WakeWindow();
@@ -92,6 +93,10 @@ public class AliveWallpaperService extends WallpaperService {
             IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
             filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);filter.addAction(Intent.ACTION_USER_UNLOCKED);
             registerReceiver(screens,filter,null,main,Context.RECEIVER_NOT_EXPORTED);registered=true;
+            if(!isPreview())try{
+                handoffReceiver=AliveHandoffTransport.install(AliveWallpaperService.this,
+                    envelope->acceptHandoff(envelope.action(),envelope.extras()));
+            }catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","ALIVE_HANDOFF_RECEIVER_UNAVAILABLE",unavailable);}
             Display own=getDisplayContext().getDisplay();
             if(own!=null)displayId=own.getDisplayId();
             displays=getSystemService(DisplayManager.class);
@@ -131,8 +136,7 @@ public class AliveWallpaperService extends WallpaperService {
         private boolean handoffReady(AliveSleepHandoff.Request request){
             return ownAmbient()&&!isPreview()&&!destroyed&&visible&&displayId==Display.DEFAULT_DISPLAY
                 &&!request.expired()&&getSurfaceHolder().getSurface().isValid()
-                &&getSystemService(KeyguardManager.class).isKeyguardLocked()
-                &&(request.waking?displayState()==AlivePhase.DisplayState.ON&&getSystemService(PowerManager.class).isInteractive():handoffDisplayReady()&&!getSystemService(PowerManager.class).isInteractive());
+                &&AlivePhase.handoffState(request.waking,getSystemService(PowerManager.class).isInteractive(),displayState(),handoffDisplayReady());
         }
         private void finishHandoff(AliveSleepHandoff.Request request,long epoch){
             if(handoff!=request||epoch!=wakeWindow.epoch()||!handoffReady(request))return;
@@ -144,23 +148,21 @@ public class AliveWallpaperService extends WallpaperService {
             if(pending.expired()){cancelHandoff();return;}
             long epoch=wakeWindow.epoch();
             if(pending.waking){
-                if(!handoffReady(pending)||!nativeWake||SystemClock.uptimeMillis()>=nativeWakeDeadline){cancelHandoff();return;}
-                if(ambient)return;
-                renderer.wake(AlivePhase.LOCK,()->main.post(()->{
+                if(!nativeWake||SystemClock.uptimeMillis()>=nativeWakeDeadline){cancelHandoff();return;}
+                if(!handoffReady(pending)||ambient)return;
+                renderer.wake(awakeTarget(),()->main.post(()->{
                     if(handoff!=pending||epoch!=wakeWindow.epoch()||!handoffReady(pending))return;
                     handoffAcknowledged=true;pending.ready();if(handoffDone)pending.finished();
                 }),()->main.post(()->finishHandoff(pending,epoch)));
                 return;
             }
-            if(!handoffReady(pending)
-                    ||getSystemService(PowerManager.class).isInteractive()
-                    ||!getSystemService(KeyguardManager.class).isKeyguardLocked()
-                    ||!getSurfaceHolder().getSurface().isValid())return;
+            if(!handoffReady(pending))return;
             renderer.presented(()->main.post(()->{
                 if(handoff!=pending||epoch!=wakeWindow.epoch()||!handoffReady(pending))return;
                 handoffAcknowledged=true;pending.ready();if(handoffDone)pending.finished();
             }),()->main.post(()->finishHandoff(pending,epoch)));
         }
+        private int awakeTarget(){return getSystemService(KeyguardManager.class).isKeyguardLocked()?AlivePhase.LOCK:AlivePhase.HOME;}
         private void wake(){
             long now=SystemClock.uptimeMillis();
             if(wakeWindow.arm(now,renderer!=null&&renderer.error().isBlank()
@@ -171,8 +173,7 @@ public class AliveWallpaperService extends WallpaperService {
             if(handoff!=null&&!handoff.waking)cancelHandoff();
             sleepGeneration++;sleep.wake();wasInteractive=false;main.removeCallbacks(sleepExpired);
             if(!nativeWake&&nativeWakeDeadline==0&&ownAmbient()&&displayId==Display.DEFAULT_DISPLAY&&!isPreview()
-                    &&displayState()==AlivePhase.DisplayState.ON&&getSystemService(PowerManager.class).isInteractive()
-                    &&getSystemService(KeyguardManager.class).isKeyguardLocked()){
+                    &&displayState()==AlivePhase.DisplayState.ON&&getSystemService(PowerManager.class).isInteractive()){
                 nativeWake=true;nativeWakeDeadline=now+2500;
             }
         }
@@ -191,7 +192,8 @@ public class AliveWallpaperService extends WallpaperService {
             if(!visible||!interactive||ambient||state!=AlivePhase.DisplayState.ON)main.removeCallbacks(refresh);
             sampled=true;wasInteractive=interactive;wasAmbient=ambient;
             long now=SystemClock.uptimeMillis();
-            if(!locked||state!=AlivePhase.DisplayState.ON){clearWake();nativeWake=false;}
+            if(!locked)clearWake();
+            if(state!=AlivePhase.DisplayState.ON){clearWake();nativeWake=false;}
             if(nativeWake&&now>=nativeWakeDeadline)nativeWake=false;
             boolean wakePreserved=wakeWindow.active(now);
             sleep.visibility(visible,now);
@@ -200,7 +202,7 @@ public class AliveWallpaperService extends WallpaperService {
             int phase=AlivePhase.phase(ownAmbient(),interactive&&state==AlivePhase.DisplayState.ON,ambient,locked,sleeping||holding);
             if(!sleeping&&interactive&&!ambient&&state==AlivePhase.DisplayState.ON)lastAwakePhase=phase;
             boolean draw=AlivePhase.drawable(ownAmbient(),visible,interactive,ambient,state,sleeping||holding);
-            if(handoff!=null&&(handoff.expired()||!ownAmbient()||!locked||displayId!=Display.DEFAULT_DISPLAY
+            if(handoff!=null&&(handoff.expired()||!ownAmbient()||displayId!=Display.DEFAULT_DISPLAY
                     ||handoff.waking&&(!interactive||state!=AlivePhase.DisplayState.ON)))cancelHandoff();
             if(!draw&&handoffAcknowledged)cancelHandoff();
             boolean transition=animate&&state!=AlivePhase.DisplayState.DOZE_SUSPEND&&AlivePhase.animate(ownAmbient(),lastRenderedPhase,phase);
@@ -220,9 +222,9 @@ public class AliveWallpaperService extends WallpaperService {
                         acknowledgeHandoff();
                     }
                 }),()->main.post(()->{if(request!=null)finishHandoff(request,renderEpoch);}));
-            }else if(nativeWake&&ownAmbient()&&interactive&&locked&&state==AlivePhase.DisplayState.ON){
-                // Wait for native ambient exit; repeats bind observers without restarting the curve.
-                if(draw&&!ambient)renderer.wake(AlivePhase.LOCK,null,null);
+            }else if(nativeWake&&ownAmbient()&&interactive&&state==AlivePhase.DisplayState.ON){
+                // Target follows real authentication; only decorative geometry changes.
+                if(draw&&!ambient)renderer.wake(locked?AlivePhase.LOCK:AlivePhase.HOME,null,null);
             }else if(wakePreserved){
                 // Wake can precede ambient=false or a short visibility gap. Neither may force AMBIENT's endpoint.
                 if(draw&&interactive&&!ambient&&phase!=AlivePhase.AMBIENT)renderer.mode(phase,true);
@@ -263,8 +265,8 @@ public class AliveWallpaperService extends WallpaperService {
         }
         @Override public void onVisibilityChanged(boolean next){
             visible=next;if(!next){
-                if(handoff!=null&&(handoff.waking||handoffAcknowledged))cancelHandoff();
-                if(!wakeWindow.active(SystemClock.uptimeMillis()))nativeWake=false;
+                if(handoffAcknowledged)cancelHandoff();
+                if(!wakeWindow.active(SystemClock.uptimeMillis())&&(handoff==null||!handoff.waking))nativeWake=false;
             }
             update("visibility",true);recheckUnlock();
         }
@@ -284,7 +286,9 @@ public class AliveWallpaperService extends WallpaperService {
             }
         }
         public boolean shouldZoomOutWallpaper(){return false;}
-        @Override public Bundle onCommand(String action,int x,int y,int z,Bundle extras,boolean resultRequested){
+        /** Called only by the sender-attributed SystemUI transport receiver. */
+        private void acceptHandoff(String action,Bundle extras){
+            if(destroyed||renderer==null)return;
             if(AliveSleepHandoff.ACTION_CANCEL.equals(action)){
                 if(handoff!=null&&extras!=null&&handoff.token.equals(extras.getString("token")))cancelHandoff();
             }
@@ -300,6 +304,8 @@ public class AliveWallpaperService extends WallpaperService {
                     }else cancelHandoff();
                 }
             }
+        }
+        @Override public Bundle onCommand(String action,int x,int y,int z,Bundle extras,boolean resultRequested){
             // Commands are triggers, never a substitute for the system's accepted keyguard state.
             if("android.wallpaper.wakingup".equals(action)||"android.wallpaper.goingtosleep".equals(action)
                     ||"android.wallpaper.keyguardgoingaway".equals(action)||"android.wallpaper.keyguardappearing".equals(action)){
@@ -314,6 +320,7 @@ public class AliveWallpaperService extends WallpaperService {
         @Override public void onDestroy(){
             destroyed=true;endSleep();main.removeCallbacks(refresh);
             if(registered){unregisterReceiver(screens);registered=false;}
+            if(handoffReceiver!=null){unregisterReceiver(handoffReceiver);handoffReceiver=null;}
             if(displayRegistered){displays.unregisterDisplayListener(displayListener);displayRegistered=false;}
             if(aodRegistered){getContentResolver().unregisterContentObserver(aodObserver);aodRegistered=false;}
             AliveSettings.runtimePreferences(AliveWallpaperService.this).unregisterOnSharedPreferenceChangeListener(changed);

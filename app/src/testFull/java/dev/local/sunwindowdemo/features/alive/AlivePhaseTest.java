@@ -67,6 +67,13 @@ public class AlivePhaseTest {
         assertFalse(AlivePhase.animate(false,AlivePhase.HOME,AlivePhase.AMBIENT));
         assertTrue(AlivePhase.animate(false,AlivePhase.LOCK,AlivePhase.HOME));
         assertTrue(AlivePhase.animate(true,AlivePhase.AMBIENT,AlivePhase.LOCK));
+        assertEquals(AlivePhase.HOME,AlivePhase.phase(true,true,false,false,false));
+        assertTrue(AlivePhase.handoffState(true,true,AlivePhase.DisplayState.ON,false));
+        assertFalse(AlivePhase.handoffState(true,false,AlivePhase.DisplayState.ON,true));
+        assertFalse(AlivePhase.handoffState(true,true,AlivePhase.DisplayState.DOZE,true));
+        assertTrue(AlivePhase.handoffState(false,false,AlivePhase.DisplayState.ON,true));
+        assertFalse(AlivePhase.handoffState(false,true,AlivePhase.DisplayState.ON,true));
+        assertFalse(AlivePhase.handoffState(false,false,AlivePhase.DisplayState.ON,false));
         AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
         sleep.end(); // Observer cancels the old AOD policy while already awake.
         assertFalse(sleep.begin(100));
