@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前运行源码版本：**0.12.0-community1**（versionCode 166），仅维护主模块；保留 code165 Alive Beta，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前架构与边界见[接入索引](<docs/adaptation/README.md>)、[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前运行源码版本：**0.12.1-polish1**（versionCode 167），仅维护主模块；保留 code165 Alive Beta，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前架构与边界见[接入索引](<docs/adaptation/README.md>)、[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 

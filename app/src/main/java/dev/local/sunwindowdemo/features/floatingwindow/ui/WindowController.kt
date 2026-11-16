@@ -1,9 +1,7 @@
 package dev.local.sunwindowdemo
 
-import android.Manifest
 import android.app.Activity
 import android.content.*
-import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
@@ -62,7 +60,6 @@ class WindowController(private val activity: Activity) {
             acceptEnableStatus(intent, sentFromUid)
             if (!compatible) return
             recovery = Intent(intent)
-            Wire.notification(context, runtime.state == "active" || runtime.state == "recovery")
             if (runtime.state == "idle" && !intent.getBooleanExtra("hasJournal", true)) TaskTools.trimIdle(activity)
             // Retain the Demo8.2 behavior: do not leave the management home below a launched window.
             if (intent.getStringExtra("event") == "ACTIVE" && activity.isTaskRoot) activity.finishAndRemoveTask()
@@ -72,6 +69,7 @@ class WindowController(private val activity: Activity) {
         store.preferences.registerOnSharedPreferenceChangeListener(change)
         activity.registerReceiver(receiver, IntentFilter(Wire.RESULT), Wire.PERMISSION, null, Context.RECEIVER_EXPORTED)
         val context = activity.applicationContext
+        Wire.clearLegacyNotification(context)
         dev.local.sunwindowdemo.core.WindowBackendEligibility.refreshAsync(context)
         IconAssets.onReload(iconsReloaded)
         IconAssets.connect(context)
@@ -191,11 +189,6 @@ class WindowController(private val activity: Activity) {
     }
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")
-    fun notifications() {
-        if (activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 5)
-        else toast("通知权限已开启")
-    }
     fun reopen() {
         val intent = recovery
         val pkg = intent?.getStringExtra("recoverPackage")

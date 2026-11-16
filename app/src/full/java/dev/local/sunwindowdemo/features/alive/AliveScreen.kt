@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import dev.local.sunwindowdemo.core.ui.SettingsPage
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -175,7 +174,7 @@ fun AliveScreen(onBack: () -> Unit) {
     val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importAsset(uri, false)
     }
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) importAsset(uri, true)
     }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -259,7 +258,7 @@ fun AliveScreen(onBack: () -> Unit) {
                 } }
             }
             SettingsGroup {
-                SettingRow("照片", onClick = if (editable) ({ photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) else null)
+                SettingRow("照片", onClick = if (editable) ({ photoPicker.launch("image/*") }) else null)
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             val status = when {

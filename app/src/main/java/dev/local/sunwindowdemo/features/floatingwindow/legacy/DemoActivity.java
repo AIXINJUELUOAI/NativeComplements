@@ -17,6 +17,7 @@ abstract class DemoActivity extends Activity {
     int dp(float value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        Wire.clearLegacyNotification(this);
         if (getActionBar() != null) getActionBar().hide();
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true);
@@ -35,7 +36,6 @@ abstract class DemoActivity extends Activity {
                 hostConnected=i.getBooleanExtra("hostConnected",false);
                 if(!backendCompatible){if(status!=null)status.setText("请重启，加载 0.2.0 系统后端后再测试。");return;}
                 if (status != null) status.setText(i.getStringExtra("report"));
-                Wire.notification(c, "active".equals(i.getStringExtra("state")) || "recovery".equals(i.getStringExtra("state")));
                 onBackendResult(i);
             }
         };

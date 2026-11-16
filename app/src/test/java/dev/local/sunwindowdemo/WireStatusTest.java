@@ -25,6 +25,28 @@ public class WireStatusTest {
         assertEquals("enable-request-1",sent[0].getStringExtra("requestId"));assertSame(Wire.LEASE,sent[0].getExtras().getBinder("lease"));
         Wire.send(context,"STATUS");assertFalse(sent[0].hasExtra("requestId"));
     }
+    @Test public void legacyNoticeIsRemovedWhileManualRestoreStillSendsItsCommand(){
+        Context app=RuntimeEnvironment.getApplication();
+        android.app.NotificationManager manager=app.getSystemService(android.app.NotificationManager.class);
+        manager.createNotificationChannel(new android.app.NotificationChannel("test","旧小窗恢复",android.app.NotificationManager.IMPORTANCE_LOW));
+        manager.notify(5,new android.app.Notification.Builder(app,"test").setSmallIcon(android.R.drawable.ic_menu_revert).build());
+        assertEquals(1,manager.getActiveNotifications().length);
+        Wire.clearLegacyNotification(app);
+        Wire.clearLegacyNotification(app);
+        assertEquals(0,manager.getActiveNotifications().length);
+        assertNull(manager.getNotificationChannel("test"));
+        var lifecycle=org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup();
+        WindowController controller=new WindowController(lifecycle.get());
+        try {
+            controller.restore();
+            var broadcasts=org.robolectric.Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents();
+            Intent sent=broadcasts.get(broadcasts.size()-1);
+            assertEquals("RESTORE",sent.getStringExtra("op"));
+            assertEquals(Wire.PROTOCOL,sent.getIntExtra("protocol",0));
+            assertEquals("android",sent.getPackage());
+            assertEquals(0,manager.getActiveNotifications().length);
+        } finally {controller.close();lifecycle.pause().stop().destroy();}
+    }
     @Test public void emptyOrUnboundedCorrelationIsRejected(){
         for(String requestId:new String[]{null,"","x".repeat(129)}){
             try{Wire.requestStatus(RuntimeEnvironment.getApplication(),requestId);fail("invalid request id");}

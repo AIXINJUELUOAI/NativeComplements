@@ -6,7 +6,7 @@ Alive 仅在 full 主模块，使用原生 WallpaperService，不接管认证、
 
 [普通服务](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)保留 ambient=false 回退；[ambient 服务](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService.java>)复用 Engine，由系统选择和生命周期决定是否运行。
 
-[编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)顶部阶段卡片进入对应样式 Sheet。照片经系统 ImageOnly Photo Picker 复制为 CE 草稿；APK 导入仍用文件选择器，无额外照片权限。编辑不自动应用；样式示意图不是用户照片的实时缩略图，真实阶段预览使用同一渲染器类型。
+[编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)顶部阶段卡片进入对应样式 Sheet。照片通过系统 `ACTION_GET_CONTENT`（`image/*`）单图选择后复制为 CE 草稿；具体相册／设备文件夹界面由系统处理应用提供，不保证各 ROM 布局一致。APK 导入仍用文件选择器，无额外照片权限。编辑不自动应用；样式示意图不是用户照片的实时缩略图，真实阶段预览使用同一渲染器类型。
 
 [系统状态](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemState.java>)只读本用户 `doze_always_on`，通过 ContentObserver/页面恢复刷新。1 显示三卡，0 显示两卡，其他/拒绝/缺键为未知，不能当关闭；隐藏卡不丢已存样式。设置已知时应用 ambient 组件，关闭后重新开启 AOD 无须重选；未知优先保已有 ambient 选择，否则普通组件回退。
 

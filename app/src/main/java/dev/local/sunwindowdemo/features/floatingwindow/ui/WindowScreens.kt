@@ -100,7 +100,6 @@ fun DiagnosticsScreen(controller: WindowController) {
         SettingRow("触摸与键盘诊断", onClick = controller::diagnostic)
         SettingRow("恢复原窗口", onClick = controller::restore)
         SettingRow("打开待恢复任务", onClick = controller::reopen)
-        SettingRow("允许恢复通知", onClick = controller::notifications)
     }
     GroupTitle("诊断信息")
     Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
