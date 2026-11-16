@@ -2,7 +2,16 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.4-alive-test1 / code148（Direct Boot，主机核验通过；待真机）
+### 当前增量：0.11.5-alive-test1 / code149（AMBIENT位置与Alive单页，主机核验通过；待真机）
+
+- 本轮仅两项：[AMBIENT固定下移与单页编辑契约](<alive-platform.md>)。启航与五照片样式的AMBIENT锚点统一`.05f`，中心约屏高45%；LOCK/HOME端点仍全屏居中，曲线/时长和147睡眠安全门不变。不是读取真实时钟边界的动态避让，不能保证所有时钟布局无重叠。
+- [Alive页面](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)顶部状态卡片点击即弹对应样式Sheet，点选保存草稿并即时刷新；无独立全屏预览/重复编辑入口/完成按钮，下方只保留照片与设置壁纸，资源导入和许可移至更多。复用SettingsPage/动态颜色/系统安全区；按阶段聚合真实预览错误，不允许健康卡片清除失败卡片状态。
+- [本用户系统AOD值](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemState.java>)只读`doze_always_on`，开启三卡、关闭两卡，未知明确提示且不误当关闭。保留aod样式，临时遮挡/省电不影响板块；已知系统值时使用AOD能力组件，实际暂停/点亮仍完全由系统决定，关闭后再开启无需再次应用。普通组件继续回退，不写系统设置、不改认证。
+- 设置壁纸移除模块内重复确认层；同组件无混用可直接发布，首次/切换仍由系统选择器确认且成功核实后才发布，取消保留草稿。148 Direct Boot发布、147准入及原签名主包边界保留；不自动安装/重启/改设备配置。
+- 最终8项定向检查通过：既有SceneMotionTest新增实际矩阵坐标/两个比例/五照片往返端点，保打断唤醒；AliveAmbientAccessTest覆盖本用户AOD开关/未知与原草稿DE隔离；AlivePhaseTest和NavigationTest单页卡片/选中即时保存/系统关闭隐藏与重开保样式。未跑全套。测试中修正AnimatorSet seek需扣selfDelay，x86预览页跳过仅arm64资源准备后保留可编辑草稿；独立审查的多卡错误覆盖P2已按phase修复并只读复核。
+- 最终release/R8、原签名、149身份、7entry/3scope、角落/Alive运行时、两个service Direct Boot/receiver非导出及无障碍/独立variant退役边界均通过。[主版APK](<../../deliverables/NativeComplements-0.11.5-alive-test1.apk>) SHA-256：`b07506bc9867d2dfac0769df5c30df9780d4a1f4669ec3f3e6bc13b54422cd9f`。真机位置/三卡native观感与性能尚待用户验证；三种解锁现象、照片burn-in与通知/跨应用扩展不在本轮，未宣称解决。
+
+### 历史增量：0.11.4-alive-test1 / code148（Direct Boot，主机核验通过；待真机）
 
 - 仅full主模块，保code147角落小窗与Alive睡眠admission/严格视觉安全门，本轮不混入新的解锁或通知功能。[Direct Boot数据边界](<alive-platform.md#code148direct-boot-数据边界>)将已应用快照和当前照片发布到本用户应用私有DE；从未确认应用的纯编辑草稿照片及编辑缩略图仍为CE。DE会保留历史已应用照片及确认应用中断后的候选，本轮未加自动回收或总量上限，不能声称DE永远只有当前一张。**DE不是凭据解锁后才可读：已应用照片在首次解锁前可由本应用读取**，不外部共享、不跨用户读取，也不绕过系统认证。
 - [已应用配置](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)以DE的AtomicFile JSON为权威，照片先完整发布再提交快照；偏好仅通知revision/error，不能因SharedPreferences提交失败而采用未发布的新配置。[核心资源](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)固定上游SHA/白名单不变，旧CE代完整hash校验后仅复制指定资源与manifest，经只读文件、暂存校验、fsync及rename发布DE，不覆盖已有代、不删CE源，不把未核额外文件带入运行时。

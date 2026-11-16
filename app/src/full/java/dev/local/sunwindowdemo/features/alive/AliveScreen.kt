@@ -12,15 +12,29 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Build
 import android.os.Process
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.Settings
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material.icons.filled.MoreVert
+import dev.local.sunwindowdemo.core.ui.SettingsPage
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,16 +48,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import dev.local.sunwindowdemo.core.ui.GroupTitle
 import dev.local.sunwindowdemo.core.ui.SettingRow
 import dev.local.sunwindowdemo.core.ui.SettingsGroup
-import dev.local.sunwindowdemo.core.ui.ToggleRow
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Full-screen renderer; editing and native picker cancellation never publish the draft. */
+/** One settings page: phase cards edit a private draft; only explicit apply publishes it. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AliveScreen(onBack: () -> Unit) {
@@ -55,15 +67,18 @@ fun AliveScreen(onBack: () -> Unit) {
     var entered by rememberSaveable { mutableStateOf(false) }
     var draft by remember { mutableStateOf<AliveSettings.Snapshot?>(null) }
     var scene by rememberSaveable { mutableIntStateOf(0) }
-    var ambient by rememberSaveable { mutableStateOf(false) }
+    var systemAod by remember { mutableIntStateOf(AliveSystemState.aod(context)) }
+    val ambient = systemAod == 1
+    var menu by remember { mutableStateOf(false) }
+    var resources by rememberSaveable { mutableStateOf(false) }
     var pendingComponent by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by rememberSaveable { mutableStateOf(false) }
-    var confirm by remember { mutableStateOf(false) }
     var ready by remember { mutableStateOf(false) }
     var hasPhoto by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
-    var previewError by remember { mutableStateOf("") }
+    val previewErrors = remember { mutableStateMapOf<Int, String>() }
+    val previewError = previewErrors.values.firstOrNull { it.isNotBlank() }.orEmpty()
     var backendError by remember { mutableStateOf(prefs.getString("backend_error", "").orEmpty()) }
     var resourcesRevision by remember { mutableIntStateOf(0) }
     var refresh by remember { mutableIntStateOf(0) }
@@ -72,7 +87,7 @@ fun AliveScreen(onBack: () -> Unit) {
     LaunchedEffect(context) {
         try {
             draft = withContext(Dispatchers.IO) {
-                AliveSettings.prepareRuntime(context)
+                if (arm64) AliveSettings.prepareRuntime(context)
                 if (entered) AliveSettings.readDraft(context) else AliveSettings.beginEdit(context)
             }
             entered = true
@@ -95,10 +110,22 @@ fun AliveScreen(onBack: () -> Unit) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "backend_error") backendError = prefs.getString("backend_error", "").orEmpty()
         }
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) refresh++ }
+        fun refreshSystem() { systemAod = AliveSystemState.aod(context); refresh++ }
+        val settingObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) { refreshSystem() }
+        }
+        val resolver = context.contentResolver
+        val registered = try {
+            resolver.registerContentObserver(Settings.Secure.getUriFor(AliveSystemState.AOD_SETTING), false, settingObserver)
+            true
+        } catch (_: RuntimeException) { false }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) refreshSystem() }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         lifecycle.addObserver(observer)
-        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener); lifecycle.removeObserver(observer) }
+        onDispose {
+            if (registered) resolver.unregisterContentObserver(settingObserver)
+            prefs.unregisterOnSharedPreferenceChangeListener(listener); lifecycle.removeObserver(observer)
+        }
     }
 
     fun appliedSuccessfully() {
@@ -116,7 +143,7 @@ fun AliveScreen(onBack: () -> Unit) {
             try {
                 withContext(Dispatchers.IO) { AliveSettings.saveDraft(context, next) }
                 draft = next
-                previewError = ""
+                previewErrors.clear()
                 message = null
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { message = failure.message ?: "草稿保存失败" }
@@ -134,7 +161,7 @@ fun AliveScreen(onBack: () -> Unit) {
                     else { AliveAssets.prepare(context, uri); AliveSettings.readDraft(context) }
                 }
                 draft = next
-                previewError = ""
+                previewErrors.clear()
                 resourcesRevision++
                 message = if (photo) "草稿照片已更新，尚未设置壁纸" else "资源已校验并导入，尚未设置壁纸"
             } catch (cancelled: CancellationException) { throw cancelled }
@@ -170,154 +197,139 @@ fun AliveScreen(onBack: () -> Unit) {
     }
     val available = arm64 && ready && hasPhoto && draft != null && previewError.isBlank() && !busy && pendingComponent == null
     val editable = draft != null && !busy && pendingComponent == null
-    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(Modifier.fillMaxSize()) {
+    LaunchedEffect(systemAod) {
+        if (systemAod != 1 && scene == 0) { editing = false; scene = 1 }
+    }
+    fun applyWallpaper() {
+        if (!available) return
+        // Keep the AOD-capable component when the system switch is off; turning it back on must not require re-applying.
+        val target = ComponentName(context, if (systemAod >= 0 || selectedAliveComponent(context, ComponentName(context, AliveAmbientWallpaperService::class.java)))
+            AliveAmbientWallpaperService::class.java else AliveWallpaperService::class.java)
+        busy = true
+        scope.launch {
+            try {
+                val applied = withContext(Dispatchers.IO) {
+                    if (selectedAliveComponent(context, target, requireUnmixed = true)) AliveSettings.applyDraft(context) else null
+                }
+                if (applied != null) { draft = applied; appliedSuccessfully() }
+                else {
+                    pendingComponent = target.flattenToString()
+                    try {
+                        wallpaperPicker.launch(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+                            .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, target))
+                    } catch (failure: Exception) { pendingComponent = null; message = failure.message ?: "无法打开系统选择器，未提交草稿" }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { message = failure.message ?: "应用失败，草稿仍保留" }
+            finally { busy = false }
+        }
+    }
+    SettingsPage(title = "Alive 壁纸", onBack = onBack, expandedTitle = false, actions = {
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "更多") }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text("渲染资源") }, onClick = { menu = false; resources = true })
+            }
+        }
+    }) { bottomInset ->
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp).padding(top = 16.dp, bottom = bottomInset + 24.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)) {
             val input = draft
-            if (arm64 && ready && hasPhoto && input != null) {
-                AlivePreview(input, scene, resourcesRevision, Modifier.fillMaxSize(),
-                    onNextScene = { scene = (scene + 1) % stages.size }, onError = { previewError = it })
-            } else Column(Modifier.align(Alignment.Center).padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(when {
-                    !arm64 -> "当前进程不支持 arm64 原生渲染"
-                    input == null -> "正在读取草稿"
-                    !ready -> "请先导入官方渲染资源"
-                    else -> "选择照片，开始真实预览"
-                }, style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(16.dp))
-                OutlinedButton(onClick = { editing = true }) { Text("打开编辑") }
-            }
-            Column(Modifier.fillMaxWidth().align(Alignment.TopCenter).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))) {
-                Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(28.dp), modifier = Modifier.padding(12.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
-                        Text("Alive", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                        IconButton(onClick = { editing = true }) { Icon(Icons.Default.Edit, "编辑") }
-                        TextButton(onClick = { confirm = true }, enabled = available) { Text("设置壁纸") }
-                    }
-                }
-                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
-            }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)).padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                if (previewError.isNotBlank() || message != null) Surface(color = if (previewError.isNotBlank()) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(20.dp), modifier = Modifier.padding(bottom = 12.dp)) {
-                    Text(if (previewError.isNotBlank()) "真实预览不可用：$previewError" else message.orEmpty(), Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
-                }
-                Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(24.dp)) {
-                    Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        stages.forEachIndexed { index, title ->
-                            TextButton(onClick = { scene = index }) { Text(if (scene == index) "● $title" else title) }
+            val visible = if (ambient) listOf(0, 1, 2) else listOf(1, 2)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                visible.forEach { phase -> key(phase) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Box(Modifier.fillMaxWidth().aspectRatio(9f / 20f).clip(RoundedCornerShape(22.dp))
+                            .background(Color.Black).semantics { contentDescription = "${stages[phase]}样式" }
+                            .clickable(enabled = editable, role = Role.Button) { scene = phase; editing = true },
+                            contentAlignment = Alignment.Center) {
+                            if (arm64 && ready && hasPhoto && input != null) {
+                                DisposableEffect(phase) { onDispose { previewErrors.remove(phase) } }
+                                AlivePreview(input, phase, resourcesRevision, Modifier.fillMaxSize(), onError = { previewErrors[phase] = it })
+                            } else Text(stages[phase], color = Color.White, style = MaterialTheme.typography.labelLarge)
                         }
+                        Text(stages[phase], style = MaterialTheme.typography.labelLarge)
                     }
-                }
-                Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f), shape = RoundedCornerShape(12.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    Text("点按背景切换阶段 · 编辑仅修改草稿", Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelSmall)
-                }
+                } }
             }
+            SettingsGroup {
+                SettingRow("照片", onClick = if (editable) ({ photoPicker.launch(arrayOf("image/*")) }) else null)
+            }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            val status = when {
+                previewError.isNotBlank() -> "壁纸渲染不可用：$previewError"
+                message != null -> message.orEmpty()
+                !arm64 -> "当前进程不支持 arm64 原生渲染"
+                input == null -> "正在读取草稿"
+                !ready -> "请从右上角导入官方渲染资源"
+                !hasPhoto -> "请选择照片"
+                systemAod < 0 -> "无法读取系统息屏显示设置；暂不显示息屏卡片，设置时沿用当前 Alive 组件"
+                else -> ""
+            }
+            if (status.isNotBlank()) Text(status, color = if (previewError.isNotBlank()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium)
+            Button(onClick = { applyWallpaper() }, enabled = available, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Text("设置壁纸") }
         }
     }
     if (editing) ModalBottomSheet(onDismissRequest = { editing = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(Modifier.fillMaxWidth().fillMaxHeight(0.72f), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item {
-                Text("编辑${stages[scene]}", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(horizontal = 8.dp))
-                PrimaryTabRow(selectedTabIndex = scene) {
-                    stages.forEachIndexed { index, title -> Tab(selected = scene == index, onClick = { scene = index }, text = { Text(title) }) }
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            val input = draft
+            val names = if (scene == 0) listOf("启航", "留光", "星月", "轻启", "山脉", "银河") else listOf("无", "长虹", "波浪", "雾花")
+            val selected = when (scene) { 0 -> input?.aod ?: 0; 1 -> input?.lock ?: 0; else -> (input?.home ?: 6) - 6 }
+            StyleGallery(scene, names, selected, editable, resourcesRevision) { value ->
+                input?.let {
+                    updateDraft(when (scene) {
+                        0 -> AliveSettings.Snapshot(value, it.lock, it.home, it.photo)
+                        1 -> AliveSettings.Snapshot(it.aod, value, it.home, it.photo)
+                        else -> AliveSettings.Snapshot(it.aod, it.lock, value + 6, it.photo)
+                    })
                 }
-            }
-            item {
-                val input = draft
-                val names = if (scene == 0) listOf("启航", "留光", "星月", "轻启", "山脉", "银河") else listOf("无", "长虹", "波浪", "雾花")
-                val selected = when (scene) { 0 -> input?.aod ?: 0; 1 -> input?.lock ?: 0; else -> (input?.home ?: 6) - 6 }
-                StyleGallery(scene, names, selected, editable, resourcesRevision) { value ->
-                    input?.let {
-                        updateDraft(when (scene) {
-                            0 -> AliveSettings.Snapshot(value, it.lock, it.home, it.photo)
-                            1 -> AliveSettings.Snapshot(it.aod, value, it.home, it.photo)
-                            else -> AliveSettings.Snapshot(it.aod, it.lock, value + 6, it.photo)
-                        })
-                    }
-                }
-                Text("缩略图为已导入的官方样式示意，背景使用你的照片实时渲染；不是系统时钟或认证界面。", Modifier.padding(8.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            item {
-                GroupTitle("照片")
-                SettingsGroup { SettingRow("共享照片", if (hasPhoto) "三个阶段共用草稿照片，最长边不超过 2048 像素" else "尚未选择照片，不使用占位图替代") }
-                OutlinedButton(onClick = { photoPicker.launch(arrayOf("image/*")) }, enabled = editable, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("选择照片") }
-            }
-            item {
-                GroupTitle("壁纸组件")
-                SettingsGroup {
-                    ToggleRow("息屏实验版", "关闭使用普通版回退。开启需模块 SystemUI 与系统框架作用域生效、系统 AOD 已启用；不改变认证、强制常亮或系统保护。",
-                        value = ambient, enabled = editable) { ambient = it }
-                    SettingRow("短时预览", "照片防烧屏位移尚未实现，请勿长期常亮测试。真机息屏、转场效果仍待验证。")
-                }
-            }
-            item {
-                GroupTitle("本地资源")
-                SettingsGroup {
-                    SettingRow("OpenAlive 0.4.41-preview", if (ready) "固定版本原生资源已校验，仅本机保存" else "需自备官方 APK（约 613 MiB）；仅导入固定素材与校验后的原生库，不安装或执行 DEX。")
-                    if (backendError.isNotBlank()) SettingRow("最近渲染器状态", backendError)
-                }
-                OutlinedButton(onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream")) },
-                    enabled = arm64 && editable, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text(if (ready) "更新已校验资源／缩略图" else "导入官方 APK") }
-                TextButton(onClick = {
-                    try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Maga-King/OpenAlive/releases/tag/v0.4.41-preview"))) }
-                    catch (failure: Exception) { message = "没有可打开上游发布说明的浏览器" }
-                }, enabled = !busy) { Text("上游发布说明与许可") }
-                Text("素材版权归原作者；导入时请保持页面打开。离开或取消不提交草稿，设置成功后返回桌面。", Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
-    if (confirm) AlertDialog(onDismissRequest = { confirm = false }, title = { Text("设置${if (ambient) "息屏实验版" else "普通版"}壁纸？") },
-        text = { Text("已选用同一组件且未混用两个版本时更新其配置；否则由系统选择器决定桌面／锁屏目标，返回成功且核实组件后才提交。成功后返回桌面并关闭本模块任务，取消保留草稿。") },
-        confirmButton = { TextButton(onClick = {
-            confirm = false
-            if (!available) return@TextButton
-            val target = ComponentName(context, if (ambient) AliveAmbientWallpaperService::class.java else AliveWallpaperService::class.java)
-            busy = true
-            scope.launch {
-                try {
-                    val applied = withContext(Dispatchers.IO) {
-                        if (selectedAliveComponent(context, target, requireUnmixed = true)) AliveSettings.applyDraft(context) else null
-                    }
-                    if (applied != null) { draft = applied; appliedSuccessfully() }
-                    else {
-                        pendingComponent = target.flattenToString()
-                        try {
-                            wallpaperPicker.launch(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
-                                .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, target))
-                        } catch (failure: Exception) { pendingComponent = null; message = failure.message ?: "无法打开系统选择器，未提交草稿" }
-                    }
-                } catch (cancelled: CancellationException) { throw cancelled }
-                catch (failure: Exception) { message = failure.message ?: "应用失败，草稿仍保留" }
-                finally { busy = false }
-            }
-        }) { Text("确认设置") } }, dismissButton = { TextButton(onClick = { confirm = false }) { Text("取消") } })
+    if (resources) ModalBottomSheet(onDismissRequest = { resources = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("渲染资源", style = MaterialTheme.typography.headlineSmall)
+            Text(if (ready) "OpenAlive 0.4.41-preview 固定版本已校验" else "需导入官方 OpenAlive 0.4.41-preview APK；只读取校验后的素材与原生库，不安装 APK 或执行 DEX。")
+            OutlinedButton(onClick = { apkPicker.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream")) },
+                enabled = arm64 && editable, modifier = Modifier.fillMaxWidth()) { Text(if (ready) "更新资源／缩略图" else "导入官方 APK") }
+            TextButton(onClick = {
+                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Maga-King/OpenAlive/releases/tag/v0.4.41-preview"))) }
+                catch (_: Exception) { message = "没有可打开上游发布说明的浏览器" }
+            }) { Text("上游发布说明与许可") }
+            if (backendError.isNotBlank()) Text(backendError, style = MaterialTheme.typography.bodySmall)
+            Text("素材版权归原作者。照片防烧屏位移尚未实现，请勿长期常亮测试。首次切换壁纸组件仍需系统确认；退出或取消不会应用草稿。", style = MaterialTheme.typography.bodySmall)
+        }
+    }
 }
 
 @Composable
 private fun StyleGallery(scene: Int, names: List<String>, selected: Int, enabled: Boolean, revision: Int, choose: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        names.indices.chunked(2).forEach { row ->
+        names.indices.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { index ->
                     val thumbnail = styleThumbnail(scene, index, revision)
-                    OutlinedCard(onClick = { choose(index) }, enabled = enabled, modifier = Modifier.weight(1f),
-                        border = androidx.compose.foundation.BorderStroke(if (selected == index) 2.dp else 1.dp,
-                            if (selected == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)) {
-                        if (thumbnail != null) Image(thumbnail, names[index], Modifier.fillMaxWidth().height(112.dp), contentScale = ContentScale.Fit)
-                        else Box(Modifier.fillMaxWidth().height(112.dp), contentAlignment = Alignment.Center) {
-                            Text("未导入缩略图\n可重新导入官方 APK 补齐", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Surface(onClick = { choose(index) }, enabled = enabled,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(1.1f).semantics { this.selected = selected == index; contentDescription = names[index] },
+                            shape = RoundedCornerShape(20.dp),
+                            border = BorderStroke(2.dp, if (selected == index) MaterialTheme.colorScheme.primary else Color.Transparent),
+                            color = if (selected == index) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow) {
+                            Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
+                                if (thumbnail != null) Image(thumbnail, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                else Text(names[index], style = MaterialTheme.typography.labelMedium)
+                            }
                         }
-                        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(names[index], Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
-                            RadioButton(selected = selected == index, onClick = null, enabled = enabled)
-                        }
+                        Text(names[index], style = MaterialTheme.typography.labelMedium,
+                            color = if (selected == index) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }

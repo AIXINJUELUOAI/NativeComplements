@@ -54,6 +54,32 @@ class NavigationTest {
         return next
     }
 
+    @Test fun aliveCardsEditOnlyTheirPhaseAndFollowSystemAod() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val resolver = context.contentResolver
+        shadowOf(context.getSystemService(android.os.UserManager::class.java)).setUserUnlocked(true)
+        android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 1)
+        launch(intent(Page.Alive))
+        try {
+            compose.waitUntil(10_000) { context.getSharedPreferences("alive_wallpaper_draft", 0).contains("aod") }
+        } catch (failure: AssertionError) { throw AssertionError(compose.onRoot().printToString(), failure) }
+        compose.onNodeWithContentDescription("息屏样式").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("星月").performClick()
+        compose.waitUntil(10_000) { context.getSharedPreferences("alive_wallpaper_draft", 0).getInt("aod", -1) == 2 }
+        compose.onNodeWithContentDescription("星月").assertIsSelected()
+        compose.onNodeWithText("完成").assertDoesNotExist()
+        compose.onNodeWithText("确认设置").assertDoesNotExist()
+        compose.runOnIdle { android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 0) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("息屏样式").assertDoesNotExist()
+        compose.onNodeWithContentDescription("锁屏样式").assertIsDisplayed()
+        compose.onNodeWithContentDescription("桌面样式").assertIsDisplayed()
+        compose.runOnIdle { android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 1) }
+        compose.onNodeWithContentDescription("息屏样式").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("星月").assertIsSelected()
+        compose.runOnIdle { android.provider.Settings.Secure.putString(resolver, "doze_always_on", null) }
+    }
+
     @Test fun nestedSettingsUseNativeActivityBackAndKeepTheirParent() {
         val (homeScenario, home) = launch(intent())
         compose.onNodeWithText("小窗").performClick()

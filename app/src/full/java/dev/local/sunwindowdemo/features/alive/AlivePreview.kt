@@ -22,12 +22,10 @@ internal fun AlivePreview(
     scene: Int,
     resourcesRevision: Int,
     modifier: Modifier = Modifier,
-    onNextScene: () -> Unit,
     onError: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val next by rememberUpdatedState(onNextScene)
     val error by rememberUpdatedState(onError)
     val view = remember(context) { DraftPreviewView(context) }
     DisposableEffect(view, lifecycle) {
@@ -39,7 +37,6 @@ internal fun AlivePreview(
         onDispose { lifecycle.removeObserver(observer); view.dispose() }
     }
     AndroidView(factory = { view }, modifier = modifier, update = {
-        it.setOnClickListener { next() }
         it.onError = { value -> error(value) }
         it.show(snapshot, scene, resourcesRevision)
     })
@@ -64,9 +61,9 @@ private class DraftPreviewView(context: Context) : TextureView(context), Texture
     init {
         surfaceTextureListener = this
         isOpaque = true
-        isClickable = true
-        isFocusable = true
-        contentDescription = "真实壁纸预览，点按依次播放息屏、锁屏、桌面"
+        isClickable = false
+        isFocusable = false
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
     }
 
     fun show(next: AliveSettings.Snapshot, target: Int, resourcesRevision: Int) {
@@ -102,7 +99,6 @@ private class DraftPreviewView(context: Context) : TextureView(context), Texture
             val next = AliveRenderer(context, input)
             renderer = next
             next.mode(scene, false)
-            if (scene == 0) next.previewLens()
             next.attach(target, width, height)
             next.visible(true)
             checkSoon()

@@ -37,7 +37,7 @@ final class SceneMotion {
     private ObjectAnimator positionX,positionY;
     private float positionStartX,positionStartY;
     private long lastFrame;
-    private float aodX,aodY=.335f;
+    private float aodX,aodY=.05f; // Screen center Y = .5 - anchorY: AMBIENT sits at 45% height.
     private int mode;
     private static final Interpolator DEFAULT=new AccelerateDecelerateInterpolator();
     private static final Interpolator LINEAR=new LinearInterpolator();

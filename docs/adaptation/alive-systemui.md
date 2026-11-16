@@ -1,6 +1,10 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## 当前增量：0.11.4-alive-test1 / code148（数据准备，不改认证）
+## 当前增量：0.11.5-alive-test1 / code149（不改SystemUI Hook）
+
+本轮[固定AMBIENT下移与单页UI](<alive-platform.md>)只改应用编辑与motion默认锚点。系统AOD值仍只读本用户设置，实际常亮/省电/遮挡仍遵守原生；没有动态时钟bounds输入，不改本篇147睡眠准入/UID/nonce/期限/认证/亮度边界。三种解锁现象仍未解决，不能用本轮位置修改宣称认证或系统涟漪修复。
+
+## 历史增量：0.11.4-alive-test1 / code148（数据准备，不改认证）
 
 code148不新增SystemUI认证或解锁Hook，保留147下述入场选择、FIRST_SWAP UID/nonce/期限校验与双真实showing安全门。[Direct Boot准备](<alive-platform.md#code148direct-boot-数据边界>)只将核心资源及当前已应用照片/AtomicFile配置快照放入本用户应用私有DE，使系统所选且directBootAware的普通/实验壁纸service有机会在首次解锁前读取；不强选、重绑或启动壁纸，不使草稿/编辑预览在锁前可读。
 

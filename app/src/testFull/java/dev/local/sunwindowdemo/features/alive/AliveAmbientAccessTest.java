@@ -10,6 +10,18 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35,manifest=Config.NONE)
 public class AliveAmbientAccessTest {
+    @Test public void systemAodPreferenceDistinguishesOffOnAndUnknown(){
+        var resolver=org.robolectric.RuntimeEnvironment.getApplication().getContentResolver();
+        android.provider.Settings.Secure.putString(resolver,AliveSystemState.AOD_SETTING,null);
+        assertEquals(-1,AliveSystemState.aod(org.robolectric.RuntimeEnvironment.getApplication()));
+        android.provider.Settings.Secure.putInt(resolver,AliveSystemState.AOD_SETTING,0);
+        assertEquals(0,AliveSystemState.aod(org.robolectric.RuntimeEnvironment.getApplication()));
+        android.provider.Settings.Secure.putInt(resolver,AliveSystemState.AOD_SETTING,1);
+        assertEquals(1,AliveSystemState.aod(org.robolectric.RuntimeEnvironment.getApplication()));
+        android.provider.Settings.Secure.putInt(resolver,AliveSystemState.AOD_SETTING,2);
+        assertEquals(-1,AliveSystemState.aod(org.robolectric.RuntimeEnvironment.getApplication()));
+        android.provider.Settings.Secure.putString(resolver,AliveSystemState.AOD_SETTING,null);
+    }
     @Test public void photoStylesDoNotSilentlyEnableLockOrHomeGlass()throws Exception{
         var context=org.robolectric.RuntimeEnvironment.getApplication();
         context.getSharedPreferences(AliveSettings.APPLIED,0).edit().clear().commit();

@@ -1,6 +1,16 @@
 # Alive：阶段事实、AOD 实验与 Android 壁纸边界
 
-## 当前增量：0.11.4-alive-test1 / code148
+## 当前增量：0.11.5-alive-test1 / code149
+
+本轮只修改AMBIENT固定位置与Alive单页编辑，不修改147睡眠准入、解锁认证或系统电源逻辑。
+
+- [SceneMotion](<../../app/src/full/java/org/aliveclean/SceneMotion.java>)和[FrameMotion](<../../app/src/full/java/org/aliveclean/FrameMotion.java>)的AMBIENT锚点统一`.05f`，屏幕中心位置为`H*(.5-.05)=.45H`；收拢终点与展开起点共用该值，LOCK/HOME仍全屏居中。不读取真实时钟bounds，固定下移不等于动态避让，也不保证所有时钟尺寸绝无重叠；原曲线、时长、native和shader未改。
+- [Alive单页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)复用SettingsPage标题及安全区，顶部阶段卡片为同一真实renderer静态端点，点击只弹对应阶段的ModalBottomSheet；无独立预览页/阶段切换栏/完成按钮，样式点选保存CE草稿后更新卡片，主题色描边加轻微提亮表示选中。下方只保留照片与设置壁纸；渲染资源/许可/失败状态收至更多，不丢失首次导入入口。样式小图仍是导入的官方示意，不伪造用户照片效果。
+- [系统AOD输入](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemState.java>)只读本应用用户`doze_always_on`，ContentObserver及页面恢复时刷新。开启显示三卡，关闭两卡；保留原aod样式，省电/遮挡等瞬态不改变板块。缺键/拒绝/非0或1均为未知，明确提示而非误报关闭；未知暂隐藏息屏卡，应用时优先沿用既有实验组件，否则普通回退。不写系统设置，不强亮屏。
+- 系统值已知时应用AOD能力组件，关闭AOD仅由系统暂停，重新开启不必再次切换组件；普通false元数据组件继续作为未知状态/旧安装的回退，不删其入口。移除模块重复确认层，点击设置对已选同组件无混用时直接发布完整快照；首次或切换仍使用原生壁纸选择器，仅成功并核实目标组件后发布。取消/失败不提交草稿，沿用148 DE发布及成功HOME/仅移除本模块任务契约。
+- 本轮验证结果在[收口索引](<README.md>)记录；照片防烧屏与三种解锁现象仍未解决，不以主机检查宣称真机位置/视觉通过。
+
+## 历史增量：0.11.4-alive-test1 / code148
 
 ### code148：Direct Boot 数据边界
 
@@ -39,8 +49,8 @@ code148主机定向检查、R8/原签名与Direct Boot服务声明打包核验�
 - [普通服务](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>) 保留 `supportsAmbientMode=false`，作为原生普通壁纸回退。
 - [实验服务](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService.java>)复用Engine并声明自身ambient能力；[绑定例外](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAmbientAccess.java>)只在有效用户、该精确组件的单次bind同步作用域内，消费一次metadata检查，不是全包/全局权限grant，不授予其他签名权限。
 - [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>) 分离 `alive_wallpaper_draft` 与 `alive_wallpaper` 已应用快照。照片使用不可变 UUID 文件名，编辑不覆盖当前照片；旧 `style` 1..5 与旧照片仍可读取，新编辑默认启航0。历史版本以一次偏好提交发布；code148起运行时改用上文DE AtomicFile完整快照，CE草稿仍独立。
-- [全屏编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>) 顶部返回/编辑/设置壁纸；“设置壁纸”是应用，不是参数设置。编辑只改草稿，底部 Sheet 直接显示当前阶段真实可选样式与固定上游缩略图，背景保持同一真实预览。缩略图不是当前用户照片的实时渲染，缺少时明确提示补导，不伪造效果。
-- 同一目标组件已选且无普通/实验混用时，页面显式确认后提交；否则打开原生选择器，仅返回成功且核实目标组件后提交。取消/失败留在编辑页并保留草稿。应用成功后发 HOME Intent，再仅结束/移除本模块所属 app task；不结束桌面或其他任务。返回桌面失败会提示，不能把已应用误报成未提交。
+- [单页编辑](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)以顶部两/三张真实阶段卡片进入对应样式Sheet，不再保留历史全屏编辑页。编辑只改草稿，缩略图仍是固定上游示意而非当前用户照片的实时渲染；缺缩略时保留名称，不伪造图片，可从更多补导。
+- 同一目标组件已选且无普通/实验混用时，点击设置即提交，不再额外模块确认；否则打开原生选择器，仅返回成功且核实目标组件后提交。取消/失败留在编辑页并保留草稿。应用成功后发 HOME Intent，再仅结束/移除本模块所属 app task；不结束桌面或其他任务。返回桌面失败会提示，不能把已应用误报成未提交。
 
 ## 平台事实 → 阶段与绘制门控
 

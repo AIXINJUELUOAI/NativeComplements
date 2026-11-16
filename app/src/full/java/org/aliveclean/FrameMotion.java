@@ -21,7 +21,7 @@ final class FrameMotion {
     private int mode;
     private AnimatorSet animation;
     private ObjectAnimator positionX,positionY;
-    private float anchorX,anchorY=.315f,positionStartX,positionStartY;
+    private float anchorX,anchorY=.05f,positionStartX,positionStartY; // Same 45%-height AMBIENT center as the lens.
     private final float[] data=new float[36],model=new float[16],content=new float[16],scratch=new float[16];
     private final ByteBuffer packet=ByteBuffer.allocateDirect(36*4).order(ByteOrder.nativeOrder());
     private final FloatBuffer floats=packet.asFloatBuffer();

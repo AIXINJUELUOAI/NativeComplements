@@ -1,6 +1,10 @@
 # Alive 照片渲染内核
 
-## 当前范围：0.11.3-alive-test1 / code146
+## 当前增量：0.11.5-alive-test1 / code149
+
+AMBIENT位置与单页编辑见[平台契约](<alive-platform.md>)：lens及五photo默认anchorY=.05、中心45%屏高；LOCK/HOME端点不动，不改native/曲线/时长，不称动态时钟避让。顶部两/三卡各持有同一renderer类型的独立TextureView、GL worker/EGL context/native handle，按当前阶段静态端点初始化，无点击循环或3秒idle演示。按阶段聚合错误、移除时清理，健康卡不能清空失败卡；生命周期及精确Surface关闭回执不变。主机定向测试不等于native真机观感/性能通过。
+
+## 保留范围：0.11.3-alive-test1 / code146
 
 本节覆盖code145当前性表述；固定native与shader未改。用户145只读证据与新系统交接分别见 [平台事实](<alive-platform.md>)、[SystemUI边界](<alive-systemui.md>)。code146源码修正不是新包真机视觉PASS。
 
@@ -16,17 +20,17 @@
 
 锁屏/桌面独立配置，默认0/6。不自创“流沙”或加入其他厂商引擎。启航不创建 FrameMotion/MaskFrames，使用 SceneMotion lens 与真实 decorator；雾花按需加载 ground gray/mask，绑定 native slots1/2，照片遮罩占slot0。
 
-## 全屏编辑、缩略图与应用
+## 单页编辑、缩略图与应用
 
 [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>) 用不可变 aod/lock/home/photo Snapshot 分离 draft/applied；导入照片使用 UUID 文件，不覆盖现用照片，保留旧style/照片兼容。实际 Engine 读 applied，系统预览读 draft，页内预览接收显式 Snapshot，预览错误不污染实际服务状态。
 
-[编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)以真实预览铺满背景，顶部返回/编辑/设置壁纸。“编辑”打开当前息屏/锁屏/桌面的底部 Sheet，直接展示样式卡片；可在 Sheet 切阶段，选择即更新草稿与背景，不再进入样式子页。设置成功返回 HOME 并仅移除本模块 task；取消/失败保留草稿，系统选择器与同组件确认边界见 [平台文档](<alive-platform.md>)。
+[编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)顶部两/三张真实阶段卡片，点卡片打开仅当前样式的底部Sheet，无阶段切换/完成按钮；点选保存草稿后更新卡片。照片入口在外层，资源入口收至更多。设置成功返回HOME并仅移除本模块task；取消/失败保留草稿，系统选择器与同组件直接发布边界见[平台文档](<alive-platform.md>)。
 
 code145 的卡片使用固定上游 **10张 PNG**：六张 AOD、四张锁屏纹理图；桌面复用四种纹理示意。它们不是当前用户照片实时缩略渲染。importer 对固定APK整体 SHA 校验后，分别校验每张白名单PNG的独立SHA与≤160000字节上限，存入私有可选 `previews-v1`，不 bundled。旧导入缺图时可重新选择同一固定 APK 补导；缺图不改变 native ready，不阻止真实渲染，也不拿假图冒充。缩略资源独立于不可变 native generation，**补图不替换已发布/已加载原生库**，不切换同进程 JNI 世代。
 
-[AlivePreview](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)仍是一个 TextureView，使用同一 [AliveRenderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)；点击背景按 **0→1→2→0** 驱动现有 scene 的真实动画，也可直接选阶段，不是录像或三张静态端点页。更换配置才 reload；阶段反向沿当前采样衔接。启航仅有界3秒 idle 演示，不复制无限 AOD 转动。
+[AlivePreview](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)每张阶段卡片使用独立TextureView与[同一renderer类型](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)，显式Snapshot输入，按对应静态端点显示；不是录像或HTML示意。原TextureView不接管点击/无障碍焦点，外层卡片处理样式编辑入口；无背景循环切阶段或idle演示。更换配置reload，真实壁纸的唤醒/收拢动画轨不变。
 
-预览跟随 STARTED 生命周期，停止/离页时异步close；EGL断开native window的 completion 返回后，才释放准确对应的 Surface/SurfaceTexture。关闭中不抢建renderer，TextureView销毁返回false后由对应回调释放，避免BufferQueue race。错误检查仅事件后250/500/1000ms三次。全屏预览不模拟物理DOZE亮度、系统遮挡/认证或时钟布局。
+预览跟随 STARTED 生命周期，停止/离页时异步close；EGL断开native window的 completion 返回后，才释放准确对应的 Surface/SurfaceTexture。关闭中不抢建renderer，TextureView销毁返回false后由对应回调释放，避免BufferQueue race。错误检查仅事件后250/500/1000ms三次。页内卡片不模拟物理DOZE亮度、系统遮挡/认证或时钟布局。
 
 ## worker、ABI 与资源生命周期
 
