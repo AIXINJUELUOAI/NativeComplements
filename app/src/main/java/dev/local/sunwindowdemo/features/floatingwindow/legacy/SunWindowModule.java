@@ -28,13 +28,10 @@ public final class SunWindowModule extends XposedModule {
             startup=hook(main).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 if(!selected[0]){selected[0]=true;
                     try{
-                        String choice=dev.local.sunwindowdemo.core.WindowBackendOwnership.select(
-                            dev.local.sunwindowdemo.core.WindowBackendSelection.readSystem(loader));
-                        String owner=!choice.isEmpty()&&!Wire.PKG.equals(choice)?choice:
-                            dev.local.sunwindowdemo.core.WindowBackendOwnership.claim(Wire.PKG);
-                        boolean delegated=dev.local.sunwindowdemo.core.ModuleIdentity.FULL_PACKAGE.equals(Wire.PKG)
-                            &&dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE.equals(choice);
-                        note("WINDOW_BACKEND_SELECTED choice="+(choice.isEmpty()?"legacy-auto":choice)+" owner="+owner);
+                        int eligibility=dev.local.sunwindowdemo.core.WindowBackendEligibility.readSystem(loader,Wire.PKG);
+                        String owner=dev.local.sunwindowdemo.core.WindowBackendOwnership.claimEligible(Wire.PKG,eligibility);
+                        boolean delegated=eligibility==0&&dev.local.sunwindowdemo.core.ModuleIdentity.FULL_PACKAGE.equals(Wire.PKG);
+                        note("WINDOW_BACKEND_SELECTED eligibility="+eligibility+" owner="+owner);
                         if(!Wire.PKG.equals(owner))WindowBackendConflict.install(this,loader,owner,delegated,this::note);
                         else installBackend(p);
                     }catch(Throwable unavailable){note("WINDOW_STARTUP_UNAVAILABLE "+FrameworkAccess.reason(unavailable));}

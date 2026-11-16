@@ -2,7 +2,26 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.1-aod-test3 / code143
+### 当前增量：0.11.2-alive-test1 / code144
+
+本轮按用户确认的范围接入启航与真实连续预览，修复小窗开关资格、熄屏交接和额外模糊；时钟避让、照片防烧屏位移、OpenAlive 以外自创效果与其他厂商引擎不在本轮。
+
+- 小窗取消额外后端选择器。[每包资格投影](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendEligibility.java>)把本包 `corner.enabled` 在后台同步到自有 PM receiver 状态，WMS 启动只读本包资格；关闭不 claim，双开保留 first-claim，身份/恢复记录不跨版。资格变更需要下一次完整重启，不热转交。升级广播、解锁后的启动、Provider 与管理页补齐旧配置投影；未完成迁移的 DEFAULT 保持旧兼容，首次升级建议各打开一次确认已保存开关，而非再选后端。
+- [草稿配置](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)使用独立偏好与不可变 UUID 照片；编辑与取消不改变已应用快照。已有同组件且无普通/实验混用时，显式确认更新配置；切换组件先由系统选择器确认，再核实实际目标提交，不能把取消当成功。
+- [编辑器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)与[单活预览](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)共用真实 renderer：点击同画面依次播放息屏0→锁屏1→桌面2→息屏0，不用录像或静态示意替代效果。不模拟真实时钟、认证、DOZE亮度；GL 关闭回执之后才释放 Surface/Texture，避免快速离开返回抢连。
+- [渲染器](<alive-renderer.md>)接入真正启航 lens0 与原五种照片1..5，锁屏0..3/桌面6..9分别选择无、长虹、波浪、雾花；默认无附加纹理。雾花真实灰度/遮罩按 native 槽位绑定；五种照片仍必须提供 native ABI 要求的 decorator。启航旋转有限3秒，不常驻 AOD 帧循环。
+- [生命周期](<alive-platform.md>)等待 native visible/可绘制最多6秒，资源及起始帧首次成功 swap 后开始1800ms收拢；隐藏暂停三轨、停止绘制，不隐藏初始化，整个睡眠交接绝对上限7800ms。缺场景只允许最近真实LOCK/HOME种子；重复信号不能重启。保留OFF/UNKNOWN/移除/SUSPEND保护，没有修改原生熄屏 controller、scrim 或电源行为，也不承诺所有系统遮挡均已消除。
+- 新增用户反馈“息屏指纹直达桌面只有模糊渐清”找到确定代码路径：退出 ambient 的 `duration=0` 曾错误传入 `animate=false`，使 AOD→HOME/LOCK直接终态，后续同目标不会补播。本版仅 ambient 进入零时长强端点，退出按真实当前事实播放展开；不等待或修改认证，不强设HOME。真机事件顺序仍待复测。
+- [SystemUI适配](<alive-systemui.md>)只对当前用户实际选中自有实验锁屏壁纸且AOD开启的两条 doze producer 投影其模糊贡献；保留认证动画、QS、启动及其他壁纸模糊。ABI/deopt失败独立卸载该新增链，原生路径保留。
+
+检查边界：用户再次要求少测试。此前已经启动的一轮 full/window 单测通过；之后首帧、暂停与释放时序修正不再重复全套，最终只做代码审查及双release/R8、原签名/身份/静态scope/入口与独立版不含Alive的打包核验。不得把中间单测结果描述为所有最终代码已全测，更不代表动画或原生GPU已验证。未安装、重启、改设备设置；用户负责真机功能与观感验证，照片仍只适合短时息屏测试。
+
+| code144 最终原签名产物 | SHA-256 |
+|---|---|
+| [主版 APK](<../../deliverables/NativeComplements-0.11.2-alive-test1.apk>) | `7969423a909b572d1a47dd8cf695707e4aea51e432b3795ab2a78161a66789bc` |
+| [独立小窗 APK](<../../deliverables/NativeComplements-Window-0.11.2-alive-test1.apk>) | `959c8678a35777fdb902336b5ccb3f1e80cde563367456ace6c3c15360e75d44` |
+
+### 历史增量：0.11.1-aod-test3 / code143
 
 code142 真机只读日志已定位两项：主版小窗虽关闭仍先占后端，独立版开启却 `WINDOW_BACKEND_CONFLICT`；Alive AOD 照片及亮屏正常，缺少熄屏收拢。03:23:45.692 开始睡眠到 03:23:49.735 物理 DOZE 的约四秒内，原门控 `ON && !interactive` 提前停绘并释放，DOZE 直接重建静态0。不能再将该问题表述为完全未接通 AOD，亦不把随后用户改静态壁纸/关闭 AOD 反推作历史失败原因。
 

@@ -21,6 +21,8 @@ public class AliveWallpaperService extends WallpaperService {
         private int displayId=Display.INVALID_DISPLAY;
         private final AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
         private boolean sampled,wasInteractive,wasAmbient;
+        private int lastAwakePhase=-1;
+        private long sleepGeneration;
         private String lastState;
         private long ambientDuration=-1;
         private final Runnable sleepExpired=()->update("sleep-expired",false);
@@ -48,13 +50,15 @@ public class AliveWallpaperService extends WallpaperService {
             }
         };
         private final SharedPreferences.OnSharedPreferenceChangeListener changed=(preferences,key)->{
-            if(renderer!=null&&("style".equals(key)||"photo_revision".equals(key)||"resources_revision".equals(key)))renderer.reload();
+            if(renderer!=null&&("applied_revision".equals(key)||"resources_revision".equals(key)
+                    ||isPreview()&&("aod".equals(key)||"lock".equals(key)||"home".equals(key)||"photo".equals(key))))renderer.reload();
         };
         @Override public void onCreate(SurfaceHolder holder){
             super.onCreate(holder);
             setTouchEventsEnabled(false);
-            renderer=new AliveRenderer(AliveWallpaperService.this);
-            getSharedPreferences("alive_wallpaper",MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
+            renderer=new AliveRenderer(AliveWallpaperService.this,isPreview());
+            getSharedPreferences(AliveSettings.APPLIED,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
+            if(isPreview())getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
             IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
             filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);
             registerReceiver(screens,filter,null,main,Context.RECEIVER_NOT_EXPORTED);registered=true;
@@ -71,8 +75,8 @@ public class AliveWallpaperService extends WallpaperService {
             main.removeCallbacks(sleepExpired);
             if(sleep.active(now))main.postDelayed(sleepExpired,sleep.remaining(now));
         }
-        private void wake(){sleep.wake();wasInteractive=false;main.removeCallbacks(sleepExpired);}
-        private void endSleep(){sleep.end();main.removeCallbacks(sleepExpired);}
+        private void wake(){sleepGeneration++;sleep.wake();wasInteractive=false;main.removeCallbacks(sleepExpired);}
+        private void endSleep(){sleepGeneration++;sleep.end();main.removeCallbacks(sleepExpired);}
         private void update(){update("resample",true);}
         private void update(String event,boolean animate){
             if(destroyed||renderer==null)return;
@@ -85,14 +89,31 @@ public class AliveWallpaperService extends WallpaperService {
                     ||state==AlivePhase.DisplayState.DOZE_SUSPEND)endSleep();
             if(!visible||!interactive||ambient||state!=AlivePhase.DisplayState.ON)main.removeCallbacks(refresh);
             sampled=true;wasInteractive=interactive;wasAmbient=ambient;
-            long now=SystemClock.uptimeMillis();boolean sleeping=sleep.active(now);
+            long now=SystemClock.uptimeMillis();
+            sleep.visibility(visible,now);
+            boolean sleeping=sleep.active(now);
             int phase=sleeping?AlivePhase.AMBIENT:AlivePhase.phase(interactive&&state==AlivePhase.DisplayState.ON,ambient,locked);
+            if(!sleeping&&interactive&&!ambient&&state==AlivePhase.DisplayState.ON)lastAwakePhase=phase;
             boolean draw=AlivePhase.drawable(supportsOwnAmbient(),visible,interactive,ambient,state,sleeping);
             boolean transition=animate&&state!=AlivePhase.DisplayState.DOZE_SUSPEND;
-            // A sleep episode's endpoint cannot be restarted by late visibility/display callbacks.
-            if(!sleeping&&!interactive&&state==AlivePhase.DisplayState.ON)transition=false;
-            renderer.mode(phase,transition);
+            // Hidden time never consumes the collapse: retain only an already-created scene.
+            boolean start=sleeping&&draw&&sleep.present(now);
+            if(start){
+                long generation=sleepGeneration;
+                renderer.sleep(lastAwakePhase,transition,()->main.post(()->{
+                    if(destroyed||generation!=sleepGeneration)return;
+                    long presentedAt=SystemClock.uptimeMillis();
+                    if(sleep.start(presentedAt)){
+                        sleep.visibility(visible,presentedAt);
+                        main.removeCallbacks(sleepExpired);main.postDelayed(sleepExpired,sleep.remaining(presentedAt));
+                    }
+                }));
+            }else if(!sleeping||sleep.presented()){
+                if(!sleeping&&!interactive)transition=false;
+                renderer.mode(phase,transition);
+            }
             renderer.visible(draw,sleeping);
+            if(sleeping){main.removeCallbacks(sleepExpired);main.postDelayed(sleepExpired,sleep.remaining(now));}
             String facts="display="+displayId+":"+state+" phase="+phase+" draw="+draw+" visible="+visible
                 +" interactive="+interactive+" locked="+locked+" ambient="+ambient+" duration="+ambientDuration+" sleeping="+sleeping;
             if(!facts.equals(lastState)||!"resample".equals(event)){
@@ -119,9 +140,13 @@ public class AliveWallpaperService extends WallpaperService {
         // Only the separate ambient component opts into the module-authorized native ambient path.
         public void onAmbientModeChanged(boolean next,long duration){
             ambient=next;ambientDuration=duration;
-            if(duration<=0)endSleep();else if(next)beginSleep();else wake();
-            update("ambient",duration>0);
-            if(!next)recheckUnlock();
+            if(next){
+                if(duration<=0)endSleep();else beginSleep();
+                update("ambient",duration>0);
+            }else{
+                // Zero is the platform ambient-call duration, not an instruction to skip wake geometry.
+                wake();update("ambient-exit",true);recheckUnlock();
+            }
         }
         public boolean shouldZoomOutWallpaper(){return false;}
         @Override public Bundle onCommand(String action,int x,int y,int z,Bundle extras,boolean resultRequested){
@@ -140,7 +165,8 @@ public class AliveWallpaperService extends WallpaperService {
             destroyed=true;main.removeCallbacks(refresh);main.removeCallbacks(sleepExpired);
             if(registered){unregisterReceiver(screens);registered=false;}
             if(displayRegistered){displays.unregisterDisplayListener(displayListener);displayRegistered=false;}
-            getSharedPreferences("alive_wallpaper",MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
+            getSharedPreferences(AliveSettings.APPLIED,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
+            if(isPreview())getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
             if(renderer!=null){renderer.close();renderer=null;}
             super.onDestroy();
         }

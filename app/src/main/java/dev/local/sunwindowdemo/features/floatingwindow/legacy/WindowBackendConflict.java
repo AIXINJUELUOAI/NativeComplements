@@ -24,15 +24,17 @@ final class WindowBackendConflict {
                     int uid=getSentFromUid();
                     if(uid!=manager&&uid!=systemUi)return;
                     if(request.getIntExtra("protocol",0)!=Wire.PROTOCOL||!"STATUS".equals(request.getStringExtra("op")))return;
+                    String currentOwner=dev.local.sunwindowdemo.core.WindowBackendOwnership.owner();
+                    boolean companion=delegated&&dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE.equals(currentOwner);
                     Intent status=new Intent(Wire.RESULT).addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY)
                         .putExtra("event","STATUS").putExtra("protocol",Wire.PROTOCOL).putExtra("state","conflict")
-                        .putExtra("backendOwner",owner).putExtra("ownershipConflict",true)
-                        .putExtra("delegatedToStandalone",delegated)
+                        .putExtra("backendOwner",currentOwner).putExtra("ownershipConflict",!currentOwner.isEmpty())
+                        .putExtra("delegatedToStandalone",companion)
                         .putExtra("capabilitiesKnown",false).putExtra("preflightReady",false)
                         .putExtra("supportsMultiWindow",false).putExtra("supportsFreeform",false)
                         .putExtra("hostConnected",false).putExtra("hasJournal",false)
-                        .putExtra("report",(delegated?"本次启动已选择独立小窗：":"本版本未取得小窗接管权，归属：")+owner+
-                            "。请使用对应版本的小窗设置；主版的小窗后端选择仅下次完整重启生效。本版本未创建小窗引擎，不会迁移或覆盖另一版本的恢复记录。");
+                        .putExtra("report",(currentOwner.isEmpty()?"本次启动没有小窗后端接管":"本次启动的小窗接管归属："+currentOwner)+
+                            "。本版本未创建小窗引擎。小窗总开关决定下次完整重启的接管资格；两个版本都开启时保留先取得者，不强抢或热转移。旧安装首次升级请打开对应版本完成开关同步后再重启，恢复记录不跨版迁移。");
                     String requestId=request.getStringExtra("requestId");
                     if(requestId!=null&&!requestId.isEmpty()&&requestId.length()<=128)status.putExtra("requestId",requestId);
                     var options=BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();

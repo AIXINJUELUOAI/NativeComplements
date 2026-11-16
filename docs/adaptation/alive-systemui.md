@@ -1,6 +1,6 @@
-# Alive 实验 AOD：SystemUI 能力 Flow 的窄投影
+# Alive 实验 AOD：SystemUI 能力与 doze 模糊的窄投影
 
-此为用户追加授权的模块例外，不是普通应用获得签名权限，也不宣称真机 AOD 已验证。仅主版安装 [AliveSystemUi](../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java)。用户在原生壁纸选择器明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通 Alive 壁纸仍为原生 ambient=false 回退。无需另存全局 enable 偏好或新增 Provider。
+当前为0.11.2-alive-test1/code144。此为用户追加授权的模块例外，不是普通应用获得签名权限，也不宣称本轮真机 AOD 已验证。仅主版安装 [AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)。用户明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通 Alive 壁纸仍为原生 ambient=false 回退。无需另存全局 enable 偏好或新增 Provider。
 
 ## 已核宿主与事件输入
 
@@ -22,7 +22,7 @@ host FlowKt.combine(nativeAmbient, lockscreenWallpaperInfo, wallpaperInfo,
 
 ## 仅额外分支的核验
 
-1. native 值为 true 时原样返回，不新增 Binder 查询，不改变其他壁纸的原生能力。
+1. 其他壁纸始终保留 native 能力结果。code144即使 native=true 也需在后台核验自有组件以建立窄 blur gate；不能再沿用历史“不新增 Binder 查询”的断言，核验失败仍返回 native 值。
 2. native 为 false 时，当前 SelectedUserModel 必须仍是 StateFlow 的同一对象且 `selectionStatus == SELECTION_COMPLETE`，用户 ID 必须有效。用户切换中不添加能力。
 3. 通过宿主 `UserSettingsProxy.getIntForUser(int defaultValue, int userId, String key)` 读取该用户 `doze_always_on == 1`，不写系统设置；该 APK 参数顺序已按 DEX 指令核对。
 4. 在 native bgDispatcher 上重新查询 `WallpaperManager.getWallpaperIdForUser(which,userId)` 与 `getWallpaperInfo(which,userId)`，不把跨用户期间可能仍旧的 wallpaperInfo 缓存直接当授权。仅锁屏组件精确匹配实验服务、实际 metadata `supportsAmbientMode()` 为 true 时允许额外 true。
@@ -36,8 +36,18 @@ host FlowKt.combine(nativeAmbient, lockscreenWallpaperInfo, wallpaperInfo,
 
 本机 Android 36 SDK 源码可核 `getWallpaperIdForUser(int which,int userId):int` 的负值缺省语义以及 `getWallpaperInfo(int which,int userId):WallpaperInfo`；实际运行框架仍逐项预检，SDK 源码不是当前设备实现证据。
 
-不 Hook LightRevealScrim、不强改 scrim alpha，不打开全局 AOD 资源，不绕过原生 `DozeParameters.getAlwaysOn`、省电、近距离遮挡及显示器暂停。这里只提供自有组件的能力投影；system_server 的专用绑定例外由另一适配边界负责，认证/解锁策略始终不在本任务范围。
+## code144：只消除两个 doze producer 的模糊贡献
+
+code143只读现场显示：所选留光自身blur0，但系统稳定doze的 `wakeAndUnlockBlurRadius=52`、`lastAppliedBlur=52`。归档代码按 `lerp(minBlur,maxBlur/2,easedDoze)` 计算，现场min1/max104/doze1吻合；这不是证明所有样式模糊都来自系统，照片样式2..5仍有上游内容模糊。
+
+新增投影只标记两个已核真实producer的同步调用范围：`NotificationShadeDepthController$statusBarStateCallback$1.onDozeAmountChanged(FF)` 与 `NotificationShadeDepthController$2$1.emit` 的classId1能力collector。ThreadLocal标记同一owner，只有它们调用 `setWakeAndUnlockBlurRadius`、ambient能力为true且doze量>0、当前repository仍匹配精确自有实验锁屏组件/当前已完成选择的用户/AOD条件时，才把**本次贡献参数**投影为0。不是全局setter清零，也不改BlurUtils、资源min/max或整个ambient Flow。
+
+该匹配由前述后台Flow的实查结果建立，并在setter上核对当前用户及锁屏/主屏流对象身份；不在高频setter内作Binder查询。组件/用户/AOD变化由原生流撤销匹配，后续producer恢复原值；不承诺跨进程零延迟。setter的认证动画直接调用不在producer作用域，不投影；QS/shade/brightness mirror/应用启动及其他原生贡献仍由原计算合成。读取失败保留native参数；三处hook/逐个deopt失败撤销这组blur hook，不扩大作用域或阻止原生能力路径。
+
+不 Hook 原生screen-off controller或LightRevealScrim，不强改scrim alpha，不打开全局AOD资源，不绕过 `DozeParameters.getAlwaysOn`、省电、近距离遮挡及显示器暂停。system_server专用绑定例外由另一边界负责，认证/解锁策略不改。此投影不等于接管系统熄屏动画，也不保证所有旧画面/闪烁已经消失。
 
 ## 验证范围
 
-本任务仅进行了源代码/归档 DEX 读取与参数语义核对，未运行构建、测试、设备操作或 Git 写操作。Lead 负责集成入口、最小检查及实验包核验。最终必须由用户真机验证组件选择、用户切换/静态锁屏恢复、AOD 开关、省电/遮挡保护和实际 ambient→锁屏→桌面效果；这些不能由编译通过替代。
+目标ABI依据归档DEX；code144能力/blur源码实现与失败回退不等于实际生效验证。Lead已完成一轮双flavor unit，但其后新增sleep首帧交接、preview race及ambient-exit duration0修正未全测；剩余构建/签名/身份边界由Lead收口，不预报PASS或hash。按用户少测试要求不新增套件/全功能回归，不自动安装、重启或写设备设置。
+
+实际组件/用户切换、静态锁屏恢复、AOD开关、省电/遮挡保护、指纹直接AOD→HOME展开和其他blur保留仍需用户真机验证。照片burn-in位移未做、时钟避让延期，限短时测试；编译、单测及页面真实预览不能代替物理DOZE和视觉验证。

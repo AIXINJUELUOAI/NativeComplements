@@ -27,7 +27,12 @@ class WindowEnableGateTest {
         Settings.Global.putInt(activity.contentResolver, "enable_freeform_support", 1)
         controller = WindowController(activity)
     }
-    @After fun cleanup() { controller.close() }
+    private fun drainEnabledSave() {
+        val worker = WindowController::class.java.getDeclaredField("enabledWorker").apply { isAccessible = true }.get(controller) as java.util.concurrent.ExecutorService
+        worker.submit {}.get(5, java.util.concurrent.TimeUnit.SECONDS)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+    }
+    @After fun cleanup() { drainEnabledSave(); controller.close() }
     private fun request(): String? = WindowController::class.java.getDeclaredField("enableRequest").apply { isAccessible = true }.get(controller) as String?
     private fun reply(uid: Int = 1000, requestId: String? = request(), complete: Boolean = true, freeform: Boolean = true, conflict: Boolean = false, known: Boolean = true) {
         val intent = Intent(Wire.RESULT).putExtra("protocol", 16).putExtra("event", "STATUS").putExtra("requestId", requestId)
@@ -54,8 +59,10 @@ class WindowEnableGateTest {
         reply(requestId = first)
         assertFalse(controller.preferences.enabled)
         reply()
+        drainEnabledSave()
         assertTrue(controller.preferences.enabled)
         controller.toggleControl()
+        drainEnabledSave()
         assertFalse(controller.preferences.enabled)
     }
     @Test fun missingCapabilityTimeoutAndSettingChangesWarnUntilUserConfirms() {
@@ -72,23 +79,29 @@ class WindowEnableGateTest {
         assertFalse(controller.preferences.enabled)
         assertNotNull(controller.enablePrompt)
         controller.confirmEnablePrompt()
+        drainEnabledSave()
         assertTrue(controller.preferences.enabled)
         controller.toggleControl()
+        drainEnabledSave()
         controller.toggleControl()
         Settings.Global.putInt(activity.contentResolver, "enable_freeform_support", 0)
         reply()
         assertFalse(controller.preferences.enabled)
         assertTrue(controller.enablePrompt!!.contains("adb shell settings put global enable_freeform_support 1"))
         controller.confirmEnablePrompt()
+        drainEnabledSave()
         assertTrue(controller.preferences.enabled)
         assertNull(controller.enablePrompt)
         assertEquals(0, Settings.Global.getInt(activity.contentResolver, "enable_freeform_support"))
         controller.toggleControl()
+        drainEnabledSave()
         Settings.Global.putString(activity.contentResolver, "enable_freeform_support", null)
         controller.toggleControl()
+        drainEnabledSave()
         assertFalse(controller.preferences.enabled)
         assertNotNull(controller.enablePrompt)
         controller.confirmEnablePrompt()
+        drainEnabledSave()
         assertTrue(controller.preferences.enabled)
         assertNull(Settings.Global.getString(activity.contentResolver, "enable_freeform_support"))
     }
@@ -102,9 +115,11 @@ class WindowEnableGateTest {
         reply(conflict = true, known = false)
         assertFalse(controller.preferences.enabled)
         assertTrue(controller.enablePrompt!!.contains("接管"))
-        assertTrue(controller.enablePrompt!!.contains("LSPosed"))
+        assertTrue(controller.enablePrompt!!.contains("小窗总开关"))
+        assertTrue(controller.enablePrompt!!.contains("不会热转移"))
         assertTrue(controller.enablePrompt!!.contains("重启"))
         controller.confirmEnablePrompt()
+        drainEnabledSave()
         assertTrue(controller.preferences.enabled) // Diagnostics do not replace backend ownership enforcement.
         assertEquals(1, Settings.Global.getInt(activity.contentResolver, "enable_freeform_support"))
     }
@@ -115,6 +130,7 @@ class WindowEnableGateTest {
         assertTrue(store.read().enabled)
         Settings.Global.putInt(activity.contentResolver, "enable_freeform_support", 0)
         controller.boolean("enabled", false)
+        drainEnabledSave()
         assertFalse(store.read().enabled)
     }
 }

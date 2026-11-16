@@ -23,6 +23,7 @@ public final class ConfigProvider extends ContentProvider {
         }
         if(!"read".equals(method))throw new IllegalArgumentException("method");
         new Config(getContext()); // Migrate before exporting, even if the manager has not opened yet.
+        dev.local.sunwindowdemo.core.WindowBackendEligibility.refreshAsync(getContext());
         Bundle out=new Bundle();
         for(var e:getContext().getSharedPreferences("corner",0).getAll().entrySet()){
             Object v=e.getValue();String k=e.getKey();

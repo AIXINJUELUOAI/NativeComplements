@@ -108,7 +108,6 @@ fun ModuleApp(
                         onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
                     )
                     Page.Window -> {
-                        WindowBackendScreen()
                         WindowScreen(controller.preferences, navigate, controller::toggleControl,
                             enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
                             dismissEnablePrompt = controller::dismissEnablePrompt, confirmEnablePrompt = controller::confirmEnablePrompt)

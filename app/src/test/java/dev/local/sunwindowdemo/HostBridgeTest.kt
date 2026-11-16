@@ -56,16 +56,17 @@ class HostBridgeTest {
         } finally { System.clearProperty(key) }
     }
 
-    @Test fun backendChoiceUsesOwnPackageManagerMarkerWithoutChangingWindowSettings() {
-        val full = dev.local.sunwindowdemo.core.ModuleIdentity.FULL_PACKAGE
-        val window = dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE
-        val before = WindowPreferenceStore(context).preferences.all.toMap()
-        assertEquals("", dev.local.sunwindowdemo.core.WindowBackendSelection.read(context))
-        dev.local.sunwindowdemo.core.WindowBackendSelection.save(context, window)
-        assertEquals(window, dev.local.sunwindowdemo.core.WindowBackendSelection.read(context))
-        dev.local.sunwindowdemo.core.WindowBackendSelection.save(context, full)
-        assertEquals(full, dev.local.sunwindowdemo.core.WindowBackendSelection.read(context))
-        assertEquals(before, WindowPreferenceStore(context).preferences.all)
+    @Test fun enabledPreferenceProjectsOnlyOwnStartupEligibility() {
+        val store = WindowPreferenceStore(context)
+        val marker = android.content.ComponentName(context.packageName, "dev.local.sunwindowdemo.core.WindowBackendEligibility")
+        store.boolean("enabled", false)
+        assertFalse(store.read().enabled)
+        assertEquals(android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, context.packageManager.getComponentEnabledSetting(marker))
+        store.enable()
+        assertTrue(store.read().enabled)
+        assertEquals(android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, context.packageManager.getComponentEnabledSetting(marker))
+        store.boolean("enabled", false)
+        assertEquals(android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, context.packageManager.getComponentEnabledSetting(marker))
     }
 
     @Test fun hostSnapshotPreservesExistingOrderAndClearsRemovedSettings() {

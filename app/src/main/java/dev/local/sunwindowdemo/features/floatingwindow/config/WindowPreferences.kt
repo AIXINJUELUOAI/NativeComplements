@@ -31,13 +31,14 @@ class WindowPreferenceStore(private val context: Context) {
     )
     /** A user choice, not a claim that runtime compatibility has been verified. */
     internal fun enable() {
-        preferences.edit().putBoolean("enabled", true).apply()
+        dev.local.sunwindowdemo.core.WindowBackendEligibility.saveEnabled(context, true)
         ConfigProvider.changed(context)
     }
     fun boolean(key: String, value: Boolean) {
         require(key != "enabled" || !value) { "Use the checked enable path" }
         require(key in setOf("enabled", "longBackWindow", "hideTopHint", "showHeat", "menuBlur", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "autoMinimizeOnOpen", "endOnClose", "keepEdgeAwake"))
-        preferences.edit().putBoolean(key, value).apply()
+        if (key == "enabled") dev.local.sunwindowdemo.core.WindowBackendEligibility.saveEnabled(context, value)
+        else preferences.edit().putBoolean(key, value).apply()
         ConfigProvider.changed(context)
     }
     fun number(key: String, value: Int) {

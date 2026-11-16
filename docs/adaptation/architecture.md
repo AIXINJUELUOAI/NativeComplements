@@ -1,14 +1,25 @@
 # 现有架构与需要划清的边界
 
-## 当前实施状态：0.10.0 / code139
+## 当前实施状态：0.11.2-alive-test1 / code144
 
-第一轮小窗规则/状态与原生执行分界、同源 full/window 隔离已完成代码闭环，运行代码已 push 至 `a0f3a7b`。最新边界与集中测试/推送证据见[最新进度](<README.md#最新进度恢复与生命周期闭环>)；不是任意平台可替换接口或设备/LOS 兼容声明。下方只保留 138 历史架构审计，不用当前阶段结论改写历史。
+现有功能规则/状态与原生执行解耦已在Alive前推送至 `5ee8e95`；code139小窗闭环与code143选择器均为历史。下文先记录code144当前边界，再保留138历史审计，不用旧“当前”表述覆盖新实现。当前代码实现不等于真机效果或设备/LOS兼容声明。
 
-## code143 启动选择增补
+## 小窗：本包开关资格，不再额外选择后端
 
-双包先到先claim不等于UI开关选择：即使full.enabled=false也可能持有owner，导致window开启仍冲突。现主版新增[后端启动选择](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendSelection.java>)，仅主user后台同步写自身PM非导出、无filter receiver state；DEFAULT维持legacy-auto，ENABLED选window，DISABLED选full。两包使用同一固定组件字符串（不受独立包R8类名压缩影响），固定user0带disabled/directBoot-aware/unaware读取后一次冻结。两包均须升级，选择仅完整重启生效，不切换Xposed开关或迁移双方journal。
+code143的额外selector没有解决“主版小窗关闭仍先占owner”的合理性问题，code144不再读取该选择决定启动。[WindowBackendEligibility](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendEligibility.java>) 由各包自身 `corner.enabled` 后台同步投影自己的非导出PM组件：ENABLED=1、DISABLED=0、DEFAULT/旧包缺marker=-1未知。主user设置保存先用 `DONT_KILL_APP|SYNCHRONOUS` 写并复核PM，再commit偏好，失败尝试恢复原资格；不把PM与偏好两次操作称跨存储原子事务。更新、已解锁boot、Provider/UI入口补迁移，先完成旧CE配置迁移，不读对方私有偏好、不写LSPosed数据库。
 
-[小窗入口](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>)保持ProductFeatures早装，仅后端同步安装延至已核WMS五参main before；deopt真实SystemServer.startOtherServices caller，失败不影响原生启动、无selectedEngine回抢。chosen包才claim并安装42hook，systemReady after仍attach；不宣称所有target在main前绝无调用，前期owned sessions为空走native。full委托后不创建小窗Engine/控制能力，同SystemUI有界环境快照只供伙伴展示和边缘保护，不借foreignBinder执行OTP/后台唤醒等主版Engine动作；过期/异常暂停。
+[WMS启动入口](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>) 固定user0读取**本包**资格，由 [Ownership](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendOwnership.java>) 冻结：0不claim，1可claim；双开仍firstclaim防重复接管，不承诺固定优先级。-1只保留旧安装firstclaim兼容，不能据未知断言关闭。**首次升级/首次启动若迁移尚未运行，当前启动仍可能旧先到先占；迁移完成后的下一次完整重启才采用资格。**运行中关闭不会卸载系统Hook或热转交，不迁journal，资格变化只影响下次完整重启，不再要求用户额外选择后端。
+
+ProductFeatures仍早装，小窗后端在已核WMS五参main before同步安装，deopt真实SystemServer.startOtherServices caller；失败保原生启动，不回抢已占owner。仅owner创建Engine，systemReady after仍attach。full被关闭而委托时只消费同SystemUI有界环境快照供展示/边缘保护，不借foreignBinder执行OTP/后台唤醒等fullEngine动作，过期/异常暂停。不是将整个full模块关掉，也不宣称任意ROM只装独立包即可兼容。
+
+## Alive：共享渲染、配置隔离与窄系统适配
+
+- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>) 保存draft/applied完整快照及UUID不可变照片；旧style1..5兼容，新配置默认启航。编辑不污染现用壁纸；同组件已选时页面显式确认提交，否则系统选择成功且核实目标后提交。
+- [同一renderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>) 支持AOD六种：lens0启航及照片1..5；锁屏0..3、桌面6..9独立纹理，默认0/6，雾花gray/mask绑定ground slots1/2。[MD3单TextureView预览](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>) 同scene点击0→1→2→0真实动画；生命周期close callback在EGL释放后才释放对应Surface/Texture，不做三套常驻渲染或用示意图冒充实际效果。
+- [Engine交接](<alive-platform.md>) 等native visible最多6s，完整起始帧成功swap ack后起1800ms收拢；hidden暂停三轨、停绘且不init，绝对上限7800ms。无scene只用最近真实LOCK/HOME种子，不假HOME。ambient进入duration0/SUSPEND强端点；退出duration0仍按真实wake展开，本轮修指纹直接AOD→HOME跳动画路径，尚未真机复测。
+- [SystemUI](<alive-systemui.md>) 仅当前user/AOD/实际锁屏精确自有实验组件时投影能力；仅两个原生doze producer的模糊贡献置0，认证/QS/其他native贡献不变。原生screenoff controller、scrim、电源/保护不改，不称替代系统熄屏或全无闪已验证。详情见 [渲染边界](<alive-renderer.md>)。
+
+照片burn-in位移未做，时钟避让延期，仅短时测试。按用户最新少测试要求，已有一轮双unit成功，但后新增交接/preview race/ambient-exit改动未全测；剩余build/sign/身份边界检查不是visual PASS，不预填hash。无新增套件、整套功能回归或自动设备写操作。
 
 ## 138 历史审计（以下正文）
 

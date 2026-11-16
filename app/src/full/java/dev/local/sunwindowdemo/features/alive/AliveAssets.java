@@ -148,6 +148,11 @@ public final class AliveAssets {
     public static File photo(Context context){return new File(context.getNoBackupFilesDir(),"alive-photo.jpg");}
 
     public static synchronized void importPhoto(Context context,Uri source)throws IOException{
+        importPhoto(context,source,photo(context));
+        context.getSharedPreferences("alive_wallpaper",Context.MODE_PRIVATE).edit().putLong("photo_revision",System.nanoTime()).apply();
+    }
+    static synchronized void importPhoto(Context context,Uri source,File destination)throws IOException{
+        if(!destination.getParentFile().getCanonicalFile().equals(context.getNoBackupFilesDir().getCanonicalFile()))throw new IOException("Invalid photo destination");
         File input=File.createTempFile("alive-photo-",".img",context.getCacheDir());
         Bitmap bitmap=null,scaled=null;
         try{
@@ -166,13 +171,11 @@ public final class AliveAssets {
             scaled=bitmap;
             int longest=Math.max(bitmap.getWidth(),bitmap.getHeight());
             if(longest>2048)scaled=Bitmap.createScaledBitmap(bitmap,Math.max(1,bitmap.getWidth()*2048/longest),Math.max(1,bitmap.getHeight()*2048/longest),true);
-            AtomicFile atomic=new AtomicFile(photo(context));FileOutputStream output=null;
+            AtomicFile atomic=new AtomicFile(destination);FileOutputStream output=null;
             try{
                 output=atomic.startWrite();
                 if(!scaled.compress(Bitmap.CompressFormat.JPEG,95,output))throw new IOException("无法保存照片");
                 atomic.finishWrite(output);output=null;
-                context.getSharedPreferences("alive_wallpaper",Context.MODE_PRIVATE).edit()
-                    .putLong("photo_revision",System.nanoTime()).apply();
             }finally{if(output!=null)atomic.failWrite(output);}
         }catch(RuntimeException failure){throw new IOException("照片导入失败",failure);}
         finally{if(scaled!=null&&scaled!=bitmap)scaled.recycle();if(bitmap!=null)bitmap.recycle();input.delete();}

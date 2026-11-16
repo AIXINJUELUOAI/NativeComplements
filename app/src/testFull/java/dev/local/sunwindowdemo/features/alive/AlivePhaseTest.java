@@ -26,10 +26,20 @@ public class AlivePhaseTest {
         assertFalse(AlivePhase.drawable(true,false,false,true,AlivePhase.DisplayState.DOZE_SUSPEND));
         AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
         sleep.begin(100);
-        assertTrue(sleep.active(100+AlivePhase.SLEEP_WINDOW_MS-1));
-        sleep.begin(800); // Repeated screen/ambient signals do not extend the same episode.
-        assertEquals(100, sleep.remaining(1800));
-        assertFalse(sleep.active(100+AlivePhase.SLEEP_WINDOW_MS));
+        assertTrue(sleep.active(100+AlivePhase.SLEEP_WAIT_MS-1));
+        sleep.begin(800); // Repeated signals cannot extend the wait for native visibility.
+        assertEquals(4300, sleep.remaining(1800));
+        assertTrue(sleep.present(4200)); // Native late visibility still gets the full collapse.
+        assertTrue(sleep.presented());
+        assertFalse(sleep.present(4300));
+        assertTrue(sleep.start(4400)); // Decode/first swap precedes the actual animation budget.
+        assertFalse(sleep.start(4500));
+        assertEquals(1700,sleep.remaining(4500));
+        sleep.visibility(false,4500);
+        assertTrue(sleep.active(6300));
+        sleep.visibility(true,6300);
+        assertEquals(1600,sleep.remaining(6300)); // Absolute handoff cap still bounds pauses.
+        assertFalse(sleep.active(7900));
         assertTrue(AlivePhase.drawable(true,true,false,false,AlivePhase.DisplayState.ON,true));
         assertFalse(AlivePhase.drawable(false,true,false,false,AlivePhase.DisplayState.ON,true));
         assertFalse(AlivePhase.drawable(true,false,false,false,AlivePhase.DisplayState.ON,true));

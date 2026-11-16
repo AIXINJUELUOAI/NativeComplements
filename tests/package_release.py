@@ -85,8 +85,8 @@ def main():
                         owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
                         found |= owners & alive_types
                 assert found == alive_types, "Alive JNI/renderer/service missing after R8"
-            assert any(b'dev.local.sunwindowdemo.core.WindowBackendSelection' in archive.read(name)
-                       for name in archive.namelist() if name.endswith('.dex')), "R8 must preserve the fixed full PM marker name in both products"
+            assert any(b'dev.local.sunwindowdemo.core.WindowBackendEligibility' in archive.read(name)
+                       for name in archive.namelist() if name.endswith('.dex')), "R8 must preserve the fixed own eligibility marker name in both products"
             if standalone:
                 for name in archive.namelist():
                     if not name.endswith(".dex"): continue
@@ -103,6 +103,10 @@ def main():
         assert "BIND_ACCESSIBILITY_SERVICE" not in manifest
         assert package + ".CONTROL" in manifest and package + ".settings" in manifest
         assert package + ".iconlayers" in manifest and package + ".diagnostics" in manifest
+        eligibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
+                            if block.lstrip().startswith('receiver') and 'WindowBackendEligibility' in block), '')
+        assert re.search(r'enabled[^\n]*=true', eligibility) and re.search(r'exported[^\n]*=false', eligibility), "Missing own eligibility migration receiver"
+        assert 'android.intent.action.BOOT_COMPLETED' in manifest and 'android.intent.action.MY_PACKAGE_REPLACED' in manifest
         if standalone:
             assert "WindowBackendSelection" not in manifest, "Only full exposes the pending backend choice marker"
             assert "dev.nativecomplements.module." not in manifest, "Standalone manifest aliases full-product identity"

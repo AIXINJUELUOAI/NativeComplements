@@ -39,16 +39,18 @@ public class WindowBackendOwnershipTest {
             } finally { if(original==null)shared.remove(key);else shared.setProperty(key,original); }
         }
     }
-    @Test public void explicitSelectionIsFrozenAndDoesNotClaimOrTransferAnOwner() {
+    @Test public void disabledFullDoesNotClaimAndQualificationIsFrozenUntilRestart() {
         Properties shared=new Properties();
-        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.select(shared,ModuleIdentity.WINDOW_PACKAGE));
-        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.select(shared,ModuleIdentity.FULL_PACKAGE));
-        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claim(shared,ModuleIdentity.WINDOW_PACKAGE));
-        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claim(shared,ModuleIdentity.FULL_PACKAGE));
-        Properties automatic=new Properties();
-        assertEquals("",WindowBackendOwnership.select(automatic,""));
-        assertEquals("",WindowBackendOwnership.select(automatic,ModuleIdentity.WINDOW_PACKAGE));
-        assertEquals(ModuleIdentity.FULL_PACKAGE,WindowBackendOwnership.claim(automatic,ModuleIdentity.FULL_PACKAGE));
+        assertEquals("",WindowBackendOwnership.claimEligible(shared,ModuleIdentity.FULL_PACKAGE,0));
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claimEligible(shared,ModuleIdentity.WINDOW_PACKAGE,1));
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claimEligible(shared,ModuleIdentity.FULL_PACKAGE,1));
+        Properties nextBoot=new Properties();
+        assertEquals(ModuleIdentity.FULL_PACKAGE,WindowBackendOwnership.claimEligible(nextBoot,ModuleIdentity.FULL_PACKAGE,1));
+        assertEquals(ModuleIdentity.FULL_PACKAGE,WindowBackendOwnership.claimEligible(nextBoot,ModuleIdentity.WINDOW_PACKAGE,1));
+        Properties bothDisabled=new Properties();
+        assertEquals("",WindowBackendOwnership.claimEligible(bothDisabled,ModuleIdentity.FULL_PACKAGE,0));
+        assertEquals("",WindowBackendOwnership.claimEligible(bothDisabled,ModuleIdentity.WINDOW_PACKAGE,0));
+        assertEquals(ModuleIdentity.WINDOW_PACKAGE,WindowBackendOwnership.claimEligible(new Properties(),ModuleIdentity.WINDOW_PACKAGE,-1));
     }
     @Test public void unknownProductCannotAcquireOwnership() {
         Properties shared=new Properties();

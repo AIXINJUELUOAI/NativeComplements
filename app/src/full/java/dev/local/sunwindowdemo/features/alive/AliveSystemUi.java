@@ -7,6 +7,10 @@ import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import java.lang.reflect.*;
 import java.util.function.Consumer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /** Host-loader Flow projection for the explicitly selected, module-only ambient wallpaper. */
 public final class AliveSystemUi {
@@ -29,10 +33,68 @@ public final class AliveSystemUi {
                 return result;
             });
             if(!module.deoptimize(access.constructor))throw new IllegalStateException("wallpaper repository constructor deoptimize");
+            installDozeBlur(module,loader,access,log);
             log.accept("ALIVE_SYSTEMUI_READY selected ambient wallpaper only");
         }catch(Throwable unavailable){
             if(hook!=null)try{hook.unhook();}catch(Throwable ignored){}
             log.accept("ALIVE_SYSTEMUI_UNAVAILABLE "+unavailable.getClass().getSimpleName());
+        }
+    }
+
+    /** Only the two native doze producers may project their own contribution; auth animators are untouched. */
+    private static void installDozeBlur(XposedModule module,ClassLoader loader,Access access,Consumer<String> log){
+        List<XposedInterface.HookHandle> hooks=new ArrayList<>();
+        java.util.concurrent.atomic.AtomicBoolean enabled=new java.util.concurrent.atomic.AtomicBoolean();
+        ThreadLocal<Object> producing=new ThreadLocal<>();
+        try{
+            Class<?> depth=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
+            Class<?> callback=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$statusBarStateCallback$1");
+            Class<?> collector=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$2$1");
+            Class<?> interactor=type(loader,"com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor");
+            Field callbackOwner=field(callback,"this$0",depth),collectorOwner=field(collector,"this$0",depth);
+            Field collectorId=field(collector,"$r8$classId",int.class);
+            Field wallpapers=field(depth,"wallpaperInteractor",interactor);
+            Field repository=field(interactor,"wallpaperRepository",access.constructor.getDeclaringClass());
+            Field ambient=field(depth,"wallpaperSupportsAmbientMode",boolean.class),amount=field(depth,"prevDozeAmount",float.class);
+            Method doze=callback.getDeclaredMethod("onDozeAmountChanged",float.class,float.class);
+            Method emit=collector.getDeclaredMethod("emit",Object.class,type(loader,"kotlin.coroutines.Continuation"));
+            Method radius=depth.getDeclaredMethod("setWakeAndUnlockBlurRadius",float.class);
+            if(doze.getReturnType()!=void.class||emit.getReturnType()!=Object.class||radius.getReturnType()!=void.class)
+                throw new NoSuchMethodException("doze blur ABI");
+            for(Method method:new Method[]{doze,emit,radius})method.setAccessible(true);
+            hooks.add(module.hook(radius).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                boolean project=false;
+                try{
+                    Object owner=chain.getThisObject();
+                    project=enabled.get()&&producing.get()==owner&&ambient.getBoolean(owner)&&amount.getFloat(owner)>0
+                        &&access.selectedOwn(repository.get(wallpapers.get(owner)));
+                }catch(ReflectiveOperationException|RuntimeException unknown){/* Native contribution on unknown state. */}
+                return project?chain.proceed(new Object[]{0f}):chain.proceed();
+            }));
+            hooks.add(module.hook(doze).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object owner=null;
+                try{owner=callbackOwner.get(chain.getThisObject());}catch(IllegalAccessException ignored){}
+                Object previous=producing.get();
+                if(owner!=null)producing.set(owner);
+                try{return chain.proceed();}finally{if(previous==null)producing.remove();else producing.set(previous);}
+            }));
+            hooks.add(module.hook(emit).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object owner=null;
+                try{if(collectorId.getInt(chain.getThisObject())==1)owner=collectorOwner.get(chain.getThisObject());}
+                catch(IllegalAccessException ignored){}
+                Object previous=producing.get();
+                if(owner!=null)producing.set(owner);
+                try{return chain.proceed();}finally{if(previous==null)producing.remove();else producing.set(previous);}
+            }));
+            // Deoptimize both real setter callers; no global BlurUtils/resource changes.
+            for(Method method:new Method[]{doze,emit,radius})
+                if(!module.deoptimize(method))throw new IllegalStateException("doze blur deoptimize");
+            enabled.set(true);
+            log.accept("ALIVE_SYSTEMUI_DOZE_BLUR_READY exact selected ambient only");
+        }catch(Throwable unknown){
+            enabled.set(false);
+            for(XposedInterface.HookHandle hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
+            log.accept("ALIVE_SYSTEMUI_DOZE_BLUR_UNAVAILABLE "+unknown.getClass().getSimpleName());
         }
     }
 
@@ -42,6 +104,24 @@ public final class AliveSystemUi {
         final Field ambient,lockInfo,homeInfo,settings,manager,background,selected,userInfo,userId,status;
         final Object complete;
         final Method combine,flowOn,current,getSetting,getInfo,getId,supports;
+        private final Map<Object,Selection> selections=new WeakHashMap<>();
+        private static final class Selection {
+            final Object selected,lock,home;
+            volatile Match match;
+            Selection(Object selected,Object lock,Object home){this.selected=selected;this.lock=lock;this.home=home;}
+        }
+        private record Match(Object user,Object lock,Object home) {}
+        boolean selectedOwn(Object repository){
+            try{
+                Selection selection;
+                synchronized(selections){selection=selections.get(repository);}
+                if(selection==null)return false;
+                Match match=selection.match;
+                return match!=null&&current.invoke(selection.selected)==match.user
+                    &&status.get(match.user)==complete&&current.invoke(selection.lock)==match.lock
+                    &&current.invoke(selection.home)==match.home;
+            }catch(ReflectiveOperationException|RuntimeException unknown){return false;}
+        }
         Access(ClassLoader loader)throws ReflectiveOperationException {
             Class<?> repository=type(loader,"com.android.systemui.wallpapers.data.repository.WallpaperRepositoryImpl");
             flow=type(loader,"kotlinx.coroutines.flow.Flow");
@@ -79,10 +159,13 @@ public final class AliveSystemUi {
         void project(Object repository,Object userRepository)throws ReflectiveOperationException {
             Object original=ambient.get(repository),selection=selected.get(userRepository);
             Object secure=settings.get(repository),wallpaper=manager.get(repository);
+            Object lock=lockInfo.get(repository),home=homeInfo.get(repository);
+            Selection gate=new Selection(selection,lock,home);
+            synchronized(selections){selections.put(repository,gate);}
             Object transform=Proxy.newProxyInstance(function.getClassLoader(),new Class<?>[]{function},(proxy,method,args)->{
                 if(method.getName().equals("invoke")&&args!=null&&args.length==5){
                     Object nativeValue=args[0];
-                    if(Boolean.TRUE.equals(nativeValue))return nativeValue;
+                    gate.match=null;
                     try{
                         Object model=args[3];
                         if(model==null||current.invoke(selection)!=model||status.get(model)!=complete)return nativeValue;
@@ -96,11 +179,15 @@ public final class AliveSystemUi {
                             which=WallpaperManager.FLAG_SYSTEM;actualId=(Integer)getId.invoke(wallpaper,which,user);
                             actual=(WallpaperInfo)getInfo.invoke(wallpaper,which,user);
                         }
-                        return actualId>0&&actual!=null&&OWN.equals(actual.getComponent())&&(Boolean)supports.invoke(actual)
+                        boolean own=actualId>0&&actual!=null&&OWN.equals(actual.getComponent())&&(Boolean)supports.invoke(actual)
                             &&(Integer)getId.invoke(wallpaper,which,user)==actualId
                             &&(Integer)getId.invoke(wallpaper,WallpaperManager.FLAG_LOCK,user)==lockId
                             &&(Integer)getSetting.invoke(secure,0,user,"doze_always_on")==1
-                            &&current.invoke(selection)==model&&status.get(model)==complete?Boolean.TRUE:nativeValue;
+                            &&current.invoke(selection)==model&&status.get(model)==complete;
+                        // Gate publication precedes emission; the collector then recomputes only its doze contribution.
+                        if(own&&current.invoke(lock)==args[1]&&current.invoke(home)==args[2])
+                            gate.match=new Match(model,args[1],args[2]);
+                        return own?Boolean.TRUE:nativeValue;
                     }catch(ReflectiveOperationException|RuntimeException unknown){return nativeValue;}
                 }
                 return switch(method.getName()){

@@ -39,12 +39,14 @@ class WindowController(private val activity: Activity) {
     private var recovery: Intent? = null
     var enablePrompt by mutableStateOf<String?>(null); private set
     var enableChecking by mutableStateOf(false); private set
+    private val enabledWorker = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var enabledSaving = false
     private var enableRequest: String? = null
     private var enableRequestedAt = 0L
     private val enableTimeout = Runnable {
         if (enableRequest != null) finishEnable(FreeformEnablePolicy.Decision.BACKEND_UNKNOWN)
     }
-    private val change = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> preferences = store.read() }
+    private val change = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> handler.post { if (!destroyed) preferences = store.read() } }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != Wire.RESULT || sentFromUid != 1000) return
@@ -70,6 +72,7 @@ class WindowController(private val activity: Activity) {
         store.preferences.registerOnSharedPreferenceChangeListener(change)
         activity.registerReceiver(receiver, IntentFilter(Wire.RESULT), Wire.PERMISSION, null, Context.RECEIVER_EXPORTED)
         val context = activity.applicationContext
+        dev.local.sunwindowdemo.core.WindowBackendEligibility.refreshAsync(context)
         IconAssets.onReload(iconsReloaded)
         IconAssets.connect(context)
         loadCatalog()
@@ -106,10 +109,24 @@ class WindowController(private val activity: Activity) {
     fun toggleControl() = setEnabled(!preferences.enabled && !enableChecking)
     fun dismissEnablePrompt() { enablePrompt = null }
     fun confirmEnablePrompt() {
-        if (destroyed || enablePrompt == null) return
+        if (destroyed || enabledSaving || enablePrompt == null) return
         enablePrompt = null
-        store.enable()
-        preferences = store.read()
+        persistEnabled(true)
+    }
+    private fun persistEnabled(value: Boolean) {
+        enabledSaving = true
+        enableChecking = true
+        enabledWorker.execute {
+            val saved = runCatching { if (value) store.enable() else store.boolean("enabled", false) }
+            handler.post {
+                if (!destroyed) {
+                    enabledSaving = false
+                    enableChecking = false
+                    preferences = store.read()
+                    toast(if (saved.isSuccess) "已保存；接管资格在下次完整重启生效，当前不会跨版转移窗口。" else "保存失败，未确认更改：${saved.exceptionOrNull()?.message}")
+                }
+            }
+        }
     }
     private fun globalFreeform(): Int? = try {
         Settings.Global.getInt(activity.contentResolver, "enable_freeform_support")
@@ -121,12 +138,12 @@ class WindowController(private val activity: Activity) {
         handler.removeCallbacks(enableTimeout)
     }
     private fun setEnabled(value: Boolean) {
-        if (destroyed) return
+        if (destroyed || enabledSaving) return
+        if (enableRequest != null && !value) { cancelEnable(); enablePrompt = null; return }
         cancelEnable()
         enablePrompt = null
         if (!value) {
-            store.boolean("enabled", false)
-            preferences = store.read()
+            persistEnabled(false)
             return
         }
         val setting = globalFreeform()
@@ -157,15 +174,14 @@ class WindowController(private val activity: Activity) {
     private fun finishEnable(decision: FreeformEnablePolicy.Decision) {
         cancelEnable()
         if (decision == FreeformEnablePolicy.Decision.ALLOWED) {
-            store.enable()
-            preferences = store.read()
+            persistEnabled(true)
             return
         }
         val reason = when (decision) {
             FreeformEnablePolicy.Decision.SETTING_REQUIRED -> "未检测到系统 Freeform 开关已开启，但这不一定代表小窗不可用。可以继续开启并尝试；若无法使用，再按需手动执行："
             FreeformEnablePolicy.Decision.SETTING_UNKNOWN -> "未能读取系统 Freeform 设置，这不代表小窗一定不可用。可以继续开启并尝试；若无法使用，再按需手动执行："
             FreeformEnablePolicy.Decision.RUNTIME_UNAVAILABLE -> "本次未检测到运行时多窗口或 Freeform 能力。可以继续开启并尝试，但不保证当前系统可用，重启也不保证解决。"
-            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "检测到其他小窗版本或宿主已取得本次启动的接管权。可以保存开启，但不会强抢接管权；建议在 LSPosed 中只保留一个小窗版本并重启。关闭管理页开关不会在当前启动中转交接管权。"
+            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "其他小窗版本已取得本次启动的接管权。可以保存开启，但不会强抢；请关闭不使用版本的小窗总开关，再完整重启。两版同时开启时保留先取得者，当前启动不会热转移窗口。"
             FreeformEnablePolicy.Decision.PREFLIGHT_FAILED -> "系统后端的接口预检尚未就绪。可以保存开启，但实际操作仍由后端安全检查决定，不会强行调用不兼容接口。"
             else -> "尚未收到本次可信完整的系统能力回应，或检查已超时。可以继续开启并尝试；如无反应，再检查模块作用域、后端状态和是否需要重启。"
         }
@@ -204,6 +220,7 @@ class WindowController(private val activity: Activity) {
     private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_LONG).show()
     fun close() {
         destroyed = true
+        enabledWorker.shutdown()
         cancelEnable()
         IconAssets.removeOnReload(iconsReloaded)
         handler.removeCallbacksAndMessages(null)
