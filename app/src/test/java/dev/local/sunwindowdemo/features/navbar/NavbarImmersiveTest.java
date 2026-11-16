@@ -22,7 +22,7 @@ import org.robolectric.shadows.ShadowDisplayManager;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 36, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE)
 public class NavbarImmersiveTest {
     private static Class<?> provider() throws Exception { return Class.forName("android.view.InsetsFrameProvider"); }
 

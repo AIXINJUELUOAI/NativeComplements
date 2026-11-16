@@ -24,7 +24,7 @@ final class DrawerMonet {
     private volatile boolean userEnabled, systemThemed;
     private Object iconCacheRef;
     private Method updateInBackground, updateMask;
-    private Field bitmapField, themedField;
+    private Field bitmapField;
     private final Map<View, java.lang.ref.WeakReference<View>> gridIcons = new WeakHashMap<>();
     private final ThreadLocal<Boolean> binding = new ThreadLocal<>();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -46,6 +46,7 @@ final class DrawerMonet {
         appInfo = Class.forName("com.android.launcher3.model.data.AppInfo", false, loader);
         predictionRow = Class.forName("com.android.launcher3.appprediction.PredictionRowView", false, loader);
         Method factory = adapter.getDeclaredMethod("getIconOnCreateSetup", android.view.ViewGroup.class);
+        factory.setAccessible(true);
         standard = bubble.getDeclaredMethod("setStandardIcon", item);
         standard.setAccessible(true);
         Method create = bitmap.getDeclaredMethod("newIcon", Context.class, int.class, shape);
@@ -59,7 +60,8 @@ final class DrawerMonet {
         java.lang.reflect.Constructor<?> requestInit = request.getDeclaredConstructor(item,
                 android.content.pm.LauncherActivityInfo.class, byte[].class, boolean.class, lookup);
         bitmapField = item.getField("bitmap");
-        themedField = bitmap.getField("themedBitmap");
+        // BitmapInfo is a Java field on older Launcher builds and a Kotlin property (getter)
+        // in LineageOS 24.0; both are probed only after the host classes load.
         module.deoptimize(bubble.getDeclaredMethod("applyIconAndLabel", item));
         module.deoptimize(bubble.getDeclaredMethod("applyFromWorkspaceItem",
                 Class.forName("com.android.launcher3.model.data.WorkspaceItemInfo", false, loader)));
@@ -121,23 +123,25 @@ final class DrawerMonet {
     private void upgrade(View view, Object info) {
         try {
             Object bitmap = bitmapField.get(info);
-            if (bitmap == null || themedField.get(bitmap) != null || upgraded.put(info, Boolean.TRUE) != null) return;
+            if (bitmap == null
+                    || LauncherIconAccess.themedBitmap(bitmap) != null
+                    || upgraded.put(info, Boolean.TRUE) != null) return;
             Object cache = iconCache();
             if (cache == null || !updateInBackground.getParameterTypes()[1].isInstance(view)) return;
             Object flag = bitmap.getClass().getMethod("getMatchingLookupFlag").invoke(bitmap);
             updateInBackground.invoke(cache, (java.util.concurrent.Executor) main::post, view, info, themedLookup(flag));
-        } catch (ReflectiveOperationException | RuntimeException failure) {
+        } catch (Exception failure) {
             android.util.Log.w("NcDrawerMonet", "themed reload failed", failure);
         }
     }
 
-    private Object iconCache() throws ReflectiveOperationException {
+    private Object iconCache() throws Exception {
         if (iconCacheRef == null) {
             ClassLoader loader = recycler.getClassLoader();
             Class<?> state = Class.forName("com.android.launcher3.LauncherAppState", false, loader);
             Object singleton = state.getField("INSTANCE").get(null);
             Object app = singleton.getClass().getMethod("get", Context.class).invoke(singleton, context);
-            iconCacheRef = state.getField("iconCache").get(app);
+            iconCacheRef = LauncherIconAccess.iconCache(app);
         }
         return iconCacheRef;
     }
@@ -145,7 +149,8 @@ final class DrawerMonet {
     void systemThemed(boolean themed) { systemThemed = themed; apply(); }
 
     private void apply() {
-        boolean next = IconRenderPolicy.themed(userEnabled,systemThemed);
+        // Both hosts follow the user's native themed-icon setting; never write ThemePreference.
+        boolean next = IconRenderPolicy.themed(userEnabled, systemThemed);
         if (enabled == next) return;
         enabled = next;
         android.util.Log.i("NcDrawerMonet", "enabled=" + next + " user=" + userEnabled + " systemThemed=" + systemThemed);
@@ -225,6 +230,7 @@ final class DrawerMonet {
         context.registerReceiver(new BroadcastReceiver() {
             @Override public void onReceive(Context c, Intent intent) { worker.post(DrawerMonet.this::reload); }
         }, new IntentFilter(ShadeStore.CHANGED), IconLayerStore.CONTROL, null, Context.RECEIVER_EXPORTED);
+        android.util.Log.i("NcDrawerMonet","connected");
         worker.post(this::reload);
     }
 
@@ -236,6 +242,7 @@ final class DrawerMonet {
                 Uri.parse("content://" + ShadeStore.AUTHORITY), "drawer", null, null));
         // A failed opt-in read must leave the native renderer untouched.
         boolean next = read.live() && read.config() != null && read.config().getBoolean("drawerMonet", false);
+        android.util.Log.i("NcDrawerMonet","reload live="+read.live()+" enabled="+next);
         main.post(() -> { userEnabled = next; apply(); });
         if (!read.live()) worker.postDelayed(this::reload, settings.retryDelay(3000));
     }

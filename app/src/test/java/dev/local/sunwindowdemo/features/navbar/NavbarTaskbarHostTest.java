@@ -25,7 +25,7 @@ import org.robolectric.shadows.ShadowDisplayManager;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 36, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE)
 public class NavbarTaskbarHostTest {
     private static Class<?> provider() throws Exception { return Class.forName("android.view.InsetsFrameProvider"); }
     private static Object source(int type, int bottom) throws Exception {

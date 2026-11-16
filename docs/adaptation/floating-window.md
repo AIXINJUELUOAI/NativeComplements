@@ -1,6 +1,12 @@
 # 小窗：Hook、系统适配边界与决策／执行现状
 
-## 当前收口范围：0.11.5-alive-test3 / code151
+## code166：LOS 接入与 Hook 目标整理
+
+保 code165 的角落、通知和跨 app 路径；[LOS24](<lineageos-24.0.md>)贡献只增加真实宿主接口接入，不将 PR 的旧 code146 功能停用带回。输入 callback、通知发送、ActivityStarter 不同签名由局部目标解析，调用者共用规则；桌面目标由[LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)统一为已知系统实际 HOME／UID。四个静态 scope 不意味着四条任意授权链。
+
+通知发送的 native proceed 仅一次，解析前失败可保原生；进入派发接管后的异常不重新发送原 PendingIntent。保 user／display／前台／正文 PI／认证／租约及恢复条件，不恢复退役功能。正式检查见[索引](<README.md>)，不沿用下方历史通过数。
+
+## 历史收口范围：0.11.5-alive-test3 / code151
 
 用户明确要求与Alive唤醒修复同包恢复两项：**应用间跳转小窗打开**、**通知小窗打开**。[行为设置](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/ui/WindowScreens.kt>)恢复原独立开关，复用`landscapeShareWindow`/`notificationWindow`旧键、默认true并保留已存false；“landscape”是历史键名，跨应用路由不只限横屏。
 

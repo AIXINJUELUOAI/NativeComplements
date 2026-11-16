@@ -57,5 +57,8 @@
   "WindowHostPolicy.java": "0.10.0 sampled-value corner, default-slot, notification and current-target admission; retain distinct recovery/safety policies and native short-circuit services in SystemUiHost",
   "WindowRecoveryPolicy.java": "0.10.0 value-only boot/live recovery eligibility and bounded retry/readiness state; native task lookup and identity sampling, journal writes, masks and restore verification remain in WindowEngine",
   "WindowHistory.java": "0.10.0 owns per-task 120ms fullscreen stability observations without removing entries before native snapshot; explicit release clears stability, preserving existing missing/reused pruning behavior",
-  "WindowLifecycle.java": "0.10.0 value-only tick admission and cadence, continuation eligibility, system-priority/input and visible-resume rules; native task/display identity, lease checks, WM-lock revalidation and effects retain their original order"
+  "WindowLifecycle.java": "0.10.0 value-only tick admission and cadence, continuation eligibility, system-priority/input and visible-resume rules; native task/display identity, lease checks, WM-lock revalidation and effects retain their original order",
+  "EdgeBackHookTarget.java": "0.12.0-community1 code166 isolates verified synthetic or Kotlin constructor callback hook targets; shares corner/input admission and never guesses an unassociated callback",
+  "SystemUiWindowTargets.java": "0.12.0-community1 code166 preflights screenshot field/getter and exact notification sender/display ABI; no UI policy or dispatch duplication",
+  "WindowServerTargets.java": "0.12.0-community1 code166 resolves known Task resizability and ActivityStarter method/argument layouts; shared attribution, launch rules and recovery remain unchanged"
 }

@@ -14,6 +14,7 @@ public final class BackBridge extends XposedModule {
     static final String CHANNEL=Wire.PKG+".backLong.v1";
     private boolean eligible,attempted;
     static volatile boolean cornerReady;
+    private final Set<Method> edgeCallbacks=new HashSet<>();
 
     private volatile boolean preserveBars;
     private boolean screenshotShown;
@@ -50,17 +51,13 @@ public final class BackBridge extends XposedModule {
     private void installEdgeTouchAdmission(ClassLoader cl){
         try{
             Class<?> displayHandler=Class.forName("com.android.systemui.navigationbar.gestural.DisplayBackGestureHandlerImpl",false,cl);
-            Class<?> adapter=field(displayHandler,"onInputEvent").getType();
-            if(adapter.isInterface())adapter=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler$$ExternalSyntheticLambda20",false,cl);
             Class<?> handler=Class.forName("com.android.systemui.navigationbar.gestural.EdgeBackGestureHandler",false,cl);
-            Field owner=field(adapter,"f$0"),displays=field(handler,"mDisplayBackGestureHandlers");
-            Method invoke=adapter.getDeclaredMethod("invoke",Object.class);
+            Field displays=field(handler,"mDisplayBackGestureHandlers");
             Method cancel=handler.getDeclaredMethod("cancelGesture",MotionEvent.class);
             Method eventDisplay=MotionEvent.class.getDeclaredMethod("getDisplayId");
             Class<?> unitClass=Class.forName("kotlin.Unit",false,cl);
             Field instance=unitClass.getField("INSTANCE");
-            if(owner.getType()!=handler||displays.getType()!=Map.class||invoke.getReturnType()!=Object.class
-                ||cancel.getReturnType()!=void.class||eventDisplay.getReturnType()!=int.class||Modifier.isStatic(invoke.getModifiers())
+            if(displays.getType()!=Map.class||cancel.getReturnType()!=void.class||eventDisplay.getReturnType()!=int.class
                 ||Modifier.isStatic(cancel.getModifiers())||instance.getType()!=unitClass||!Modifier.isStatic(instance.getModifiers()))
                 throw new NoSuchMethodException("edge admission signature mismatch");
             Object unit=instance.get(null);if(unit==null)throw new IllegalStateException("missing Unit.INSTANCE");
@@ -75,43 +72,77 @@ public final class BackBridge extends XposedModule {
                 pilfer.setAccessible(true);cornerCompat=compat;cornerMonitor=monitor;cornerPilfer=pilfer;
             }catch(Throwable unavailable){note("CORNER_INPUT_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
             final Field compat=cornerCompat,monitor=cornerMonitor;final Method pilfer=cornerPilfer;
-            invoke.setAccessible(true);cancel.setAccessible(true);eventDisplay.setAccessible(true);
+            cancel.setAccessible(true);eventDisplay.setAccessible(true);
             java.util.concurrent.atomic.AtomicBoolean active=new java.util.concurrent.atomic.AtomicBoolean(true);
-            hook(invoke).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object argument=chain.getArg(0);
-                if(cornerReady&&argument instanceof MotionEvent event)try{
-                    if((Integer)eventDisplay.invoke(event)==Display.DEFAULT_DISPLAY){
-                        SystemUiHost host=SystemUiHost.live;
-                        Object map=displays.get(owner.get(chain.getThisObject()));
-                        Object display=map instanceof Map<?,?> handlers?handlers.get(Display.DEFAULT_DISPLAY):null;
-                        if(host!=null&&display!=null&&host.cornerInput(event,()->{
-                            try{pilfer.invoke(monitor.get(compat.get(display)));}
-                            catch(Exception error){throw new IllegalStateException("corner pilfer",error);}
-                        }))return unit;
-                    }
+            EdgeBackHookTarget.Callback direct=null;
+            try{direct=EdgeBackHookTarget.synthetic(displayHandler,handler,cl);}
+            catch(ReflectiveOperationException mismatch){note("EDGE_BACK_ADMISSION_SYNTHETIC_UNAVAILABLE "+mismatch.getClass().getSimpleName());}
+            if(direct!=null){
+                installEdgeCallback(direct,displays,cancel,eventDisplay,unit,compat,monitor,pilfer,active);
+                note("EDGE_BACK_ADMISSION_READY");
+            }else{
+                List<XposedInterface.HookHandle> hooks=new ArrayList<>();
+                try{
+                    for(EdgeBackHookTarget.ConstructorCallback target:EdgeBackHookTarget.constructors(displayHandler))
+                        hooks.add(hook(target.constructor()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                            Object result=chain.proceed();Object callback=chain.getArg(target.argument());
+                            if(callback!=null)try{
+                                installEdgeCallback(EdgeBackHookTarget.captured(callback.getClass(),handler),displays,cancel,eventDisplay,unit,compat,monitor,pilfer,active);
+                                cornerReady=pilfer!=null;
+                                main.post(()->{SystemUiHost host=SystemUiHost.live;if(host!=null)host.refresh();});
+                            }catch(Throwable failure){note("EDGE_BACK_ADMISSION_CALLBACK_UNAVAILABLE "+failure.getClass().getSimpleName());}
+                            return result;
+                        }));
                 }catch(Throwable failure){
-                    cornerReady=false;note("CORNER_INPUT_DISABLED "+failure.getClass().getSimpleName());
-                    SystemUiHost host=SystemUiHost.live;if(host!=null)host.cancelCornerInput();
+                    for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}
+                    throw failure;
                 }
-                if(active.get()&&argument instanceof MotionEvent event&&event.getActionMasked()==MotionEvent.ACTION_DOWN
-                    &&event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)){
-                    try{
-                        if((Integer)eventDisplay.invoke(event)!=Display.DEFAULT_DISPLAY)return chain.proceed();
-                        SystemUiHost host=SystemUiHost.live;
-                        if(host!=null&&host.blocksEdgeTouch(event.getX(),event.getY())){
-                            Object nativeHandler=owner.get(chain.getThisObject()),map=displays.get(nativeHandler);
-                            if(map instanceof Map<?,?> handlers&&handlers.get(Display.DEFAULT_DISPLAY)!=null){
-                                cancel.invoke(nativeHandler,event);return unit;
-                            }
-                        }
-                    }catch(Throwable failure){active.set(false);note("EDGE_BACK_ADMISSION_DISABLED "+failure.getClass().getSimpleName());}
-                }
-                return chain.proceed();
-            });
+                // Constructor discovery alone is not evidence that the input callback was installed.
+                note("EDGE_BACK_ADMISSION_READY callback-constructor");return;
+            }
             cornerReady=pilfer!=null;
             if(cornerReady)note("CORNER_INPUT_READY native monitor; pilfer only after diagonal threshold");
-            note("EDGE_BACK_ADMISSION_READY");
         }catch(Throwable failure){note("EDGE_BACK_ADMISSION_UNAVAILABLE "+failure.getClass().getSimpleName());}
+    }
+    private synchronized void installEdgeCallback(EdgeBackHookTarget.Callback target,Field displays,
+                                     Method cancel,Method eventDisplay,Object unit,Field compat,Field monitor,Method pilfer,
+                                     java.util.concurrent.atomic.AtomicBoolean active)throws Exception{
+        Method invoke=target.invoke();Field owner=target.owner();
+        if(edgeCallbacks.contains(invoke))return;
+        hook(invoke).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+            Object argument=chain.getArg(0);
+            if(cornerReady&&argument instanceof MotionEvent event)try{
+                if((Integer)eventDisplay.invoke(event)==Display.DEFAULT_DISPLAY){
+                    SystemUiHost host=SystemUiHost.live;
+                    Object nativeHandler=owner.get(chain.getThisObject());
+                    Object map=displays.get(nativeHandler);
+                    Object display=map instanceof Map<?,?> handlers?handlers.get(Display.DEFAULT_DISPLAY):null;
+                    if(host!=null&&display!=null&&compat!=null&&monitor!=null&&pilfer!=null&&host.cornerInput(event,()->{
+                        try{pilfer.invoke(monitor.get(compat.get(display)));}
+                        catch(Exception error){throw new IllegalStateException("corner pilfer",error);}
+                    }))return unit;
+                }
+            }catch(Throwable failure){
+                cornerReady=false;note("CORNER_INPUT_DISABLED "+failure.getClass().getSimpleName());
+                SystemUiHost host=SystemUiHost.live;if(host!=null)host.cancelCornerInput();
+            }
+            if(active.get()&&argument instanceof MotionEvent event&&event.getActionMasked()==MotionEvent.ACTION_DOWN
+                &&event.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)){
+                try{
+                    boolean defaultDisplay=(Integer)eventDisplay.invoke(event)==Display.DEFAULT_DISPLAY;
+                    SystemUiHost host=SystemUiHost.live;
+                    if(defaultDisplay&&host!=null&&host.blocksEdgeTouch(event.getX(),event.getY())){
+                        Object nativeHandler=owner.get(chain.getThisObject()),map=displays.get(nativeHandler);
+                        if(map instanceof Map<?,?> handlers&&handlers.get(Display.DEFAULT_DISPLAY)!=null){
+                            cancel.invoke(nativeHandler,event);return unit;
+                        }
+                    }
+                }catch(Throwable failure){active.set(false);note("EDGE_BACK_ADMISSION_DISABLED "+failure.getClass().getSimpleName());}
+            }
+            return chain.proceed();
+        });
+        edgeCallbacks.add(invoke);
+        note("EDGE_BACK_ADMISSION_CALLBACK_READY " + invoke.getDeclaringClass().getSimpleName());
     }
     private Runnable reconnect;
     private synchronized void connect(Context c){
@@ -152,13 +183,15 @@ public final class BackBridge extends XposedModule {
                 if(handle!=null)throw new NoSuchMethodException("ambiguous screenshot entry");handle=m;
             }
             if(handle==null)throw new NoSuchMethodException("screenshot entry");
+            handle.setAccessible(true);
+            SystemUiWindowTargets.Screenshot windowTarget=SystemUiWindowTargets.screenshot(screenshotWindow);
             hooks.add(hook(handle).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object screenshot=field(controller,"window").get(chain.getThisObject());
-                Window w=(Window)field(screenshotWindow,"window").get(screenshot);watchScreenshot(w);
+                Window w=windowTarget.get(screenshot);watchScreenshot(w);
                 return chain.proceed();
             }));
             hooks.add(hook(screenshotWindow.getDeclaredMethod("removeWindow")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object result=chain.proceed();Window w=(Window)field(screenshotWindow,"window").get(chain.getThisObject());
+                Object result=chain.proceed();Window w=windowTarget.get(chain.getThisObject());
                 View v=w.peekDecorView();if(v==null||!v.isAttachedToWindow())screenshot(false);return result;
             }));
             note("SCREENSHOT_READY hooks=2");

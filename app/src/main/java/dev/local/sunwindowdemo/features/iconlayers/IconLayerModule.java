@@ -39,11 +39,13 @@ public final class IconLayerModule extends XposedModule {
     private String lastError = "";
 
     @Override public void onModuleLoaded(ModuleLoadedParam p) {
-        eligible = !p.isSystemServer() && IconLayerStore.LAUNCHER.equals(p.getProcessName());
+        eligible = !p.isSystemServer()
+                && dev.local.sunwindowdemo.core.LauncherTargets.isLauncherProcess(p.getProcessName());
     }
 
     @Override public synchronized void onPackageLoaded(PackageLoadedParam p) {
-        if (!eligible || installed || !IconLayerStore.LAUNCHER.equals(p.getPackageName())) return;
+        if (!eligible || installed
+                || !dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(p.getPackageName())) return;
         installed = true;
         loader = p.getDefaultClassLoader();
         // Theme observation survives optional desktop/drawer ABI failure and installs no replacements.
@@ -56,6 +58,7 @@ public final class IconLayerModule extends XposedModule {
         try {
             Class<?> provider = Class.forName("com.android.launcher3.icons.IconProvider", false, loader);
             Method icon = provider.getDeclaredMethod("getIcon", PackageItemInfo.class, ApplicationInfo.class, int.class);
+            icon.setAccessible(true);
             if (icon.getReturnType() != Drawable.class) throw new NoSuchMethodException("IconProvider.getIcon");
             handles.add(hook(icon).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 PackageItemInfo info = (PackageItemInfo) chain.getArg(0);
@@ -116,6 +119,7 @@ public final class IconLayerModule extends XposedModule {
         Field background = clip.getType().getDeclaredField("mBackground"); background.setAccessible(true);
         Field foreground = clip.getType().getDeclaredField("mForeground"); foreground.setAccessible(true);
         Method setIcon = view.getDeclaredMethod("setIcon", Drawable.class, Drawable.class, Supplier.class, int.class, boolean.class);
+        setIcon.setAccessible(true);
         handles.add(hook(setIcon).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
             AdaptiveIconDrawable test = null;
             try {
@@ -234,18 +238,18 @@ public final class IconLayerModule extends XposedModule {
             Class<?> stateClass = Class.forName("com.android.launcher3.LauncherAppState", false, loader);
             Object singleton = stateClass.getField("INSTANCE").get(null);
             Object state = singleton.getClass().getMethod("get", Context.class).invoke(singleton, context);
-            Object model = stateClass.getField("model").get(state);
-            Object cache = stateClass.getField("iconCache").get(state);
+            Object model = LauncherIconAccess.model(state);
+            Object cache = LauncherIconAccess.iconCache(state);
             Class<?> base = Class.forName("com.android.launcher3.icons.cache.BaseIconCache", false, loader);
             Field workerField = base.getDeclaredField("workerHandler"); workerField.setAccessible(true);
             Handler cacheWorker = (Handler) workerField.get(cache);
-            Method remove = base.getDeclaredMethod("removeIconsForPkg", UserHandle.class, String.class); remove.setAccessible(true);
+            Method remove = LauncherIconAccess.removeIconsForPkg(base);
             Object callbacks = model.getClass().getMethod("newModelCallbacks").invoke(model);
             Method changed = callbacks.getClass().getMethod("onPackageChanged", String.class, UserHandle.class);
             cacheWorker.post(() -> {
                 boolean success = true;
                 for (String pkg : packages) try {
-                    remove.invoke(cache, android.os.Process.myUserHandle(), pkg);
+                    LauncherIconAccess.remove(remove, cache, pkg, android.os.Process.myUserHandle());
                     changed.invoke(callbacks, pkg, android.os.Process.myUserHandle());
                 } catch (Exception failure) { success = false; note("PACKAGE_REFRESH_FAILED package=" + pkg); }
                 final boolean ok = success;

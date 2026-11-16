@@ -53,6 +53,30 @@ public class ShadeTest {
         assertEquals(5, LandscapeShade.CONSTRUCTORS.length);
     }
 
+    static final class LegacyRepository { Object legacyUseSplitShade; }
+    static final class HydratedRepository { Object legacyUseSplitShade$delegate; }
+    @Test public void composeAbiReadsFieldShapeWithoutTouchingNativeFlow() throws Exception {
+        assertFalse(ComposeShadeLayout.hydrated(LegacyRepository.class));
+        assertTrue(ComposeShadeLayout.hydrated(HydratedRepository.class));
+        assertThrows(NoSuchFieldException.class, () -> ComposeShadeLayout.hydrated(Object.class));
+    }
+
+    @Test public void binderRedrawPreservesNativeStateForDisableRestore() throws Exception {
+        var paints = SignalDisplay.class.getDeclaredField("PAINTS"); paints.setAccessible(true);
+        var redraw = SignalDisplay.class.getDeclaredField("REDRAW"); redraw.setAccessible(true);
+        var values = (java.util.List<?>) paints.get(null);
+        var drawable = new android.graphics.drawable.ColorDrawable();
+        int nativeState = (5 << 8) | 2;
+        try {
+            assertEquals(nativeState, SignalDisplay.present(drawable, 1, nativeState));
+            ((Runnable) redraw.get(null)).run();
+            assertEquals(nativeState, drawable.getLevel());
+            var state = values.get(0).getClass().getDeclaredField("nativeState"); state.setAccessible(true);
+            assertEquals(nativeState, state.getInt(values.get(0)));
+            assertFalse(SignalDisplay.redrawing());
+        } finally { values.clear(); }
+    }
+
     @Test public void composeResourceOverrideIsScopedAndRestoresNativeOutsideForcedLandscape() {
         assertEquals(true, ComposeShadeLayout.overrideBoolean(false, 1, true, true, 1, 2));
         assertEquals(false, ComposeShadeLayout.overrideBoolean(true, 2, true, true, 1, 2));

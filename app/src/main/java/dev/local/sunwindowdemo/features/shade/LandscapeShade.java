@@ -46,16 +46,71 @@ public final class LandscapeShade {
         attempted = true;
         logger = log;
         try {
-            Class<?> controller = Class.forName("com.android.systemui.statusbar.policy.SplitShadeStateControllerImpl", false, loader);
+            Class<?> controller;
             Method shouldUse;
-            try { shouldUse=controller.getDeclaredMethod("shouldUseSplitNotificationShade",Resources.class); }
-            catch (NoSuchMethodException sceneRepository) {
+            try {
+                controller = Class.forName("com.android.systemui.statusbar.policy.SplitShadeStateControllerImpl", false, loader);
+                shouldUse = controller.getDeclaredMethod("shouldUseSplitNotificationShade", Resources.class);
+            } catch (ClassNotFoundException | NoSuchMethodException sceneRepository) {
                 main=new Handler(Looper.getMainLooper());
                 ComposeShadeLayout.install(module,loader,hooks,value->ready&&forceSplit(enabled,value.getConfiguration()));
                 ready=true;
                 note("SHADE_READY hydrated repository");
                 return;
             }
+            // API37 PixelOS R8 removes isEnabled() entirely. Exact legacy panel/controller
+            // signatures are the fallback; never write a flag or install a Scene hook.
+            Boolean scene = null;
+            try {
+                Method sceneEnabled = Class.forName("com.android.systemui.scene.shared.flag.SceneContainerFlag", false, loader)
+                        .getDeclaredMethod("isEnabled");
+                if (sceneEnabled.getReturnType() != boolean.class || !Modifier.isStatic(sceneEnabled.getModifiers()))
+                    throw new IllegalStateException("scene flag signature");
+                sceneEnabled.setAccessible(true);
+                scene = (Boolean) sceneEnabled.invoke(null);
+                if (scene != null) note("SHADE_SCENE_FLAG " + scene);
+            } catch (ClassNotFoundException | NoSuchMethodException inlined) {
+                // Only an absent/inlined getter is unknown; real invocation/signature failure stays native.
+                note("SHADE_SCENE_FLAG_UNAVAILABLE " + inlined.getClass().getSimpleName());
+            }
+            main = new Handler(Looper.getMainLooper());
+            // A Scene product must use its repository; a legacy class left in the DEX
+            // does not prove that the legacy panel is active. Never force the Scene flag.
+            if (Boolean.TRUE.equals(scene)) {
+                if (!installCompose(module, loader)) throw new IllegalStateException("Scene shade repository unavailable");
+                ready = true;
+                note("SHADE_READY scene repository");
+                return;
+            }
+            installLegacy(module, loader, controller, shouldUse);
+            if (!Boolean.TRUE.equals(scene)) installCompose(module, loader);
+            ready = true;
+            note("SHADE_READY legacy controller");
+        } catch (Throwable failure) {
+            ready = false;
+            enabled = false;
+            for (XposedInterface.HookHandle hook : hooks) try { hook.unhook(); } catch (Throwable ignored) {}
+            hooks.clear();
+            note("SHADE_UNAVAILABLE " + failure);
+        }
+    }
+
+    private static boolean installCompose(XposedModule module, ClassLoader loader) {
+        List<XposedInterface.HookHandle> composeHooks = new ArrayList<>();
+        try {
+            ComposeShadeLayout.install(module, loader, composeHooks,
+                    value -> ready && forceSplit(enabled, value.getConfiguration()));
+            hooks.addAll(composeHooks);
+            return true;
+        } catch (Throwable unavailable) {
+            for (XposedInterface.HookHandle hook : composeHooks) try { hook.unhook(); } catch (Throwable ignored) {}
+            note("SHADE_COMPOSE_UNAVAILABLE " + unavailable.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private static void installLegacy(XposedModule module, ClassLoader loader, Class<?> controller,
+                                      Method shouldUse) throws Exception {
             Class<?> panel = Class.forName("com.android.systemui.shade.NotificationPanelViewController", false, loader);
             updateResources = panel.getDeclaredMethod("updateResources");
             Field owner = panel.getDeclaredField("mSplitShadeStateController");
@@ -64,20 +119,7 @@ public final class LandscapeShade {
                     || updateResources.getReturnType() != void.class || Modifier.isStatic(updateResources.getModifiers())
                     || owner.getType() != controller || resources.getType() != Resources.class)
                 throw new NoSuchMethodException("legacy shade signatures");
-            // API37 PixelOS R8 removes isEnabled() entirely. Exact legacy panel/controller
-            // signatures are the fallback; never write a flag or install a Scene hook.
-            try {
-                Method sceneEnabled = Class.forName("com.android.systemui.scene.shared.flag.SceneContainerFlag", false, loader)
-                        .getDeclaredMethod("isEnabled");
-                if (sceneEnabled.getReturnType() != boolean.class || !Modifier.isStatic(sceneEnabled.getModifiers()))
-                    throw new IllegalStateException("scene flag signature");
-                sceneEnabled.setAccessible(true);
-                if ((Boolean) sceneEnabled.invoke(null)) throw new IllegalStateException("SceneContainer enabled");
-            } catch (ClassNotFoundException | NoSuchMethodException inlined) {
-                // Verified device has only isUnexpectedlyInLegacyMode(), not a readable getter.
-            }
             updateResources.setAccessible(true);
-            main = new Handler(Looper.getMainLooper());
             hooks.add(module.hook(updateResources).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed();
                 remember(chain.getThisObject());
@@ -105,17 +147,6 @@ public final class LandscapeShade {
             // Install the shared getter before dropping compiled copies in all consumers.
             if (!module.deoptimize(updateResources)) throw new IllegalStateException("shade update deoptimize");
             deoptimizeCallers(module, loader);
-            ComposeShadeLayout.install(module, loader, hooks,
-                    value -> ready && forceSplit(enabled, value.getConfiguration()));
-            ready = true;
-            note("SHADE_READY");
-        } catch (Throwable failure) {
-            ready = false;
-            enabled = false;
-            for (XposedInterface.HookHandle hook : hooks) try { hook.unhook(); } catch (Throwable ignored) {}
-            hooks.clear();
-            note("SHADE_UNAVAILABLE " + failure);
-        }
     }
 
     // Direct DEX callers in the verified API37 SystemUI; each can contain its own

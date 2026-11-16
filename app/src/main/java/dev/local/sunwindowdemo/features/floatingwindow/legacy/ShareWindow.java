@@ -57,26 +57,10 @@ final class ShareWindow {
         java.util.List<XposedInterface.HookHandle> handles=new java.util.ArrayList<>();
         try{
             ClassLoader loader=a.task.getClassLoader();
-            String[] names={"com.android.server.wm.ActivityRecord","com.android.server.wm.ActivityRecord",
-                "android.service.voice.IVoiceInteractionSession","com.android.internal.app.IVoiceInteractor",null,
-                "android.app.ActivityOptions","com.android.server.wm.Task","com.android.server.wm.TaskFragment",
-                "com.android.server.wm.BackgroundActivityStartController$BalVerdict","com.android.server.uri.NeededUriGrants",null,
-                "com.android.server.wm.Transition",null,null};
-            Class<?>[] parameters=new Class<?>[names.length];
-            for(int i=0;i<names.length;i++)parameters[i]=names[i]==null?(i==12?boolean.class:int.class):Class.forName(names[i],false,loader);
             Class<?> starter=Class.forName("com.android.server.wm.ActivityStarter",false,loader);
-            Method method;
-            int taskArgument=6;
-            try{method=a.method(starter,"startActivityUnchecked",parameters);}
-            catch(NoSuchMethodException newer){
-                Class<?>[] next=new Class<?>[16];
-                System.arraycopy(parameters,0,next,0,6);
-                next[6]=Class.forName("com.android.server.wm.TaskDisplayArea",false,loader);
-                System.arraycopy(parameters,6,next,7,8);
-                next[15]=Class.forName("com.android.server.wm.ActivityCallerState$CallerInfo",false,loader);
-                method=a.method(starter,"startActivityUnchecked",next);parameters=next;taskArgument=7;
-            }
-            final int taskIndex=taskArgument,flagsIndex=taskArgument+4,argumentCount=parameters.length;
+            WindowServerTargets.StartUnchecked target=WindowServerTargets.startUnchecked(loader,starter);
+            Method method=target.method();
+            final int taskIndex=target.task(),flagsIndex=target.flags(),argumentCount=target.count();
             java.lang.reflect.Field optionsField=a.field(starter,"mOptions");
             Method launchParams=a.method(starter,"computeLaunchParams",a.activity,a.activity,a.task);
             handles.add(module.hook(launchParams).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{

@@ -16,12 +16,10 @@ public final class NavbarProvider extends ContentProvider {
         if (!"system".equals(method)) throw new IllegalArgumentException("system read only");
         int uid = Binder.getCallingUid();
         if (uid != getContext().getApplicationInfo().uid) {
-            boolean allowed = false;
-            for (String owner : new String[]{"com.android.systemui", "com.google.android.apps.nexuslauncher"}) {
-                try {
-                    if (uid == getContext().getPackageManager().getApplicationInfo(owner, 0).uid) allowed = true;
-                } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {}
-            }
+            boolean allowed = dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(getContext(), uid);
+            try {
+                allowed |= uid == getContext().getPackageManager().getApplicationInfo("com.android.systemui", 0).uid;
+            } catch (android.content.pm.PackageManager.NameNotFoundException ignored) {}
             if (!allowed) throw new SecurityException("immersive navbar reader");
         }
         return NavbarStore.systemSnapshot(getContext());

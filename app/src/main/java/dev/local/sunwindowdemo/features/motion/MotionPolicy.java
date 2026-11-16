@@ -13,7 +13,8 @@ public final class MotionPolicy {
     public static Targets targets(List<App> installed,int fallback,Map<String,Integer> overrides){
         Set<Integer> excluded=new HashSet<>();
         for(App app:installed)if(app.uid<10000||app.persistent
-                ||Set.of("dev.nativecomplements.module","com.android.systemui","com.google.android.apps.nexuslauncher")
+                ||Set.of("dev.nativecomplements.module","com.android.systemui",
+                    "com.google.android.apps.nexuslauncher","com.android.launcher3")
                     .contains(app.packageName))excluded.add(app.uid);
         Map<Integer,Integer> rules=new HashMap<>();Map<Integer,String> packages=new HashMap<>();
         for(App app:installed){

@@ -46,9 +46,9 @@ public final class ShadeStore {
 
     public static void setDrawerMonet(Context context, boolean enabled) {
         preferences(context).edit().putBoolean("drawer_monet", enabled).apply();
-        context.sendBroadcast(new Intent(CHANGED).setPackage(
-                dev.local.sunwindowdemo.features.iconlayers.IconLayerStore.LAUNCHER), null,
-                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+        android.os.Bundle options=BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();
+        for(String launcher:dev.local.sunwindowdemo.core.LauncherTargets.targets(context))
+            context.sendBroadcast(new Intent(CHANGED).setPackage(launcher),null,options);
     }
 
     public static int iconScale(Context context, boolean notification) {

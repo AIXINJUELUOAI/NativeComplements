@@ -252,6 +252,16 @@ public class LinkedWindowsTest {
                 sent.add(new android.content.Intent(intent));
             }
         };
+        android.content.pm.PackageInfo launcher=new android.content.pm.PackageInfo();
+        launcher.packageName=dev.local.sunwindowdemo.core.LauncherTargets.PIXEL;
+        launcher.applicationInfo=new android.content.pm.ApplicationInfo();launcher.applicationInfo.packageName=launcher.packageName;
+        launcher.applicationInfo.flags=android.content.pm.ApplicationInfo.FLAG_SYSTEM;
+        org.robolectric.Shadows.shadowOf(context.getPackageManager()).installPackage(launcher);
+        android.content.pm.ResolveInfo home=new android.content.pm.ResolveInfo();home.activityInfo=new android.content.pm.ActivityInfo();
+        home.activityInfo.packageName=launcher.packageName;home.activityInfo.name=launcher.packageName+".Home";home.activityInfo.applicationInfo=launcher.applicationInfo;
+        org.robolectric.Shadows.shadowOf(context.getPackageManager()).addResolveInfoForIntent(
+            new android.content.Intent(android.content.Intent.ACTION_MAIN).addCategory(android.content.Intent.CATEGORY_HOME),home);
+        dev.local.sunwindowdemo.core.LauncherTargets.invalidate();
         set(engine,"context",context);set(engine,"lock",windowLock);
         synchronized(windowLock){
             call("pushHistory",new Class<?>[]{});
@@ -260,7 +270,7 @@ public class LinkedWindowsTest {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(1,sent.size());
         assertEquals(WindowEngine.HISTORY,sent.get(0).getAction());
-        assertEquals(LauncherGuard.PACKAGE,sent.get(0).getPackage());
+        assertEquals(dev.local.sunwindowdemo.core.LauncherTargets.PIXEL,sent.get(0).getPackage());
         assertEquals(Wire.PROTOCOL,sent.get(0).getIntExtra("protocol",0));
         assertArrayEquals(new int[0],sent.get(0).getIntArrayExtra("hiddenTaskIds"));
     }

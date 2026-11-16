@@ -20,6 +20,7 @@ public final class SignalDisplay {
     private static final List<Paint> PAINTS=new ArrayList<>();
     private static final ThreadLocal<Binding> BINDING=new ThreadLocal<>();
     private static final List<XposedInterface.HookHandle> HOOKS=new ArrayList<>();
+    private static final ThreadLocal<Boolean> REDRAWING=new ThreadLocal<>();
     private static volatile boolean enabled;
     private static boolean installed,connected;
     private static Method primary,emergencyOnly;
@@ -140,6 +141,16 @@ public final class SignalDisplay {
             log.accept("SIGNAL_DISPLAY_READY standard mobile drawable");
         }catch(Throwable failure){
             enabled=false;for(var hook:HOOKS)try{hook.unhook();}catch(Throwable ignored){}HOOKS.clear();
+            log.accept("SIGNAL_SYNTHETIC_EMITTER_UNAVAILABLE "+StackedSignalTargets.describe(failure));
+            installBinder(module,loader);
+        }
+    }
+    private static void installBinder(XposedModule module,ClassLoader loader){
+        try {
+            if(primary==null||emergencyOnly==null||signalDrawable==null)throw new IllegalStateException("signal framework preflight failed");
+            MobileSignalBinder.install(module,loader,signalDrawable,HOOKS,log);
+            log.accept("SIGNAL_DISPLAY_READY mobile binder callback");
+        } catch(Throwable failure) {
             log.accept("SIGNAL_DISPLAY_UNAVAILABLE "+StackedSignalTargets.describe(failure));
         }
     }
@@ -196,7 +207,22 @@ public final class SignalDisplay {
         }
     }
     private record Callback(Field repo,Field sub,Method strength,Method service,Method ntn){}
-    private static void forget(Drawable drawable){synchronized(PAINTS){PAINTS.removeIf(p->p.drawable.get()==null||p.drawable.get()==drawable);}}
+    static void forget(Drawable drawable){synchronized(PAINTS){PAINTS.removeIf(p->p.drawable.get()==null||p.drawable.get()==drawable);}}
+    static boolean redrawing(){return Boolean.TRUE.equals(REDRAWING.get());}
+    static int present(Drawable drawable,int sub,int state){
+        return remember(new Binding(drawable,sub),state)?adjusted(state,sub):state;
+    }
+    static void observe(Object owner,int subscription,int kind,Object value){
+        synchronized(RADIOS){
+            RADIOS.entrySet().removeIf(e->e.getValue().owner.get()==null);
+            Radio radio=RADIOS.get(subscription);
+            if(radio==null||radio.owner.get()!=owner){radio=new Radio(owner);RADIOS.put(subscription,radio);}
+            if(kind==0)radio.strength=(SignalStrength)value;
+            else if(kind==1){radio.service=(ServiceState)value;if(!registeredNr(radio.service))radio.strength=null;}
+            else{radio.ntn=(Boolean)value;if(radio.ntn)radio.strength=null;}
+        }
+        requestRedraw();
+    }
     private static boolean remember(Binding b,int state){
         synchronized(PAINTS){
             PAINTS.removeIf(p->p.drawable.get()==null);
@@ -234,6 +260,7 @@ public final class SignalDisplay {
     }
     private static final Runnable REDRAW=()->{
         Binding previous=BINDING.get();BINDING.remove();
+        REDRAWING.set(true);
         try{
             if(stackedRevision!=null)try{
                 int revision=(Integer)stackedRevisionRead.invoke(stackedRevision);
@@ -249,7 +276,7 @@ public final class SignalDisplay {
                     forget(d);
                 }
             }
-        }finally{if(previous!=null)BINDING.set(previous);else BINDING.remove();}
+        }finally{REDRAWING.remove();if(previous!=null)BINDING.set(previous);else BINDING.remove();}
     };
     private static void requestRedraw(){MAIN.removeCallbacks(REDRAW);MAIN.post(REDRAW);}
     public static void connect(Application app){

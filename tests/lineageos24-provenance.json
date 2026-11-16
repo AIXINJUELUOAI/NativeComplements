@@ -1,0 +1,39 @@
+{
+  "distribution": "LineageOS 24.0",
+  "source_root": "../域外源码库/LineageOS-24.0",
+  "manifest": {
+    "repository": "https://github.com/LineageOS/android.git",
+    "commit": "913c6baa35ffa32be9ae33368cac69dbec6ead4b",
+    "branch": "lineage-24.0"
+  },
+  "frameworks_base": {
+    "repository": "https://github.com/LineageOS/android_frameworks_base.git",
+    "commit": "5c6d4b35dc4a65cae62391fab5e64386738e6692",
+    "branch": "lineage-24.0"
+  },
+  "frameworks_native": {
+    "repository": "https://github.com/LineageOS/android_frameworks_native.git",
+    "commit": "46018f54b42489de960c62c3db9de131abce43ea",
+    "branch": "lineage-24.0"
+  },
+  "frameworks_libs_systemui": {
+    "repository": "https://github.com/LineageOS/android_frameworks_libs_systemui.git",
+    "commit": "0e181d3d5dd8456ee158d9ac8725d9cd59fecd28",
+    "branch": "lineage-24.0"
+  },
+  "launcher3": {
+    "repository": "https://github.com/LineageOS/android_packages_apps_Launcher3.git",
+    "commit": "fd5398ae59ca898b7907a376df4bd293692ad0fe",
+    "branch": "lineage-24.0"
+  },
+  "telecomm": {
+    "repository": "https://github.com/LineageOS/android_packages_services_Telecomm.git",
+    "commit": "d75099ec2298dff41dd7607c667344990c52e044",
+    "branch": "lineage-24.0"
+  },
+  "themepicker": {
+    "repository": "https://github.com/LineageOS/android_packages_apps_ThemePicker.git",
+    "commit": "d5a70ebd9cd04dd9e5a98a74efab4bea319248d9",
+    "branch": "lineage-24.0"
+  }
+}

@@ -2,7 +2,16 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：code165 / 0.11.7-aod-fix1
+### 当前增量：code166 / 0.12.0-community1
+
+- 按2026-11-17授权集成 [LFRon 的 PR #4](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)，保留作者与 PR 祖先，保 code165 Alive 运行源码，不将 PR 旧实现覆盖最新视觉／AOD修复。具体取舍见[LOS24](<lineageos-24.0.md>)。
+- 相同 Hook 不动，真正不同的输入、通知、ActivityStarter、Legacy／Hydrated／信号接入收进最小目标解析与功能适配，规则、安全门和恢复共用。不建立 ROM 插件工厂。Launcher3加入第四静态作用域，桌面权限以已知系统实际 HOME／UID为准。
+- 首次一次维护者提示、关于页开发者下的适配者及反馈fallback已接入；不在首页常驻、不逐功能未适配／未验证提示、不凭ROM名禁用。PR自动Minimal主题切换不纳入，保系统主题门控，不改用户桌面偏好。[轻量协作](<../community-adaptation-plan.md>)同步启用短期任务分支。
+- 最终冻结后必要定向 **24类／95项，0失败、0错误、0跳过**（非全套）：维护记录与一次提示、HOME/UID权限、图标上报、导航/双栏/信号、通知/跨app小窗、Alive既有准入与开发者工具入口。真实输入interceptor用例验证非默认display原生异常不重试；独立审查提出的该main既存重复proceed已窄修，通知接管后不重发与信号整组失败回滚复核通过。Alive运行源码相对code165零差异。
+- `verify_runtime.py` 通过：Demo8.2基线4项不变、22项已记录差异、40项已记录新增及原七组主机检查。`verify_lineageos24.py` 因本机缺仓库外源码树为 **SKIP**，不是通过。打包中原R8探针仍指旧install方法的检查失败已修为检查实际resolve入口，并新增binder宿主名检查；最终release/R8、原签名、166身份、7入口/4scope、Direct Boot与退役产品边界全部核验通过。
+- [主APK](<../../deliverables/NativeComplements-0.12.0-community1.apk>) SHA-256 `45b2833d6d45937786a7f1cb88cbc2cd0106ed027bc24b453d4d87c81be844d4`。主机与打包不是LOS实机效果验收；未自动安装、重启或写设备设置。提交与推送回执另记，不以本地工作树称已合并远端。
+
+### 历史增量：code165 / 0.11.7-aod-fix1
 
 - 收口既有 Alive 睡眠/唤醒视觉、内容恢复、隐藏保留及起始帧预绘增量，首页保留 Beta；修复开发者工具全景 AOD 受限设置读取崩溃，显式 root 后台查询/切换并验证读回。临时覆盖整机重启后需重新开启，不包含 LTPO 或暗光自动关闭修复。详细取舍见[当前实现与验证](<alive-systemui.md#code165--0117-aod-fix1当前收口>)。
 - 2026-11-17 用户手动试用暂未再发现 Alive 问题；先前锁屏特效带到桌面的现象本轮未复现，不追加猜测补丁，不宣称全 ROM/所有配置已验证。13 项最小定向通过，原签名 release/R8、165 身份、7 入口/3 scope、Direct Boot 与退役产品边界核验通过。[主 APK](<../../deliverables/NativeComplements-0.11.7-aod-fix1.apk>) SHA-256 `6a561d9fb1b5218814ab2e334bed6519a9d53665a4bc78ffaa7e041612fb6313`。无自动安装/重启/设备写入；社区 PR 只读审查、不合并，另议集成。

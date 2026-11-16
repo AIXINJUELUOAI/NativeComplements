@@ -36,6 +36,38 @@ class DiagnosticsProviderTest {
         try { provider.call("state", null, null); fail("must reject UID") }
         catch (_: SecurityException) { }
     }
+    @Test fun onlyActualSystemHomeUidCanReportLauncherEvents() {
+        val context = RuntimeEnvironment.getApplication()
+        val pm = org.robolectric.Shadows.shadowOf(context.packageManager)
+        val homeIntent = android.content.Intent(android.content.Intent.ACTION_MAIN)
+            .addCategory(android.content.Intent.CATEGORY_HOME)
+        fun installHome(name: String, uid: Int) {
+            pm.installPackage(android.content.pm.PackageInfo().apply {
+                packageName = name
+                applicationInfo = android.content.pm.ApplicationInfo().apply {
+                    packageName = name; this.uid = uid
+                    flags = android.content.pm.ApplicationInfo.FLAG_SYSTEM
+                }
+            })
+            pm.addResolveInfoForIntent(homeIntent, android.content.pm.ResolveInfo().apply {
+                activityInfo = android.content.pm.ActivityInfo().apply {
+                    packageName = name; this.name = "$name.Home"
+                }
+                isDefault = true
+            })
+        }
+        installHome("com.android.launcher3", 54321)
+        ShadowBinder.setCallingUid(54321)
+        provider.call("state", null, null)
+        // Installed/allowlisted but no longer actual HOME must not retain bridge access.
+        pm.removeResolveInfosForIntent(homeIntent, "com.android.launcher3")
+        installHome("sample.other.home", 54322)
+        try { provider.call("state", null, null); fail("inactive HOME UID") }
+        catch (_: SecurityException) { }
+        ShadowBinder.setCallingUid(54322)
+        try { provider.call("state", null, null); fail("third-party HOME UID") }
+        catch (_: SecurityException) { }
+    }
     @Test fun sourceSpoofRawValuesBundlesAndManagementAreRejected() {
         DiagnosticsStore.start()
         rejected { provider.call("events", "system:hook_installed:\n", null) }

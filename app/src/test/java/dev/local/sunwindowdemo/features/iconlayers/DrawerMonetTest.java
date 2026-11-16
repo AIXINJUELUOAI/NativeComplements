@@ -17,7 +17,20 @@ import static org.junit.Assert.*;
 @Config(sdk = 35)
 public class DrawerMonetTest {
     private final Context context = RuntimeEnvironment.getApplication();
-    @Before public void clear() { ShadeStore.preferences(context).edit().clear().commit(); }
+    @Before public void clear() {
+        ShadeStore.preferences(context).edit().clear().commit();
+        PackageInfo launcher = new PackageInfo(); launcher.packageName = IconLayerStore.LAUNCHER;
+        launcher.applicationInfo = new ApplicationInfo();
+        launcher.applicationInfo.packageName = launcher.packageName;
+        launcher.applicationInfo.uid = 10042; launcher.applicationInfo.flags = ApplicationInfo.FLAG_SYSTEM;
+        var pm = Shadows.shadowOf(context.getPackageManager()); pm.installPackage(launcher);
+        ResolveInfo home = new ResolveInfo(); home.activityInfo = new ActivityInfo();
+        home.activityInfo.packageName = launcher.packageName; home.activityInfo.name = "Home";
+        home.activityInfo.applicationInfo = launcher.applicationInfo;
+        pm.setResolveInfosForIntent(new android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_HOME), java.util.List.of(home));
+        dev.local.sunwindowdemo.core.LauncherTargets.invalidate();
+    }
     @After public void uid() { ShadowBinder.setCallingUid(Process.myUid()); }
 
     @Test public void defaultOffTogglePersistsAndDoesNotEnableOtherFeatures() {
@@ -34,12 +47,6 @@ public class DrawerMonetTest {
     }
 
     @Test public void launcherGetsOnlyProjectionAndUnknownUidCannotReadOrWrite() {
-        PackageInfo launcher = new PackageInfo();
-        launcher.packageName = IconLayerStore.LAUNCHER;
-        launcher.applicationInfo = new ApplicationInfo();
-        launcher.applicationInfo.packageName = launcher.packageName;
-        launcher.applicationInfo.uid = 10042;
-        Shadows.shadowOf(context.getPackageManager()).installPackage(launcher);
         ShadeProvider provider = new ShadeProvider();
         ProviderInfo info = new ProviderInfo(); info.authority = ShadeStore.AUTHORITY;
         provider.attachInfo(context, info);
@@ -54,6 +61,22 @@ public class DrawerMonetTest {
         ShadowBinder.setCallingUid(context.getApplicationInfo().uid);
         assertTrue(provider.call("drawer", null, null).getBoolean("drawerMonet"));
         assertThrows(IllegalArgumentException.class, () -> provider.call("write", null, null));
+    }
+
+    @Test public void nativeThemeDisabledAlwaysDisablesDrawerWithoutChangingPreferences() throws Exception {
+        DrawerMonet drawer = new DrawerMonet();
+        for (var pair : new Object[][]{{"userEnabled", true}, {"enabled", true}, {"context", context}}) {
+            var field = DrawerMonet.class.getDeclaredField((String) pair[0]);
+            field.setAccessible(true); field.set(drawer, pair[1]);
+        }
+        var prefs = context.getSharedPreferences("nativecomplements_drawer_theme", Context.MODE_PRIVATE);
+        prefs.edit().clear().putString("sentinel", "unchanged").commit();
+        drawer.systemThemed(false);
+        var enabled = DrawerMonet.class.getDeclaredField("enabled"); enabled.setAccessible(true);
+        assertEquals(false, enabled.get(drawer));
+        assertEquals(java.util.Map.of("sentinel", "unchanged"), prefs.getAll());
+        drawer.systemThemed(true); assertEquals(true, enabled.get(drawer));
+        drawer.systemThemed(false); assertEquals(false, enabled.get(drawer));
     }
 
     @Test public void nestedScopesAndExceptionsRestorePriorBinding() throws Throwable {

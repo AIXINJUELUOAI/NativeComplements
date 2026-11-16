@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.BuildConfig
+import dev.local.sunwindowdemo.core.adaptation.AdaptationNotice
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
@@ -23,6 +24,7 @@ fun HomeScreen(
     onShade: () -> Unit = {},
     onAlive: (() -> Unit)? = null,
 ) {
+    AdaptationNotice(onAbout)
     Text("版本 ${BuildConfig.VERSION_NAME}", Modifier.padding(start = 16.dp, bottom = 20.dp),
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
     SettingsGroup {

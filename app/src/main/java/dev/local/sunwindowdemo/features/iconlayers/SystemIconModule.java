@@ -44,7 +44,7 @@ public final class SystemIconModule extends XposedModule {
         Class<?> descriptor=Class.forName("com.android.internal.statusbar.StatusBarIcon",false,loader);
         Field notification=field(view,"mNotification"),conversation=field(view,"mShowsConversation");
         Field referenceSize=field(view,"mOriginalStatusBarIconSize");
-        Method get=view.getDeclaredMethod("getIcon",descriptor);
+        Method get=view.getDeclaredMethod("getIcon",descriptor);get.setAccessible(true);
         updateNotificationDrawable=view.getDeclaredMethod("updateDrawable",boolean.class);updateNotificationDrawable.setAccessible(true);
         hook(get).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
             Object object=chain.getThisObject();
@@ -78,7 +78,7 @@ public final class SystemIconModule extends XposedModule {
         Class<?> attrs=Class.forName("com.android.wm.shell.startingsurface.SplashscreenContentDrawer$SplashScreenWindowAttrs",false,loader);
         Field activity=field(builder,"mActivityInfo"),outer=field(builder,"this$0"),temporary=field(drawer,"mTmpAttrs");
         Field icon=field(attrs,"mSplashScreenIcon"),background=field(attrs,"mIconBgColor"),suggest=field(builder,"mSuggestType");
-        Method build=builder.getDeclaredMethod("build");
+        Method build=builder.getDeclaredMethod("build");build.setAccessible(true);
         hook(build).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
             ActivityInfo target=(ActivityInfo)activity.get(chain.getThisObject());Context c=context;
             int type=suggest.getInt(chain.getThisObject());

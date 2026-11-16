@@ -36,7 +36,7 @@ fun MotionScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0
     val defaultMode = config.getInt("default_mode", 0)
     val enabled = config.getBoolean("enabled")
     val visible = remember(apps, selected, defaultMode) {
-        apps.filter { it.packageName !in setOf("dev.nativecomplements.module", "com.android.systemui", "com.google.android.apps.nexuslauncher") }
+        apps.filter { it.packageName !in setOf("dev.nativecomplements.module", "com.android.systemui", "com.google.android.apps.nexuslauncher", "com.android.launcher3") }
             .sortedByDescending { selected[it.packageName] ?: defaultMode }
     }
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {

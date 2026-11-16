@@ -12,7 +12,7 @@ import verify_signal_target as dex
 ROOT = Path(__file__).resolve().parents[1]
 CERTIFICATE = "28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104"
 SCOPE = ROOT / "app/src/main/resources/META-INF/xposed/scope.list"
-SYSTEM_SCOPES = {"system", "com.google.android.apps.nexuslauncher", "com.android.systemui"}
+SYSTEM_SCOPES = {"system", "com.google.android.apps.nexuslauncher", "com.android.launcher3", "com.android.systemui"}
 ENTRIES = {"dev.local.sunwindowdemo." + name for name in (
     "SunWindowModule", "LauncherGuard", "BackBridge", "features.callblocking.CallBlockingModule",
     "features.iconlayers.IconLayerModule", "features.iconlayers.SystemIconModule", "features.navbar.NavbarModule")}
@@ -20,7 +20,7 @@ ENTRIES = {"dev.local.sunwindowdemo." + name for name in (
 
 def check_scopes(text):
     scopes = text.splitlines()
-    assert len(scopes) == len(SYSTEM_SCOPES) and set(scopes) == SYSTEM_SCOPES, "Expected exactly three system scopes"
+    assert len(scopes) == len(SYSTEM_SCOPES) and set(scopes) == SYSTEM_SCOPES, "Expected exactly four system scopes"
 
 
 def run(*args):
@@ -37,11 +37,18 @@ def main():
     version = re.search(r'versionName = "([^"]+)"', gradle)[1]
     code = int(re.search(r'versionCode = (\d+)', gradle)[1])
     sdk = Path(os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
-               or str(Path(os.environ["LOCALAPPDATA"]) / "Android/Sdk"))
+               or str(Path(os.environ.get("LOCALAPPDATA", Path.home())) / "Android/Sdk"))
     tools = sdk / "build-tools/36.1.0"
-    jdk = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Android\Android Studio\jbr"))
-    env = os.environ.copy(); env["JAVA_HOME"] = str(jdk)
-    subprocess.run([str(ROOT / "gradlew.bat"), "--no-daemon", "--console=plain",
+    jdk_env = os.environ.get("JAVA_HOME")
+    jdk = Path(jdk_env) if jdk_env else None
+    env = os.environ.copy()
+    if jdk:
+        env["JAVA_HOME"] = str(jdk)
+    windows = os.name == "nt"
+    gradlew = ROOT / ("gradlew.bat" if windows else "gradlew")
+    java = (jdk / "bin" / ("java.exe" if windows else "java")) if jdk else Path(shutil.which("java") or "java")
+    aapt2 = tools / ("aapt2.exe" if windows else "aapt2")
+    subprocess.run([str(gradlew), "--no-daemon", "--console=plain",
                     ":app:assembleFullRelease"], cwd=ROOT, env=env, check=True)
     package = "dev.nativecomplements.module"
     apk = ROOT / "app/build/outputs/apk/full/release/app-full-release.apk"
@@ -76,12 +83,12 @@ def main():
         assert found == required_types, "Integrated Alive/corner/admission runtime missing after R8: " + str(required_types - found)
         assert any(b'dev.local.sunwindowdemo.core.WindowBackendEligibility' in archive.read(name)
                    for name in names if name.endswith('.dex')), "Preserve own eligibility marker for old installations"
-    signature = run(jdk / "bin/java.exe", "-jar", tools / "lib/apksigner.jar", "verify", "--print-certs", apk)
+    signature = run(java, "-jar", tools / "lib/apksigner.jar", "verify", "--print-certs", apk)
     assert re.search(r"certificate SHA-256 digest: (\w+)", signature)[1] == CERTIFICATE
-    badging = run(tools / "aapt2.exe", "dump", "badging", apk).splitlines()[0]
+    badging = run(aapt2, "dump", "badging", apk).splitlines()[0]
     for expected in (f"name='{package}'", f"versionCode='{code}'", f"versionName='{version}'"):
         assert expected in badging, badging
-    manifest = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
+    manifest = run(aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
     assert "WindowAccessibilityService" not in manifest and "android.accessibilityservice.AccessibilityService" not in manifest
     for authority in ("CONTROL", "settings", "iconlayers", "diagnostics"):
         assert package + "." + authority in manifest
@@ -102,11 +109,11 @@ def main():
     assert re.search(r'exported[^\n]*=false', boot), "Migration receiver must stay private"
     assert "android.permission.AMBIENT_WALLPAPER" not in manifest
     assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
-    resources = run(tools / "aapt2.exe", "dump", "resources", apk)
+    resources = run(aapt2, "dump", "resources", apk)
     for xml, expected in (("alive_wallpaper", "false"), ("alive_ambient_wallpaper", "true")):
         match = re.search(r"resource [^\n]+ xml/" + xml + r"\s+\(\) \(file\) (\S+)", resources)
         assert match, "Missing wallpaper XML: " + xml
-        metadata = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", match[1])
+        metadata = run(aapt2, "dump", "xmltree", apk, "--file", match[1])
         assert re.search(r"supportsAmbientMode[^\n]*=" + expected + r"(?:\s|$)", metadata), metadata
     assert "xml/window_accessibility_service" not in resources
     assert "WindowShortcutActivity" not in manifest and "android.app.shortcuts" not in manifest, "Retired shortcut must remain absent"

@@ -19,25 +19,26 @@ final class ComposeShadeLayout {
     private static volatile int splitId, fullWidthId;
     private ComposeShadeLayout() {}
 
+    private record Targets(Constructor<?>[] initial, Method emit, Constructor<?>[] callbacks, Method configChanged) {}
+
+    private static Targets resolve(ClassLoader loader) throws Exception {
+        Class<?> repository = Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository", false, loader);
+        boolean hydrated = hydrated(repository);
+        Class<?> initial = hydrated ? repository : Class.forName(
+                "com.android.systemui.shade.domain.interactor.ShadeModeInteractorImpl", false, loader);
+        Class<?> emitter = Class.forName(repository.getName() + (hydrated
+                ? "$onActivated$2$1$1" : "$special$$inlined$map$1$2"), false, loader);
+        Class<?> callback = Class.forName("com.android.systemui.common.ui.data.repository.ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1", false, loader);
+        Method configChanged = callback.getDeclaredMethod("onConfigChanged", Configuration.class);
+        configChanged.setAccessible(true);
+        Method emit = emitter.getDeclaredMethod("emit", Object.class, Class.forName("kotlin.coroutines.Continuation", false, loader));
+        emit.setAccessible(true);
+        return new Targets(initial.getDeclaredConstructors(), emit, callback.getDeclaredConstructors(), configChanged);
+    }
+
     static void install(XposedModule module, ClassLoader loader, List<XposedInterface.HookHandle> hooks,
                         Predicate<Resources> force) throws Exception {
-        Class<?> repository = Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository", false, loader);
-        Class<?> interactor = Class.forName("com.android.systemui.shade.domain.interactor.ShadeModeInteractorImpl", false, loader);
-        Class<?> emitter;
-        boolean hydrated;
-        try {
-            repository.getDeclaredField("legacyUseSplitShade");
-            emitter=Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository$special$$inlined$map$1$2",false,loader);
-            hydrated=false;
-        } catch (NoSuchFieldException newer) {
-            repository.getDeclaredField("legacyUseSplitShade$delegate");
-            emitter=Class.forName("com.android.systemui.shade.data.repository.ShadeConfigRepository$onActivated$2$1$1",false,loader);
-            hydrated=true;
-        }
-        Class<?> callback = Class.forName("com.android.systemui.common.ui.data.repository.ConfigurationRepositoryImpl$onConfigurationChange$1$callback$1", false, loader);
-        onConfigChanged = callback.getDeclaredMethod("onConfigChanged", Configuration.class);
-        onConfigChanged.setAccessible(true);
-        Method emit = emitter.getDeclaredMethod("emit", Object.class, Class.forName("kotlin.coroutines.Continuation", false, loader));
+        Targets targets = resolve(loader);
         hooks.add(module.hook(Resources.class.getDeclaredMethod("getBoolean", int.class))
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                     Object original = chain.proceed();
@@ -49,13 +50,13 @@ final class ComposeShadeLayout {
                     return overrideBoolean(original, id, true,
                             force.test(resources), splitId, fullWidthId);
                 }));
-        hooks.add(module.hook(emit).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+        hooks.add(module.hook(targets.emit()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
             Boolean before = readingShadeConfig.get();
             readingShadeConfig.set(true);
             try { return chain.proceed(); }
             finally { restoreScope(before); }
         }));
-        for (Constructor<?> constructor : (hydrated?repository:interactor).getDeclaredConstructors()) {
+        for (Constructor<?> constructor : targets.initial()) {
             hooks.add(module.hook(constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Boolean before = readingShadeConfig.get();
                 readingShadeConfig.set(true);
@@ -64,14 +65,26 @@ final class ComposeShadeLayout {
             }));
             if (!module.deoptimize(constructor)) throw new IllegalStateException("compose shade initial state deoptimize");
         }
-        for (Constructor<?> constructor : callback.getDeclaredConstructors()) {
+        for (Constructor<?> constructor : targets.callbacks()) {
             hooks.add(module.hook(constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed();
                 synchronized (callbacks) { callbacks.add(new WeakReference<>(chain.getThisObject())); }
                 return result;
             }));
         }
-        if (!module.deoptimize(emit)) throw new IllegalStateException("compose shade emitter deoptimize");
+        if (!module.deoptimize(targets.emit())) throw new IllegalStateException("compose shade emitter deoptimize");
+        onConfigChanged = targets.configChanged();
+    }
+
+    // The field is only an ABI discriminator; never read or write the native flow.
+    static boolean hydrated(Class<?> repository) throws NoSuchFieldException {
+        try {
+            repository.getDeclaredField("legacyUseSplitShade");
+            return false;
+        } catch (NoSuchFieldException newer) {
+            repository.getDeclaredField("legacyUseSplitShade$delegate");
+            return true;
+        }
     }
 
     // R classes can be removed by R8 even when JADX prints symbolic R.bool references.

@@ -10,7 +10,9 @@ import android.os.SystemClock;
 /** User-selected icon assets and a narrowly scoped launcher bridge. */
 public final class IconLayerStore {
     public static final String TARGET = "dev.local.nativecomplements.lab";
-    public static final String LAUNCHER = "com.google.android.apps.nexuslauncher";
+    /** Kept for source compatibility; bridge checks use LauncherTargets.isLauncherUid. */
+    public static final String LAUNCHER = dev.local.sunwindowdemo.core.LauncherTargets.PIXEL;
+    public static final String LINEAGE_LAUNCHER = dev.local.sunwindowdemo.core.LauncherTargets.LINEAGE;
     public static final String SYSTEM_UI = "com.android.systemui";
     public static final String REFRESH = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.action("ICON_LAYERS_REFRESH");
     public static final String CONTROL = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.controlPermission();
@@ -41,7 +43,7 @@ public final class IconLayerStore {
         b.putInt("loadFailures", p.getInt("loadFailures", 0));
         b.putLong("seen", p.getLong("seen", 0));
         // Launcher-reported system themed-icon state gates every Monet surface outside the desktop.
-        b.putBoolean("systemThemed", p.getBoolean("system_themed", false));
+        b.putBoolean("systemThemed", systemThemed(c));
         b.putBoolean("coverMonet", dev.local.sunwindowdemo.features.shade.ShadeStore.coverMonet(c));
         b.putBoolean("windowMonet", dev.local.sunwindowdemo.features.shade.ShadeStore.windowMonet(c));
         return b;
@@ -60,7 +62,9 @@ public final class IconLayerStore {
         broadcast(c,true);
     }
     private static void broadcast(Context c,boolean all) {
-        for(String host:new String[]{LAUNCHER,SYSTEM_UI,"android",dev.local.sunwindowdemo.BuildConfig.APPLICATION_ID})
+        var hosts = new java.util.ArrayList<>(dev.local.sunwindowdemo.core.LauncherTargets.targets(c));
+        hosts.addAll(java.util.List.of(SYSTEM_UI, "android", dev.local.sunwindowdemo.BuildConfig.APPLICATION_ID));
+        for(String host:hosts)
             c.sendBroadcast(new Intent(REFRESH).setPackage(host).putExtra("all",all).addFlags(Intent.FLAG_RECEIVER_FOREGROUND));
     }
 
@@ -77,12 +81,23 @@ public final class IconLayerStore {
         prefs(c).edit().putStringSet("originals", set).apply(); refresh(c);
     }
 
-    public static boolean systemThemed(Context c) { return prefs(c).getBoolean("system_themed", false); }
+    public static boolean systemThemed(Context c) {
+        String home = dev.local.sunwindowdemo.core.LauncherTargets.home(c);
+        return home != null && home.equals(prefs(c).getString("system_themed_home", ""))
+                && prefs(c).getBoolean("system_themed", false);
+    }
 
     static void report(Context c, Bundle b) {
         if (b.containsKey("systemThemed")) {
+            String home = dev.local.sunwindowdemo.core.LauncherTargets.home(c);
+            if (home == null) throw new SecurityException("no trusted HOME");
             boolean themed = b.getBoolean("systemThemed");
-            if (themed != systemThemed(c)) { prefs(c).edit().putBoolean("system_themed", themed).commit(); refresh(c); }
+            if (themed != systemThemed(c) || !home.equals(prefs(c).getString("system_themed_home", ""))) {
+                if (!prefs(c).edit().putBoolean("system_themed", themed)
+                        .putString("system_themed_home", home).commit())
+                    throw new IllegalStateException("theme report not persisted");
+                refresh(c);
+            }
             if (b.size() == 1) return;
         }
         prefs(c).edit().putString("version", b.getString("version", ""))

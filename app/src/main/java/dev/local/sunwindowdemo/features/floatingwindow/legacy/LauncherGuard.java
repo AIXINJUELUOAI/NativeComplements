@@ -13,7 +13,6 @@ import java.util.List;
 
 /** Prevents the launcher swipe monitor from claiming explicitly owned corner streams. */
 public final class LauncherGuard extends XposedModule {
-    static final String PACKAGE="com.google.android.apps.nexuslauncher";
     static final String STATE=Wire.PKG+".GUARD_STATE";
     static final String QUERY=Wire.PKG+".QUERY_GUARD_STATE";
     private final GestureGate gate=new GestureGate();
@@ -23,16 +22,16 @@ public final class LauncherGuard extends XposedModule {
     private int claims;
     private RecentsFilter recents;
     private IBinder visualLease;
-    @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&(PACKAGE.equals(p.getProcessName())||p.getProcessName().startsWith(PACKAGE+":"));}
+    @Override public void onModuleLoaded(ModuleLoadedParam p){eligible=!p.isSystemServer()&&dev.local.sunwindowdemo.core.LauncherTargets.isLauncherProcess(p.getProcessName());}
     @Override public synchronized void onPackageLoaded(PackageLoadedParam p){
-        if(!eligible||attempted||!PACKAGE.equals(p.getPackageName()))return;attempted=true;
+        if(!eligible||attempted||!dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(p.getPackageName()))return;attempted=true;
         ProductFeatures.installLauncher(this,p.getDefaultClassLoader(),this::note);
         List<XposedInterface.HookHandle> handles=new ArrayList<>();
         try{
             ClassLoader loader=p.getDefaultClassLoader();
             Class<?> handler=Class.forName("com.android.quickstep.TouchInteractionHandler",false,loader);
             Class<?> service=Class.forName("com.android.quickstep.TouchInteractionService",false,loader);
-            Method event=handler.getDeclaredMethod("onInputEvent",InputEvent.class);
+            Method event=handler.getDeclaredMethod("onInputEvent",InputEvent.class);event.setAccessible(true);
             Method displayId=InputEvent.class.getDeclaredMethod("getDisplayId");displayId.setAccessible(true);
             Method create=service.getDeclaredMethod("onCreate"),destroy=service.getDeclaredMethod("onDestroy");
             if(event.getReturnType()!=void.class||create.getReturnType()!=void.class||destroy.getReturnType()!=void.class)throw new NoSuchMethodException("signature");

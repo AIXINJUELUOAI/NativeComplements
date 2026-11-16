@@ -16,12 +16,14 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.BuildConfig
 import dev.local.sunwindowdemo.R
+import dev.local.sunwindowdemo.core.adaptation.CommunityAdaptation
 import dev.local.sunwindowdemo.core.ui.*
 
 @Composable
 fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit, onLogs: () -> Unit = {}) {
     val context = LocalContext.current
     val uri = LocalUriHandler.current
+    val adaptation = remember { CommunityAdaptation.current() }
     var versionTaps by remember { mutableIntStateOf(0) }
     var toolsVisible by rememberSaveable { mutableStateOf(false) }
     val icon = remember {
@@ -40,8 +42,14 @@ fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit, onLogs: () -> Unit 
     }
     SettingsGroup {
         SettingRow("开发者", "AIXINJUELUOAI", { uri.openUri("https://github.com/AIXINJUELUOAI") })
-        SettingRow("项目主页", onClick = { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements") })
-        SettingRow("反馈问题", onClick = { uri.openUri("https://github.com/AIXINJUELUOAI/NativeComplements/issues") })
+        adaptation?.let {
+            SettingRow("适配者", "${it.maintainer()} · ${it.systemName()}", { uri.openUri(it.authorUrl()) })
+        }
+        SettingRow("项目主页", onClick = { uri.openUri(CommunityAdaptation.PROJECT_URL) })
+        SettingRow("反馈问题", adaptation?.let {
+            if (it.maintainerFeedbackUrl() == null) "主项目（暂无已确认的适配者反馈入口）"
+            else "优先向 ${it.maintainer()} 反馈该系统的兼容性问题"
+        }, onClick = { uri.openUri(adaptation?.feedbackUrl() ?: CommunityAdaptation.PROJECT_ISSUES) })
         SettingRow("诊断日志", "开始记录、复现问题后停止并导出；不会自动上传", onClick = onLogs)
         SettingRow("开源许可", onClick = onLicenses)
     }

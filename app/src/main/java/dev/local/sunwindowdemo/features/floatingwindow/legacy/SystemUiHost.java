@@ -52,7 +52,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         }}catch(Exception ignored){}
     }};
     private final BroadcastReceiver queryReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-        try{int uid=getSentFromUid();if(uid==getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid||uid==getApplicationInfo().uid)publish(true);}catch(Exception ignored){}
+        try{int uid=getSentFromUid();if(dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(SystemUiHost.this,uid)||uid==getApplicationInfo().uid)publish(true);}catch(Exception ignored){}
     }};
     private int settingsFailures;
     private void loadSettings(){settingsWorker.execute(()->{
@@ -244,7 +244,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             if(Intent.ACTION_SCREEN_OFF.equals(i.getAction())){main.removeCallbacks(poll);polling=false;}else resumePoll();
         }
     };
-    private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){loadApps();}};
+    private final BroadcastReceiver packageReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){dev.local.sunwindowdemo.core.LauncherTargets.invalidate();loadApps();}};
     private int catalogGeneration;
     private final Runnable iconsReloaded=()->main.post(()->{if(!cleaned)loadApps();});
     private void initialize() {
@@ -369,7 +369,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         WindowManager.LayoutParams p=new WindowManager.LayoutParams(width,height,OVERLAY_TYPE,flags,PixelFormat.TRANSLUCENT);
         p.setFitInsetsTypes(0);p.setTitle("NativeComplements-window-menu");trust(p);return p;
     }
-    private void refresh() {
+    void refresh() {
         if(!allowed()){hideFan();if(panel!=null&&!(screenshotVisible||systemFocus))hidePanel();removeHot();return;}
         if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()&&BackBridge.cornerReady){if(left==null)addHot(false);if(right==null)addHot(true);}
         else removeHot();
@@ -434,12 +434,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(!force&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
         publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;
         publishedEnabled=enabled;publishedWidth=bounds.width();publishedHeight=bounds.height();published=rects.clone();publishedHandles=handles.clone();
-        Intent state=new Intent(LauncherGuard.STATE).setPackage(LauncherGuard.PACKAGE).putExtra("enabled",enabled)
+        Intent state=new Intent(LauncherGuard.STATE).putExtra("enabled",enabled)
             .putExtra("width",bounds.width()).putExtra("height",bounds.height()).putExtra("rects",rects);
         state.putExtra("handleRects",handles).putExtra("immersive",immersive).putExtra("hiddenTask",hidden).putExtra("dropEnabled",dropEnabled).putExtra("density",getResources().getDisplayMetrics().density);
         android.os.Bundle extras=new android.os.Bundle();extras.putBinder("lease",lease);extras.putBinder("dropChannel",dropChannel);state.putExtras(extras);
-        sendBroadcast(state,null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
-        sendBroadcast(new Intent(state).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+        android.os.Bundle options=android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();
+        for(String launcher:dev.local.sunwindowdemo.core.LauncherTargets.targets(this))
+            sendBroadcast(new Intent(state).setPackage(launcher),null,options);
+        sendBroadcast(new Intent(state).setPackage(BackBridge.PACKAGE),null,options);
     }
     private List<ShortcutTarget> selectedTargets(){
         List<ShortcutTarget> selected=new ArrayList<>();
@@ -602,7 +604,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             var task=tasks.get(0);String pkg=task.topActivity.getPackageName();
             if(Wire.PKG.equals(pkg)&&attempt<20){main.postDelayed(()->floatCurrent(attempt+1,quiet),32);return;}
             if(!WindowHostPolicy.currentTarget(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task),Wire.PKG.equals(pkg),
-                "com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg),LauncherGuard.PACKAGE.equals(pkg),Wire.allowedPackage(pkg))){
+                "com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg),dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(pkg),Wire.allowedPackage(pkg))){
                 if(!quiet)Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
             }
             if(activeTask>0&&task.taskId==activeTask){if(!quiet)Toast.makeText(this,"当前应用已经是小窗",Toast.LENGTH_SHORT).show();return;}

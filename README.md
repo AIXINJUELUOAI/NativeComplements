@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前运行源码版本：**0.11.7-aod-fix1**（versionCode 165），仅维护主模块；Alive 壁纸仍为 Beta。当前进度、验证范围与限制见[接入与架构索引](<docs/adaptation/README.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前运行源码版本：**0.12.0-community1**（versionCode 166），仅维护主模块；保留 code165 Alive Beta，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前进度与验证见[接入索引](<docs/adaptation/README.md>)、[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 
@@ -17,10 +17,10 @@
 需要已 root、安装兼容现代 libxposed API 101 的 LSPosed 环境。当前主要针对已核对的 **Android 17 / API 37** 系统接口适配；最低安装版本为 Android 14，但能安装不等于所有功能可用。
 
 1. 安装 APK，在 LSPosed 中启用“类原生补全计划”。
-2. 勾选模块既定的三个作用域：**系统框架、系统界面、Pixel 桌面**。
+2. 模块声明四个作用域：**系统框架、系统界面、Pixel 桌面、Launcher3**；桌面只选择当前系统实际存在的一项。
 3. 自行重启手机后，进入模块按需开启功能。
 
-作用域对应 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`。其他桌面不代表已适配。升级请使用相同签名的 APK，不要为了升级先卸载，以免丢失设置。
+作用域对应 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`、`com.android.launcher3`。实际接入按宿主接口与 HOME／UID 核验，其他桌面不代表已适配。升级请使用相同签名的 APK，不要为了升级先卸载，以免丢失设置。
 
 ## 功能全览
 

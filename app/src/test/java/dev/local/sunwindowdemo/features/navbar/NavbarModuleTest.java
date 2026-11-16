@@ -13,7 +13,7 @@ import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 36, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE)
 public class NavbarModuleTest {
     private final List<String> events = new ArrayList<>();
     private final List<Throwable> failures = new ArrayList<>();

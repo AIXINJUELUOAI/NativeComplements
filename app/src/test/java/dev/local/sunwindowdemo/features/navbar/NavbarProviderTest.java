@@ -15,7 +15,7 @@ import org.robolectric.shadows.ShadowBinder;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 36, manifest = Config.NONE)
+@Config(sdk = 35, manifest = Config.NONE)
 public class NavbarProviderTest {
     private final Context context = RuntimeEnvironment.getApplication();
 
@@ -71,7 +71,16 @@ public class NavbarProviderTest {
         pkg.applicationInfo = new ApplicationInfo();
         pkg.applicationInfo.packageName = pkg.packageName;
         pkg.applicationInfo.uid = 54321;
-        org.robolectric.Shadows.shadowOf(context.getPackageManager()).installPackage(pkg);
+        pkg.applicationInfo.flags = ApplicationInfo.FLAG_SYSTEM;
+        var pm = org.robolectric.Shadows.shadowOf(context.getPackageManager());
+        pm.installPackage(pkg);
+        var home = new android.content.pm.ResolveInfo();
+        home.activityInfo = new android.content.pm.ActivityInfo();
+        home.activityInfo.packageName = pkg.packageName;
+        home.activityInfo.name = pkg.packageName + ".Launcher";
+        home.activityInfo.applicationInfo = pkg.applicationInfo;
+        pm.setResolveInfosForIntent(new android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_HOME), java.util.List.of(home));
         NavbarStore.setEnabled(context, true);
         ShadowBinder.setCallingUid(54321);
         Bundle extras = new Bundle();
@@ -79,6 +88,9 @@ public class NavbarProviderTest {
         Bundle result = provider().call("system", "com.android.systemui", extras);
         assertEquals(java.util.Set.of("enabled"), result.keySet());
         assertTrue(result.getBoolean("enabled"));
+        pm.setResolveInfosForIntent(new android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_HOME), java.util.List.of());
+        assertThrows(SecurityException.class, () -> provider().call("system", null, null));
         ShadowBinder.setCallingUid(54322);
         assertThrows(SecurityException.class, () -> provider().call("system", pkg.packageName, extras));
     }

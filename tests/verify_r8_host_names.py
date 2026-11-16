@@ -23,7 +23,8 @@ REQUIRED = {
         "com.android.launcher3.taskbar.TaskbarInsetsController", "android.view.InsetsFrameProvider",
         "setProviderInsets", "draw", "dispatchDraw", "callApplicationOnCreate"},
     (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit", "com.android.systemui.shared.system.InputMonitorCompat", "inputMonitorCompat", "mInputMonitor", "pilferPointers"},
-    (PREFIX + "features/shade/ComposeShadeLayout;", "install"): {"kotlin.coroutines.Continuation"},
+    (PREFIX + "features/shade/ComposeShadeLayout;", "resolve"): {"kotlin.coroutines.Continuation", "com.android.systemui.shade.data.repository.ShadeConfigRepository"},
+    (PREFIX + "features/shade/MobileSignalBinder;", "install"): {"com.android.systemui.statusbar.pipeline.mobile.ui.binder.MobileIconBinder"},
     (PREFIX + "features/shade/SignalDisplay;", "install"): {"kotlin.Pair"},
     (PREFIX + "features/shade/SignalDisplay;", "installStacked"): {
         "kotlin.Pair", "androidx.compose.runtime.ParcelableSnapshotMutableIntState",

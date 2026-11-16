@@ -20,7 +20,7 @@ final class RotationSuggestion {
         app.registerReceiver(new android.content.BroadcastReceiver(){
             @Override public void onReceive(android.content.Context c,android.content.Intent intent){
                 try {
-                    if(getSentFromUid()!=app.getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid)return;
+                    if(!dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(app,getSentFromUid()))return;
                     if(intent.hasExtra("hook")){
                         RotationDiagnostics.update("launcher_hook",intent.getStringExtra("hook"));
                         if(SystemUiHost.live!=null)SystemUiHost.live.publishRotationSettings();return;
