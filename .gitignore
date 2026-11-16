@@ -21,6 +21,21 @@ local.properties
 /_files.txt
 /scaled_*.png
 
+# Retired local prototypes and one-off handoff artifacts
+/demos/
+/navbar-demo/
+/000[1-6]-*.patch
+/NativeComplements-review-*.zip
+/README (1).md
+/REVIEW.md
+/NativeComplements-0.9.10-性能分析.md
+/docs/branch-integration-audit-2026-11-13.md
+/docs/coolapk-0.9.18.md
+/docs/navigation-bar-adaptation-discussion.md
+/baseline/*.apk
+/tests/package_navbar_demo.py
+/tests/verify_navbar_demo_target.py
+
 # Reproducible outputs and temporary work
 **/build/
 deliverables/
