@@ -31,7 +31,8 @@ public final class AliveRenderer implements AutoCloseable {
     private long scene,frameTime;
     private int width,height,photo,mask,decorator,mode=1,seed=-1;
     private boolean seedAnimate,deferredSleep;
-    private Runnable sleepPresented,framePresented;
+    private Runnable sleepPresented,framePresented,wakePresented,wakeFinished,sleepFinished;
+    private boolean deferredWake,wakeStarted;
     private volatile Runnable unavailable;
     private float aspect;
     private boolean visible,holding,framePosted,failed,firstFrame,endpointPending;
@@ -77,13 +78,16 @@ public final class AliveRenderer implements AutoCloseable {
         post(()->changeMode(next,animate));
     }
     /** One-shot acknowledgement of a real submitted buffer; never creates a hidden scene. */
-    public void presented(Runnable callback){post(()->{
-        framePresented=callback;
+    public void presented(Runnable callback){presented(callback,null);}
+    public void presented(Runnable callback,Runnable endpoint){post(()->{
+        framePresented=callback;if(endpoint!=null&&mode==0)sleepFinished=endpoint;
         if(visible&&scene!=0)schedule();
     });}
     /** Called once by the Service when a real visible sleep episode can actually start. */
-    public void sleep(int lastAwakePhase,boolean animate,Runnable presented){
+    public void sleep(int lastAwakePhase,boolean animate,Runnable presented){sleep(lastAwakePhase,animate,presented,null);}
+    public void sleep(int lastAwakePhase,boolean animate,Runnable presented,Runnable endpoint){
         post(()->{
+            wakeStarted=false;deferredWake=false;wakePresented=wakeFinished=null;sleepFinished=endpoint;
             boolean absent=scene==0,known=lastAwakePhase==1||lastAwakePhase==2;
             if(animate&&(!absent||known)){
                 // Present a fully decoded starting frame before starting any collapse clock.
@@ -98,8 +102,26 @@ public final class AliveRenderer implements AutoCloseable {
             }
         });
     }
+    /** Only a real native wake may seed a cold scene from AMBIENT; repeats just observe it. */
+    public void wake(int target,Runnable presented,Runnable endpoint){
+        if(target!=1&&target!=2)throw new IllegalArgumentException("wake scene");
+        post(()->{
+            if(failed)return;
+            if(presented!=null)wakePresented=presented;
+            if(endpoint!=null)wakeFinished=endpoint;
+            if(!wakeStarted){
+                wakeStarted=true;deferredSleep=false;sleepPresented=sleepFinished=null;
+                mode=target;animateMode=true;deferredWake=true;lensUntil=0;sample.clear();endpointPending=true;
+                seed=scene==0?0:-1;seedAnimate=scene==0;
+            }
+            if(visible){if(scene==0)start();else schedule();}
+        });
+    }
+    /** Forget observer tickets, not the native animation already in progress. */
+    public void clearHandoff(){post(()->{framePresented=sleepFinished=wakePresented=wakeFinished=null;});}
     private void changeMode(int next,boolean animate){
-            if(next!=mode||!animate){deferredSleep=false;sleepPresented=null;}
+            if(next!=mode||!animate){deferredSleep=false;sleepPresented=null;sleepFinished=null;}
+            if(!animate){deferredWake=false;wakeStarted=false;wakePresented=wakeFinished=null;}
             if(mode==next){
                 if(!animate){
                     if(scene!=0&&(textures.active()||motion.transitionActive()||frameMotion!=null&&frameMotion.active()))
@@ -138,7 +160,7 @@ public final class AliveRenderer implements AutoCloseable {
     public void visible(boolean value,boolean retainScene){post(()->{
         boolean changed=visible!=value||holding;visible=value;holding=false;
         if(!value){
-            framePresented=null;
+            framePresented=sleepFinished=wakePresented=wakeFinished=null;
             if(!retainScene){seed=-1;seedAnimate=false;deferredSleep=false;sleepPresented=null;}
             if(retainScene&&scene!=0){
                 if(changed){motion.pause(true);textures.pause(true);if(frameMotion!=null)frameMotion.pause(true);}
@@ -225,7 +247,7 @@ public final class AliveRenderer implements AutoCloseable {
             NativeScene.texture(scene,0,mask,spec.size,spec.size);
             masks=new MaskFrames(context,handler,()->{if(visible&&scene!=0)render(frameTime);},spec);
         }
-        if(initial!=mode&&!deferredSleep){
+        if(initial!=mode&&!deferredSleep&&!deferredWake){
             textures.change(mode,animate);if(frameMotion!=null)frameMotion.change(mode,motion);motion.change(mode);
             if(!animate){if(frameMotion!=null)frameMotion.finish();motion.finish();}
         }
@@ -295,9 +317,19 @@ public final class AliveRenderer implements AutoCloseable {
                 Runnable presented=sleepPresented;sleepPresented=null;if(presented!=null)presented.run();
                 android.util.Log.i("NativeComplements","ALIVE_RENDER sleep-presented target=0");
             }
+            if(deferredWake){
+                deferredWake=false;
+                Runnable presented=wakePresented;wakePresented=null;if(presented!=null)presented.run();
+                textures.change(mode,true);if(frameMotion!=null)frameMotion.change(mode,motion);motion.change(mode);
+            }else if(wakePresented!=null){Runnable presented=wakePresented;wakePresented=null;presented.run();}
             if(firstFrame){android.util.Log.i("NativeComplements","ALIVE_RENDER first-frame mode="+mode);firstFrame=false;}
             boolean active=textures.active()||motion.transitionActive()||(frameMotion!=null?frameMotion.active():mode==0&&time<lensUntil);
             if(!active&&!resumedSample&&endpointPending){android.util.Log.i("NativeComplements","ALIVE_RENDER endpoint mode="+mode+" ratios="+motion.values[0]+","+motion.values[1]+","+motion.values[2]+" textures="+settings.lock+"/"+settings.home);endpointPending=false;}
+            if(!active&&!resumedSample){
+                Runnable endpoint=mode==0?sleepFinished:wakeFinished;
+                if(mode==0)sleepFinished=null;else wakeFinished=null;
+                if(endpoint!=null)endpoint.run();
+            }
             if(active||resumedSample)schedule();
         }catch(Exception|LinkageError failure){fail(failure);}
     }
@@ -305,7 +337,7 @@ public final class AliveRenderer implements AutoCloseable {
         if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(draw);
     }
     private void release(){
-        framePresented=null;
+        framePresented=sleepFinished=wakePresented=wakeFinished=null;wakeStarted=false;deferredWake=false;
         if(scene!=0||display!=EGL14.EGL_NO_DISPLAY)android.util.Log.i("NativeComplements","ALIVE_RENDER release mode="+mode+" visible="+visible);
         stopFrames();
         sample.clear();if(textures!=null){textures.close();textures=null;}

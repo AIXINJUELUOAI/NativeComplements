@@ -2,7 +2,14 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.5-alive-trace1 / code153（原生转场定位包；不是视觉修复）
+### 当前增量：0.11.6-alive-takeover1 / code154（壁纸视觉接管测试版）
+
+- 用户明确要进一步接管，而非继续降低偶发次数。153亮屏样本确认scene保留、Alive真实展开，同时旧sleep视觉门在interactive后退出；不再把该轮归因场景丢失。不要求反复泛抓日志，转实现[独立wake首swap交接](<alive-systemui.md>)。
+- wake使用独立UID/nonce/defaultdisplay握手与固定2500ms上限，真实可见有效Surface成功swap后才裁同root LightReveal输出、Alive真实端点且native reveal=1后撤（仍不续2500上限）；sleep的window flag/认证准入不向wake放宽，原生setAlpha/reveal/opaque/500ms状态链/电源逻辑照常。新wake可覆盖旧sleep已过期的长AOD，明确真实wake允许冷AMBIENT种子，普通hidden恢复不补播。
+- 内容只在sleep ACK到真实done/cancel/cap短暂裁精确clockface与notification stack子View，原生时钟/tick、通知多贡献alpha原样，未知父override回原生，撤门invalidate恢复最新状态，不藏root/认证/UDFPS、不写alpha。wake时钟/通知仍原生交互，**不把本版称所有系统动画完全替换或首帧零闪**。
+- 本用户AOD开关observer缓存统一服务准入：关/未知不播AMBIENT进出，LOCK→HOME仍Alive；不写系统值。用户已取消长侧滑恢复，无源码手势改动，上滑小窗留待另期。最终3类共9项定向通过（Phase3/Access5/Trace1），含AOD关闭/未知与重新开启后下轮sleep、wake/sleep期限及Binder状态序列；未跑全套，不拿值测试假装GPU/Xposed时序覆盖。独立只读复核与Lead收口修正AOD切换闭锁、旧wake期限后补播、Alive先于native端点撤clip及旧布局cancel跨episode，未遗留已证P1/P2；原sleep预算仍只generation，视觉ACK/端点/保留资格另严格epoch，不用简单旧代guard破坏lateSurface。release/R8/原签名/154身份7入口3scope/Direct Boot/退役边界及新内容DEX保留全部通过；[接管主APK](<../../deliverables/NativeComplements-0.11.6-alive-takeover1.apk>) SHA256 `92c8faa6cb705935441afa388a5d65845e163625065ffedd357b4533e36dbac6`。实机呈现/父RenderNode裁剪及观感仍待用户手动安装完整重启后验证；不自动安装/重启/改设置。
+
+### 历史增量：0.11.5-alive-trace1 / code153（原生转场定位包；不是视觉修复）
 
 - 用户确认锁屏按电源息屏仍见壁纸及clock/notification原生效果；20:52:24该轮Alive起始帧约6ms、safe ACK约8ms、VISUAL约18ms，不能归因Hook未装或Alive未启动。原生锁屏→AOD状态、LightReveal、clock形变与通知是多路链，不全局禁动画、不改状态/电源/认证。
 - 仅[诊断接线](<alive-systemui.md>)新增同episode `ep`关联的有限边沿日志；保现有首swap/UID/nonce/真实showing与回退，未知ABI的观测独立失败，不改变原参数返回/Flow值。不截图、不记录通知内容、不逐帧刷日志，不新增scope。152后已提交的Alive图标也随本包纳入，不混入其他功能开发。

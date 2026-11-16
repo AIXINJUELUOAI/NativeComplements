@@ -62,7 +62,7 @@ def main():
         assert "assets/licenses/openalive/NOTICE.txt" in names
         required_types = {"Lorg/aliveclean/NativeScene;", "Lorg/aliveclean/AliveRenderer;"} | {
             "Ldev/local/sunwindowdemo/features/alive/" + name + ";" for name in (
-                "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveAmbientAccess", "AliveSystemUi", "AliveSleepHandoff", "AliveTransitionTrace")}
+                "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveAmbientAccess", "AliveSystemUi", "AliveSleepHandoff", "AliveTransitionTrace", "AliveVisualContent")}
         required_types |= {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
             "CornerGesture", "FanView", "AndroidWindowAdmission", "WindowAdmission")}
         found = set()

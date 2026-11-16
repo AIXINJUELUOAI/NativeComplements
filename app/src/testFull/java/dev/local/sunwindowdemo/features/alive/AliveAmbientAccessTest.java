@@ -10,6 +10,27 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35,manifest=Config.NONE)
 public class AliveAmbientAccessTest {
+    @Test public void handoffRequestsHaveSeparateWakeDeadlineAndOrderedNonceReplies()throws Exception{
+        java.util.List<Integer> replies=new java.util.ArrayList<>();String token=java.util.UUID.randomUUID().toString();
+        android.os.Binder reply=new android.os.Binder(){
+            @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel result,int flags){
+                assertEquals(AliveSleepHandoff.REPLY_CODE,code);data.enforceInterface("dev.nativecomplements.module.alive.SleepReply");
+                assertEquals(token,data.readString());assertEquals(0,data.readInt());replies.add(data.readInt());data.enforceNoDataAvail();return true;
+            }
+        };
+        android.os.Bundle extras=new android.os.Bundle();extras.putString("token",token);extras.putBinder("reply",reply);
+        long now=android.os.SystemClock.uptimeMillis();extras.putLong("expires",now+2500);
+        AliveSleepHandoff.Request wake=AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE_WAKE,extras,0);
+        assertNotNull(wake);assertTrue(wake.waking);wake.ready();wake.finished();wake.cancel();
+        assertEquals(java.util.List.of(1,2,0),replies);
+        extras.putLong("expires",now+2501);assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE_WAKE,extras,0));
+        extras.putLong("expires",now+7800);
+        AliveSleepHandoff.Request sleep=AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,0);assertNotNull(sleep);assertFalse(sleep.waking);
+        assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,1));
+        extras.putLong("expires",now);assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,0));
+        extras.putLong("expires",now+100);extras.putString("token","bad");assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,0));
+        extras.putString("token",token);extras.putBinder("reply",null);assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,0));
+    }
     @Test public void systemAodPreferenceDistinguishesOffOnAndUnknown(){
         var resolver=org.robolectric.RuntimeEnvironment.getApplication().getContentResolver();
         android.provider.Settings.Secure.putString(resolver,AliveSystemState.AOD_SETTING,null);

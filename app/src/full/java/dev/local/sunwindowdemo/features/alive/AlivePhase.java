@@ -66,6 +66,13 @@ public final class AlivePhase {
         return display==DisplayState.ON?interactive||ownAmbient&&sleeping:
             (display==DisplayState.DOZE||display==DisplayState.DOZE_SUSPEND)&&ownAmbient&&ambient;
     }
+    /** AOD off/unknown never selects AMBIENT just because a native ambient flag is late. */
+    public static int phase(boolean ownAmbient,boolean interactive,boolean ambient,boolean locked,boolean sleeping){
+        return ownAmbient&&(sleeping||!interactive||ambient)?AMBIENT:locked?LOCK:HOME;
+    }
+    public static boolean animate(boolean ownAmbient,int previous,int next){
+        return ownAmbient||previous!=AMBIENT&&next!=AMBIENT;
+    }
     /** Always derive from current platform facts; commands never leave an unlocked phase latched. */
     public static int phase(boolean interactive,boolean ambient,boolean locked){
         return !interactive||ambient?AMBIENT:locked?LOCK:HOME;

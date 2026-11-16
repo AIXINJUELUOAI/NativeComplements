@@ -58,6 +58,21 @@ public class AlivePhaseTest {
         assertFalse(sleep.begin(2350)); // An ended episode is not a fresh sleep, even if duplicate signals follow.
         assertFalse(wake.arm(2350,true,sleep));
     }
+    @Test public void disabledOrUnknownAodNeverUsesAmbientButKeepsLockHomeAnimation(){
+        for(boolean interactive:new boolean[]{false,true})for(boolean ambient:new boolean[]{false,true}){
+            assertEquals(AlivePhase.LOCK,AlivePhase.phase(false,interactive,ambient,true,true));
+            assertEquals(AlivePhase.HOME,AlivePhase.phase(false,interactive,ambient,false,false));
+        }
+        assertFalse(AlivePhase.animate(false,AlivePhase.AMBIENT,AlivePhase.LOCK));
+        assertFalse(AlivePhase.animate(false,AlivePhase.HOME,AlivePhase.AMBIENT));
+        assertTrue(AlivePhase.animate(false,AlivePhase.LOCK,AlivePhase.HOME));
+        assertTrue(AlivePhase.animate(true,AlivePhase.AMBIENT,AlivePhase.LOCK));
+        AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
+        sleep.end(); // Observer cancels the old AOD policy while already awake.
+        assertFalse(sleep.begin(100));
+        sleep.wake(); // Actual ON + interactive + !ambient resets only the old sleep latch.
+        assertTrue(sleep.begin(200));assertTrue(sleep.present(210));assertTrue(sleep.start(220));
+    }
     @Test public void phaseUsesCurrentFactsAndNeverLatchesAnUnlockCommand(){
         for(int bits=0;bits<8;bits++){
             boolean interactive=(bits&1)!=0,ambient=(bits&2)!=0,locked=(bits&4)!=0;

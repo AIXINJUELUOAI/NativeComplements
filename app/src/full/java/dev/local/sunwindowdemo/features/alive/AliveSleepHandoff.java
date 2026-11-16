@@ -24,20 +24,24 @@ import java.util.function.Consumer;
 public final class AliveSleepHandoff {
     public static final String ACTION_PREPARE="dev.nativecomplements.module.alive.PREPARE_SLEEP";
     public static final String ACTION_CANCEL="dev.nativecomplements.module.alive.CANCEL_SLEEP";
+    public static final String ACTION_PREPARE_WAKE="dev.nativecomplements.module.alive.PREPARE_WAKE";
     public static final int REPLY_CODE=IBinder.FIRST_CALL_TRANSACTION;
     private static final String DESCRIPTOR="dev.nativecomplements.module.alive.SleepReply";
-    private static final long MAX_MS=7800;
+    private static final long MAX_MS=7800,WAKE_MS=2500;
     private AliveSleepHandoff() {}
 
     public static final class Request {
         public final long expires;
         public final String token;
+        public final boolean waking;
         private final IBinder reply;
         private final int display;
-        private Request(long expires,String token,IBinder reply,int display){this.expires=expires;this.token=token;this.reply=reply;this.display=display;}
+        private Request(long expires,String token,IBinder reply,int display,boolean waking){this.expires=expires;this.token=token;this.reply=reply;this.display=display;this.waking=waking;}
         public boolean expired(){return SystemClock.uptimeMillis()>=expires;}
         /** Call only after this visible Engine's valid Surface has successfully swapped its sleep frame. */
         public void ready(){send(1);}
+        /** Only after this episode's real endpoint buffer has swapped successfully. */
+        public void finished(){send(2);}
         public void cancel(){send(0);}
         private void send(int state){
             if(expired()||!reply.isBinderAlive())return;
@@ -48,12 +52,13 @@ public final class AliveSleepHandoff {
         }
     }
     public static Request parse(String action,Bundle extras,int displayId){
-        if(!ACTION_PREPARE.equals(action)||extras==null||displayId!=Display.DEFAULT_DISPLAY)return null;
+        boolean waking=ACTION_PREPARE_WAKE.equals(action);
+        if((!ACTION_PREPARE.equals(action)&&!waking)||extras==null||displayId!=Display.DEFAULT_DISPLAY)return null;
         try{
             long expires=extras.getLong("expires"),now=SystemClock.uptimeMillis();
             String token=extras.getString("token");IBinder reply=extras.getBinder("reply");
-            return expires>now&&expires-now<=MAX_MS&&token!=null&&token.length()==36&&reply!=null
-                ?new Request(expires,token,reply,displayId):null;
+            return expires>now&&expires-now<=(waking?WAKE_MS:MAX_MS)&&token!=null&&token.length()==36&&reply!=null
+                ?new Request(expires,token,reply,displayId,waking):null;
         }catch(RuntimeException unknown){return null;}
     }
 
@@ -74,7 +79,8 @@ public final class AliveSleepHandoff {
             hooks.add(module.hook(h.draw).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 View view=(View)chain.getThisObject();
                 boolean clip=false;
-                try{if(h.sameRoot(view))h.scrim=new WeakReference<>(view);clip=h.enabled&&h.ready&&h.safe()&&h.sameRoot(view);}catch(ReflectiveOperationException|RuntimeException unknown){h.cancel("draw-unknown");}
+                try{if(h.sameRoot(view))h.scrim=new WeakReference<>(view);clip=h.enabled&&h.ready&&h.visualSafe()&&h.sameRoot(view);
+                    if(clip&&h.waking&&h.contentDone&&h.revealAmount.getFloat(view)>=1f){h.cancelLater("wake-finished");clip=false;}}catch(ReflectiveOperationException|RuntimeException unknown){h.cancel("draw-unknown");}
                 h.traceClip(view,clip);
                 if(clip&&!h.visual){h.visual=true;h.log.accept("ALIVE_HANDOFF_VISUAL ready=true ep="+h.episode());}
                 if(!clip)return chain.proceed();
@@ -85,7 +91,7 @@ public final class AliveSleepHandoff {
                 Object result=chain.proceed();h.main.post(h::begin);return result;
             }));
             hooks.add(module.hook(h.wake).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object result=chain.proceed();h.main.post(()->{h.cancel("wake");h.sleepSignalled=false;});return result;
+                Object result=chain.proceed();h.main.post(h::wakingUp);return result;
             }));
             hooks.add(module.hook(h.sleepAnimations).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 if(Looper.myLooper()!=Looper.getMainLooper())return chain.proceed();
@@ -115,6 +121,9 @@ public final class AliveSleepHandoff {
                 if(!module.deoptimize(method))throw new IllegalStateException("sleep handoff deoptimize");
             h.enabled=true;selection.changes(()->h.main.post(h::selectionChanged));
             log.accept("ALIVE_HANDOFF_READY native window and first-swap scoped");
+            // Content output is separate from wallpaper/state/power, and unavailable ABI stays native.
+            try{h.contentRefresh=AliveVisualContent.install(module,loader,h::contentEpisode,h::traceRoot,log);}
+            catch(Throwable unavailable){log.accept("ALIVE_CONTENT_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
             // Diagnostics are optional: their failure never changes the installed handoff.
             try{AliveTransitionTrace.install(module,loader,h::traceEpisode,()->h.traceId,h::traceRoot,log);}
             catch(Throwable unavailable){log.accept("ALIVE_TRACE_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
@@ -131,11 +140,12 @@ public final class AliveSleepHandoff {
         final Field root,params,state,keyguard,showing,occluded,going,fading,bouncer,depth,depthOwner,wallpapers,repository;
         final Field stateShowing,stateOccluded,stateBouncer,stateGoing;
         final Method layout,apply,draw,sleep,wake,sleepAnimations,startAnimation,shouldPlay,lazyGet;
-        final Field nativeWindow,nativeScrim,nativePlaying,nativeAnimator,nativeDecision,animations;
+        final Field nativeWindow,nativeScrim,nativePlaying,nativeAnimator,nativeDecision,animations,revealAmount;
         final ThreadLocal<Object> sleepScope=new ThreadLocal<>(),admissionScope=new ThreadLocal<>();
         WeakReference<Object> window=new WeakReference<>(null);
         WeakReference<View> scrim=new WeakReference<>(null);
-        boolean enabled,active,ready,visual,restoring,sleepSignalled,resent;
+        boolean enabled,active,ready,visual,restoring,sleepSignalled,wakeSignalled,resent,waking,contentDone;
+        Runnable contentRefresh=()->{};
         IBinder response;
         DisplayManager displays;
         Context observedContext;
@@ -217,6 +227,7 @@ public final class AliveSleepHandoff {
             repository=field(interactor,"wallpaperRepository",type(loader,"com.android.systemui.wallpapers.data.repository.WallpaperRepositoryImpl"));
             layout=owner.getDeclaredMethod("applyWindowLayoutParams");apply=owner.getDeclaredMethod("apply",windowState);
             draw=type(loader,"com.android.systemui.statusbar.LightRevealScrim").getDeclaredMethod("onDraw",Canvas.class);
+            revealAmount=field(draw.getDeclaringClass(),"revealAmount",float.class);
             Class<?> service=type(loader,"com.android.systemui.keyguard.KeyguardService$2");
             sleep=service.getDeclaredMethod("onStartedGoingToSleep",int.class);wake=service.getDeclaredMethod("onStartedWakingUp",int.class,boolean.class);
             Class<?> controller=type(loader,"com.android.systemui.statusbar.phone.ScreenOffAnimationController");
@@ -266,27 +277,43 @@ public final class AliveSleepHandoff {
             return !occluded.getBoolean(guard)&&!going.getBoolean(guard)&&!fading.getBoolean(guard)&&!bouncer.getBoolean(guard)
                 &&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
         }
-        boolean safe()throws ReflectiveOperationException {
+        String contentEpisode(){
+            try{return !waking&&ready&&!contentDone&&safe()?episode():null;}
+            catch(ReflectiveOperationException|RuntimeException unknown){return null;}
+        }
+        boolean visualSafe()throws ReflectiveOperationException {return waking?safe(true):safe();}
+        boolean safe()throws ReflectiveOperationException {return !waking&&safe(false);}
+        boolean safe(boolean awake)throws ReflectiveOperationException {
+            if(Looper.myLooper()!=Looper.getMainLooper())return false;
             Object owner=window.get();View view=view();
             if(!enabled||!active||SystemClock.uptimeMillis()>=expires||owner==null||view==null||!view.isAttachedToWindow())return false;
             Display display=view.getDisplay();
             if(display==null||display.getDisplayId()!=Display.DEFAULT_DISPLAY||(display.getState()!=Display.STATE_ON&&display.getState()!=Display.STATE_DOZE))return false;
             PowerManager power=view.getContext().getSystemService(PowerManager.class);
-            if(power==null||power.isInteractive())return false;
+            if(power==null||power.isInteractive()!=awake||awake&&display.getState()!=Display.STATE_ON)return false;
             Object now=selection.token(repo(owner));
             if(!(identity instanceof AliveSystemUi.MatchToken old)||!(now instanceof AliveSystemUi.MatchToken current)||!old.same(current))return false;
             Object guard=keyguard.get(owner),snapshot=state.get(owner);
             return showing.getBoolean(guard)&&!occluded.getBoolean(guard)&&!going.getBoolean(guard)&&!fading.getBoolean(guard)&&!bouncer.getBoolean(guard)
                 &&stateShowing.getBoolean(snapshot)&&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
         }
+        void wakingUp(){
+            if(wakeSignalled)return;
+            wakeSignalled=true;cancel("wake");sleepSignalled=false;begin(true);
+        }
         void begin(){
             if(!enabled||sleepSignalled)return;
-            sleepSignalled=true;
+            wakeSignalled=false;
+            if(active)cancel("new-sleep");
+            sleepSignalled=true;begin(false);
+        }
+        void begin(boolean awake){
+            if(!enabled||active)return;
             try{
                 Object owner=window.get();View view=view();if(owner==null||view==null||view.getDisplay()==null||view.getDisplay().getDisplayId()!=0)return;
                 Object repo=repo(owner);Object token=selection.token(repo);int expected=selection.uid(repo);
                 if(token==null||expected<0)return;
-                identity=token;uid=expected;nonce=UUID.randomUUID().toString();expires=SystemClock.uptimeMillis()+MAX_MS;active=true;ready=false;resent=false;
+                identity=token;uid=expected;nonce=UUID.randomUUID().toString();expires=SystemClock.uptimeMillis()+(awake?WAKE_MS:MAX_MS);active=true;ready=false;resent=false;waking=awake;contentDone=false;
                 traceId=UUID.randomUUID().toString().substring(0,8);clipEdges=0;clipKnown=false;
                 rotation=view.getDisplay().getRotation();width=view.getWidth();height=view.getHeight();
                 displays=view.getContext().getSystemService(DisplayManager.class);
@@ -295,7 +322,7 @@ public final class AliveSleepHandoff {
                 IntentFilter filter=new IntentFilter(Intent.ACTION_WALLPAPER_CHANGED);filter.addAction("android.intent.action.USER_SWITCHED");
                 observedContext.registerReceiver(changes,filter,Context.RECEIVER_EXPORTED);
                 observedContext.getContentResolver().registerContentObserver(Settings.Secure.getUriFor("doze_always_on"),false,settingObserver);
-                view.addOnAttachStateChangeListener(attached);main.postDelayed(timeout,MAX_MS);
+                view.addOnAttachStateChangeListener(attached);main.postDelayed(timeout,awake?WAKE_MS:MAX_MS);
                 String episode=nonce;int expectedUid=uid;
                 response=new Binder(){
                     @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags){
@@ -307,17 +334,18 @@ public final class AliveSleepHandoff {
                         }catch(RuntimeException malformed){return false;}
                     }
                 };
-                send(ACTION_PREPARE,response);
-                refresh();log.accept("ALIVE_HANDOFF_PREPARE expires="+expires+" ep="+episode());
+                send(awake?ACTION_PREPARE_WAKE:ACTION_PREPARE,response);
+                refresh();log.accept("ALIVE_HANDOFF_PREPARE waking="+waking+" expires="+expires+" ep="+episode());
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("begin-failed");}
         }
         void beforeLayout(Object owner)throws ReflectiveOperationException {
             if(restoring||!active||owner!=window.get())return;
+            if(waking){if(visual&&!visualSafe())cancelLater("wake-state");return;}
             if(safe()){
                 WindowManager.LayoutParams value=(WindowManager.LayoutParams)params.get(owner);
                 layoutOriginal=value.flags;layoutPending=true;value.flags|=WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
                 View overlay=scrim.get();if(ready&&overlay!=null)overlay.invalidate();
-            }else if(visual)main.post(()->cancel("state"));
+            }else if(visual)cancelLater("state");
         }
         void afterLayout(Object owner){
             if(!layoutPending)return;
@@ -337,9 +365,21 @@ public final class AliveSleepHandoff {
             if(!active||!Objects.equals(nonce,token))return;
             if(status==0){cancel("engine-cancel");return;}
             try{
-                if(status!=1||SystemClock.uptimeMillis()>=expires){cancel("unsafe-ack");return;}
+                if(SystemClock.uptimeMillis()>=expires){cancel("unsafe-ack");return;}
+                if(status==2&&ready){
+                    contentDone=true;
+                    if(waking){
+                        View reveal=scrim.get();
+                        if(reveal!=null&&sameRoot(reveal)&&revealAmount.getFloat(reveal)>=1f)cancel("wake-finished");
+                        else if(reveal!=null)reveal.invalidate();
+                        return;
+                    }
+                    contentRefresh.run();log.accept("ALIVE_HANDOFF_FINISHED waking=false ep="+episode());return;
+                }
+                if(status!=1){cancel("unsafe-ack");return;}
+                if(ready)return; // Repeated ACKs cannot re-open completed content output.
                 ready=true;View value=scrim.get();if(value!=null)value.invalidate();
-                refresh();log.accept("ALIVE_HANDOFF_FIRST_SWAP safe="+safe()+" ep="+episode());
+                refresh();log.accept("ALIVE_HANDOFF_FIRST_SWAP waking="+waking+" safe="+visualSafe()+" ep="+episode());
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("ack-failed");}
         }
         void selectionChanged(){
@@ -360,6 +400,11 @@ public final class AliveSleepHandoff {
                 enabled=false;log.accept("ALIVE_HANDOFF_RESTORE_FAILED disabled "+unknown.getClass().getSimpleName());
             }
             View value=scrim.get();if(value!=null)value.invalidate();
+            contentRefresh.run();
+        }
+        void cancelLater(String reason){
+            String pending=nonce;
+            main.post(()->{if(active&&Objects.equals(nonce,pending))cancel(reason);});
         }
         void cancel(String reason){
             if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->cancel(reason));return;}
