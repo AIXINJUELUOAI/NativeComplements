@@ -68,8 +68,15 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
     private var accepted = false
     private var bufferAfter = 0L
     private var renderingKey: AlivePreviewCache.Key? = null
+    private var frameCheck: Runnable? = null
+    private var frameWatchdog: Runnable? = null
+    private var checksStarted = false
+    private var confirmationError = ""
     var onError: (String) -> Unit = {}
-    private val checkError = Runnable { renderer?.let { onError(it.error()) } }
+    private val checkError = Runnable { renderer?.let { onError(it.error().ifBlank { confirmationError }) } }
+    private fun diagnose(event: String, details: String = "") {
+        android.util.Log.i("NativeComplements", "ALIVE_PREVIEW phase=$scene generation=$generation event=$event $details")
+    }
 
     init {
         setBackgroundColor(android.graphics.Color.BLACK)
@@ -110,10 +117,9 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
         val texture = currentTexture ?: return
         val input = snapshot ?: return
         val ticket = ++generation
-        submitted = false; updated = false; accepted = false
+        submitted = false; updated = false; accepted = false; checksStarted = false; confirmationError = ""
         renderingKey = key()
-        // Old EGL has closed before this cutoff. EGL's automatic buffer timestamps use monotonic nanoseconds.
-        // A queued old TextureView update alone must not acknowledge this new renderer's frame.
+        // Retain the old-buffer cutoff; OEM timestamp origins still require real-device verification.
         bufferAfter = System.nanoTime()
         try {
             val target = Surface(texture)
@@ -121,6 +127,21 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
             renderTexture = texture
             val next = AliveRenderer(context, input)
             renderer = next
+            val cacheKey = renderingKey
+            val watchdog = Runnable {
+                if (generation == ticket && renderer === next && renderTexture === texture &&
+                    renderingKey == cacheKey && key() == cacheKey && active && enabled && !accepted && confirmationError.isBlank()) {
+                    confirmationError = "真实预览首帧未能确认，请离开页面后重试"
+                    diagnose("timeout", "cutoff=$bufferAfter timestamp=${texture.timestamp} submitted=$submitted updated=$updated")
+                    onError(next.error().ifBlank { confirmationError })
+                }
+                frameWatchdog = null
+            }
+            frameWatchdog = watchdog
+            main.postDelayed(watchdog, 3000)
+            next.onUnavailable {
+                main.post { if (generation == ticket && renderer === next) onError(next.error()) }
+            }
             next.mode(scene, false)
             next.attach(target, width, height)
             next.visible(true)
@@ -128,12 +149,10 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
                 main.post {
                     if (generation == ticket && renderer === next && renderTexture === texture) {
                         submitted = true
-                        acceptFrame(texture)
+                        diagnose("submitted", "cutoff=$bufferAfter updated=$updated")
+                        queueFrameCheck(texture)
                     }
                 }
-            }
-            next.onUnavailable {
-                main.post { if (generation == ticket && renderer === next) onError(next.error()) }
             }
             checkSoon()
         } catch (failure: Exception) {
@@ -144,22 +163,55 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
             onError(failure.message ?: "原生渲染库不可用")
         }
     }
-    private fun acceptFrame(texture: SurfaceTexture) {
+    private fun queueFrameCheck(texture: SurfaceTexture) {
         val next = renderer ?: return
-        if (accepted || !submitted || !updated || !active || !enabled || renderTexture !== texture ||
-            renderingKey != key() || next.error().isNotBlank() || texture.timestamp < bufferAfter) return
-        accepted = true
         val cacheKey = renderingKey ?: return
-        // Bound GPU readback as well as retained bytes. No per-frame capture or disk I/O.
-        val scale = minOf(1f, AlivePreviewCache.MAX_SIDE.toFloat() / maxOf(width, height))
-        try {
-            val bitmap = textureView.getBitmap(maxOf(1, (width * scale).toInt()), maxOf(1, (height * scale).toInt()))
-            if (bitmap != null) AlivePreviewCache.put(cacheKey, bitmap)
-        } catch (_: RuntimeException) { /* The confirmed real surface remains usable without a cached copy. */ }
-        catch (_: OutOfMemoryError) { /* Thumbnail allocation is optional, never replace it with a black bitmap. */ }
-        cover.setImageDrawable(null)
-        cover.visibility = View.GONE
-        onError("")
+        if (checksStarted || accepted || !submitted || !updated) return
+        checksStarted = true
+        val ticket = generation
+        var attempt = 0
+        val delays = longArrayOf(16, 50, 150)
+        val check = object : Runnable {
+            override fun run() {
+                if (generation != ticket || renderer !== next || renderTexture !== texture ||
+                    renderingKey != cacheKey || key() != cacheKey || !active || !enabled || accepted) return
+                if (next.error().isNotBlank()) { onError(next.error()); return }
+                val scale = minOf(1f, AlivePreviewCache.MAX_SIDE.toFloat() / maxOf(width, height))
+                val before = texture.timestamp
+                // TextureView's draw listener precedes RenderThread latch. Readback synchronizes that
+                // pending layer update; never call it from onSurfaceTextureUpdated/the drawing stack.
+                val bitmap = try {
+                    textureView.getBitmap(maxOf(1, (width * scale).toInt()), maxOf(1, (height * scale).toInt()))
+                } catch (_: RuntimeException) { null }
+                catch (_: OutOfMemoryError) { null }
+                val after = texture.timestamp
+                if (attempt == 0) diagnose("readback", "cutoff=$bufferAfter before=$before after=$after bitmap=${bitmap != null}")
+                if (after >= bufferAfter && next.error().isBlank()) {
+                    accepted = true
+                    frameCheck = null
+                    frameWatchdog?.let(main::removeCallbacks); frameWatchdog = null
+                    confirmationError = ""
+                    bitmap?.let { AlivePreviewCache.put(cacheKey, it) }
+                    cover.setImageDrawable(null)
+                    cover.visibility = View.GONE
+                    diagnose("accepted", "timestamp=$after attempts=${attempt + 1}")
+                    onError("")
+                    return
+                }
+                bitmap?.recycle() // Rejected copies have never been published to a cover or the cache.
+                attempt++
+                if (attempt < delays.size) main.postDelayed(this, delays[attempt]) else {
+                    frameCheck = null
+                    frameWatchdog?.let(main::removeCallbacks); frameWatchdog = null
+                    confirmationError = "真实预览首帧未能确认，请离开页面后重试"
+                    diagnose("timeout", "cutoff=$bufferAfter timestamp=$after attempts=$attempt")
+                    onError(next.error().ifBlank { confirmationError })
+                    // Keep a matching cached cover (or black placeholder), never expose an unconfirmed old buffer.
+                }
+            }
+        }
+        frameCheck = check
+        main.postDelayed(check, delays[0])
     }
     private fun checkSoon() {
         main.removeCallbacks(checkError)
@@ -168,6 +220,8 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
     private fun stop(restartAfterClose: Boolean = true) {
         ++generation
         submitted = false; updated = false; renderingKey = null
+        frameCheck?.let(main::removeCallbacks); frameCheck = null
+        frameWatchdog?.let(main::removeCallbacks); frameWatchdog = null
         main.removeCallbacks(checkError)
         val oldRenderer = renderer
         val oldSurface = surface
@@ -213,6 +267,10 @@ private class DraftPreviewView(context: Context) : FrameLayout(context), Texture
         return false // EGL must disconnect this exact native buffer queue before it is released.
     }
     override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {
-        if (renderTexture === texture) { updated = true; acceptFrame(texture) }
+        if (renderTexture === texture) {
+            if (!updated) diagnose("updated", "timestamp=${texture.timestamp} cutoff=$bufferAfter submitted=$submitted")
+            updated = true
+            queueFrameCheck(texture)
+        }
     }
 }

@@ -1,6 +1,10 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## 当前增量：0.11.5-alive-test1 / code149（不改SystemUI Hook）
+## 当前诊断：code152（未新增内容层Hook）
+
+151用户仍报熄屏闪真实时钟/日期/通知；152仅编辑卡片确认窄修，不是此问题已解决。真实树中LightRevealScrim与KeyguardRootView为兄弟，SharedNotificationContainer在root外，当前scrim空clip不会裁内容。root内同时含DeviceEntry/UDFPS/auth视觉，不可整root或Shade强alpha0/visibility隐藏；这两个容器继承ConstraintLayout且无自有draw/dispatchDraw，不能以getDeclaredMethod假称已适配。Root alpha Flow与通知原生多贡献min为真实候选，不能覆盖值后硬restore1，撤门必须让原生最新状态重算。将shouldDelayKeyguardShow复回true又会阻断当前ACK要求的真实locked/双showing，不能恢复旧1300ms猜改。尚无安全闭合的内容门实现；需同nonce/user/root下真实alpha/认证/转场边沿证据，再决定内容门与ACK/稳定AOD的撤门时机。不提前clip未swap壁纸、不修改认证/电源/亮度，timeout/wake/配置/用户/组件变化仍原生回退。
+
+## 历史增量：0.11.5-alive-test1 / code149（不改SystemUI Hook）
 
 本轮[固定AMBIENT下移与单页UI](<alive-platform.md>)只改应用编辑与motion默认锚点。系统AOD值仍只读本用户设置，实际常亮/省电/遮挡仍遵守原生；没有动态时钟bounds输入，不改本篇147睡眠准入/UID/nonce/期限/认证/亮度边界。三种解锁现象仍未解决，不能用本轮位置修改宣称认证或系统涟漪修复。
 

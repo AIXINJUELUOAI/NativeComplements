@@ -1,6 +1,10 @@
 # Alive 照片渲染内核
 
-## 当前增量：0.11.5-alive-test3 / code151
+## 当前增量：0.11.5-alive-test4 / code152（静态预览确认窄修）
+
+151实机三个卡片GL均成功init/swap/endpoint但cover仍VISIBLE，LOCK/HOME持续黑。150在TextureView.draw链的Updated回调同步读timestamp/getBitmap，RenderThread消费可晚于listener，且静态卡无新帧驱动重试；这是一条源码可证饥饿路径，不等于已实测OEM timestamp=0。[预览](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)改为submitted+updated后绘制外主线程16/50/150ms三次最多小图读回，先由HWUI同步消费再读timestamp；同ticket/renderer/texture/key/active/error门保留，只确认新帧才撤cover，缓存可选，不以全黑像素判失败。stop/dispose取消pending及旧代；过期明确失败，不能健康空串清除，也不超时直接露旧buffer。没有改共享renderer/native/动画/睡眠/导航；时间戳零点假设仍需152边沿日志与真机确认，不称普遍OEM终解。测试/打包状态见[总览](<README.md>)。
+
+## 历史增量：0.11.5-alive-test3 / code151
 
 用户标记失败的19:13:31首轮：wake后visibilityfalse约80ms使旧Service force endpoint/release，重现后静态LOCK；后续成功轮保scene并正常反向。这次仅Service路由复用renderer.visible(false,true)暂停现有scene，成功sleep帧后真实ON/锁定wake固定≤2000ms保留资格，不隐藏绘制/初始化、不延迟、不改renderer/motion/native；stable真实awake恢复mode(true)，ambient尚未退出不先force endpoint。新sleep/解锁/非ON/surface或配置失效关闭资格（资源失效仅递增epoch/撤资格，不结束合法sleep；旧代成功回调不得获得新资格），到期visible只清资格不end动画，hidden释放。此窄例外覆盖146“所有非sleep隐藏都release”的历史描述，不允许普通app返回补播，不承诺所有native系统动画冲突均已解决；实机视觉待验证。
 

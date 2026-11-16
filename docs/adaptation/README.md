@@ -2,7 +2,14 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.5-alive-test3 / code151（唤醒短隐藏保帧与两类小窗入口）
+### 当前增量：0.11.5-alive-test4 / code152（静态卡片遮罩确认窄修；待真机）
+
+- 用户151截图与保持页面采样：息屏球体可见、LOCK/HOME全黑；三个334/335px卡片的GL均成功init/first-frame/endpoint，View树三张ImageView cover仍V，优先定位预览遮罩确认，不是草稿未应用或无照片。原TextureUpdated同步回调处可能尚未RenderThread消费新buffer，却先比较timestamp；静态卡有限帧没有后续确认，AOD连续帧可重试。且同步回调属于draw，getBitmap不应在其中执行。
+- 本轮仅[预览](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)将确认移出绘制，submitted+updated后按16/50/150ms间隔（累计约16/66/216ms）合并为最多3次有界小图读回/同步消费，再比timestamp和原代际/renderer/texture/key/active/error门；确认后uncover，bitmap可用才cache；复制失败但已由新timestamp证实帧时不强迫缓存。每代3s单次watchdog兜缺submit/update，stop/accept取消，超时不直接露旧buffer。超时报告明确错误而不是空error永久黑，有限边沿日志定位，不逐帧。不改renderer/native/动画/睡眠/小窗。保同时间基假设的OEM边界，不将主机构建称所有设备native呈现已验证。
+- 系统照片选择器现场确认为MediaProvider的PhotoPickerActivity、ACTION_PICK_IMAGES/image/*，不是自建文件页；导航沉浸配置false，native nav source已有SUPPRESS_SCRIM|ANIMATE_RESIZING且正常73px区域，picker内容base至2597/总2670，外部窗口不继承本模块Activity导航配色。灰底不能仅凭截图归因模块沉浸或缺SUPPRESS_SCRIM，本轮不猜改navbar或增加普通应用scope。
+- 用户确认151仍熄屏闪时钟/日期/通知；151只处理wake短hidden，不能称该sleep内容层已修。当前LightReveal clip不是Keyguard内容层适配，继续独立查安全native内容呈现，不延长固定时间或放宽ACK/showing/认证；152不承诺解决此项。最终2项既有定向检查（卡片/系统照片入口、缓存隔离与预算）通过，未跑全套、未用源码字符串或假GPU单测冒充时序覆盖；独立只读最终复核未见可证P1/P2，Lead复核diff。release/R8、原签名、152身份/7入口3scope/Direct Boot及退役产品边界核验通过，[主APK](<../../deliverables/NativeComplements-0.11.5-alive-test4.apk>) SHA256 `d2768c241a85096a02a4a973d3ed03b4e58947ab310287540283b1640fc987a9`。未自动安装/重启/改设置，静态卡片native效果仍待用户验证。
+
+### 历史增量：0.11.5-alive-test3 / code151（唤醒短隐藏保帧与两类小窗入口）
 
 - 用户确认19:13:31第一轮唯一触发系统动画混入，后续连续反向未触发。只读样本：31.622 wake→31.631 visibility=false→31.632 force-endpoint0/release→31.648 ambient-exit hidden animate=false→31.711恢复visible→31.741静态LOCK重建；后续成功轮scene保留、mode0→1 animate=true。该轮sleep至wake约612ms，并非1800到期，不能把“约2s结束”举例固化为补丁。
 - 本轮仅窄修[Service](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)在成功sleep首帧后、真实ON/锁定唤醒时的既有scene资源保留：固定首wake≤2000ms，不重复延长，不是延迟动画；hidden pause不mode/不绘制/不初始化，真实ON/interactive/非ambient恢复时沿当前值反向。visible先恢复不提前消耗窗口，ambient未退不强端点；到期可见只撤资源保留资格，hidden才释放。真正新sleep、非ON、解锁、surface/reload/destroy均取消（同episode重复ambient/PREPARE/SCREEN_OFF不清成功资格、不续sleep期限；资源失效仅epoch撤资格，不闭锁原sleep），普通app隐藏仍原端点恢复，不复活旧解锁种子。动画/native/安全门不改。
