@@ -97,9 +97,30 @@ public final class AliveRenderer implements AutoCloseable {
                 if(!absent)schedule();
                 android.util.Log.i("NativeComplements","ALIVE_RENDER sleep-seed="+seed+" waiting-first-frame=true");
             }else{
-                changeMode(0,false);
-                if(presented!=null)presented.run();
+                // Static AMBIENT still acknowledges only after a real swap of that frame.
+                changeMode(0,false);sleepFinished=endpoint;framePresented=presented;
+                if(scene!=0)schedule();
             }
+        });
+    }
+    /**
+     * Sleep from a hidden wallpaper: build the scene and replace the stale buffer before the platform exposes it.
+     */
+    public void prewarm(int initial){
+        if(initial<0||initial>2)throw new IllegalArgumentException("scene");
+        post(()->{
+            if(visible||holding||failed)return;
+            if(scene!=0){
+                // Retained idle scene: settle it on the awake start frame without animating.
+                motion.pause(false);textures.pause(false);if(frameMotion!=null)frameMotion.pause(false);
+                changeMode(initial,false);
+            }else{
+                mode=initial;seed=-1;seedAnimate=false;animateMode=false;lensUntil=0;
+                start();
+                if(scene==0)return;
+            }
+            render(System.nanoTime(),true);
+            android.util.Log.i("NativeComplements","ALIVE_RENDER prewarm mode="+initial);
         });
     }
     /** Only a real native wake may seed a cold scene from AMBIENT; repeats just observe it. */
@@ -165,7 +186,10 @@ public final class AliveRenderer implements AutoCloseable {
         if(!value){
             framePresented=sleepFinished=wakePresented=wakeFinished=null;
             if(!retainScene){seed=-1;seedAnimate=false;deferredSleep=false;sleepPresented=null;}
-            if(retainScene&&scene!=0){
+            if(scene!=0&&!preview){
+                // Keep the idle scene (no frames, no sensors) so a sleep from an app can present its first
+                // frame at once instead of a 70-90ms cold init that exposes the stale buffer. Cost measured
+                // on device: ~68MB PSS for the whole wallpaper process; surface loss/reload still release it.
                 if(changed){motion.pause(true);textures.pause(true);if(frameMotion!=null)frameMotion.pause(true);}
                 stopFrames();sample.clear();if(changed)android.util.Log.i("NativeComplements","ALIVE_RENDER hidden-retained mode="+mode);
             }
@@ -292,8 +316,9 @@ public final class AliveRenderer implements AutoCloseable {
         return ids[0];
     }
     private void schedule(){if(visible&&scene!=0&&choreographer!=null&&!framePosted){framePosted=true;choreographer.postFrameCallback(frame);}}
-    private void render(long time){
-        if(!visible||scene==0)return;
+    private void render(long time){render(time,false);}
+    private void render(long time,boolean hidden){
+        if(!visible&&!hidden||scene==0)return;
         try{
             boolean resumedSample=frameMotion!=null&&sample.pending;
             float lensSpeed=mode!=0?1f:Math.max(0f,Math.min(1f,(lensUntil-time)/3_000_000_000f));

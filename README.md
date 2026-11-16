@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前运行源码版本：**0.9.48-fixes-test2**（versionCode 138）。目前暂停新功能开发，先整理跨系统接入与独立小窗边界，见[接入与架构索引](<docs/adaptation/README.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前运行源码版本：**0.11.7-aod-fix1**（versionCode 165），仅维护主模块；Alive 壁纸仍为 Beta。当前进度、验证范围与限制见[接入与架构索引](<docs/adaptation/README.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 

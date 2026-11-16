@@ -2,7 +2,12 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：code155 / 0.11.6-alive-takeover2
+### 当前增量：code165 / 0.11.7-aod-fix1
+
+- 收口既有 Alive 睡眠/唤醒视觉、内容恢复、隐藏保留及起始帧预绘增量，首页保留 Beta；修复开发者工具全景 AOD 受限设置读取崩溃，显式 root 后台查询/切换并验证读回。临时覆盖整机重启后需重新开启，不包含 LTPO 或暗光自动关闭修复。详细取舍见[当前实现与验证](<alive-systemui.md#code165--0117-aod-fix1当前收口>)。
+- 2026-11-17 用户手动试用暂未再发现 Alive 问题；先前锁屏特效带到桌面的现象本轮未复现，不追加猜测补丁，不宣称全 ROM/所有配置已验证。13 项最小定向通过，原签名 release/R8、165 身份、7 入口/3 scope、Direct Boot 与退役产品边界核验通过。[主 APK](<../../deliverables/NativeComplements-0.11.7-aod-fix1.apk>) SHA-256 `6a561d9fb1b5218814ab2e334bed6519a9d53665a4bc78ffaa7e041612fb6313`。无自动安装/重启/设备写入；社区 PR 只读审查、不合并，另议集成。
+
+### 历史增量：code155 / 0.11.6-alive-takeover2
 
 - 自有交接改显式本包shareIdentity可信广播，不再依赖SystemUI当前wallpaperTarget；动态receiver只同用户SystemUI UID/包，旧公开onCommand不接自有控制。Binder回执UID/nonce/defaultdisplay、真实成功swap及epoch保留，不新授权限或强保布局。
 - 息屏精确时钟/通知从原系统sleep事件及安全非交互起始门抑制，不再等ACK/showing，原生更新后刷新父DL；纯壁纸遮罩仍实际首swap才裁，sleep布局/原生admission仍双showing严格门。快速指纹真实AOD→GONE可完成纯装饰交接，awake按真实LOCK/HOME沿当前三轨、不重播/续期；不改认证状态、电源、root/UDFPS及bouncer/遮挡安全。详细[实现与边界](<alive-systemui.md>)。最终原有Phase3/Access5/Trace1共9项定向通过，覆盖纯装饰方向/display条件与传输UID/包/user拒绝；不是GPU/Xposed/实际广播投递覆盖。独立review修正capture同身份早return不刷新父DL的一项问题，冻结后无剩余可证P1/P2；Lead复核最终diff。release/R8/原签名/155身份7入口3scope/Direct Boot/退役边界/新Transport DEX核验通过；[主APK](<../../deliverables/NativeComplements-0.11.6-alive-takeover2.apk>) SHA256 `e04b3a5af3c2359a36fe31742f99f8e5cfdb6e6f4390e313e598f14e9e42923c`。真机效果不由构建代替，不自动安装重启改设置，无手势改动。

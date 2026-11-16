@@ -33,6 +33,9 @@ public final class AliveSystemUi {
                 return result;
             });
             if(!module.deoptimize(access.constructor))throw new IllegalStateException("wallpaper repository constructor deoptimize");
+            // Experiment switch (root-only debug prop, read once per SystemUI start): leave the native
+            // AOD-wallpaper flow alone so it can be observed without the handoff/blur takeover.
+            if(nativeExperiment()){log.accept("ALIVE_SYSTEMUI_NATIVE_EXPERIMENT handoff and doze blur skipped");return;}
             installDozeBlur(module,loader,access,log);
             AliveSleepHandoff.install(module,loader,access,log);
             log.accept("ALIVE_SYSTEMUI_READY selected ambient wallpaper only");
@@ -219,6 +222,12 @@ public final class AliveSystemUi {
             // Replace only this new repository's cold projection; never write a StateFlow or global resource.
             ambient.set(repository,projection);
         }
+    }
+    private static boolean nativeExperiment(){
+        try{
+            Method get=Class.forName("android.os.SystemProperties").getMethod("get",String.class);
+            return "1".equals(get.invoke(null,"debug.nc.alive_native"));
+        }catch(ReflectiveOperationException|RuntimeException unknown){return false;}
     }
     private static Class<?> type(ClassLoader loader,String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}
     private static Field field(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {

@@ -16,7 +16,7 @@ public class AliveWallpaperService extends WallpaperService {
 
     private final class PhotoEngine extends Engine {
         private AliveRenderer renderer;
-        private boolean ambient,visible,registered,destroyed,displayRegistered,displayRemoved;
+        private boolean ambient,visible,registered,destroyed,displayRegistered,displayRemoved,sleepHidden;
         private DisplayManager displays;
         private BroadcastReceiver handoffReceiver;
         private int displayId=Display.INVALID_DISPLAY;
@@ -112,6 +112,11 @@ public class AliveWallpaperService extends WallpaperService {
                 nativeWakeDeadline=0;
                 clearWake();wakeWindow.invalidate();
                 if(handoff!=null&&handoff.waking)cancelHandoff();
+                // From an app the wallpaper was not on screen: build the awake scene now and replace the
+                // stale buffer, so the first exposed frame is the real start of the full collapse.
+                sleepHidden=!visible;
+                if(sleepHidden&&renderer!=null&&!isPreview()&&displayId==Display.DEFAULT_DISPLAY)
+                    renderer.prewarm(lastAwakePhase==AlivePhase.LOCK?AlivePhase.LOCK:AlivePhase.HOME);
             }
             main.removeCallbacks(sleepExpired);
             if(sleep.active(now))main.postDelayed(sleepExpired,sleep.remaining(now));
@@ -204,12 +209,13 @@ public class AliveWallpaperService extends WallpaperService {
             boolean draw=AlivePhase.drawable(ownAmbient(),visible,interactive,ambient,state,sleeping||holding);
             if(handoff!=null&&(handoff.expired()||!ownAmbient()||displayId!=Display.DEFAULT_DISPLAY
                     ||handoff.waking&&(!interactive||state!=AlivePhase.DisplayState.ON)))cancelHandoff();
-            if(!draw&&handoffAcknowledged)cancelHandoff();
+            if(!draw&&handoffAcknowledged&&!briefHidden())cancelHandoff();
             boolean transition=animate&&state!=AlivePhase.DisplayState.DOZE_SUSPEND&&AlivePhase.animate(ownAmbient(),lastRenderedPhase,phase);
             lastRenderedPhase=phase;
             // Hidden time never consumes the collapse: retain only an already-created scene.
             boolean start=sleeping&&draw&&sleep.present(now);
             if(start){
+                if(sleepHidden)transition=animate;
                 long generation=sleepGeneration,renderEpoch=wakeWindow.epoch();
                 AliveSleepHandoff.Request request=handoff;
                 renderer.sleep(lastAwakePhase,transition,()->main.post(()->{
@@ -228,6 +234,9 @@ public class AliveWallpaperService extends WallpaperService {
             }else if(wakePreserved){
                 // Wake can precede ambient=false or a short visibility gap. Neither may force AMBIENT's endpoint.
                 if(draw&&interactive&&!ambient&&phase!=AlivePhase.AMBIENT)renderer.mode(phase,true);
+            }else if(holding&&!sleeping){
+                // hold() below keeps the presented AMBIENT scene. A mode() jump here would drop the
+                // pending endpoint callback, so SystemUI never learned the collapse had finished.
             }else if(!sleeping||sleep.presented()){
                 // Ordinary visibility still receives only the current endpoint, never a deferred unlock.
                 if(!sleeping&&(!interactive||!draw||"visibility".equals(event)))transition=false;
@@ -264,12 +273,29 @@ public class AliveWallpaperService extends WallpaperService {
             invalidateScene();update();renderer.attach(holder.getSurface(),width,height);acknowledgeHandoff();
         }
         @Override public void onVisibilityChanged(boolean next){
-            visible=next;if(!next){
-                if(handoffAcknowledged)cancelHandoff();
-                if(!wakeWindow.active(SystemClock.uptimeMillis())&&(handoff==null||!handoff.waking))nativeWake=false;
+            long now=SystemClock.uptimeMillis();
+            visible=next;main.removeCallbacks(hiddenSettled);
+            if(!next){
+                hiddenSince=now;
+                // WM briefly hides the wallpaper while its target moves between launcher and keyguard.
+                // Only a hide that outlasts the grace period cancels an acknowledged handoff.
+                if(handoffAcknowledged)main.postDelayed(hiddenSettled,HIDDEN_GRACE_MS);
+                if(!wakeWindow.active(now)&&(handoff==null||!handoff.waking))nativeWake=false;
+            }else{
+                // Hidden for real (an app was shown over the wake): returning later is an ordinary
+                // visibility change, never a replay of the AMBIENT→awake wake animation.
+                if(hiddenSince>=0&&now-hiddenSince>=HIDDEN_GRACE_MS){
+                    nativeWake=false;clearWake();wakeWindow.invalidate();
+                    if(handoff!=null&&handoff.waking)cancelHandoff();
+                }
+                hiddenSince=-1;
             }
             update("visibility",true);recheckUnlock();
         }
+        private static final long HIDDEN_GRACE_MS=150;
+        private long hiddenSince=-1;
+        private final Runnable hiddenSettled=()->{if(!visible&&handoffAcknowledged)cancelHandoff();update("hidden-settled",true);};
+        private boolean briefHidden(){return !visible&&hiddenSince>=0&&SystemClock.uptimeMillis()-hiddenSince<HIDDEN_GRACE_MS;}
         // Only the separate ambient component opts into the module-authorized native ambient path.
         public void onAmbientModeChanged(boolean next,long duration){
             ambient=next;ambientDuration=duration;

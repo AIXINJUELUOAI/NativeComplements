@@ -3,6 +3,7 @@ package dev.local.sunwindowdemo.features.alive;
 import android.graphics.Canvas;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Display;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,6 +14,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -20,11 +22,12 @@ import java.util.function.Supplier;
 /** Sleep-only drawing suppression, not a replacement clock animation. Native progress and alpha stay intact. */
 public final class AliveVisualContent {
     private AliveVisualContent() {}
+    private static final long FADE_MS=300;
 
     /** Run the returned refresh after Host readiness/selection/cancellation changes, including when no frame is scheduled. */
     public static Runnable install(XposedModule module,ClassLoader loader,Supplier<String> visual,
-            Predicate<View> sameRoot,Consumer<String> log) {
-        Content content=new Content(module,visual,sameRoot,log);
+            BooleanSupplier fade,Predicate<View> sameRoot,Consumer<String> log) {
+        Content content=new Content(module,visual,fade,sameRoot,log);
         try {
             Class<?> clock=type(loader,"com.android.keyguard.ClockEventController");
             Class<?> controller=type(loader,"com.android.systemui.plugins.keyguard.ui.clocks.ClockController");
@@ -52,14 +55,16 @@ public final class AliveVisualContent {
             });
 
             content.add(method(ViewGroup.class,"drawChild",Canvas.class,View.class,long.class),chain->{
-                boolean clip=false;Canvas canvas=null;int saved=-1;
+                boolean clip=false;int alpha=255;Canvas canvas=null;int saved=-1;
                 if(content.enabled&&Looper.myLooper()==Looper.getMainLooper())try {
-                    View child=(View)chain.getArg(1);
-                    if(content.matches(child,(ViewGroup)chain.getThisObject())){
+                    View child=(View)chain.getArg(1);ViewGroup parent=(ViewGroup)chain.getThisObject();
+                    if(content.matches(child,parent)){
                         content.refresh();
                         clip=content.clipping&&content.eligible(child);
+                        if(!clip&&content.eligible(child))alpha=content.fadeAlpha(parent);
                     }
                     if(clip){canvas=(Canvas)chain.getArg(0);saved=canvas.save();canvas.clipRect(0,0,0,0);}
+                    else if(alpha<255){canvas=(Canvas)chain.getArg(0);saved=canvas.saveLayerAlpha(0,0,parent.getWidth(),parent.getHeight(),alpha);}
                 }catch(Throwable failure){
                     if(saved>=0)try{canvas.restoreToCount(saved);}catch(Throwable ignored){}
                     saved=-1;content.fail(failure);
@@ -82,16 +87,18 @@ public final class AliveVisualContent {
         final Handler main=new Handler(Looper.getMainLooper());
         final XposedModule module;
         final Supplier<String> visual;
+        final BooleanSupplier fade;
         final Predicate<View> sameRoot;
         final Consumer<String> logger;
+        long fadeStart,fadeEnd;
         final List<XposedInterface.HookHandle> hooks=new ArrayList<>();
         final List<WeakReference<View>> targets=new ArrayList<>();
         WeakReference<Object> clockOwner=new WeakReference<>(null);
         volatile boolean enabled;
         String current;
         boolean clipping;
-        Content(XposedModule module,Supplier<String> visual,Predicate<View> sameRoot,Consumer<String> log){
-            this.module=module;this.visual=visual;this.sameRoot=sameRoot;this.logger=log;
+        Content(XposedModule module,Supplier<String> visual,BooleanSupplier fade,Predicate<View> sameRoot,Consumer<String> log){
+            this.module=module;this.visual=visual;this.fade=fade;this.sameRoot=sameRoot;this.logger=log;
             for(int i=0;i<3;i++)targets.add(new WeakReference<>(null));
         }
         void add(Method method,XposedInterface.Hooker hook)throws Throwable {
@@ -135,13 +142,23 @@ public final class AliveVisualContent {
             String ready=enabled?visual.get():null;
             boolean next=ready!=null;
             if(next==clipping&&java.util.Objects.equals(current,ready))return;
-            String previous=current;current=ready;clipping=next;
+            String previous=current;current=ready;
+            // Bounded sleep release fades back in; wake/cancel/failure returns native output at once.
+            long now=SystemClock.uptimeMillis();
+            if(clipping&&!next&&fade.getAsBoolean()){fadeStart=now;fadeEnd=now+FADE_MS;}else{fadeStart=fadeEnd=0;}
+            clipping=next;
             for(WeakReference<View> target:targets)invalidate(target.get());
             log("ALIVE_CONTENT clip="+clipping+" ep="+(ready==null?previous:ready));
         }
         void safeRefresh(){try{refresh();}catch(Throwable failure){fail(failure);}}
+        int fadeAlpha(ViewGroup parent){
+            long now=SystemClock.uptimeMillis();
+            if(fadeEnd==0||now>=fadeEnd){fadeStart=fadeEnd=0;return 255;}
+            parent.postInvalidateOnAnimation();
+            return Math.max(0,Math.min(255,(int)(255*(now-fadeStart)/FADE_MS)));
+        }
         void fail(Throwable failure){
-            enabled=false;clipping=false;
+            enabled=false;clipping=false;fadeStart=fadeEnd=0;
             for(XposedInterface.HookHandle hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
             hooks.clear();for(WeakReference<View> target:targets)invalidate(target.get());
             log("ALIVE_CONTENT_UNAVAILABLE "+failure.getClass().getSimpleName());

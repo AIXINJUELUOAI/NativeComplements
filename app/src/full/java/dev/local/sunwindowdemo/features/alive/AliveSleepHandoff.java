@@ -27,6 +27,8 @@ public final class AliveSleepHandoff {
     public static final int REPLY_CODE=IBinder.FIRST_CALL_TRANSACTION;
     private static final String DESCRIPTOR="dev.nativecomplements.module.alive.SleepReply";
     private static final long MAX_MS=7800,WAKE_MS=2500;
+    /** Upper bound for hiding clock/notifications; Alive's collapse endpoint normally releases earlier. */
+    private static final long CONTENT_MS=2000,CONTENT_AFTER_READY_MS=250;
     private AliveSleepHandoff() {}
 
     public static final class Request {
@@ -91,7 +93,8 @@ public final class AliveSleepHandoff {
                 return chain.proceed();
             }));
             hooks.add(module.hook(h.wake).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                h.main.post(h::wakingUp);return chain.proceed();
+                if(Looper.myLooper()==Looper.getMainLooper())h.wakingUp();else h.main.post(h::wakingUp);
+                return chain.proceed();
             }));
             hooks.add(module.hook(h.sleepAnimations).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 if(Looper.myLooper()!=Looper.getMainLooper())return chain.proceed();
@@ -121,8 +124,23 @@ public final class AliveSleepHandoff {
                 if(!module.deoptimize(method))throw new IllegalStateException("sleep handoff deoptimize");
             h.enabled=true;selection.changes(()->h.main.post(h::selectionChanged));
             log.accept("ALIVE_HANDOFF_READY native window and first-swap scoped");
+            // The fingerprint unlock/dwell ripple is decoration drawn over the same transition; withhold it
+            // only while Alive owns the visual. Authentication and UDFPS input are untouched.
+            try{
+                Method ripple=type(loader,"com.android.systemui.biometrics.AuthRippleView").getDeclaredMethod("onDraw",Canvas.class);
+                if(!module.deoptimize(ripple))throw new IllegalStateException("ripple deoptimize");
+                hooks.add(module.hook(ripple).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    boolean clip=false;
+                    try{View view=(View)chain.getThisObject();clip=h.enabled&&h.ready&&h.visualSafe()&&h.sameRoot(view);}
+                    catch(ReflectiveOperationException|RuntimeException unknown){clip=false;}
+                    if(!clip)return chain.proceed();
+                    Canvas canvas=(Canvas)chain.getArg(0);int saved=canvas.save();
+                    try{canvas.clipRect(0,0,0,0);return chain.proceed();}finally{canvas.restoreToCount(saved);}
+                }));
+                log.accept("ALIVE_HANDOFF_RIPPLE_READY");
+            }catch(Throwable unavailable){log.accept("ALIVE_HANDOFF_RIPPLE_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
             // Content output is separate from wallpaper/state/power, and unavailable ABI stays native.
-            try{h.contentRefresh=AliveVisualContent.install(module,loader,h::contentEpisode,h::traceRoot,log);}
+            try{h.contentRefresh=AliveVisualContent.install(module,loader,h::contentEpisode,h::contentFade,h::traceRoot,log);}
             catch(Throwable unavailable){log.accept("ALIVE_CONTENT_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
             // Diagnostics are optional: their failure never changes the installed handoff.
             try{AliveTransitionTrace.install(module,loader,h::traceEpisode,()->h.traceId,h::traceRoot,log);}
@@ -144,7 +162,9 @@ public final class AliveSleepHandoff {
         final ThreadLocal<Object> sleepScope=new ThreadLocal<>(),admissionScope=new ThreadLocal<>();
         WeakReference<Object> window=new WeakReference<>(null);
         WeakReference<View> scrim=new WeakReference<>(null);
-        boolean enabled,active,ready,visual,restoring,sleepSignalled,wakeSignalled,resent,waking,contentDone;
+        boolean enabled,active,ready,visual,restoring,sleepSignalled,wakeSignalled,resent,waking,contentDone,contentLatched,inherited;
+        long contentUntil;
+        final Runnable contentRelease=()->this.contentRefresh.run();
         Runnable contentRefresh=()->{};
         IBinder response;
         DisplayManager displays;
@@ -278,10 +298,16 @@ public final class AliveSleepHandoff {
                 &&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
         }
         String contentEpisode(){
-            // These exact decorative children can be withheld before wallpaper readiness; this never exposes another surface.
-            try{return !waking&&!contentDone&&safe(false,false)?episode():null;}
-            catch(ReflectiveOperationException|RuntimeException unknown){return null;}
+            // Clock/notifications are withheld only for the collapse itself, bounded by CONTENT_MS.
+            // Once admitted, a transient state read cannot flash them back for a frame mid-episode.
+            if(!active||waking||contentDone||SystemClock.uptimeMillis()>=contentUntil)return null;
+            if(contentLatched)return episode();
+            try{if(safe(false,false)){contentLatched=true;return episode();}}
+            catch(ReflectiveOperationException|RuntimeException unknown){/* native */}
+            return null;
         }
+        /** Content released by the bounded sleep path fades in; wake or cancellation shows it at once. */
+        boolean contentFade(){return active&&!waking;}
         boolean visualSafe()throws ReflectiveOperationException {return safe(waking,false);}
         boolean safe()throws ReflectiveOperationException {return !waking&&safe(false);}
         boolean safe(boolean awake)throws ReflectiveOperationException {return safe(awake,!awake);}
@@ -303,7 +329,13 @@ public final class AliveSleepHandoff {
         }
         void wakingUp(){
             if(wakeSignalled)return;
+            // Alive's AMBIENT frame is already on screen: keep the black reveal scrim withheld from the
+            // first wake frame instead of letting the native circle reveal run until a new wake swap.
+            boolean inherit=active&&!waking&&ready&&visual;
             wakeSignalled=true;cancel("wake");sleepSignalled=false;begin(true);
+            if(inherit&&active&&waking&&!ready){
+                ready=true;inherited=true;refresh();log.accept("ALIVE_HANDOFF_WAKE_INHERIT ep="+episode());
+            }
         }
         void begin(){
             if(!enabled||sleepSignalled)return;
@@ -318,6 +350,8 @@ public final class AliveSleepHandoff {
                 Object repo=repo(owner);Object token=selection.token(repo);int expected=selection.uid(repo);
                 if(token==null||expected<0||expected/100000!=android.os.Process.myUid()/100000)return;
                 identity=token;uid=expected;nonce=UUID.randomUUID().toString();expires=SystemClock.uptimeMillis()+(awake?WAKE_MS:MAX_MS);active=true;ready=false;resent=false;waking=awake;contentDone=false;
+                contentLatched=false;contentUntil=awake?0:SystemClock.uptimeMillis()+CONTENT_MS;
+                main.removeCallbacks(contentRelease);if(!awake)main.postDelayed(contentRelease,CONTENT_MS);
                 traceId=UUID.randomUUID().toString().substring(0,8);clipEdges=0;clipKnown=false;
                 rotation=view.getDisplay().getRotation();width=view.getWidth();height=view.getHeight();
                 displays=view.getContext().getSystemService(DisplayManager.class);
@@ -339,13 +373,19 @@ public final class AliveSleepHandoff {
                     }
                 };
                 send(awake?ACTION_PREPARE_WAKE:ACTION_PREPARE,response);
+                if(!awake){
+                    // Push the wallpaper flag now instead of waiting for keyguard SHOW to relayout the window.
+                    try{layout.invoke(owner);}catch(ReflectiveOperationException|RuntimeException unknown){log.accept("ALIVE_HANDOFF_EARLY_LAYOUT_FAILED");}
+                }
                 refresh();log.accept("ALIVE_HANDOFF_PREPARE waking="+waking+" expires="+expires+" ep="+episode());
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("begin-failed");}
         }
         void beforeLayout(Object owner)throws ReflectiveOperationException {
             if(restoring||!active||owner!=window.get())return;
             if(waking){if(visual&&!visualSafe())cancelLater("wake-state");return;}
-            if(safe()){
+            // From the sleep signal on, request the wallpaper before keyguard reports showing: otherwise the
+            // shade window comes up ~30-50ms before the wallpaper and that gap is a black frame.
+            if(safe(false,false)){
                 WindowManager.LayoutParams value=(WindowManager.LayoutParams)params.get(owner);
                 layoutOriginal=value.flags;layoutPending=true;value.flags|=WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
                 View overlay=scrim.get();if(ready&&overlay!=null)overlay.invalidate();
@@ -367,6 +407,8 @@ public final class AliveSleepHandoff {
         }
         void ack(String token,int status){
             if(!active||!Objects.equals(nonce,token))return;
+            // Wallpaper hidden by an app taking over the unlock: the native unlock-to-app reveal resumes
+            // (same choice as OpenAlive on ColorOS; Alive does not animate into apps).
             if(status==0){cancel("engine-cancel");return;}
             try{
                 if(SystemClock.uptimeMillis()>=expires){cancel("unsafe-ack");return;}
@@ -383,6 +425,11 @@ public final class AliveSleepHandoff {
                 if(status!=1){cancel("unsafe-ack");return;}
                 if(ready)return; // Repeated ACKs cannot re-open completed content output.
                 ready=true;View value=scrim.get();if(value!=null)value.invalidate();
+                if(!waking){
+                    // Clock/notifications come back right as Alive starts, not after its whole collapse.
+                    long release=SystemClock.uptimeMillis()+CONTENT_AFTER_READY_MS;
+                    if(release<contentUntil){contentUntil=release;main.removeCallbacks(contentRelease);main.postDelayed(contentRelease,CONTENT_AFTER_READY_MS);}
+                }
                 refresh();log.accept("ALIVE_HANDOFF_FIRST_SWAP waking="+waking+" safe="+visualSafe()+" ep="+episode());
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("ack-failed");}
         }
@@ -414,6 +461,7 @@ public final class AliveSleepHandoff {
             if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->cancel(reason));return;}
             String ended=episode();traceId=null;
             boolean was=active;active=false;ready=false;visual=false;main.removeCallbacks(timeout);
+            main.removeCallbacks(contentRelease);contentLatched=false;contentUntil=0;inherited=false;
             if(displays!=null){displays.unregisterDisplayListener(displayListener);displays=null;}
             if(observedContext!=null){
                 observedContext.unregisterComponentCallbacks(configuration);

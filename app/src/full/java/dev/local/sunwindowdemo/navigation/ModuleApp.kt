@@ -224,6 +224,50 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
         SettingRow("旋转建议诊断", rotation)
         SettingRow("刷新状态", onClick = { calls = CallBlockingStore.readConfig(context); motion = MotionStore.read(context); rotation = rotationStatus() })
     }
+    AodWallpaperToggle()
+}
+
+@Composable
+private fun AodWallpaperToggle() {
+    val context = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
+    var state by remember { mutableStateOf<AodWallpaperControl.State?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf("状态未知，点击下方按钮授权 root 并读取；进入页面不会自动申请权限") }
+    fun operate(target: Boolean? = null) {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                state = kotlinx.coroutines.runInterruptible(Dispatchers.IO) {
+                    if (target == null) AodWallpaperControl.read(context) else AodWallpaperControl.set(context, target)
+                }
+                message = if (target == null) {
+                    if (state?.wallpaper == true && state?.capability == false)
+                        "壁纸设置已开，但系统能力未启用；可关闭清理，或重试开启以修复"
+                    else "已读取系统实际状态"
+                } else "已${if (target) "开启" else "关闭"}并读回确认；若画面未更新，可手动重启 SystemUI。整机重启后需重新读取并开启"
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                state = null
+                message = failure.message ?: "无法读取系统状态，请检查 root 授权后重试"
+            } finally {
+                busy = false
+            }
+        }
+    }
+    GroupTitle("实验")
+    SettingsGroup {
+        ToggleRow("息屏显示壁纸（全景 AOD）",
+            "$message\n临时系统覆盖，整机重启后需重新开启；需要系统息屏显示已开启及支持的壁纸。操作期间请留在本页，退出或超时不会回滚已执行的命令。此项不修复 LTPO；Alive 照片防烧屏位移尚未实现，限短时测试。",
+            state?.wallpaper == true, enabled = state != null && !busy) { operate(it) }
+        if (state?.wallpaper == true && state?.capability == false) {
+            SettingRow("重试开启系统壁纸能力", onClick = if (busy) null else ({ operate(true) }))
+        }
+        SettingRow(if (busy) "正在处理…" else if (state == null) "授权 root 并读取状态" else "重新读取状态",
+            onClick = if (busy) null else ({ operate() }))
+    }
 }
 
 

@@ -1,6 +1,15 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## code155 / 0.11.6-alive-takeover2
+## code165 / 0.11.7-aod-fix1：当前收口
+
+- 收录此前本地 Alive 增量：睡眠内容抑制上限 2000ms，首帧就绪后最多再等待 250ms，再以 300ms 装饰淡入恢复时钟/通知；wake 同步建立视觉交接，既有已呈现 sleep 可有条件继承壁纸遮罩资格。仅同 root、有界视觉期裁指纹装饰涟漪，不改认证或 UDFPS 输入。
+- 应用遮住壁纸时保留非 preview 的 idle scene（停止帧与传感器），睡眠信号可预绘 awake 起始帧以替换旧 buffer；Surface 销毁、资源重载及 Engine 销毁仍释放。隐藏 grace 为 150ms，真正隐藏后返回只恢复当前端点；静态 AMBIENT 回执仍等待真实 swap。该资源保留/预绘是本版本的明确取舍，不沿用历史“隐藏绝不初始化/绘制”的描述，不保证零额外内存或所有设备功耗表现。
+- `debug.nc.alive_native=1` 仅在 SystemUI 启动时读取，用于跳过 handoff/doze blur 实验；默认关闭，不由模块自动写入。首页 Alive 保留 Beta 标记。
+- 修复开发者工具加载全景 AOD 开关时直接读取受限 Secure 键导致的 SecurityException。现在进入页面不自动提权；显式 root 读取/切换在后台执行，校验系统能力和设置读回，异常明确未知。壁纸设置已开而能力未开时可关闭或重试。临时 fabricated overlay 整机重启后需重新开启，不自动重启 SystemUI/手机；不修复 LTPO，也不新增暗光/遮挡自动暂停策略。
+- 2026-11-17 用户手动试用反馈：当前暂未再发现 Alive 问题；此前“锁屏有特效、桌面无特效时桌面继承锁屏效果”本次未复现，按用户要求不追改。此为用户反馈，不等于所有配置/ROM/长期运行已验证；照片防烧屏位移仍未实现，仅短时测试。
+- 当前源码 13 项最小定向通过：Phase 3、AmbientAccess 5、Trace 1、SceneMotion 2、全景开关解析/命令 1、开发者入口 1。覆盖值状态、身份拒绝、轨道及页面，不覆盖真实 GPU/Xposed/面板功耗或 root 实机切换。原签名 release/R8、code165 身份、7 入口/3 scope、Direct Boot 与退役边界打包核验通过，APK SHA-256 `6a561d9fb1b5218814ab2e334bed6519a9d53665a4bc78ffaa7e041612fb6313`。本轮未自动安装、重启或写设备设置；社区 PR 未合并。
+
+## 历史 code155 / 0.11.6-alive-takeover2
 
 - 自有PREPARE/CANCEL不再走wallpaperTarget依赖的WindowSession命令。[直达传输](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveHandoffTransport.java>)为显式本包、shareIdentity广播，仅同用户SystemUI实际UID+包名接收，非preview已存在Engine动态注册；公开壁纸onCommand只保原生事件，不能转入自有控制。回执仍校真实Engine UID/nonce/defaultdisplay，receiver不创建/唤醒Engine、不改wallpaper flags或授权限。
 - sleep在原系统回调前建立内容episode，精确clockface/通知装饰在安全非interactive门内立即停止输出，不等壁纸ACK或双showing；capture原生更新后同步刷新gate/父invalidate，避免同View重用及缓存父DL漏过。纯LightReveal仍必须实际visible+有效surface成功swap，sleep window flag与native admission继续严格双showing/无认证过渡，不借内容门放宽系统布局。

@@ -155,7 +155,11 @@ class NavigationTest {
         compose.onNodeWithText("开发者工具").assertDoesNotExist()
         repeat(7) { compose.onNodeWithText("版本 ${BuildConfig.VERSION_NAME}").performClick() }
         compose.onNodeWithText("开发者工具").performScrollTo().performClick()
-        nextPage(about, Page.Tools)
+        val tools = nextPage(about, Page.Tools)
+        launch(tools)
+        compose.onNodeWithText("息屏显示壁纸（全景 AOD）").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("授权 root 并读取状态").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("状态未知", substring = true).assertExists()
     }
 
     @Test fun diagnosticsEntryOpensScrollableContentWithoutNestedInfiniteHeight() {
