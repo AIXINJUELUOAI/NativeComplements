@@ -1,8 +1,8 @@
 # 现有架构与需要划清的边界
 
-## 当前实施状态：0.11.2-alive-test1 / code144
+## 当前实施状态：0.11.2-alive-test2 / code145
 
-现有功能规则/状态与原生执行解耦已在Alive前推送至 `5ee8e95`；code139小窗闭环与code143选择器均为历史。下文先记录code144当前边界，再保留138历史审计，不用旧“当前”表述覆盖新实现。当前代码实现不等于真机效果或设备/LOS兼容声明。
+现有功能规则/状态与原生执行解耦已在Alive前推送至 `5ee8e95`；code139小窗闭环与code143选择器均为历史。下文先记录code145当前边界，再保留138历史审计，不用旧“当前”表述覆盖新实现。当前代码实现不等于真机效果或设备/LOS兼容声明。
 
 ## 小窗：本包开关资格，不再额外选择后端
 
@@ -12,14 +12,21 @@ code143的额外selector没有解决“主版小窗关闭仍先占owner”的合
 
 ProductFeatures仍早装，小窗后端在已核WMS五参main before同步安装，deopt真实SystemServer.startOtherServices caller；失败保原生启动，不回抢已占owner。仅owner创建Engine，systemReady after仍attach。full被关闭而委托时只消费同SystemUI有界环境快照供展示/边缘保护，不借foreignBinder执行OTP/后台唤醒等fullEngine动作，过期/异常暂停。不是将整个full模块关掉，也不宣称任意ROM只装独立包即可兼容。
 
-## Alive：共享渲染、配置隔离与窄系统适配
+## 小窗：可选无障碍系统按钮，只换输入入口
 
-- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>) 保存draft/applied完整快照及UUID不可变照片；旧style1..5兼容，新配置默认启航。编辑不污染现用壁纸；同组件已选时页面显式确认提交，否则系统选择成功且核实目标后提交。
-- [同一renderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>) 支持AOD六种：lens0启航及照片1..5；锁屏0..3、桌面6..9独立纹理，默认0/6，雾花gray/mask绑定ground slots1/2。[MD3单TextureView预览](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>) 同scene点击0→1→2→0真实动画；生命周期close callback在EGL释放后才释放对应Surface/Texture，不做三套常驻渲染或用示意图冒充实际效果。
-- [Engine交接](<alive-platform.md>) 等native visible最多6s，完整起始帧成功swap ack后起1800ms收拢；hidden暂停三轨、停绘且不init，绝对上限7800ms。无scene只用最近真实LOCK/HOME种子，不假HOME。ambient进入duration0/SUSPEND强端点；退出duration0仍按真实wake展开，本轮修指纹直接AOD→HOME跳动画路径，尚未真机复测。
-- [SystemUI](<alive-systemui.md>) 仅当前user/AOD/实际锁屏精确自有实验组件时投影能力；仅两个原生doze producer的模糊贡献置0，认证/QS/其他native贡献不变。原生screenoff controller、scrim、电源/保护不改，不称替代系统熄屏或全无闪已验证。详情见 [渲染边界](<alive-renderer.md>)。
+code145新增两包共用的 [WindowAccessibilityService](<../../app/src/main/java/dev/local/sunwindowdemo/WindowAccessibilityService.java>)，由用户在系统设置手动开启并使用系统无障碍按钮；不复刻长侧滑，不提供自有全屏触摸捕获或手势识别。声明仅请求button，无事件订阅，内容读取/截图/手势模拟/触摸探索能力均关闭，事件回调为空；不遍历窗口或页面树。
 
-照片burn-in位移未做，时钟避让延期，仅短时测试。按用户最新少测试要求，已有一轮双unit成功，但后新增交接/preview race/ambient-exit改动未全测；剩余build/sign/身份边界检查不是visual PASS，不预填hash。无新增套件、整套功能回归或自动设备写操作。
+点击只在本包enabled时发送指定SystemUI包的SHOW_MENU广播，携带protocol16并分享发送者身份；[SystemUiHost接收端](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)核本包实际UID、协议、既有enabled/backendReady/安全状态与openWait门控后才呼出现有菜单。任务/几何/恢复仍由原Xposed system_server后端执行，SystemUI仍拥有菜单与控件，独立身份不跨包借用。**Freeform＋无障碍本身不足以运行现有小窗，仍需Xposed后端及宿主适配生效**；本轮只扩大呼出入口，不声明所有ROM兼容或免Xposed。
+
+## Alive：全屏编辑、静态交接与窄系统适配
+
+- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)保持draft/applied完整快照与UUID不可变照片；旧style1..5兼容，新配置默认启航。同组件无普通/实验混用时页面确认应用，否则系统选择成功且核实目标才提交；取消/失败保draft。
+- [全屏编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)顶部返回/编辑/设置壁纸，底部Sheet直接显示当前息屏/锁屏/桌面样式。[单TextureView](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)同scene真实0→1→2→0，关闭回执在EGL断开后才释放对应Surface/Texture；应用成功发HOME并只移除本模块task，不结束桌面/他人任务。
+- [同一renderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)支持lens0启航及照片1..5，锁屏0..3/桌面6..9独立纹理，默认0/6，雾花ground slots1/2。固定APK补导10张上游PNG作样式示意，分别SHA校验放私有可选previews-v1；不是当前用户照片实时缩略，不bundled，缺图可重选固定APK补齐，不替换已加载不可变native generation。
+- [Engine交接](<alive-platform.md>)依旧等native visible最多6s、首swap ack后1800ms收拢、hidden暂停三轨不绘不init、总绝限7800ms。code144自然日志证实59.832窗口结束仍ON即释放，至下一分钟01.745 DOZE相隔1.913s；code145动画完成后仅在同episode绝限内静态保留已呈现端点，不新建/续动画/延绝限。无scene只用真实LOCK/HOME种子；wake/ambient进入0/OFF/UNKNOWN/SUSPEND取消，ambient退出0仍真实展开。
+- [SystemUI](<alive-systemui.md>)继续精确own/currentuser/AOD能力投影及两doze producer贡献0；新增默认显示器非交互、真实安全Keyguard门控的LightReveal binder一次episode≤7800ms投影：Pair(同native目标,true)→false，只跳额外333+733ms淡出，保留0.4/0.64原生暗度，不alpha0、不改原1300ms controller/auth/power。ABI/deopt失败保native，不能称全面连续或无闪已验证。
+
+照片burn-in位移未做，时钟避让延期，仅短时测试。按用户少测试要求，本轮仅Phase/目标必要检查及R8/签名/身份/资源/产品边界，由Lead收口，不预报执行中的PASS/hash，不跑full suite或全功能回归。当前根因证据来自code144用户自然操作，code145视觉、GPU和物理DOZE仍待用户验证；不自动安装/重启/写设备设置。
 
 ## 138 历史审计（以下正文）
 

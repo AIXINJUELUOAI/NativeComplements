@@ -2,7 +2,24 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.2-alive-test1 / code144
+### 当前增量：0.11.2-alive-test2 / code145
+
+- [全屏Alive编辑器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)进入即真实单场景背景，顶部返回／编辑／设置壁纸；编辑底部Sheet直接展示当前息屏、锁屏或桌面样式，选中更新草稿背景，成功应用后回HOME并移除当前模块任务；取消或失败留在页面。照片、资源和普通／实验组件选择收在Sheet，草稿隔离保留。
+- [导入器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)增加10张固定上游官方样式缩略PNG，各自SHA-256核验，只存私有独立可选目录，不把native已加载代替换。原来已经导入核心资源的用户，重新选择同一固定OpenAlive APK即可补齐缩略图；没有资源时不伪造图片。缩略为官方样式示意，背景才是本人的实时壁纸渲染。
+- 用户本轮桌面手动熄屏的只读日志确认：13:59:57.722开始收拢，59.112被系统隐藏、59.420再次可见，59.832模块窗口到期释放，14:00:01.745原生才进入DOZE，造成约1.9秒空档。新[生命周期](<alive-platform.md>)把收拢结束与资源释放分开，已经呈现的端点静态保留到原生交接；隐藏不绘制、不新建scene、不延长整个episode原7800ms绝对上限。唤醒／零时长进入／OFF／UNKNOWN／移除／SUSPEND仍结束。
+- [SystemUI局部衔接](<alive-systemui.md>)仅精确自有实验壁纸、当前用户、AOD、默认显示器非交互且真实锁屏安全条件下，一次性把原生LightReveal目标的额外333ms延迟＋733ms淡出改为立即提交**相同目标暗度**，不设透明0、不改原1300ms转场、controller、认证、电源。只是减少一层视觉叠加，不代表全部系统遮挡或先缩暗已被接管。
+- [无障碍服务](<../../app/src/main/java/dev/local/sunwindowdemo/WindowAccessibilityService.java>)是full/window可选的系统无障碍按钮入口，仅呼出现有小窗菜单；不读取页面／事件、不截图、不模拟手势或启用触摸探索。用户手动启用并加入系统按钮；请求仍受本包UID、协议16、enabled、后端及系统安全规则校验，不跨版控制。它不替换现有系统侧后端，仍需要Xposed生效，不能宣称“Freeform＋无障碍就免后端运行”。
+
+本轮不跑整套功能回归，仅生命周期定向检查、必要失败保护审查和最终双release/R8、原签名、身份／scope／入口／无障碍最小能力及独立版边界核验。日志仅证明旧code144的断点，不证明code145观感已通过；用户负责真机验证。没有安装、重启或写设备设置；时钟避让、自创效果、其他厂商引擎及照片防烧屏位移仍未实现，仅短时测试。
+
+最终核验：既有 `AlivePhaseTest` 定向生命周期检查通过（不跑整套）；基线变更清单核验、文档引用、双release/R8、原签名和上述包边界通过。只读安全复核另补renderer统一holding初始化门，覆盖Surface替换与reload入口；该最终修正已重新打包，不沿用中间包摘要。未自动安装或真机验证。
+
+| code145 最终原签名产物 | SHA-256 |
+|---|---|
+| [主版 APK](<../../deliverables/NativeComplements-0.11.2-alive-test2.apk>) | `11f4fd358e4fce4523f3126133220cfd1b778178447216b9aef52e853802f812` |
+| [独立小窗 APK](<../../deliverables/NativeComplements-Window-0.11.2-alive-test2.apk>) | `10bceeb0c01e9ff281153d4182bf00567b6edbaab0f8349476549ffc05b57542` |
+
+### 历史增量：0.11.2-alive-test1 / code144
 
 本轮按用户确认的范围接入启航与真实连续预览，修复小窗开关资格、熄屏交接和额外模糊；时钟避让、照片防烧屏位移、OpenAlive 以外自创效果与其他厂商引擎不在本轮。
 

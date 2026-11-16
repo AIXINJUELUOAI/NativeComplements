@@ -48,7 +48,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private final BroadcastReceiver settingsReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
         try{if(getSentFromUid()==getPackageManager().getApplicationInfo(Wire.PKG,0).uid){
-            if(WindowShortcutActivity.ACTION.equals(i.getAction()))main.postDelayed(()->floatCurrent(0),120);else loadSettings();
+            if(Wire.SHOW_MENU.equals(i.getAction())){
+                if(i.getIntExtra("protocol",0)==Wire.PROTOCOL&&allowed()&&openWait==null)showPanel();
+            }else if(WindowShortcutActivity.ACTION.equals(i.getAction()))main.postDelayed(()->floatCurrent(0),120);else loadSettings();
         }}catch(Exception ignored){}
     }};
     private final BroadcastReceiver queryReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
@@ -543,7 +545,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void backPanel(){if(menuContent==null||!AppList.back(menuContent))hidePanel();}
     private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;menuContent=null;updateOverlayPriority();publish(false);}}
     private void quickAction(String id){if(quick!=null)quick.action(id);}
-    private IntentFilter settingsFilter(){IntentFilter filter=new IntentFilter(ConfigProvider.CHANGED);filter.addAction(WindowShortcutActivity.ACTION);return filter;}
+    private IntentFilter settingsFilter(){IntentFilter filter=new IntentFilter(ConfigProvider.CHANGED);filter.addAction(WindowShortcutActivity.ACTION);filter.addAction(Wire.SHOW_MENU);return filter;}
     private void updateOpenWait(Intent frame){
         if(!frame.hasExtra("waitingOpen"))return;
         String token=frame.getStringExtra("waitingToken"),pkg=frame.getStringExtra("waitingPackage");

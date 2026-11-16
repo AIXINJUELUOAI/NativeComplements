@@ -9,6 +9,7 @@ final class Wire {
     static final String PKG = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.packageName();
     static final String COMMAND = PKG + ".COMMAND", RESULT = PKG + ".RESULT";
     static final String PERMISSION = PKG + ".CONTROL";
+    static final String SHOW_MENU = PKG + ".SHOW_WINDOW_MENU";
     static final int PROTOCOL = 16;
     static final Binder LEASE = new Binder();
     static final String CHANNEL = PKG + ".frames.v16";

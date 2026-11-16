@@ -49,6 +49,10 @@ fun ModuleApp(
     appPackage: String? = null,
     openIconApp: (String) -> Unit = {},
 ) {
+    if (page == Page.Alive) {
+        dev.local.sunwindowdemo.features.alive.AliveScreen(onBack = back)
+        return
+    }
     val context = LocalContext.current
     var iconBatch by rememberSaveable { mutableStateOf(false) }
     var iconSelection by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -88,7 +92,6 @@ fun ModuleApp(
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
             Page.Shade -> ShadeScreen(bottomInset)
-            Page.Alive -> dev.local.sunwindowdemo.features.alive.AliveScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)

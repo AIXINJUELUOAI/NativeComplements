@@ -53,5 +53,12 @@ public class AlivePhaseTest {
         assertFalse(AlivePhase.drawable(true,false,false,false,AlivePhase.DisplayState.ON,sleep.active(3100)));
         assertTrue(AlivePhase.drawable(true,true,false,false,AlivePhase.DisplayState.ON,sleep.active(3426)));
         sleep.wake();assertFalse(sleep.active(3500));
+        sleep.begin(10_000);assertTrue(sleep.present(10_010));assertTrue(sleep.start(10_020));
+        assertFalse(sleep.active(11_821));
+        assertTrue(sleep.holding(11_821)); // Finished curve must not drop the buffer while native display remains ON.
+        assertEquals(5_979,sleep.holdRemaining(11_821));
+        assertFalse(sleep.holding(17_800)); // Same absolute cap, not another wait interval.
+        sleep.end();assertFalse(sleep.holding(12_000));
+        sleep.wake();assertFalse(sleep.holding(12_000));
     }
 }

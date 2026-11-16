@@ -33,7 +33,7 @@ public final class AliveRenderer implements AutoCloseable {
     private boolean seedAnimate,deferredSleep;
     private Runnable sleepPresented;
     private float aspect;
-    private boolean visible,framePosted,failed,firstFrame,endpointPending;
+    private boolean visible,holding,framePosted,failed,firstFrame,endpointPending;
     private volatile boolean closed;
     private volatile String error="";
     private String reportedError;
@@ -112,10 +112,18 @@ public final class AliveRenderer implements AutoCloseable {
                 motion.change(next);if(!animate)motion.finish();schedule();
             }
     }
+    /** Static handoff may retain a presented scene, never decode/recreate one just to bridge native ON→DOZE. */
+    public void hold(boolean value){post(()->{
+        visible=value;holding=true;
+        if(scene==0)return;
+        stopFrames();motion.finish();textures.change(0,false);
+        if(frameMotion!=null)frameMotion.finish();sample.clear();lensUntil=0;animateMode=false;
+        endpointPending=true;if(value)schedule();
+    });}
     public void visible(boolean value){visible(value,false);}
     /** A bounded sleep interruption may retain an existing scene, but must never draw or init hidden. */
     public void visible(boolean value,boolean retainScene){post(()->{
-        boolean changed=visible!=value;visible=value;
+        boolean changed=visible!=value||holding;visible=value;holding=false;
         if(!value){
             if(retainScene&&scene!=0){
                 if(changed){motion.pause(true);textures.pause(true);if(frameMotion!=null)frameMotion.pause(true);}
@@ -148,7 +156,7 @@ public final class AliveRenderer implements AutoCloseable {
         handler.post(()->{try{release();surface=null;}finally{try{if(afterRelease!=null)afterRelease.run();}finally{thread.quitSafely();}}});
     }
     private void start(){
-        if(surface==null||!surface.isValid()||width<1||height<1||scene!=0)return;
+        if(holding||surface==null||!surface.isValid()||width<1||height<1||scene!=0)return;
         try{init();schedule();}catch(Exception|LinkageError failure){fail(failure);}
     }
     private void fail(Throwable failure){

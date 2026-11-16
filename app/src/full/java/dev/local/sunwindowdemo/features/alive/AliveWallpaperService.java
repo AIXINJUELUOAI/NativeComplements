@@ -92,9 +92,10 @@ public class AliveWallpaperService extends WallpaperService {
             long now=SystemClock.uptimeMillis();
             sleep.visibility(visible,now);
             boolean sleeping=sleep.active(now);
-            int phase=sleeping?AlivePhase.AMBIENT:AlivePhase.phase(interactive&&state==AlivePhase.DisplayState.ON,ambient,locked);
+            boolean holding=supportsOwnAmbient()&&!interactive&&ambient&&state==AlivePhase.DisplayState.ON&&sleep.holding(now);
+            int phase=sleeping||holding?AlivePhase.AMBIENT:AlivePhase.phase(interactive&&state==AlivePhase.DisplayState.ON,ambient,locked);
             if(!sleeping&&interactive&&!ambient&&state==AlivePhase.DisplayState.ON)lastAwakePhase=phase;
-            boolean draw=AlivePhase.drawable(supportsOwnAmbient(),visible,interactive,ambient,state,sleeping);
+            boolean draw=AlivePhase.drawable(supportsOwnAmbient(),visible,interactive,ambient,state,sleeping||holding);
             boolean transition=animate&&state!=AlivePhase.DisplayState.DOZE_SUSPEND;
             // Hidden time never consumes the collapse: retain only an already-created scene.
             boolean start=sleeping&&draw&&sleep.present(now);
@@ -112,10 +113,14 @@ public class AliveWallpaperService extends WallpaperService {
                 if(!sleeping&&!interactive)transition=false;
                 renderer.mode(phase,transition);
             }
-            renderer.visible(draw,sleeping);
-            if(sleeping){main.removeCallbacks(sleepExpired);main.postDelayed(sleepExpired,sleep.remaining(now));}
+            if(holding&&!sleeping){
+                // Keep the final buffer through native ON→DOZE; never initialize or animate just for this bridge.
+                renderer.hold(visible);
+            }else renderer.visible(draw,sleeping||holding);
+            if(sleeping||holding){main.removeCallbacks(sleepExpired);main.postDelayed(sleepExpired,
+                sleeping?sleep.remaining(now):sleep.holdRemaining(now));}
             String facts="display="+displayId+":"+state+" phase="+phase+" draw="+draw+" visible="+visible
-                +" interactive="+interactive+" locked="+locked+" ambient="+ambient+" duration="+ambientDuration+" sleeping="+sleeping;
+                +" interactive="+interactive+" locked="+locked+" ambient="+ambient+" duration="+ambientDuration+" sleeping="+sleeping+" holding="+holding;
             if(!facts.equals(lastState)||!"resample".equals(event)){
                 android.util.Log.i("NativeComplements","ALIVE_ENGINE event="+event+" "+facts+" remaining="+sleep.remaining(now));
                 lastState=facts;

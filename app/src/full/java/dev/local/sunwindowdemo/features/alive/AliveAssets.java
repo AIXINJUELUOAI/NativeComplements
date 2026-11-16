@@ -30,15 +30,27 @@ public final class AliveAssets {
     private static final Map<String,Long> REQUIRED=requiredFiles();
     private static final long MAX_ENTRY=16L*1024*1024,MAX_TOTAL=29_539_884L,MAX_PHOTO=32L*1024*1024;
     private static final int MAX_FILES=252;
+    private static final Map<String,String> PREVIEWS=Map.ofEntries(
+        Map.entry("alive_photo_wallpaper_aod_set_sail.png","9086061a04cf42a47f8a2a1d5a8e2f129e3cd2ce5a5dcb85b3d7b7d529af320d"),
+        Map.entry("alive_photo_wallpaper_aod_leave_light.png","91404e2176554dfee7d46c9bf50e6181529b53af981f3fa97a2973b53b6ab7c7"),
+        Map.entry("alive_photo_wallpaper_aod_moon_and_star.png","bff098299c46fb7d5889bb245e8995d0d85553984a09d9e3aa3f07afeb749b57"),
+        Map.entry("alive_photo_wallpaper_aod_light_start.png","7d8e218d3683d82b47b9b8b714d3286632b77bf9313ff2f79a174159d6f2e660"),
+        Map.entry("alive_photo_wallpaper_aod_mountain.png","936a5254acdbae743d0e1e11c8b0adfc505359b8e424a71b94848bc7393c9a1c"),
+        Map.entry("alive_photo_wallpaper_aod_galaxy.png","a33d67d661ab67a7821e04afa391cf72922cc70be44b8182aa7c22a980facab2"),
+        Map.entry("alive_photo_wallpaper_lockscreen_source.png","80d131c70da0153c480cc0569d7db94fb6b723dcacab45078f3c6e22f19cc87f"),
+        Map.entry("alive_photo_wallpaper_lockscreen_straight_line.png","45df3f0f30cd93a912279502dabf783c7f30811647dcf7556ac36c9a65912420"),
+        Map.entry("alive_photo_wallpaper_lockscreen_curve.png","1bf7f043243c3508679dc900e9ff9fd859b8ee00cd9af9e15ff2387a80a8e256"),
+        Map.entry("alive_photo_wallpaper_lockscreen_frosted_glass.png","3bbdb5d383f5ac9ec289a3deb21cc67ae64c638b4e93084b7ecfabc12002eb1e"));
     private static File checked;
     private AliveAssets() {}
 
     /** Imports exactly the pinned official APK; foreign DEX is never extracted or executed. */
     public static synchronized void prepare(Context context,Uri source)throws IOException{
         requireArm64();
-        if(ready(context))return;
+        boolean coreReady=ready(context);
+        if(coreReady&&previewsReady(context))return;
         File root=root(context),published=generation(context);
-        if(published.exists())throw new IOException("已发布资源损坏；不会覆盖已加载的原生库，请先清除本功能数据并重启应用");
+        if(!coreReady&&published.exists())throw new IOException("已发布资源损坏；不会覆盖已加载的原生库，请先清除本功能数据并重启应用");
         File apk=File.createTempFile("alive-source-",".apk",context.getCacheDir());
         File stage=new File(root,"import-"+UUID.randomUUID());
         try{
@@ -47,6 +59,11 @@ public final class AliveAssets {
                 long size=copy(input,output,SOURCE_BYTES,digest);output.getFD().sync();
                 if(size!=SOURCE_BYTES||!hex(digest.digest()).equals(SOURCE_SHA256))
                     throw new IOException("仅支持官方 OpenAlive 0.4.41-preview APK，文件大小或 SHA-256 不匹配");
+            }
+            importPreviews(context,apk);
+            if(coreReady){
+                context.getSharedPreferences(AliveSettings.APPLIED,Context.MODE_PRIVATE).edit().putLong("resources_revision",System.nanoTime()).apply();
+                return;
             }
             if(!stage.mkdir())throw new IOException("无法建立资源暂存目录");
             JSONArray manifest=new JSONArray();Set<String> names=new HashSet<>();long total=0;
@@ -136,12 +153,52 @@ public final class AliveAssets {
 
     /** Renderer paths are relative to APK assets/, not arbitrary filesystem paths. */
     public static synchronized InputStream open(Context context,String path)throws IOException{
+        if(path!=null&&path.startsWith("editor/")){
+            String name=path.substring(7),expected=PREVIEWS.get(name);
+            if(expected==null)throw new IOException("缩略资源未授权");
+            File file=new File(new File(root(context),"previews-v1"),name);
+            if(!validPreview(file,expected))throw new IOException("请重新选择固定 OpenAlive APK 补充样式缩略资源");
+            return new FileInputStream(file);
+        }
         if(path==null||!allowed("assets/"+path))throw new IOException("资源路径未授权");
         File dir=generation(context);
         if(!dir.equals(checked)&&!ready(context))throw new IOException("资源尚未就绪");
         File file=child(dir,"assets/"+path);
         if(!regularReadOnly(file)||file.length()!=REQUIRED.get("assets/"+path))throw new IOException("资源不完整");
         return new FileInputStream(file);
+    }
+
+    /** Optional editor assets are independent of the immutable, possibly already loaded native generation. */
+    public static synchronized boolean previewsReady(Context context)throws IOException{
+        File dir=new File(root(context),"previews-v1");
+        for(var item:PREVIEWS.entrySet())try{if(!validPreview(new File(dir,item.getKey()),item.getValue()))return false;}
+        catch(IOException unavailable){return false;}
+        return true;
+    }
+    private static boolean validPreview(File file,String expected)throws IOException{
+        if(!file.exists()||!regularReadOnly(file)||file.length()<=0||file.length()>160_000)return false;
+        MessageDigest hash=digest();try(InputStream input=new FileInputStream(file)){copy(input,OutputStream.nullOutputStream(),160_000,hash);}
+        return expected.equals(hex(hash.digest()));
+    }
+    private static void importPreviews(Context context,File apk)throws IOException{
+        File dir=new File(root(context),"previews-v1");
+        if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("无法创建缩略资源目录");
+        try(ZipFile archive=new ZipFile(apk)){
+            for(var item:PREVIEWS.entrySet()){
+                File file=new File(dir,item.getKey());
+                if(validPreview(file,item.getValue()))continue;
+                ZipEntry entry=archive.getEntry("assets/editor/"+item.getKey());
+                if(entry==null||entry.getSize()<=0||entry.getSize()>160_000)throw new IOException("缺少固定样式缩略资源");
+                AtomicFile atomic=new AtomicFile(file);FileOutputStream output=null;
+                try{
+                    output=atomic.startWrite();MessageDigest hash=digest();
+                    try(InputStream input=archive.getInputStream(entry)){if(copy(input,output,160_000,hash)!=entry.getSize())throw new IOException("缩略资源长度错误");}
+                    if(!item.getValue().equals(hex(hash.digest())))throw new IOException("缩略资源校验错误");
+                    atomic.finishWrite(output);output=null;
+                    if(!file.setReadOnly())throw new IOException("无法封存缩略资源");
+                }finally{if(output!=null)atomic.failWrite(output);}
+            }
+        }
     }
 
     /** A missing photo stays missing; callers must ask the user to select one. */

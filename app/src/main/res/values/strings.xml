@@ -3,7 +3,8 @@
     <string name="shortcut_window">当前应用小窗</string>
     <string name="shortcut_window_long">将当前应用变成小窗</string>
     <string name="description">类原生补全 · 小窗、弹幕通知、图标适配与日常工具</string>
-    <string name="accessibility_description">用于角落手势、快捷应用菜单和小窗触摸控制。检查窗口类型及前台应用，不读取页面正文。</string>
+    <string name="window_accessibility_label">小窗菜单按钮</string>
+    <string name="accessibility_description">手动启用后，将本服务加入系统无障碍按钮，点击呼出当前版本的小窗应用菜单。不读取页面、窗口内容或事件，不截图或模拟手势；仍需本版本已启用的小窗系统后端。</string>
     <color name="launcher_background">@android:color/system_accent1_100</color>
     <color name="launcher_foreground">@android:color/system_accent1_600</color>
 </resources>

@@ -28,6 +28,9 @@ public final class AlivePhase {
         public boolean presented(){return presented;}
         public boolean active(long now){return signalled&&now<(hiddenAt>=0?hardDeadline:deadline);}
         public long remaining(long now){return active(now)?(hiddenAt>=0?hardDeadline:deadline)-now:0;}
+        /** Animation completion is not permission to drop the already presented buffer before native DOZE. */
+        public boolean holding(long now){return signalled&&started&&now<hardDeadline;}
+        public long holdRemaining(long now){return holding(now)?hardDeadline-now:0;}
         /** Stop this sleep episode without allowing duplicate sleep signals to restart it. */
         public void end(){signalled=true;deadline=hardDeadline=0;hiddenAt=-1;}
         public void wake(){signalled=false;presented=started=false;deadline=hardDeadline=0;hiddenAt=-1;}

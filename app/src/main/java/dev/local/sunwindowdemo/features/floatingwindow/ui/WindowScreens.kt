@@ -6,6 +6,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
@@ -35,7 +36,12 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
 
 @Composable
 fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, number: (String, Int) -> Unit) {
+    val context = LocalContext.current
     SettingsGroup {
+        SettingRow("无障碍按钮呼出菜单", "可选：在系统设置中手动启用“小窗菜单按钮”并加入无障碍按钮，启用本身不呼出菜单；点击按钮沿用本版本的小窗限制，不支持借用另一版本后端。", onClick = {
+            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                .onFailure { android.widget.Toast.makeText(context, "系统无障碍设置暂不可用", android.widget.Toast.LENGTH_SHORT).show() }
+        })
         ToggleRow("长侧滑打开小窗", "从屏幕侧边向内长滑，松手后将当前应用转为小窗", value = p.longBackWindow) { boolean("longBackWindow", it) }
         ToggleRow("关闭顶部提示", value = p.hideTopHint) { boolean("hideTopHint", it) }
     }

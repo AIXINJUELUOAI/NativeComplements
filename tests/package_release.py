@@ -69,7 +69,7 @@ def main():
             entries = archive.read("META-INF/xposed/java_init.list").decode().splitlines()
             assert len(entries) == len(ENTRIES[product]) and set(entries) == ENTRIES[product], (product, entries)
             assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx")) for name in archive.namelist())
-            assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/")) for name in archive.namelist()), "Official Alive resources must remain user-imported, not bundled"
+            assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/")) for name in archive.namelist()), "Official Alive resources must remain user-imported, not bundled"
             if not standalone:
                 assert "assets/licenses/openalive/LICENSE" in archive.namelist()
                 assert "assets/licenses/openalive/NOTICE.txt" in archive.namelist()
@@ -100,7 +100,10 @@ def main():
         for expected in (f"name='{package}'", f"versionCode='{code}'", f"versionName='{version}'"):
             assert expected in badging, badging
         manifest = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
-        assert "BIND_ACCESSIBILITY_SERVICE" not in manifest
+        accessibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
+                              if block.lstrip().startswith('service') and 'WindowAccessibilityService' in block), '')
+        assert 'android.permission.BIND_ACCESSIBILITY_SERVICE' in accessibility and re.search(r'exported[^\n]*=true', accessibility), 'Missing system-bound accessibility button entry'
+        assert 'android.accessibilityservice.AccessibilityService' in manifest
         assert package + ".CONTROL" in manifest and package + ".settings" in manifest
         assert package + ".iconlayers" in manifest and package + ".diagnostics" in manifest
         eligibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
@@ -129,6 +132,12 @@ def main():
                 assert match, "Missing wallpaper XML: " + xml
                 metadata = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", match[1])
                 assert re.search(r"supportsAmbientMode[^\n]*=" + expected + r"(?:\s|$)", metadata), metadata
+        accessibility_path = re.search(r"resource [^\n]+ xml/window_accessibility_service\s+\(\) \(file\) (\S+)", resources)
+        assert accessibility_path, 'Missing accessibility metadata'
+        accessibility_xml = run(tools / 'aapt2.exe', 'dump', 'xmltree', apk, '--file', accessibility_path[1])
+        for capability in ('canRetrieveWindowContent', 'canPerformGestures', 'canRequestTouchExplorationMode', 'canTakeScreenshot'):
+            assert re.search(capability + r'[^\n]*=false', accessibility_xml), 'Unrequested accessibility capability: ' + capability
+        assert 'accessibilityEventTypes' not in accessibility_xml or re.search(r'accessibilityEventTypes[^\n]*=0x0(?:\s|$)', accessibility_xml), 'Accessibility entry must not collect window events'
         shortcut_path = re.search(r"resource [^\n]+ xml/shortcuts\s+\(\) \(file\) (\S+)", resources)
         assert shortcut_path, "Missing compiled static shortcut resource"
         shortcut = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", shortcut_path[1])
