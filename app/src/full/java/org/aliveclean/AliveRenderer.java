@@ -31,7 +31,8 @@ public final class AliveRenderer implements AutoCloseable {
     private long scene,frameTime;
     private int width,height,photo,mask,decorator,mode=1,seed=-1;
     private boolean seedAnimate,deferredSleep;
-    private Runnable sleepPresented;
+    private Runnable sleepPresented,framePresented;
+    private volatile Runnable unavailable;
     private float aspect;
     private boolean visible,holding,framePosted,failed,firstFrame,endpointPending;
     private volatile boolean closed;
@@ -55,6 +56,8 @@ public final class AliveRenderer implements AutoCloseable {
     }
     private AliveSettings.Snapshot readSettings(){return preview?AliveSettings.readDraft(context):AliveSettings.readApplied(context);}
     public String error(){return error;}
+    /** Worker callback; the owner must marshal lifecycle changes to its own thread. */
+    public void onUnavailable(Runnable callback){unavailable=callback;}
     /** Bounded editor-only idle demonstration; never re-arms a real suspended Engine. */
     public void previewLens(){post(()->{
         if(reportAppliedStatus||mode!=0)return;
@@ -69,6 +72,11 @@ public final class AliveRenderer implements AutoCloseable {
         if(next<0||next>2)throw new IllegalArgumentException("scene");
         post(()->changeMode(next,animate));
     }
+    /** One-shot acknowledgement of a real submitted buffer; never creates a hidden scene. */
+    public void presented(Runnable callback){post(()->{
+        framePresented=callback;
+        if(visible&&scene!=0)schedule();
+    });}
     /** Called once by the Service when a real visible sleep episode can actually start. */
     public void sleep(int lastAwakePhase,boolean animate,Runnable presented){
         post(()->{
@@ -105,7 +113,8 @@ public final class AliveRenderer implements AutoCloseable {
             int previous=mode;mode=next;animateMode=animate;sample.clear();endpointPending=true;
             lensUntil=next==0&&animate?System.nanoTime()+3_000_000_000L:0;
             android.util.Log.i("NativeComplements","ALIVE_RENDER mode="+previous+"->"+next+" animate="+animate+" scene="+(scene!=0)+" visible="+visible);
-            if(scene==0){seed=-1;seedAnimate=false;if(next!=0&&previous==0&&animate){seed=0;seedAnimate=true;}}
+            // A recreated surface is a current-state snapshot, not a deferred wake animation.
+            if(scene==0){seed=-1;seedAnimate=false;}
             if(scene!=0){
                 textures.change(next,animate);
                 if(frameMotion!=null){frameMotion.change(next,motion);if(!animate)frameMotion.finish();}
@@ -125,6 +134,8 @@ public final class AliveRenderer implements AutoCloseable {
     public void visible(boolean value,boolean retainScene){post(()->{
         boolean changed=visible!=value||holding;visible=value;holding=false;
         if(!value){
+            framePresented=null;
+            if(!retainScene){seed=-1;seedAnimate=false;deferredSleep=false;sleepPresented=null;}
             if(retainScene&&scene!=0){
                 if(changed){motion.pause(true);textures.pause(true);if(frameMotion!=null)frameMotion.pause(true);}
                 stopFrames();sample.clear();if(changed)android.util.Log.i("NativeComplements","ALIVE_RENDER hidden-retained mode="+mode);
@@ -162,6 +173,7 @@ public final class AliveRenderer implements AutoCloseable {
     private void fail(Throwable failure){
         reportError(failure.getClass().getSimpleName()+": "+String.valueOf(failure.getMessage()));failed=true;
         android.util.Log.e("NativeComplements","ALIVE_RENDER_UNAVAILABLE",failure);release();
+        Runnable callback=unavailable;if(callback!=null)callback.run();
     }
     private void reportError(String value){
         error=value;if(!reportAppliedStatus||value.equals(reportedError))return;reportedError=value;
@@ -270,6 +282,7 @@ public final class AliveRenderer implements AutoCloseable {
                 ||!NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():sample.base))
                 throw new IOException("Invalid native photo packet");
             if(!EGL14.eglSwapBuffers(display,window))throw new IOException("EGL swap failed");
+            Runnable submitted=framePresented;framePresented=null;if(submitted!=null)submitted.run();
             reportError("");sample.clear();
             if(deferredSleep){
                 deferredSleep=false;lensUntil=System.nanoTime()+3_000_000_000L;
@@ -287,6 +300,7 @@ public final class AliveRenderer implements AutoCloseable {
         if(choreographer!=null)choreographer.removeFrameCallback(frame);framePosted=false;handler.removeCallbacks(draw);
     }
     private void release(){
+        framePresented=null;
         if(scene!=0||display!=EGL14.EGL_NO_DISPLAY)android.util.Log.i("NativeComplements","ALIVE_RENDER release mode="+mode+" visible="+visible);
         stopFrames();
         sample.clear();if(textures!=null){textures.close();textures=null;}

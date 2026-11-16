@@ -122,7 +122,6 @@ final class ShareWindow {
                 if(chain.getArg(taskIndex)==null&&chain.getArg(taskIndex+1)==null){
                     try{
                         selected=engine.prepareInstaller(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(flagsIndex));
-                        if(selected==null)selected=engine.prepareShare(chain.getArg(0),chain.getArg(1),(ActivityOptions)chain.getArg(5),(Integer)chain.getArg(flagsIndex));
                     }
                     catch(Exception error){log.accept("SHARE_WINDOW_NATIVE "+FrameworkAccess.reason(error));}
                 }
@@ -136,7 +135,7 @@ final class ShareWindow {
                 }
                 }finally{if(previousForeground==null)engine.launchForeground.remove();else engine.launchForeground.set(previousForeground);}
             }));
-            log.accept("SHARE_WINDOW_READY inter-app source/result/URI chain preserved");
+            log.accept("OWNED_WINDOW_LAUNCH_READY installer safety and owned-task continuation only");
         }catch(Throwable error){for(XposedInterface.HookHandle handle:handles)try{handle.unhook();}catch(Throwable ignored){}log.accept("SHARE_WINDOW_UNAVAILABLE "+FrameworkAccess.reason(error));}
     }
 }

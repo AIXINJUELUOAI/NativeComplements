@@ -1,6 +1,6 @@
-# Alive 实验 AOD：SystemUI 能力、doze 模糊与额外淡出的窄投影
+# Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-当前为0.11.2-alive-test2/code145。此为用户追加授权的模块例外，不是普通应用获得签名权限，也不宣称本轮真机 AOD 已验证。仅主版安装 [AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)。用户明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通 Alive 壁纸仍为原生 ambient=false 回退。无需另存全局 enable 偏好或新增 Provider。
+当前为0.11.3-alive-test1/code146，覆盖145仅跳额外淡出的实现。此为用户追加授权的模块例外，不是普通应用获得签名权限；新Handoff尚未真机验证。仅主版安装 [AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)。明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通Alive仍为ambient=false回退。不新增全局enable偏好或Provider。
 
 ## 已核宿主与事件输入
 
@@ -44,18 +44,30 @@ code143只读现场显示：所选留光自身blur0，但系统稳定doze的 `wa
 
 该匹配由前述后台Flow的实查结果建立，并在setter上核对当前用户及锁屏/主屏流对象身份；不在高频setter内作Binder查询。组件/用户/AOD变化由原生流撤销匹配，后续producer恢复原值；不承诺跨进程零延迟。setter的认证动画直接调用不在producer作用域，不投影；QS/shade/brightness mirror/应用启动及其他原生贡献仍由原计算合成。读取失败保留native参数；三处hook/逐个deopt失败撤销这组blur hook，不扩大作用域或阻止原生能力路径。
 
-## code145：保留原生目标暗度，仅跳一次额外淡出
+## code145历史：只跳额外淡出不足以接管视觉交接
 
-[自然操作日志](<../../verification/alive-live-20261116-1400/manual-transition-logcat.txt>)已定位code144在动画窗口结束、显示器仍ON时释放native scene，1.913秒后DOZE才重建的断层；Engine现用同7800ms绝限静态保留已呈现端点，见 [平台交接](<alive-platform.md>)。这不等于系统遮挡也已统一，故新增独立的LightReveal binder窄投影。
+[code144日志](<../../verification/alive-live-20261116-1400/manual-transition-logcat.txt>)曾定位scene释放至DOZE的1.913秒断层，145随后增加7800ms绝限内静态holding及额外fade投影。[145新只读证据](<../../verification/alive-live-20261116-1440/logcat-all.txt>)进一步显示14:38:52.987 sleep、53.029首swap、54.830窗口到期、57.066 DOZE，期间visible/draw=true；用户仍报告软件内/桌面都先原生熄屏动画/黑场再Alive。这排除了“只需晚释放”作为完整答案，但不凭日志武断认定每帧具体遮挡层。
 
-目标为已核 `LightRevealScrimViewBinder$bind$1$1$2$1.emit(Object,Continuation)`，只把原生 host `Pair(nativeTarget,true)`替换为 **`Pair(同一个nativeTarget,false)`**，让原生binder立即提交自身暗度目标，跳过其额外333ms等待与733ms淡出。保留原生0.4/0.64等目标，不写alpha=0、不硬编码新暗度，不改原生1300ms screen-off controller、LightReveal几何、电源或认证。
+code145曾对已核 `LightRevealScrimViewBinder$bind$1$1$2$1.emit(Object,Continuation)` 仅作host `Pair(nativeTarget,true)`→`Pair(同一个nativeTarget,false)`，跳额外333ms等待与733ms淡出，保留0.4/0.64原生目标暗度。以下门控记录为历史；**code146已删除这组投影，不与新Handoff叠加。**
 
-门控必须全部成立：view所属默认显示器且ON/DOZE、非交互、后台已实查的精确自有实验锁屏组件/当前完成选择用户/AOD匹配仍有效；只在binder主线程收集中识别原生target=1开启一次identity-scoped episode，期限≤7800ms。随后0<target<1且原生animate=true时，还需真实KeyguardStateController showing、未occluded/goingAway/bouncer/fadingAway；user/lock/home对象身份仍相同才投影。该次分支无论安全与否都消耗token，不延后解锁后补播；唤醒、其他target、用户/组件失配与读取失败清理episode，过期不重放。不是逐帧hook，也不在binder里新增Binder查询。
+当时门控必须全部成立：view所属默认显示器且ON/DOZE、非交互、后台已实查的精确自有实验锁屏组件/当前完成选择用户/AOD匹配仍有效；只在binder主线程收集中识别原生target=1开启一次identity-scoped episode，期限≤7800ms。随后0<target<1且原生animate=true时，还需真实KeyguardStateController showing、未occluded/goingAway/bouncer/fadingAway；user/lock/home对象身份仍相同才投影。该次分支无论安全与否都消耗token，不延后解锁后补播；唤醒、其他target、用户/组件失配与读取失败清理episode，过期不重放。不是逐帧hook，也不在binder里新增Binder查询。
 
-精确ABI/类型/emit返回值及deopt失败撤销这一组新增hook，运行异常保原生参数；不影响能力Flow与doze blur各自的失败回退。不打开全局AOD资源，不绕过 `DozeParameters.getAlwaysOn`、省电、接近保护或显示器暂停。system_server专用绑定例外仍在另一边界，认证/解锁策略不改；不能再用“完全不Hook LightReveal binder”描述本轮，也不能把本次局部投影称接管整套系统熄屏动画。
+当时该组ABI/deopt失败独立撤销，不影响能力Flow/doze blur；这段仅保留145实现历史，不再描述146为Hook LightReveal binder。两版都不打开全局AOD资源，不绕过 `DozeParameters.getAlwaysOn`、省电、接近保护或显示器暂停；system_server绑定例外与视觉交接是不同边界。
+
+## code146：共用睡眠入口、首swap确认后才透出Alive
+
+[AliveSleepHandoff](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)替代145额外fade投影，接已核 `KeyguardService$2.onStartedGoingToSleep`，软件内与桌面共用同一个入口，而非桌面补丁。原方法先执行，再开启一次episode，经原生 `WallpaperManager.sendWallpaperCommand` 向实际壁纸发PREPARE；重复睡眠信号不续期，绝对期限7800ms，不持wake lock。
+
+1. 复用能力投影的实查MatchToken：当前完成选择用户、精确实验锁屏组件、AOD开关、真实壁纸ID及本包实际UID。仅默认显示器ON/DOZE、非交互、同一个native shade window/root且真实Keyguard showing、未occluded/goingAway/fading/bouncer时有效；窗口state也须一致。未知一律原生。
+2. 在该窗口原生 `applyWindowLayoutParams` 提交范围临时OR `FLAG_SHOW_WALLPAPER`，原方法继续执行，随后恢复原pending flags；不提前空画系统遮罩，不改窗口输入/认证属性。
+3. [Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)只在自有非预览实验服务、默认显示器ON、非交互、真实锁定、native visible且surface有效时，向 [renderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)请求一次真实成功swap回执。经raw Binder返回；接收端核 `Binder.getCallingUid()` 为该用户本包实际UID、interface descriptor、episode nonce、display0、状态/Parcel无多余数据及期限。旧回执不能启用新episode；成功swap不等于物理屏幕已呈现。
+4. 回执之后且上述同一安全scope仍有效，才在同root `LightRevealScrim.onDraw` 临时空Canvas clip，**仍执行原onDraw并finally恢复clip**。不改native alpha、opaque回调、LightReveal controller或Keyguard认证，不吞原方法、不全局透明；也不修改显示器电源、亮度或输入。
+5. timeout、wake、Engine取消/renderer失败/已确认后不可绘或隐藏、surface销毁、窗口detach、配置/尺寸/旋转、用户/壁纸/AOD切换、OFF/SUSPEND/移除或未知失败均停止局部呈现并请求原生重算。surface挂载后重新安排首swap确认，不复用被attach释放掉的旧回调。ABI/deopt安装失败撤销本组Hook，能力Flow与doze blur独立回退。无首swap则不clip，重复命令/回执不延长绝限，不能解锁后补开视觉scope。
+
+这里控制的是自有Alive在一段安全睡眠窗口内的**壁纸可见与局部LightReveal绘制**，并未替换所有原生锁屏/熄屏动画，也未照搬OpenAlive的ColorOS专用屏幕/CPU窗口或全包权限例外。系统仍控制软件退出、认证、功耗/接近保护和最终DOZE；新交接尚未真机验证。
 
 ## 验证范围
 
-目标ABI依据归档DEX；code145能力/blur/额外淡出源码和失败回退不等于实际生效或普遍连续性验证。按用户少测试要求，本轮仅Phase/目标相关必要检查与R8/原签名/身份/资源及产品边界，由Lead收口；本文不预报仍在执行的PASS、hash或交付状态，不跑full suite/全功能回归，不自动安装、重启或写设备设置。
+目标ABI依据归档DEX；145只读现场不是146 Handoff实际生效或普遍连续性的证明。按用户少测试要求仅保留必要启动/Hook失败恢复、生命周期与构建/R8/原签名/身份/资源/产品边界核验，由Lead收口；本文不预报执行中的PASS/hash，不跑full suite或全功能回归，不自动安装、重启或写设置。
 
-实际组件/用户切换、静态锁屏恢复、AOD开关、省电/遮挡、一次性淡出门控、指纹直接AOD→HOME及其他blur保留仍需用户验证。照片burn-in位移未做、时钟避让延期，限短时测试；构建、单测和全屏真实预览不能代替物理DOZE、GPU或视觉验证，不称全面连续/无闪/其他ROM兼容已通过。
+软件内与桌面熄屏交接、组件/用户/AOD/配置切换回退、省电/遮挡、指纹直达HOME、球体色块与补播修正仍交用户真机验证。照片burn-in位移未做、时钟避让延期，限短时测试；构建、单测及全屏预览不能代替物理DOZE/GPU/视觉验证，不称所有原生动画已替换、全面连续/无闪或其他ROM兼容已通过。

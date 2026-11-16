@@ -45,7 +45,7 @@ final class WindowEngine {
     private IBinder uiLease;
     private long uiSeen;
     private boolean uiReady;
-    private volatile boolean landscapeShareWindow,endOnClose,keepEdgeAwake;
+    private volatile boolean endOnClose,keepEdgeAwake;
     private volatile boolean autoMinimizeOnOpen=true;
     private WindowContinuation continuation;
     private boolean continuationReady;
@@ -353,7 +353,6 @@ final class WindowEngine {
                         if(getSentFromUid()==uiUid&&i.getIntExtra("protocol",0)==Wire.PROTOCOL&&extras!=null){
                             uiLease=extras.getBinder("lease");uiSeen=SystemClock.elapsedRealtime();
                             uiReady=i.getBooleanExtra("hostReady",false);
-                            landscapeShareWindow=i.getBooleanExtra("landscapeShareWindow",false);
                             autoMinimizeOnOpen=i.getBooleanExtra("autoMinimizeOnOpen",true);
                             endOnClose=i.getBooleanExtra("endOnClose",false);keepEdgeAwake=i.getBooleanExtra("keepEdgeAwake",false);
                             windowDim=Rules.clamp(i.getIntExtra("windowDim",Config.DEFAULT_WINDOW_DIM),0,100);
@@ -794,38 +793,7 @@ final class WindowEngine {
             return new ShareLaunch(request,ShareWindow.installerOptions(options),null,task,true);
         }
     }
-    ShareLaunch prepareShare(Object request,Object source,ActivityOptions options,int realCallingUid)throws Exception{
-        if(lock==null||handler==null||context==null||request==null||!landscapeShareWindow
-            ||!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000)return null;
-        synchronized(lock){
-            if(recovering||pendingStart!=null||anyRestoring()
-                ||screenBlocked())return null;
-            source=launchSource(request,source,realCallingUid);if(source==null)return null;
-            if((Boolean)a.call(request,"isResolverOrDelegateActivity")||a.integer(request,"getUid")<10000)return null;
-            String pkg=(String)a.field(request,"packageName");
-            if(!Wire.allowedPackage(pkg)||Wire.PKG.equals(pkg)||BackBridge.PACKAGE.equals(pkg)
-                ||LauncherGuard.PACKAGE.equals(pkg)||!UserHandle.getUserHandleForUid(a.integer(request,"getUid")).equals(android.os.Process.myUserHandle()))return null;
-            Intent intent=(Intent)a.field(request,"intent");boolean chooser=(Boolean)a.call(source,"isResolverOrDelegateActivity");
-            String sourcePkg=(String)a.field(source,"packageName");
-            if(!chooser&&(a.integer(source,"getUid")<10000||Wire.PKG.equals(sourcePkg)||BackBridge.PACKAGE.equals(sourcePkg)||LauncherGuard.PACKAGE.equals(sourcePkg)))return null;
-            if(pkg.equals(a.call(context.getPackageManager(),"getPermissionControllerPackageName")))return null;
-            if(!ShareWindow.eligibleIntent(intent,chooser)||(intent.getFlags()&Intent.FLAG_ACTIVITY_CLEAR_TASK)!=0||pkg.equals(a.field(source,"packageName")))return null;
-            Object sourceTask=a.call(source,"getTask");
-            if(sourceTask==null||sourceTask!=a.focused.invoke(root)||!a.bool(sourceTask,"isVisibleRequested")
-                ||a.integer(sourceTask,"getWindowingMode")!=1)return null;
-            Object display=a.call(sourceTask,"getDisplayContent");Rect bounds=(Rect)a.call(display,"getBounds");
-            if((Integer)a.field(display,"mDisplayId")!=0||a.integer(sourceTask,"getActivityType")!=1)return null;
-            if(options!=null){int mode=(Integer)a.call(options,"getLaunchWindowingMode");if(mode!=0&&mode!=1)return null;}
-            NativeForeground before=launchForeground.get();
-            if(before!=null&&keepNativeForeground(before,before.task,pkg,
-                a.integer(request,"getUid")/100000,display))return null;
-            boolean horizontal=initialLandscape(request,pkg,0);
-            Geometry.Placement p=Geometry.place(Math.min(bounds.width(),bounds.height()),horizontal,0,0,bounds.width(),bounds.height(),0);
-            ActivityOptions next=ShareWindow.launchOptions(options,new Rect(0,0,p.width(),p.height()));
-            log.accept("SHARE_WINDOW_PREPARE package="+pkg+" landscape="+horizontal);
-            return new ShareLaunch(request,next,uiLease,sourceTask,false);
-        }
-    }
+    ShareLaunch prepareShare(Object request,Object source,ActivityOptions options,int realCallingUid){return null;}
     private Object startShare(Object request,Object started,ShareLaunch launch)throws Exception{
         Object task=a.call(started,"getTask");
         if(task==null||!launch.lease.isBinderAlive())return null;

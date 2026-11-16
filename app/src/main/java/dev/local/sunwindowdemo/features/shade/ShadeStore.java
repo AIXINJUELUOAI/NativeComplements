@@ -34,17 +34,11 @@ public final class ShadeStore {
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 
-    /** Cover (TaskCover) and floating-window menu/sector Monet icons; effective only with system themed icons. */
-    public static boolean coverMonet(Context context) { return preferences(context).getBoolean("cover_monet", false); }
-    public static boolean windowMonet(Context context) { return preferences(context).getBoolean("window_monet", false); }
-    public static void setCoverMonet(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean("cover_monet", enabled).apply();
-        dev.local.sunwindowdemo.features.iconlayers.IconLayerStore.refresh(context);
-    }
-    public static void setWindowMonet(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean("window_monet", enabled).apply();
-        dev.local.sunwindowdemo.features.iconlayers.IconLayerStore.refresh(context);
-    }
+    /** Retired surfaces: old saved preferences are deliberately ignored. Drawer Monet is independent. */
+    public static boolean coverMonet(Context context) { return false; }
+    public static boolean windowMonet(Context context) { return false; }
+    public static void setCoverMonet(Context context, boolean enabled) {}
+    public static void setWindowMonet(Context context, boolean enabled) {}
 
     public static boolean drawerMonet(Context context) {
         return preferences(context).getBoolean("drawer_monet", false);

@@ -45,7 +45,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private final Set<String> litCameras=new HashSet<>();
     private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,chooser;
     private boolean torchDismissed,rotationRestoring;
-    private final SuggestionRules.Attempt opening=new SuggestionRules.Attempt(),inputAttempt=new SuggestionRules.Attempt();
+    private final SuggestionRules.Attempt inputAttempt=new SuggestionRules.Attempt();
     private final Binder rotationLease=new Binder();
     void publishRotationSettings(){
         Bundle extras=new Bundle();extras.putBinder("lease",rotationLease);
@@ -419,26 +419,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         catch(RuntimeException e){view=null;RotationDiagnostics.update("window","窗口添加失败: "+e.getClass().getSimpleName());status("OVERLAY_UNAVAILABLE");}
     }
     private void open(Intent intent,String pkg,Runnable completed){
-        if(intent==null||locked()||opening.running())return;
+        if(intent==null||locked())return;
         try{
             Intent launch=new Intent(intent).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if(launch.resolveActivity(context.getPackageManager())==null)throw new IllegalStateException();
-            if(settings.getBoolean("window")){
-                if(!new Config(context).enabled()){
-                    Toast.makeText(context,"请开启小窗控制，或关闭建议中的小窗打开",Toast.LENGTH_SHORT).show();return;
-                }
-                int generation=opening.begin();
-                ResultReceiver reply=new ResultReceiver(main){
-                    @Override protected void onReceiveResult(int result,Bundle data){
-                        if(!opening.complete(closed,generation))return;
-                        if(result==1){chooser=false;completed.run();}
-                        else {Toast.makeText(context,"打开未完成，请重试",Toast.LENGTH_SHORT).show();render();}
-                    }
-                };
-                Wire.openIntent(context,pkg,launch,reply);
-                main.postDelayed(()->{if(opening.timeout(closed,generation)){Toast.makeText(context,"打开超时，请重试",Toast.LENGTH_SHORT).show();render();}},15000);
-            }else {context.startActivity(launch);chooser=false;completed.run();}
-        }catch(Exception e){opening.cancel();Toast.makeText(context,"目标应用暂不支持此入口",Toast.LENGTH_SHORT).show();}
+            context.startActivity(launch);chooser=false;completed.run();
+        }catch(Exception e){Toast.makeText(context,"目标应用暂不支持此入口",Toast.LENGTH_SHORT).show();}
     }
     private void openMap(String pkg){
         if(mapText==null)return;

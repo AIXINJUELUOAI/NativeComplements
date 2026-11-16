@@ -28,7 +28,7 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
     )
     GroupTitle("小窗设置")
     SettingsGroup {
-        SettingRow("手势与菜单", onClick = { navigate(Page.Gestures) }, leading = { Glyph("gesture") })
+        SettingRow("小窗入口与菜单", onClick = { navigate(Page.Gestures) }, leading = { Glyph("gesture") })
         SettingRow("窗口与多任务", onClick = { navigate(Page.Behavior) }, leading = { Glyph("window") })
         SettingRow("小窗触发限制", onClick = { navigate(Page.Prevention) }, leading = { Glyph("check") })
     }
@@ -38,25 +38,14 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
 fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, number: (String, Int) -> Unit) {
     val context = LocalContext.current
     SettingsGroup {
-        SettingRow("无障碍按钮呼出菜单", "可选：在系统设置中手动启用“小窗菜单按钮”并加入无障碍按钮，启用本身不呼出菜单；点击按钮沿用本版本的小窗限制，不支持借用另一版本后端。", onClick = {
+        SettingRow("无障碍按钮呼出菜单", "在系统设置中手动启用“小窗菜单按钮”并加入无障碍按钮，启用本身不呼出菜单；点击按钮沿用本版本的小窗限制，不支持借用另一版本后端。", onClick = {
             runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
                 .onFailure { android.widget.Toast.makeText(context, "系统无障碍设置暂不可用", android.widget.Toast.LENGTH_SHORT).show() }
         })
-        ToggleRow("长侧滑打开小窗", "从屏幕侧边向内长滑，松手后将当前应用转为小窗", value = p.longBackWindow) { boolean("longBackWindow", it) }
-        ToggleRow("关闭顶部提示", value = p.hideTopHint) { boolean("hideTopHint", it) }
-    }
-    GroupTitle("触发与选中")
-    SettingsGroup {
-        SliderRow("角落热区边长", value = p.heat, range = 36..72, unit = " dp") { number("heat", it) }
-        SliderRow("触发滑动距离", value = p.distance, range = 24..100, unit = " dp") { number("distance", it) }
-        SliderRow("滑动选中距离", value = p.selectionDistance, range = 50..100, unit = "%") { number("selectionDistance", it) }
     }
     GroupTitle("菜单外观")
     SettingsGroup {
         ToggleRow("菜单背景模糊", value = p.menuBlur) { boolean("menuBlur", it) }
-        SliderRow("扇区快捷项数量", value = p.fanCount, range = 1..5, unit = " 个") { number("fanCount", it) }
-        SliderRow("扇形半径", value = p.radius, range = 120..260, unit = " dp") { number("radius", it) }
-        SliderRow("图标直径", value = p.icon, range = 32..56, unit = " dp") { number("icon", it) }
     }
 }
 
@@ -67,8 +56,6 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, num
     }
     GroupTitle("窗口行为")
     SettingsGroup {
-        ToggleRow("应用间跳转小窗打开", value = p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
-        ToggleRow("通知小窗打开", value = p.notificationWindow) { boolean("notificationWindow", it) }
         ToggleRow("新开小窗时自动最小化", value = p.autoMinimizeOnOpen) { boolean("autoMinimizeOnOpen", it) }
         ToggleRow("双击空白处关闭", value = p.doubleClose) { boolean("doubleClose", it) }
         ToggleRow("贴边锁屏继续运行", value = p.keepEdgeAwake) { boolean("keepEdgeAwake", it) }
@@ -89,9 +76,6 @@ fun PreventionScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, b
 @Composable
 fun DiagnosticsScreen(controller: WindowController) {
     val runtime = controller.runtime
-    SettingsGroup {
-        ToggleRow("显示小窗触发热区", value = controller.preferences.showHeat) { controller.boolean("showHeat", it) }
-    }
     GroupTitle("小窗连接")
     SettingsGroup {
         SettingRow("系统后端", when {
@@ -105,14 +89,13 @@ fun DiagnosticsScreen(controller: WindowController) {
     GroupTitle("测试与恢复")
     SettingsGroup {
         SettingRow("触摸与键盘诊断", onClick = controller::diagnostic)
-        SettingRow("使用 Chrome 测试", onClick = controller::chrome)
         SettingRow("恢复原窗口", onClick = controller::restore)
         SettingRow("打开待恢复任务", onClick = controller::reopen)
         SettingRow("允许恢复通知", onClick = controller::notifications)
     }
     GroupTitle("诊断信息")
     Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        SelectionContainer { Text(runtime.report + "\n\n最近手势：" + runtime.lastTouch,
+        SelectionContainer { Text(runtime.report + "\n\n入口状态：" + runtime.lastTouch,
             Modifier.fillMaxWidth().padding(20.dp), style = MaterialTheme.typography.bodySmall) }
     }
 }

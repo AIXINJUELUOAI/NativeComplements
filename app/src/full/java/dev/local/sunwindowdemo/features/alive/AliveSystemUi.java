@@ -26,7 +26,7 @@ public final class AliveSystemUi {
             Access access=new Access(loader);
             hook=module.hook(access.constructor).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();
-                try{access.project(chain.getThisObject(),chain.getArg(3));}
+                try{access.project(chain.getThisObject(),chain.getArg(3),(android.content.Context)chain.getArg(5));}
                 catch(ReflectiveOperationException|RuntimeException unavailable){
                     log.accept("ALIVE_SYSTEMUI_PROJECTION_UNAVAILABLE "+unavailable.getClass().getSimpleName());
                 }
@@ -34,7 +34,7 @@ public final class AliveSystemUi {
             });
             if(!module.deoptimize(access.constructor))throw new IllegalStateException("wallpaper repository constructor deoptimize");
             installDozeBlur(module,loader,access,log);
-            installSleepFade(module,loader,access,log);
+            AliveSleepHandoff.install(module,loader,access,log);
             log.accept("ALIVE_SYSTEMUI_READY selected ambient wallpaper only");
         }catch(Throwable unavailable){
             if(hook!=null)try{hook.unhook();}catch(Throwable ignored){}
@@ -101,84 +101,15 @@ public final class AliveSystemUi {
         }
     }
 
-    /** Preserve the native dim target; remove only its additional 333ms delay + 733ms fade once per sleep. */
-    private static void installSleepFade(XposedModule module,ClassLoader loader,Access access,Consumer<String> log){
-        XposedInterface.HookHandle hook=null;
-        java.util.concurrent.atomic.AtomicBoolean enabled=new java.util.concurrent.atomic.AtomicBoolean();
-        try{
-            Class<?> depth=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
-            Class<?> interactor=type(loader,"com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor");
-            Field wallpapers=field(depth,"wallpaperInteractor",interactor);
-            Field repository=field(interactor,"wallpaperRepository",access.constructor.getDeclaringClass());
-            Class<?> keyguard=type(loader,"com.android.systemui.statusbar.policy.KeyguardStateControllerImpl");
-            Field keyguardState=field(depth,"keyguardStateController",type(loader,"com.android.systemui.statusbar.policy.KeyguardStateController"));
-            Field showing=field(keyguard,"mShowing",boolean.class),occluded=field(keyguard,"mOccluded",boolean.class);
-            Field going=field(keyguard,"mKeyguardGoingAway",boolean.class),bouncer=field(keyguard,"mPrimaryBouncerShowing",boolean.class);
-            Field fading=field(keyguard,"mKeyguardFadingAway",boolean.class);
-            Class<?> binder=type(loader,"com.android.systemui.keyguard.ui.binder.LightRevealScrimViewBinder$bind$1$1$2$1");
-            Field scrim=field(binder,"$revealScrim",type(loader,"com.android.systemui.statusbar.LightRevealScrim"));
-            Class<?> pair=type(loader,"kotlin.Pair");
-            Constructor<?> create=pair.getDeclaredConstructor(Object.class,Object.class);
-            Method first=pair.getDeclaredMethod("component1"),second=pair.getDeclaredMethod("component2");
-            Method emit=binder.getDeclaredMethod("emit",Object.class,type(loader,"kotlin.coroutines.Continuation"));
-            if(emit.getReturnType()!=Object.class)throw new NoSuchMethodException("sleep fade ABI");
-            for(AccessibleObject member:new AccessibleObject[]{create,first,second,emit})member.setAccessible(true);
-            // Binder collection is on the view's main lifecycle; one identity-scoped episode, never per-frame hooks.
-            Object[] episode={null};long[] deadline={0};boolean[] high={false};
-            hook=module.hook(emit).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object replacement=null;
-                try{
-                    if(enabled.get()&&android.os.Looper.myLooper()==android.os.Looper.getMainLooper()){
-                        android.view.View view=(android.view.View)scrim.get(chain.getThisObject());
-                        Object input=chain.getArg(0);
-                        if(!pair.isInstance(input))throw new IllegalArgumentException("native Pair required");
-                        Object nativeTarget=first.invoke(input);boolean animate=Boolean.TRUE.equals(second.invoke(input));
-                        float target=((Number)nativeTarget).floatValue();
-                        android.view.Display display=view.getDisplay();
-                        boolean displayAllowed=display!=null&&display.getDisplayId()==android.view.Display.DEFAULT_DISPLAY
-                            &&(display.getState()==android.view.Display.STATE_ON||display.getState()==android.view.Display.STATE_DOZE);
-                        android.os.PowerManager power=view.getContext().getSystemService(android.os.PowerManager.class);
-                        Object owner=access.depth.get();
-                        Object repo=owner==null?null:repository.get(wallpapers.get(owner));
-                        Object identity=repo==null?null:access.selectedToken(repo);
-                        boolean own=displayAllowed&&power!=null&&!power.isInteractive()&&identity!=null;
-                        if(!own){episode[0]=null;deadline[0]=0;high[0]=false;}
-                        else{
-                            long now=android.os.SystemClock.uptimeMillis();
-                            if(target==1f){
-                                if(!high[0]){episode[0]=identity;deadline[0]=now+7800;}
-                                high[0]=true;
-                            }else if(target>0f&&target<1f){
-                                Object state=keyguardState.get(owner);
-                                Access.Match before=episode[0] instanceof Access.Match value?value:null;
-                                Access.Match current=(Access.Match)identity;
-                                boolean same=before!=null&&before.user==current.user&&before.lock==current.lock&&before.home==current.home;
-                                boolean allowed=same&&now<deadline[0]&&animate&&keyguard.isInstance(state)
-                                    &&showing.getBoolean(state)&&!occluded.getBoolean(state)&&!going.getBoolean(state)
-                                    &&!bouncer.getBoolean(state)&&!fading.getBoolean(state);
-                                // Consume even when unsafe: no late replay after unlock, occlusion or an expired episode.
-                                episode[0]=null;deadline[0]=0;
-                                if(allowed)replacement=create.newInstance(nativeTarget,Boolean.FALSE);
-                                log.accept("ALIVE_SLEEP_FADE target="+target+" nativeAnimate="+animate+" projected="+allowed);
-                            }else{episode[0]=null;deadline[0]=0;high[0]=false;}
-                        }
-                    }
-                }catch(ReflectiveOperationException|RuntimeException unknown){
-                    episode[0]=null;deadline[0]=0;high[0]=false;
-                }
-                return replacement==null?chain.proceed():chain.proceed(new Object[]{replacement,chain.getArg(1)});
-            });
-            if(!module.deoptimize(emit))throw new IllegalStateException("sleep fade deoptimize");
-            enabled.set(true);log.accept("ALIVE_SLEEP_FADE_READY native target preserved");
-        }catch(Throwable unknown){
-            enabled.set(false);
-            if(hook!=null)try{hook.unhook();}catch(Throwable ignored){}
-            log.accept("ALIVE_SLEEP_FADE_UNAVAILABLE "+unknown.getClass().getSimpleName());
-        }
+    static record MatchToken(Object user,Object lock,Object home,int uid,int wallpaperId,int lockId) {
+        boolean same(MatchToken other){return other!=null&&user==other.user&&lock==other.lock&&home==other.home&&uid==other.uid&&wallpaperId==other.wallpaperId&&lockId==other.lockId;}
     }
-
-    private static final class Access {
+    private static final class Access implements AliveSleepHandoff.Selection {
+        volatile Runnable changed=()->{};
         volatile java.lang.ref.WeakReference<Object> depth=new java.lang.ref.WeakReference<>(null);
+        public Object token(Object repository){return selectedToken(repository);}
+        public int uid(Object repository){Object value=selectedToken(repository);return value instanceof MatchToken token?token.uid:-1;}
+        public void changes(Runnable listener){changed=listener;}
         final Constructor<?> constructor;
         final Class<?> flow,function;
         final Field ambient,lockInfo,homeInfo,settings,manager,background,selected,userInfo,userId,status;
@@ -187,17 +118,16 @@ public final class AliveSystemUi {
         private final Map<Object,Selection> selections=new WeakHashMap<>();
         private static final class Selection {
             final Object selected,lock,home;
-            volatile Match match;
+            volatile MatchToken match;
             Selection(Object selected,Object lock,Object home){this.selected=selected;this.lock=lock;this.home=home;}
         }
-        private record Match(Object user,Object lock,Object home) {}
         boolean selectedOwn(Object repository){return selectedToken(repository)!=null;}
         Object selectedToken(Object repository){
             try{
                 Selection selection;
                 synchronized(selections){selection=selections.get(repository);}
                 if(selection==null)return null;
-                Match match=selection.match;
+                MatchToken match=selection.match;
                 return match!=null&&current.invoke(selection.selected)==match.user
                     &&status.get(match.user)==complete&&current.invoke(selection.lock)==match.lock
                     &&current.invoke(selection.home)==match.home?match:null;
@@ -237,7 +167,7 @@ public final class AliveSystemUi {
                     ||supports.getReturnType()!=boolean.class||!flow.isAssignableFrom(combine.getReturnType())||flowOn.getReturnType()!=flow
                     ||!function.isInterface())throw new NoSuchMethodException("ambient projection ABI");
         }
-        void project(Object repository,Object userRepository)throws ReflectiveOperationException {
+        void project(Object repository,Object userRepository,android.content.Context context)throws ReflectiveOperationException {
             Object original=ambient.get(repository),selection=selected.get(userRepository);
             Object secure=settings.get(repository),wallpaper=manager.get(repository);
             Object lock=lockInfo.get(repository),home=homeInfo.get(repository);
@@ -266,10 +196,15 @@ public final class AliveSystemUi {
                             &&(Integer)getSetting.invoke(secure,0,user,"doze_always_on")==1
                             &&current.invoke(selection)==model&&status.get(model)==complete;
                         // Gate publication precedes emission; the collector then recomputes only its doze contribution.
-                        if(own&&current.invoke(lock)==args[1]&&current.invoke(home)==args[2])
-                            gate.match=new Match(model,args[1],args[2]);
+                        if(own&&current.invoke(lock)==args[1]&&current.invoke(home)==args[2]){
+                            android.content.pm.ApplicationInfo app=(android.content.pm.ApplicationInfo)
+                                android.content.pm.PackageManager.class.getMethod("getApplicationInfoAsUser",String.class,int.class,int.class)
+                                    .invoke(context.getPackageManager(),OWN.getPackageName(),0,user);
+                            gate.match=new MatchToken(model,args[1],args[2],app.uid,actualId,lockId);
+                        }
                         return own?Boolean.TRUE:nativeValue;
                     }catch(ReflectiveOperationException|RuntimeException unknown){return nativeValue;}
+                    finally{changed.run();}
                 }
                 return switch(method.getName()){
                     case "equals" -> proxy==args[0];

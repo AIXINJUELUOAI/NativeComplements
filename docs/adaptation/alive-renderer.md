@@ -1,6 +1,8 @@
 # Alive 照片渲染内核
 
-## 当前范围：0.11.2-alive-test2 / code145
+## 当前范围：0.11.3-alive-test1 / code146
+
+本节覆盖code145当前性表述；固定native与shader未改。用户145只读证据与新系统交接分别见 [平台事实](<alive-platform.md>)、[SystemUI边界](<alive-systemui.md>)。code146源码修正不是新包真机视觉PASS。
 
 接入基于 [OpenAlive 固定提交 2d54c72](<https://github.com/Maga-King/OpenAlive/tree/2d54c72a573b2f66e20b558283bef58cdb0ada60>) 的 MIT Java 动画/矩阵/遮罩解码及照片渲染分支，不是 Flyme 官方服务移植，不声称原版系统时序、性能或其他 ROM 兼容。复制源码保留 [完整 MIT 许可](<../../app/src/full/java/org/aliveclean/LICENSE>)。
 
@@ -38,9 +40,15 @@ code145 的卡片使用固定上游 **10张 PNG**：六张 AOD、四张锁屏纹
 
 等待native visible最多6秒，隐藏不初始化/绘制；无scene只用最近真实LOCK/HOME种子，没有种子静态AOD，不假HOME。完整起始帧成功swap ack后起1800ms收拢；隐藏pause三轨、停帧，恢复再续，从首次sleep信号起绝对上限仍7800ms。
 
-code144日志证实动画窗口到期时仍ON，释放至DOZE空档1.913秒。code145由 [Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>) 的同episode `holding`把动画完成与buffer释放分开：`hold(visible)`只保留**已存在scene**，结束三轨、清待呈现样本与lens期限，按需呈现静态AOD端点；无scene直接返回，不为交接解码/重建，隐藏不绘制。不新增动画、不延长7800ms绝限，不把等待变无限保活。wake/ambient进入0/OFF/UNKNOWN/SUSPEND取消，DOZE按正常事实门控衔接。
+[Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)保留code145的同episode `holding`：只留已存在scene，结束三轨、清待呈现样本与lens期限，按需提交静态AOD端点；无scene不为交接重建，隐藏不绘制、不延长7800ms绝限。wake/ambient进入0/OFF/UNKNOWN/SUSPEND取消，DOZE按正常事实门控衔接。code145新日志已表明首swap和端点都发生在DOZE之前且visible=true，用户仍看到原生熄屏/黑场，故不能把holding称为完整系统视觉交接。
 
-`mode(同阶段,false)`仍结束三轨并清旧样本；进入ambient duration0/DOZE_SUSPEND强端点，退出duration0仍要求真实唤醒展开。隐藏/释放后0→1/2可保留AOD起点，不等待或修改认证。原生LightReveal额外淡出的窄适配见 [SystemUI边界](<alive-systemui.md>)，不是renderer控制系统。
+## code146：球体混合退出与禁止补播
+
+- [SceneMotion](<../../app/src/full/java/org/aliveclean/SceneMotion.java>)按**实际AOD混合占比**而不只逻辑mode选择启航awake轨：快速0→LOCK→HOME期间只要 `values[0]>0.000001`，仍走对应AOD展开轨，避免误走普通LOCK→HOME的tr4，把尚存decorator按默认1000ms拖尾。正常AOD展开decorator在33ms退0，沿当前采样衔接，不删原装饰图/改shader掩盖色块。实际纯HOME占比不借该条件重新采球。
+- [Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)在非睡眠的隐藏/不可绘或visibility回调只提交当前端点；[AliveRenderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)无scene时不再保留AOD解锁种子。普通隐藏清待播wake/sleep回调，重建按当前mode初始化；解锁到软件后再回桌面不应补播旧解锁。只有同一有界sleep episode允许暂留现有scene并暂停三轨。
+- `mode(同阶段,false)`结束三轨并清旧样本。进入ambient duration0/DOZE_SUSPEND强端点，真实可见awake场景仍可展开，不等待/修改认证。新SystemUI交接的first-swap回执来自一次真正 `eglSwapBuffers` 成功；回执本身不创建隐藏scene，也不是物理屏幕已呈现的证明。renderer失败通知Engine取消handoff，确认后停绘也取消；surface重新attach后再安排确认，不能拿已被release清掉的回调当成成功。
+
+用户将异常描述为球体色块叠到壁纸，比“光晕”更准确；上面是代码可证的错误轨道与生命周期修正，尚无code146真机证据能宣称残留已消失。
 
 原生AOD target黑底合成局部照片；样式1自身blur0，2为22、3..5为100是继承内容参数，不是字面输出像素半径；系统额外doze blur是另一边界。照片burn-in位移未做，时钟避让延期，只短时测试。
 
@@ -48,4 +56,4 @@ code144日志证实动画窗口到期时仍ON，释放至DOZE空档1.913秒。co
 
 初始化/解码/native packet/EGL swap失败释放停试，不无限重建；遮罩最多三次尝试。实际服务通过error及applied backend_error报告、成功swap清除，预览独立；仅配置/资源显式变化重试，不让错误键造成reload回环。
 
-按用户要求，本轮只做Phase/目标相关必要检查及R8/签名/身份/资源/产品边界核验，由Lead收口，本文不预报仍在运行的结果或hash，不跑full suite/全功能回归。静态交接、LightReveal投影、六AOD与纹理、全屏Sheet、应用回桌面、指纹/GPU/物理DOZE仍待用户验证；不称全面连续、无闪或其他ROM兼容已通过。
+按用户要求只保留必要生命周期/失败保护与构建、R8、签名、身份及产品边界核验，由Lead收口；本文不预报执行中的PASS/hash，不跑full suite或全功能回归。code145视觉反馈不能作为code146新交接、混合轨修正及禁止补播的真机PASS；六AOD/纹理、指纹、GPU和物理DOZE仍交用户验证，不自动安装/重启/改设置，不称全面连续、无闪或其他ROM兼容。

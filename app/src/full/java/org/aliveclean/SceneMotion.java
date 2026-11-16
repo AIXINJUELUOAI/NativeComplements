@@ -190,6 +190,8 @@ final class SceneMotion {
         if(!active())lastFrame=0;
         if(animation!=null)animation.cancel();
         int previous=mode,tr=transition(previous,next);
+        // A wake redirected before LOCK is visually complete is still an AOD expansion.
+        if(aod==0&&next!=0&&values[0]>0.000001f)tr=transition(0,next);
         ArrayList<Animator> tracks=new ArrayList<>();
         if(aod==0)lens(tracks,tr,next);else if(aod==101)full(tracks,tr,next);
         if(textureTracks){if(lock==1||lock==2)glass(tracks,tr,next);else if(lock==3)ground(tracks,tr,next);}

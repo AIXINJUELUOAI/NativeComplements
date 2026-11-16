@@ -196,11 +196,6 @@ class WindowController(private val activity: Activity) {
             activity.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 5)
         else toast("通知权限已开启")
     }
-    fun chrome() {
-        if (!preferences.enabled || !runtime.compatible || !runtime.hostConnected) { toast("请先启用小窗控制并连接 SystemUI 宿主"); return }
-        if (activity.packageManager.getLaunchIntentForPackage("com.android.chrome")?.component == null) { toast("未找到 Chrome，可使用内置诊断页"); return }
-        Wire.send(activity, "OPEN", "com.android.chrome", -1, Wire.token(), false)
-    }
     fun reopen() {
         val intent = recovery
         val pkg = intent?.getStringExtra("recoverPackage")

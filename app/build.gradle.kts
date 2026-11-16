@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 145
-        versionName = "0.11.2-alive-test2"
+        versionCode = 146
+        versionName = "0.11.3-alive-test1"
     }
     flavorDimensions += "product"
     productFlavors {
@@ -25,7 +25,7 @@ android {
             applicationId = "dev.nativecomplements.window"
             proguardFile("proguard-window.pro")
             resValue("string", "app_name", "类原生小窗")
-            resValue("string", "description", "同源独立小窗 · 系统任务与原生手势")
+            resValue("string", "description", "同源独立小窗 · 无障碍按钮与系统任务")
         }
     }
     signingConfigs {

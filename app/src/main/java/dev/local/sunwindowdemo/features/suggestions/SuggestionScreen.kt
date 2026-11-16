@@ -108,8 +108,6 @@ fun SuggestionScreen(controller: WindowController) {
         SettingRow("按钮显示", onClick = { sheet = SuggestionSheet.Button },
             leading = { SuggestionIcon(R.drawable.ic_suggestion_tune, buttonTone) },
             trailing = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) })
-        IconToggleRow("以小窗打开", value = config.getBoolean("window"), onChange = { toggle("window", it) },
-            leading = { SuggestionIcon(R.drawable.ic_qs_current_window, windowTone) })
     }
 
     val active = sheet

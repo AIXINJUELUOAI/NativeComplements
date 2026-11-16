@@ -42,12 +42,8 @@ final class AppCatalog {
         Drawable adapted=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(c,pkg);
         return normalized(c,adapted!=null?adapted:original);
     }
-    /** Floating menu, sector and open-wait icons: Monet when the window Monet switch is effective. */
-    static Drawable windowIcon(Context c,String pkg,Drawable original){
-        if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return new ColorDrawable(Color.TRANSPARENT);
-        Drawable themed=dev.local.sunwindowdemo.features.iconlayers.IconAssets.window(c,pkg,original);
-        return themed!=null?normalized(c,themed):icon(c,pkg,original);
-    }
+    /** Menu/open-wait use the same original or colour-adapted artwork, never Monet. */
+    static Drawable windowIcon(Context c,String pkg,Drawable original){return icon(c,pkg,original);}
     private static Drawable raster(Context c,Drawable icon){
         Bitmap bitmap=Bitmap.createBitmap(192,192,Bitmap.Config.ARGB_8888);
         Rect saved=new Rect(icon.getBounds());int alpha=icon.getAlpha();

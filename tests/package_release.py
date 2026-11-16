@@ -17,7 +17,7 @@ BASE_ENTRIES = {"dev.local.sunwindowdemo." + name for name in ("SunWindowModule"
 ENTRIES = {
     "full": BASE_ENTRIES | {"dev.local.sunwindowdemo.features." + name for name in (
         "callblocking.CallBlockingModule", "iconlayers.IconLayerModule", "iconlayers.SystemIconModule", "navbar.NavbarModule")},
-    "window": BASE_ENTRIES | {"dev.local.sunwindowdemo.features.iconlayers.LauncherThemeModule"},
+    "window": BASE_ENTRIES,
 }
 WINDOW_FORBIDDEN = {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
     "SuggestionHost", "SuggestionInput", "BarrageHost", "RotationSuggestion", "LauncherRotationSuggestion",
@@ -25,7 +25,7 @@ WINDOW_FORBIDDEN = {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
     "features/iconlayers/SystemIconModule", "features/iconlayers/DrawerMonet", "features/motion/MotionAccess",
     "features/edgetouch/EdgeInputFilter", "features/shade/LandscapeShade", "features/shade/StatusBarOffset", "features/shade/SignalDisplay",
     "features/alive/AliveWallpaperService", "features/alive/AliveAssets", "features/alive/AlivePhase",
-    "features/alive/AliveAmbientWallpaperService", "features/alive/AliveAmbientAccess", "features/alive/AliveSystemUi")}
+    "features/alive/AliveAmbientWallpaperService", "features/alive/AliveAmbientAccess", "features/alive/AliveSystemUi", "features/alive/AliveSleepHandoff")}
 
 
 
@@ -77,7 +77,8 @@ def main():
                                "Ldev/local/sunwindowdemo/features/alive/AliveWallpaperService;",
                                "Ldev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService;",
                                "Ldev/local/sunwindowdemo/features/alive/AliveAmbientAccess;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveSystemUi;"}
+                               "Ldev/local/sunwindowdemo/features/alive/AliveSystemUi;",
+                               "Ldev/local/sunwindowdemo/features/alive/AliveSleepHandoff;"}
                 found = set()
                 for name in archive.namelist():
                     if name.endswith(".dex"):
@@ -138,10 +139,7 @@ def main():
         for capability in ('canRetrieveWindowContent', 'canPerformGestures', 'canRequestTouchExplorationMode', 'canTakeScreenshot'):
             assert re.search(capability + r'[^\n]*=false', accessibility_xml), 'Unrequested accessibility capability: ' + capability
         assert 'accessibilityEventTypes' not in accessibility_xml or re.search(r'accessibilityEventTypes[^\n]*=0x0(?:\s|$)', accessibility_xml), 'Accessibility entry must not collect window events'
-        shortcut_path = re.search(r"resource [^\n]+ xml/shortcuts\s+\(\) \(file\) (\S+)", resources)
-        assert shortcut_path, "Missing compiled static shortcut resource"
-        shortcut = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", shortcut_path[1])
-        assert package + ".FLOAT_CURRENT" in shortcut and package in shortcut
+        assert "WindowShortcutActivity" not in manifest and "android.app.shortcuts" not in manifest, "Window creation entry must be accessibility-only"
         target = ROOT / f"deliverables/NativeComplements{'-Window' if standalone else ''}-{version}.apk"
         verified.append((apk, target, badging))
     # Publish neither deliverable until both products pass every check.

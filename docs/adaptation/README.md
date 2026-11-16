@@ -2,7 +2,25 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.2-alive-test2 / code145
+### 当前增量：0.11.3-alive-test1 / code146
+
+- 用户明确桌面与应用内熄屏均先走系统动画、稍后才出现Alive，不是仅桌面回调问题。code145只读记录显示14:38:52.987开始睡眠、53.029提交首帧、54.830收拢预算到期，直到57.066才DOZE，期间native visible/draw均为true；不能把“已经画在下层但不可见”误判成没有渲染。旧版减少额外淡出不足以解决完整交接。
+- [共用系统睡眠交接](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)跟随原生KeyguardService睡眠事件，给当前壁纸发送一次episode命令；仅自有当前用户实验组件、AOD开启、默认显示器、非交互、真实锁屏且无遮挡/认证退出/输入认证时，临时保留原生壁纸显示flag。原系统黑层在准备阶段继续绘制，应用内容不转成球体。
+- [自有Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)仅真实native visible、有效Surface及成功swap后返回UID/nonce/显示器/绝限校验回执；随后只对同一根窗口的LightReveal绘制做短时空clip，原onDraw、opaque、controller、认证、输入、电源和亮度仍执行。没有回执/ABI不符/异常回原生；不加wakelock、不逐帧IPC、不隐藏初始化。绝限7800ms不续期，隐藏、唤醒、渲染失败、AOD/用户/壁纸/配置变化及OFF/SUSPEND取消。只针对已核这一层，不能承诺所有其他原生遮挡消除或观感已通过。
+- [球体轨道](<../../app/src/full/java/org/aliveclean/SceneMotion.java>)修正快速0→1→2时的实际视觉来源：球体权重仍非零就继续AOD展开，而不是按未达到的LOCK逻辑目标选长尾轨，避免decorator从应有33ms退出变成1000ms造成色块拖尾。保留比例连续插值，不改固定native/shader；真正HOME终态不采球，未把截图当作永久终态污染的证据。
+- [渲染生命周期](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)不再为不可见/已销毁scene留下唤醒种子；重新可见与重新attach只显示当前端点，解锁回软件再返回桌面不应补播过去的解锁。真实可见的唤醒仍使用既有scene过渡。
+- 两包小窗只保留[系统无障碍按钮](<../../app/src/main/java/dev/local/sunwindowdemo/WindowAccessibilityService.java>)呼出菜单，删除长侧滑、角落/扇区、通知点击、桌面shortcut、全屏跨应用自动进入和快捷建议小窗入口；既有窗口内部导航、菜单操作、系统后端与安全规则保留。小窗及遮罩莫奈真实路径恒关并忽略旧值，抽屉莫奈不变。独立版移除“关于”，单独保留开源许可；主版“关于”不动。静态scope仍3个，full入口7个/window入口3个。
+
+源码收口状态：Handoff与全部运行时代码已冻结，以下为最终产物而非执行中预报；四篇专项文档可按此快照完成末次复核。
+
+验证边界：既有 `AlivePhaseTest`、`AliveAmbientAccessTest` 及一个最小 `SceneMotionTest` 打断唤醒轨回归通过；不跑全功能套件。独立只读审查核对归档ABI，发现的渲染失败撤回、停绘撤回和Surface attach后回执三项已修，最终快照无确认未处理P0/P1/P2。最终双release/R8、原签名、7/3入口、3静态scope、无障碍最小能力、移除shortcut/手势执行路径及window不含Alive边界通过。首次收口发现选中令牌变量名编译错误已改；旧R8检查仍要求已删除的手势方法也已改为验证移除，随后最终重打包通过，不沿用中间产物。未自动安装、重启或写设备设置；新code146尚未真机验证。时钟避让和照片防烧屏位移未做，仅短时测试。
+
+| code146 最终原签名产物 | SHA-256 |
+|---|---|
+| [主版 APK](<../../deliverables/NativeComplements-0.11.3-alive-test1.apk>) | `e8cbd4e5f5d714076574fcc5124f04d8ffb64aa45544a8f2abcbc70975fe446b` |
+| [独立小窗 APK](<../../deliverables/NativeComplements-Window-0.11.3-alive-test1.apk>) | `3cf1eb23a450c28c687563dca0823ffa34c5c5e5fc04b72657de55839c91c335` |
+
+### 历史增量：0.11.2-alive-test2 / code145
 
 - [全屏Alive编辑器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)进入即真实单场景背景，顶部返回／编辑／设置壁纸；编辑底部Sheet直接展示当前息屏、锁屏或桌面样式，选中更新草稿背景，成功应用后回HOME并移除当前模块任务；取消或失败留在页面。照片、资源和普通／实验组件选择收在Sheet，草稿隔离保留。
 - [导入器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)增加10张固定上游官方样式缩略PNG，各自SHA-256核验，只存私有独立可选目录，不把native已加载代替换。原来已经导入核心资源的用户，重新选择同一固定OpenAlive APK即可补齐缩略图；没有资源时不伪造图片。缩略为官方样式示意，背景才是本人的实时壁纸渲染。

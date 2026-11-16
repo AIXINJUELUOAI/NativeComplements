@@ -36,7 +36,7 @@ REQUIRED = {
 RUNTIME_METHODS = {
     "WindowEngine": {"blockBackgroundTouch", "trackTouchGuard", "clientOwner", "ownerInsets", "idle", "mayAllowResize", "visibleFullscreen", "endClosedApplications"},
     "WindowPolicy": {"backgroundTouchGuard", "startsTouchGuard", "coveredFullscreen"},
-    "BackBridge": {"connect", "cancelNativeUp", "abort"},
+    "BackBridge": {"connect", "installEdgeTouchAdmission"},
     "Config": {"longBackWindow"},
     "TaskCover": {"beforeReveal", "canRetarget", "reusesPresentation", "handoff"},
     "TaskCleanupGuard": {"install", "delay", "acquired", "check"},
@@ -81,6 +81,9 @@ def check(apk, window=False):
             if obsolete:
                 raise RuntimeError(f"Removed navigation runtime still present in final DEX: {sorted(obsolete)}")
             for owner, cls in data.classes.items():
+                if owner == PREFIX + "BackBridge;":
+                    retired = {"cancelNativeUp", "abort", "observe", "finish", "installCornerTouch"}
+                    assert not retired & {method["name"] for method in cls["methods"]}, "Retired window gesture execution in final APK"
                 if owner in runtime:
                     missing = runtime[owner] - {method["name"] for method in cls["methods"]}
                     if missing:

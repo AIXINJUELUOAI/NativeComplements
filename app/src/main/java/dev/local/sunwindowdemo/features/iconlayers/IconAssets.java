@@ -20,7 +20,7 @@ public final class IconAssets {
     private static volatile Handler worker;
     private static volatile boolean ready;
     // Effective switches: the user's choice AND the launcher-reported system themed-icon state.
-    private static volatile boolean coverMonet, windowMonet;
+
     private static Context host;
     private static dev.local.sunwindowdemo.core.HostSnapshot settings;
     private static final List<Runnable> listeners=new ArrayList<>();
@@ -115,11 +115,9 @@ public final class IconAssets {
                 catch(Exception failure){failed++;android.util.Log.w("NcIconAssets","asset failed: "+pkg);}
             }
         }
-        boolean themed=config.getBoolean("systemThemed");
-        boolean cover=IconRenderPolicy.themed(config.getBoolean("coverMonet"),themed),window=IconRenderPolicy.themed(config.getBoolean("windowMonet"),themed);
-        Map<String,Bitmap> activityMonos=cover||window?activityMonos(c,config.getStringArrayList("targets"),stale):Map.of();
+        Map<String,Bitmap> activityMonos=Map.of(); // Retired cover/menu surfaces never precompute fallback masks.
         if(stale.getAsBoolean())return false;
-        coverMonet=cover;windowMonet=window;
+
         snapshot=new Snapshot(Map.copyOf(entries),activityMonos,generation,failed,demo>=0&&demo<=2?demo:0,Set.copyOf(algorithms));ready=true;return true;
     }
     /** Native mono first; missing layers are converted once for the two opted-in Monet surfaces. Worker only. */
@@ -181,10 +179,9 @@ public final class IconAssets {
         }
         return IconLayerStore.TARGET.equals(pkg)&&current.demo!=0?new LayeredTestIcon(c.getResources(),current.demo):null;
     }
-    /** Monet icon for the launch/floating-window cover, or null to keep the current artwork. */
-    public static Drawable cover(Context c,String pkg,Drawable original){return coverMonet?themed(c,pkg,original):null;}
-    /** Monet icon for the floating-window menu and sector, or null to keep the current artwork. */
-    public static Drawable window(Context c,String pkg,Drawable original){return windowMonet?themed(c,pkg,original):null;}
+    /** Retired cover/menu Monet paths always retain original or colour-adapted artwork. */
+    public static Drawable cover(Context c,String pkg,Drawable original){return null;}
+    public static Drawable window(Context c,String pkg,Drawable original){return null;}
     /**
      * Same monochrome source precedence as the desktop (module artwork first, then the app's own
      * monochrome layer) and the launcher's themed colours. Missing layers use the worker-converted cache.

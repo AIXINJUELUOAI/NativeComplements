@@ -21,8 +21,6 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
-    var coverMonet by remember { mutableStateOf(ShadeStore.coverMonet(context)) }
-    var windowMonet by remember { mutableStateOf(ShadeStore.windowMonet(context)) }
     var systemThemed by remember { mutableStateOf(IconLayerStore.systemThemed(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
@@ -34,8 +32,6 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             enabled = ShadeStore.read(context).getBoolean("enabled")
             drawerMonet = ShadeStore.drawerMonet(context)
-            coverMonet = ShadeStore.coverMonet(context)
-            windowMonet = ShadeStore.windowMonet(context)
             offset = ShadeStore.offset(context)
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
@@ -65,10 +61,6 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             val hint = if (systemThemed) null else "需先在“壁纸与样式”中打开主题图标"
             ToggleRow("抽屉莫奈图标", hint ?: "应用抽屉与推荐行使用和桌面相同的主题图标",
                 value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
-            ToggleRow("遮罩莫奈图标", hint ?: "打开应用、小窗及小窗变换时遮罩中间的图标",
-                value = coverMonet && systemThemed, enabled = systemThemed) { ShadeStore.setCoverMonet(context, it) }
-            ToggleRow("小窗莫奈图标", hint ?: "小窗悬浮菜单与扇区中的应用图标",
-                value = windowMonet && systemThemed, enabled = systemThemed) { ShadeStore.setWindowMonet(context, it) }
         }
         GroupTitle("通知与控制中心")
         SettingsGroup {

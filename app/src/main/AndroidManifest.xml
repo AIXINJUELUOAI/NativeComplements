@@ -20,12 +20,8 @@
         </receiver>
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask" android:excludeFromRecents="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <activity android:name=".DiagnosticActivity" android:theme="@android:style/Theme.DeviceDefault.DayNight" android:exported="false" android:taskAffinity="${applicationId}.diagnostic" android:launchMode="singleTask" android:autoRemoveFromRecents="true" android:resizeableActivity="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
-        <activity android:name=".WindowShortcutActivity" android:exported="true" android:theme="@android:style/Theme.NoDisplay" android:excludeFromRecents="true" android:noHistory="true" android:taskAffinity="${applicationId}.shortcut">
-            <intent-filter><action android:name="android.intent.action.CREATE_SHORTCUT" /><category android:name="android.intent.category.DEFAULT" /></intent-filter>
-        </activity>
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
         <provider android:name=".features.diagnostics.DiagnosticsProvider" android:authorities="${applicationId}.diagnostics" android:exported="true" android:grantUriPermissions="false" />
         <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="${applicationId}.callblocking" android:exported="true" android:directBootAware="true" />
