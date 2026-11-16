@@ -2,7 +2,11 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.6-alive-takeover1 / code154（壁纸视觉接管测试版）
+### 当前实机反馈：code154 未解决息屏闪帧及快速指纹原生动画
+
+- 只读确认154已加载；本次现场sleep native视觉先动约百毫秒后才ACK/clip，wake请求无任何FIRST_SWAP/VISUAL至超时，快速AOD→GONE原生视觉仍完整运行。不是用户未重启，不再把主机构建/定向检查当效果闭环；闪出的具体像素未捕获，不猜是壁纸还是锁屏。精确services Session DEX已核命令需当前wallpaperTarget或ALWAYS_UPDATE_WALLPAPER，当前wake通道不保证可达；设计另排除认证直达app。详见[实机失败与边界](<alive-systemui.md#当前实机结果code154-未解决目标问题>)。此轮只保存现有日志/核路径/纠正文档，未改运行源码或发新包，不要求用户反复复现。
+
+### code154尝试实现：0.11.6-alive-takeover1（不视为效果通过）
 
 - 用户明确要进一步接管，而非继续降低偶发次数。153亮屏样本确认scene保留、Alive真实展开，同时旧sleep视觉门在interactive后退出；不再把该轮归因场景丢失。不要求反复泛抓日志，转实现[独立wake首swap交接](<alive-systemui.md>)。
 - wake使用独立UID/nonce/defaultdisplay握手与固定2500ms上限，真实可见有效Surface成功swap后才裁同root LightReveal输出、Alive真实端点且native reveal=1后撤（仍不续2500上限）；sleep的window flag/认证准入不向wake放宽，原生setAlpha/reveal/opaque/500ms状态链/电源逻辑照常。新wake可覆盖旧sleep已过期的长AOD，明确真实wake允许冷AMBIENT种子，普通hidden恢复不补播。

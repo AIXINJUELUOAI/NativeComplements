@@ -1,6 +1,15 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## 当前接管测试版：code154 / 0.11.6-alive-takeover1
+## 当前实机结果：code154 未解决目标问题
+
+用户安装完整重启后仍报告按电源闪一帧（未确认是锁屏还是壁纸），应用内息屏马上指纹解锁仍原生动画。22:10只读现机确认154已运行，不能以‘未重启/未加载’解释；不要求再复现。
+
+- 已存本地现场 `takeover154-failure-native.txt` / `takeover154-failure-lspd.txt`。22:10:02.614 native goingtosleep、.617 renderer sleep-presented；.634原生clock doze=1、GONE→AOD与PowerButtonReveal已开始，.638通知alpha=.915；到.726才ACK并开内容门、.733才LightReveal clip。因此约百毫秒的原生早帧未接管，日志不能识别用户看到的具体像素，更不能说只有一帧。
+- 22:10:03.616亮屏，.617旧sleep门撤；.640发wake PREPARE、.652 Engine native ambient-exit、.697 AOD→GONE，.752真实unlocked、renderer1→2；本轮没有任何wake FIRST_SWAP/VISUAL，直到06.139 Host timeout。整个保存的LSPosed样本也无wake FIRST_SWAP。故新wake握手至少在这些样本没有建立，不能仅解释为‘完成认证后正常撤回’或把代码就绪当实机接管成功；Engine未见相应system-wake接收日志。进一步直接解精确services归档DEX证实实际检查在Session.sendWallpaperCommand而非WallpaperController：windowForClient取本Session真实WindowState，非空后只有mCanAlwaysUpdateWallpaper或window==当前getWallpaperTarget才调用unchecked，否则静默return；Session构造由ALWAYS_UPDATE_WALLPAPER权限决定该bool，精确a4bf SystemUI manifest未声明此权限。154wake不保持sleep flag/target，因此该命令通道不能保证送达，吻合PREPARE后无接收/ACK的现场；未直接记录失败瞬间服务端target，故不把单次丢弃条件称已动态截获。精确ControllerUnchecked本体确实无检查、无prevTarget例外，不沿旧版源码猜测。
+- 设计本身还将wake限定locked且Host双showing/!going/!fading，未覆盖AOD→GONE快速认证直达应用。认证状态/输入/遮挡等必须保持系统权威，但‘不修改认证’不等于‘所有认证期间的纯装饰绘制都必须原生’；后续要将纯视觉资格与真实认证状态区分，而非删除安全门或藏root/UDFPS。
+- 154实际只是有条件首swap后抑制部分原生输出，不是用户所要从起始到反向唤醒的完整视觉替换。9项定向/签名构建结果仍成立，但不构成效果通过。未修改运行源码、未自动安装/重启/设置。
+
+## code154 接管尝试的实现（保留，不视为效果验证）
 
 用户要求从减少偶发混播转为视觉接管。153实机21:33:56.430唤醒，.431原sleep clip退出，.440旧episode撤回，.460已有scene真实`0→1 animate=true`；此前hidden约24ms已保scene，因此该样本不是冷wake，确认现有设计在wake主动撤视觉门。原500ms状态/电源链不是要禁掉的对象。
 
