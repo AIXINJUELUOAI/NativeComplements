@@ -47,6 +47,7 @@ public class AliveWallpaperService extends WallpaperService {
                 String action=intent.getAction();
                 if(Intent.ACTION_SCREEN_OFF.equals(action))beginSleep();
                 else if(Intent.ACTION_SCREEN_ON.equals(action)||Intent.ACTION_USER_PRESENT.equals(action))wake();
+                if(Intent.ACTION_USER_UNLOCKED.equals(action)&&renderer!=null)renderer.reload();
                 update("broadcast:"+action,true);
                 if(!Intent.ACTION_SCREEN_OFF.equals(action))recheckUnlock();
             }
@@ -59,10 +60,10 @@ public class AliveWallpaperService extends WallpaperService {
             super.onCreate(holder);
             setTouchEventsEnabled(false);
             renderer=new AliveRenderer(AliveWallpaperService.this,isPreview());
-            getSharedPreferences(AliveSettings.APPLIED,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
-            if(isPreview())getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
+            AliveSettings.runtimePreferences(AliveWallpaperService.this).registerOnSharedPreferenceChangeListener(changed);
+            if(isPreview())AliveSettings.credential(AliveWallpaperService.this).getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
             IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
-            filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);
+            filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);filter.addAction(Intent.ACTION_USER_UNLOCKED);
             registerReceiver(screens,filter,null,main,Context.RECEIVER_NOT_EXPORTED);registered=true;
             Display own=getDisplayContext().getDisplay();
             if(own!=null)displayId=own.getDisplayId();
@@ -228,8 +229,8 @@ public class AliveWallpaperService extends WallpaperService {
             destroyed=true;cancelHandoff();main.removeCallbacks(refresh);main.removeCallbacks(sleepExpired);
             if(registered){unregisterReceiver(screens);registered=false;}
             if(displayRegistered){displays.unregisterDisplayListener(displayListener);displayRegistered=false;}
-            getSharedPreferences(AliveSettings.APPLIED,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
-            if(isPreview())getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
+            AliveSettings.runtimePreferences(AliveWallpaperService.this).unregisterOnSharedPreferenceChangeListener(changed);
+            if(isPreview())AliveSettings.credential(AliveWallpaperService.this).getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
             if(renderer!=null){renderer.close();renderer=null;}
             super.onDestroy();
         }

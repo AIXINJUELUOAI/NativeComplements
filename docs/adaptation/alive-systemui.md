@@ -1,6 +1,14 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## 当前增量：0.11.3-alive-test2 / code147
+## 当前增量：0.11.4-alive-test1 / code148（数据准备，不改认证）
+
+code148不新增SystemUI认证或解锁Hook，保留147下述入场选择、FIRST_SWAP UID/nonce/期限校验与双真实showing安全门。[Direct Boot准备](<alive-platform.md#code148direct-boot-数据边界>)只将核心资源及当前已应用照片/AtomicFile配置快照放入本用户应用私有DE，使系统所选且directBootAware的普通/实验壁纸service有机会在首次解锁前读取；不强选、重绑或启动壁纸，不使草稿/编辑预览在锁前可读。
+
+迁移仅在已解锁worker访问CE，核心资源完整hash/白名单复制、只读暂存/fsync/rename，不覆盖已发布代、不删除CE源。已应用照片先发布、再提交并读回核验AtomicFile快照，revision偏好不作权威。失败或未准备仍安全回退；新安装先应用一次、旧版先已解锁迁移，之后下一次开机才具备数据。DE已应用照片以及保留的历史已应用/确认应用中断候选在首次解锁前对本应用可读是明确隐私取舍，不是系统认证放宽；本轮不自动回收或限制其总量，不能声称DE只存当前一张。
+
+本轮编译/打包及首解锁前行为由Lead收口，本文不预报PASS。三种解锁现象仍在诊断，时钟下移/避让、照片burn-in及通知/跨应用扩展未实现；Direct Boot不作为这些问题已修复的证据。
+
+## 保留实现：0.11.3-alive-test2 / code147
 
 146真机只读证据确认GONE→AOD原生shouldDelayKeyguardShow约1300ms，首帧已有但真实锁屏/视觉交接必须等待；不是首swap本身延迟。147新增下列精确ABI，并与原Handoff同组安装/deopt，任一失败unhook整组：
 

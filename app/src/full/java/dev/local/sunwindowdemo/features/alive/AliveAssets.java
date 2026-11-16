@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Process;
+import android.os.UserManager;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -44,12 +45,60 @@ public final class AliveAssets {
     private static File checked;
     private AliveAssets() {}
 
+    /** Core renderer resources are user-private DE data, available before credential unlock. */
+    public static Context runtime(Context context){
+        return context.isDeviceProtectedStorage()?context:context.createDeviceProtectedStorageContext();
+    }
+    private static Context credential(Context context)throws IOException{
+        UserManager users=context.getSystemService(UserManager.class);
+        if(users==null||!users.isUserUnlocked())throw new IOException("解锁后才能访问编辑器资源");
+        return AliveSettings.credential(context);
+    }
+
+    /** Copies only a fully validated legacy generation; never replaces or deletes either published source. */
+    public static synchronized boolean migrate(Context context)throws IOException{
+        Context device=runtime(context);
+        if(ready(device))return true;
+        UserManager users=context.getSystemService(UserManager.class);
+        if(users==null||!users.isUserUnlocked())return false;
+        requireArm64();
+        File published=generation(device);
+        if(published.exists())throw new IOException("设备加密区资源损坏；不会覆盖已发布的原生库");
+        File source=new File(root(credential(context)),SOURCE_SHA256);
+        if(!source.exists())return false;
+        if(!validate(source,false))throw new IOException("旧版 Alive 资源完整性校验失败");
+        File stage=new File(root(device),"import-"+UUID.randomUUID());
+        try{
+            if(!stage.mkdir())throw new IOException("无法建立迁移暂存目录");
+            for(var item:REQUIRED.entrySet())copyResource(child(source,item.getKey()),child(stage,item.getKey()),item.getValue());
+            File manifest=child(source,"manifest.json");
+            copyResource(manifest,child(stage,"manifest.json"),manifest.length());
+            if(!validate(stage,false))throw new IOException("迁移资源完整性校验失败");
+            syncDirectories(stage);
+            if(published.exists()||!stage.renameTo(published))throw new IOException("无法发布迁移资源；未更改现有资源");
+            syncDirectory(published.getParentFile());checked=null;
+            if(!ready(device))throw new IOException("设备加密区资源校验失败");
+            return true;
+        }finally{removeStage(stage);}
+    }
+    private static void copyResource(File source,File target,long size)throws IOException{
+        if(!regularReadOnly(source)||size<=0||source.length()!=size)throw new IOException("迁移源资源无效");
+        File parent=target.getParentFile();
+        if(!parent.isDirectory()&&!parent.mkdirs())throw new IOException("无法创建迁移目录");
+        try(InputStream input=new FileInputStream(source);FileOutputStream output=new FileOutputStream(target)){
+            if(!target.setReadOnly())throw new IOException("无法将迁移资源设为只读");
+            if(copy(input,output,size,null)!=size)throw new IOException("迁移资源长度不匹配");
+            output.getFD().sync();
+        }
+    }
+
     /** Imports exactly the pinned official APK; foreign DEX is never extracted or executed. */
     public static synchronized void prepare(Context context,Uri source)throws IOException{
+        context=credential(context);
         requireArm64();
         boolean coreReady=ready(context);
         if(coreReady&&previewsReady(context))return;
-        File root=root(context),published=generation(context);
+        File root=root(runtime(context)),published=generation(context);
         if(!coreReady&&published.exists())throw new IOException("已发布资源损坏；不会覆盖已加载的原生库，请先清除本功能数据并重启应用");
         File apk=File.createTempFile("alive-source-",".apk",context.getCacheDir());
         File stage=new File(root,"import-"+UUID.randomUUID());
@@ -62,7 +111,7 @@ public final class AliveAssets {
             }
             importPreviews(context,apk);
             if(coreReady){
-                context.getSharedPreferences(AliveSettings.APPLIED,Context.MODE_PRIVATE).edit().putLong("resources_revision",System.nanoTime()).apply();
+                runtime(context).getSharedPreferences(AliveSettings.APPLIED,Context.MODE_PRIVATE).edit().putLong("resources_revision",System.nanoTime()).apply();
                 return;
             }
             if(!stage.mkdir())throw new IOException("无法建立资源暂存目录");
@@ -100,11 +149,13 @@ public final class AliveAssets {
                 output.getFD().sync();
             }
             if(!new File(stage,"manifest.json").setReadOnly())throw new IOException("无法封存资源清单");
+            if(!validate(stage,false))throw new IOException("暂存资源完整性校验失败");
+            syncDirectories(stage);
             // No active generation is replaced: a loaded native library keeps the same immutable path.
             if(published.exists()||!stage.renameTo(published))throw new IOException("无法发布资源；未更改现有资源");
-            checked=null;
+            syncDirectory(root);checked=null;
             if(!ready(context))throw new IOException("资源完整性校验失败");
-            context.getSharedPreferences("alive_wallpaper",Context.MODE_PRIVATE).edit()
+            runtime(context).getSharedPreferences(AliveSettings.APPLIED,Context.MODE_PRIVATE).edit()
                 .putLong("resources_revision",System.nanoTime()).apply();
         }catch(JSONException invalid){throw new IOException("资源清单无效",invalid);}
         finally{apk.delete();removeStage(stage);}
@@ -113,9 +164,11 @@ public final class AliveAssets {
     /** Resource/ABI readiness only; actual JNI linking and renderer capability checks remain with the runtime. */
     public static synchronized boolean ready(Context context){
         if(!arm64())return false;
+        try{return validate(generation(context),true);}catch(IOException|RuntimeException failure){return false;}
+    }
+    private static boolean validate(File dir,boolean cached){
         try{
-            File dir=generation(context);
-            if(dir.equals(checked)){
+            if(cached&&dir.equals(checked)){
                 for(var entry:REQUIRED.entrySet()){
                     File file=child(dir,entry.getKey());
                     if(!regularReadOnly(file)||file.length()!=entry.getValue())return false;
@@ -139,7 +192,7 @@ public final class AliveAssets {
                 String actualHash=hex(hash.digest());
                 if(!actualHash.equals(entry.getString("sha256"))||path.equals(LIBRARY)&&!actualHash.equals(LIBRARY_SHA256))return false;
             }
-            required(names);checked=dir;return true;
+            required(names);if(cached)checked=dir;return true;
         }catch(IOException|JSONException|RuntimeException failure){return false;}
     }
 
@@ -156,7 +209,7 @@ public final class AliveAssets {
         if(path!=null&&path.startsWith("editor/")){
             String name=path.substring(7),expected=PREVIEWS.get(name);
             if(expected==null)throw new IOException("缩略资源未授权");
-            File file=new File(new File(root(context),"previews-v1"),name);
+            File file=new File(new File(root(credential(context)),"previews-v1"),name);
             if(!validPreview(file,expected))throw new IOException("请重新选择固定 OpenAlive APK 补充样式缩略资源");
             return new FileInputStream(file);
         }
@@ -170,7 +223,7 @@ public final class AliveAssets {
 
     /** Optional editor assets are independent of the immutable, possibly already loaded native generation. */
     public static synchronized boolean previewsReady(Context context)throws IOException{
-        File dir=new File(root(context),"previews-v1");
+        File dir=new File(root(credential(context)),"previews-v1");
         for(var item:PREVIEWS.entrySet())try{if(!validPreview(new File(dir,item.getKey()),item.getValue()))return false;}
         catch(IOException unavailable){return false;}
         return true;
@@ -181,7 +234,7 @@ public final class AliveAssets {
         return expected.equals(hex(hash.digest()));
     }
     private static void importPreviews(Context context,File apk)throws IOException{
-        File dir=new File(root(context),"previews-v1");
+        File dir=new File(root(credential(context)),"previews-v1");
         if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("无法创建缩略资源目录");
         try(ZipFile archive=new ZipFile(apk)){
             for(var item:PREVIEWS.entrySet()){
@@ -269,7 +322,19 @@ public final class AliveAssets {
         if(!file.isDirectory()&&!file.mkdirs())throw new IOException("无法创建私有资源目录");
         return file;
     }
-    private static File generation(Context context)throws IOException{return new File(root(context),SOURCE_SHA256);}
+    private static File generation(Context context)throws IOException{return new File(root(runtime(context)),SOURCE_SHA256);}
+    private static void syncDirectories(File directory)throws IOException{
+        File[] children=directory.listFiles();
+        if(children==null)throw new IOException("无法读取暂存资源目录");
+        for(File file:children)if(file.isDirectory())syncDirectories(file);
+        syncDirectory(directory);
+    }
+    private static void syncDirectory(File directory)throws IOException{
+        FileDescriptor descriptor=null;
+        try{descriptor=Os.open(directory.getPath(),OsConstants.O_RDONLY,0);Os.fsync(descriptor);}
+        catch(ErrnoException failure){throw new IOException("无法同步资源目录",failure);}
+        finally{if(descriptor!=null)try{Os.close(descriptor);}catch(ErrnoException ignored){}}
+    }
     private static File child(File root,String path)throws IOException{
         File file=new File(root,path);String base=root.getCanonicalPath()+File.separator;
         if(!file.getCanonicalPath().startsWith(base))throw new IOException("无效资源路径");

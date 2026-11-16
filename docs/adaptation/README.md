@@ -2,7 +2,16 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.3-alive-test2 / code147
+### 当前增量：0.11.4-alive-test1 / code148（Direct Boot，主机核验通过；待真机）
+
+- 仅full主模块，保code147角落小窗与Alive睡眠admission/严格视觉安全门，本轮不混入新的解锁或通知功能。[Direct Boot数据边界](<alive-platform.md#code148direct-boot-数据边界>)将已应用快照和当前照片发布到本用户应用私有DE；从未确认应用的纯编辑草稿照片及编辑缩略图仍为CE。DE会保留历史已应用照片及确认应用中断后的候选，本轮未加自动回收或总量上限，不能声称DE永远只有当前一张。**DE不是凭据解锁后才可读：已应用照片在首次解锁前可由本应用读取**，不外部共享、不跨用户读取，也不绕过系统认证。
+- [已应用配置](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)以DE的AtomicFile JSON为权威，照片先完整发布再提交快照；偏好仅通知revision/error，不能因SharedPreferences提交失败而采用未发布的新配置。[核心资源](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)固定上游SHA/白名单不变，旧CE代完整hash校验后仅复制指定资源与manifest，经只读文件、暂存校验、fsync及rename发布DE，不覆盖已有代、不删CE源，不把未核额外文件带入运行时。
+- [私有迁移接收器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveBootReceiver.java>)不是Direct Boot入口，仅在已解锁的BOOT_COMPLETED/MY_PACKAGE_REPLACED后台准备；Engine初始化worker也先准备，真实运行使用DE、预览仍用CE。两个壁纸service标记directBootAware，但不强选、重绑或启动壁纸，不新增认证Hook。
+- 新安装须导入并应用一次；旧版须在已解锁状态完成迁移，**之后的下一次开机**才有完整DE数据。未经迁移的首次开机仍安全回退，标记directBootAware不等于已有可用资源或首解锁前真机通过。
+- 本轮主版编译、既有`AliveAmbientAccessTest`/`AlivePhaseTest`定向检查通过，覆盖DE锁前快照读取、CE草稿隔离、同名照片变更拒绝、快照写入失败保旧；没有跑全功能套件。最终R8、原签名、148身份/7entry/3scope、两个壁纸service Direct Boot标志、迁移receiver非导出及原产品边界打包核验通过。独立审查发现AtomicFile.finishWrite静默失败可能误报成功，已补照片完整hash与快照字节读回后才通知，且以最终源码重新核验。不自动安装、重启或改设置，首次解锁前显示与147动画观感均待用户验证。
+- [主版APK](<../../deliverables/NativeComplements-0.11.4-alive-test1.apk>) SHA-256：`66cf6e329afde4363c0c28502cd8088c46d96bcd4c0380c8b53571937d07785e`。三种解锁场景仍在诊断，未宣称解决；新增五分钟只读样本仅AOD稳定态，无新的解锁对照。时钟下移/避让、照片burn-in及通知/跨应用扩展未实施。
+
+### 历史增量：0.11.3-alive-test2 / code147
 
 - 取消独立小窗产品维护，仅构建/交付主模块。保留 `full` 源集与主包身份、原签名、7入口/3scope，不搬迁Alive资源；独立源目录仅历史保留，不再产生window variant。旧独立包若仍激活，保留原跨ClassLoader owner key与资格门：不能双建引擎、强抢或迁移恢复记录，需用户先恢复旧窗再手动停用/卸载旧独立模块并完整重启。
 - [角落适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)恢复原生InputMonitor观察、达到斜向阈值后才pilfer；[宿主](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)恢复左右下角/扇区与保护矩形发布、截图/安全UI/锁屏/配置/lease取消。保[纯手势规则](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/CornerGesture.java>)和准入/生命周期分层，不恢复长侧滑、通知/shortcut/分享/跨app自动小窗、莫奈；无障碍service/按钮/设置全部移除。其他ROM按[小窗接入](<floating-window.md>)核对ABI与执行恢复，合回产品不是取消适配边界或宣称通用兼容。

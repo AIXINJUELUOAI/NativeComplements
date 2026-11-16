@@ -1,6 +1,17 @@
 # 现有架构与需要划清的边界
 
-## 当前收口范围：0.11.3-alive-test2 / code147
+## 当前收口范围：0.11.4-alive-test1 / code148
+
+本轮仅增加Alive Direct Boot数据准备，保留147产品和动画边界；不改变规则/状态与平台执行恢复分层，不恢复独立小窗，不新增解锁、时钟或通知功能。验证与产物由Lead收口，此处不预报PASS/hash或设备效果。
+
+### Alive：CE编辑与DE已应用运行时分离
+
+- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)保留纯值Snapshot；CE纯编辑草稿照片/编辑缩略图不迁移。用户确认应用时才向本用户应用私有DE发布照片及完整样式，AtomicFile JSON是权威，先准备不可变照片再发布并读回校验快照。DE偏好只通知revision/error，不以SharedPreferences提交失败后的内存值冒充已发布状态。
+- [AliveAssets](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)统一核心运行时DE路径；固定来源SHA/native/shader/mask白名单不变。解锁后的迁移先完整核验CE旧代，仅复制指定集合与manifest，readonly/fsync/暂存再校验/rename，不覆盖旧DE代、不删除CE源、不复制额外文件。真实renderer首次native加载前准备同一DE代，不能同进程换已加载库路径；预览仍使用CE草稿。
+- [私有BootReceiver](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveBootReceiver.java>)只消费已解锁BOOT_COMPLETED/MY_PACKAGE_REPLACED并派worker，Engine初始化worker也准备；receiver非directBoot，不自动启动、重绑或选择壁纸。两个壁纸service声明directBootAware只表示可被系统锁前启动，不保证已有数据；新安装须应用一次，旧版须已解锁迁移后下一次开机才有效，首次未迁移仍回退。
+- DE保留历史已应用照片及确认应用中断候选，本轮无自动回收/总量上限；不能承诺只存当前照片。从未确认应用的纯编辑草稿仍只在CE。DE中的这些照片在首次凭据解锁前对本应用可读，仍每用户应用私有、不外部共享、不跨用户读取。此隐私取舍不授予锁屏认证能力、不放宽147视觉safe/UID/nonce/期限门，不改AOD/电源/亮度。三种解锁现象仍在诊断；时钟下移/避让、照片burn-in与通知/跨应用扩展未实现，首解锁前真机行为仍待验证。
+
+## 保留范围：0.11.3-alive-test2 / code147
 
 code147按用户授权只在主模块提供小窗：恢复原生Hook左右下角滑动与扇区，不做无障碍触发，不再构建或发布独立小窗variant。**产品合回不等于回退规则分层，更不等于其他ROM免适配可用。**本节覆盖下方146“当前”及更早历史；实施和核验仍由Lead收口，不预报执行中的PASS/hash/真机效果。
 

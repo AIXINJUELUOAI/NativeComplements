@@ -93,6 +93,13 @@ def main():
                    if block.lstrip().startswith('receiver') and 'WindowBackendSelection' in block), '')
     assert re.search(r'enabled[^\n]*=false', marker) and re.search(r'exported[^\n]*=false', marker), "Preserve private legacy backend marker"
     assert "AliveWallpaperService" in manifest and "AliveAmbientWallpaperService" in manifest and "android.permission.BIND_WALLPAPER" in manifest
+    for service in ("AliveWallpaperService", "AliveAmbientWallpaperService"):
+        block = next((part for part in re.split(r'(?m)^\s*E:', manifest)
+                      if part.lstrip().startswith('service') and service in part), '')
+        assert re.search(r'directBootAware[^\n]*=true', block), "Wallpaper must support Direct Boot: " + service
+    boot = next((part for part in re.split(r'(?m)^\s*E:', manifest)
+                 if part.lstrip().startswith('receiver') and 'AliveBootReceiver' in part), '')
+    assert re.search(r'exported[^\n]*=false', boot), "Migration receiver must stay private"
     assert "android.permission.AMBIENT_WALLPAPER" not in manifest
     assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
     resources = run(tools / "aapt2.exe", "dump", "resources", apk)
