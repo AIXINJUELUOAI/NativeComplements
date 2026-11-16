@@ -75,7 +75,8 @@ public final class AliveSleepHandoff {
                 View view=(View)chain.getThisObject();
                 boolean clip=false;
                 try{if(h.sameRoot(view))h.scrim=new WeakReference<>(view);clip=h.enabled&&h.ready&&h.safe()&&h.sameRoot(view);}catch(ReflectiveOperationException|RuntimeException unknown){h.cancel("draw-unknown");}
-                if(clip&&!h.visual){h.visual=true;h.log.accept("ALIVE_HANDOFF_VISUAL ready=true");}
+                h.traceClip(view,clip);
+                if(clip&&!h.visual){h.visual=true;h.log.accept("ALIVE_HANDOFF_VISUAL ready=true ep="+h.episode());}
                 if(!clip)return chain.proceed();
                 Canvas canvas=(Canvas)chain.getArg(0);int saved=canvas.save();
                 try{canvas.clipRect(0,0,0,0);return chain.proceed();}finally{canvas.restoreToCount(saved);}
@@ -114,6 +115,9 @@ public final class AliveSleepHandoff {
                 if(!module.deoptimize(method))throw new IllegalStateException("sleep handoff deoptimize");
             h.enabled=true;selection.changes(()->h.main.post(h::selectionChanged));
             log.accept("ALIVE_HANDOFF_READY native window and first-swap scoped");
+            // Diagnostics are optional: their failure never changes the installed handoff.
+            try{AliveTransitionTrace.install(module,loader,h::traceEpisode,()->h.traceId,h::traceRoot,log);}
+            catch(Throwable unavailable){log.accept("ALIVE_TRACE_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
         }catch(Throwable unknown){
             if(host!=null){host.enabled=false;host.cancel("install-failed");}
             for(XposedInterface.HookHandle hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
@@ -161,6 +165,30 @@ public final class AliveSleepHandoff {
             }
         };
         boolean layoutPending;int layoutOriginal;
+        int clipEdges;boolean clipKnown,lastClip;
+        volatile String traceId;
+        String episode(){return traceId==null?"none":traceId;}
+        String traceEpisode(){
+            // Host visual callbacks are main-thread only; no cross-thread reflection or settings polling.
+            if(Looper.myLooper()!=Looper.getMainLooper()||!enabled||!active||nonce==null||SystemClock.uptimeMillis()>=expires)return null;
+            try{
+                Object owner=window.get();View value=view();
+                if(owner==null||value==null||!value.isAttachedToWindow()||value.getDisplay()==null
+                        ||value.getDisplay().getDisplayId()!=Display.DEFAULT_DISPLAY)return null;
+                Object token=selection.token(repo(owner));
+                return identity instanceof AliveSystemUi.MatchToken old&&token instanceof AliveSystemUi.MatchToken now&&old.same(now)?episode():null;
+            }catch(ReflectiveOperationException|RuntimeException unknown){return null;}
+        }
+        boolean traceRoot(View value){
+            try{return value!=null&&sameRoot(value);}catch(IllegalAccessException|RuntimeException unknown){return false;}
+        }
+        void traceClip(View value,boolean clip){
+            try{
+                if(clipEdges>=8||traceEpisode()==null||!traceRoot(value)||clipKnown&&clip==lastClip)return;
+                clipKnown=true;lastClip=clip;clipEdges++;
+                log.accept("ALIVE_TRACE ep="+episode()+" clip="+clip+" ready="+ready+" visual="+visual);
+            }catch(RuntimeException ignored){/* Diagnostics never alter the draw path. */}
+        }
         volatile String nonce;
         long expires;Object identity;int uid;
         final Runnable timeout=()->cancel("timeout");
@@ -259,6 +287,7 @@ public final class AliveSleepHandoff {
                 Object repo=repo(owner);Object token=selection.token(repo);int expected=selection.uid(repo);
                 if(token==null||expected<0)return;
                 identity=token;uid=expected;nonce=UUID.randomUUID().toString();expires=SystemClock.uptimeMillis()+MAX_MS;active=true;ready=false;resent=false;
+                traceId=UUID.randomUUID().toString().substring(0,8);clipEdges=0;clipKnown=false;
                 rotation=view.getDisplay().getRotation();width=view.getWidth();height=view.getHeight();
                 displays=view.getContext().getSystemService(DisplayManager.class);
                 if(displays!=null)displays.registerDisplayListener(displayListener,main);
@@ -279,7 +308,7 @@ public final class AliveSleepHandoff {
                     }
                 };
                 send(ACTION_PREPARE,response);
-                refresh();log.accept("ALIVE_HANDOFF_PREPARE expires="+expires);
+                refresh();log.accept("ALIVE_HANDOFF_PREPARE expires="+expires+" ep="+episode());
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("begin-failed");}
         }
         void beforeLayout(Object owner)throws ReflectiveOperationException {
@@ -310,7 +339,7 @@ public final class AliveSleepHandoff {
             try{
                 if(status!=1||SystemClock.uptimeMillis()>=expires){cancel("unsafe-ack");return;}
                 ready=true;View value=scrim.get();if(value!=null)value.invalidate();
-                refresh();log.accept("ALIVE_HANDOFF_FIRST_SWAP safe="+safe());
+                refresh();log.accept("ALIVE_HANDOFF_FIRST_SWAP safe="+safe()+" ep="+episode());
             }catch(ReflectiveOperationException|RuntimeException unknown){cancel("ack-failed");}
         }
         void selectionChanged(){
@@ -334,6 +363,7 @@ public final class AliveSleepHandoff {
         }
         void cancel(String reason){
             if(Looper.myLooper()!=Looper.getMainLooper()){main.post(()->cancel(reason));return;}
+            String ended=episode();traceId=null;
             boolean was=active;active=false;ready=false;visual=false;main.removeCallbacks(timeout);
             if(displays!=null){displays.unregisterDisplayListener(displayListener);displays=null;}
             if(observedContext!=null){
@@ -342,8 +372,8 @@ public final class AliveSleepHandoff {
                 observedContext.getContentResolver().unregisterContentObserver(settingObserver);observedContext=null;
             }
             try{View view=view();if(view!=null)view.removeOnAttachStateChangeListener(attached);if(was)send(ACTION_CANCEL,null);}catch(ReflectiveOperationException|RuntimeException ignored){}
-            if(was){restoring=true;try{refresh();}finally{restoring=false;}log.accept("ALIVE_HANDOFF_END "+reason);}
-            identity=null;nonce=null;response=null;
+            if(was){restoring=true;try{refresh();}finally{restoring=false;}log.accept("ALIVE_HANDOFF_END "+reason+" ep="+ended);}
+            identity=null;nonce=null;response=null;traceId=null;
         }
     }
     private static Class<?> type(ClassLoader loader,String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}

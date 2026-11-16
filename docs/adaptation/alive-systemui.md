@@ -1,6 +1,18 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-## 当前诊断：code152（未新增内容层Hook）
+## 当前定位包：code153 / 0.11.5-alive-trace1
+
+本轮只增加可撤销的只读诊断，不替换视觉、不统一AOD开关行为。用户已确认后续目标为系统AOD开时Alive主导亮灭屏、关时保原生；当前壁纸服务仅按组件能力启动sleep的条件仍待修复，不能以本定位包宣称目标已实现。锁屏→AOD原生500ms状态链与电源控制必须保留；原生遮罩、clock doze形变、通知alpha是独立视觉路径，不存在可安全全局关闭的单一动画开关。
+
+153观测[诊断类](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveTransitionTrace.java>)与[原交接](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)同一有界episode：`ALIVE_TRACE`和PREPARE/FIRST_SWAP/VISUAL/END共用8位`ep`（独立随机诊断标识，不从握手nonce派生、不输出Binder凭证）；只选中精确自有ambient壁纸、默认屏已附着宿主且未过期时在主线程记录；若transition回调来自其他线程，仅转交枚举/进度快照并重验独立episode，超100ms或代际不符即丢弃。遮罩与通知View另验同root；不逐帧、不记录通知正文/包名，不截图、不读应用内容。每组ABI独立预检/deopt；失败只撤本组诊断，不改变现有handoff及原函数参数、返回或Flow值。日志仅沿用既有LSPosed模块日志通道，无网络上传；诊断记录不能当握手凭证。
+
+目标记录为原生transition开始/完成/取消、LightReveal效果/数值边沿、clock doze和通知alpha有限边沿、clip有限进出。它们是执行事实而非物理屏幕可见证明；缺某组日志先查该组READY/UNAVAILABLE与门条件，不能直接判该原生效果不存在。wake、超时、用户/壁纸/设置/配置变化仍沿原有cancel收尾，不为了日志延长接管期限或暂停系统状态。
+
+只读现机样本20:52:24.105已锁定后sleep，.111提交Alive起始帧，.113safe ACK，.123clip进入；该轮不是scene0冷wake。20:52:31/34是locked=false的另外两轮，不混入锁屏结论。长期AOD并不必然释放scene；只有实际发生hidden/surface失效/reload后scene0的冷wake静态重建是已证条件性缺口，尚需失败轮次对应证据。用户确认观察到的原生效果同时包含壁纸和时钟/通知，因此不把仅裁LightReveal当完整修复。
+
+定位包完成后的手动验证：用户安装并完整重启使SystemUI载入新代码；保持系统AOD开启，先只在锁屏按电源息屏一次，标记异常时刻。随后分别记录应用内息屏、长AOD唤醒和AOD关开对照，避免混轮。不自动安装、重启或改设备设置。构建/最小检查由交付收口，不作为宿主ABI或设备视觉已验证声明。
+
+## 历史诊断：code152（未新增内容层Hook）
 
 151用户仍报熄屏闪真实时钟/日期/通知；152仅编辑卡片确认窄修，不是此问题已解决。真实树中LightRevealScrim与KeyguardRootView为兄弟，SharedNotificationContainer在root外，当前scrim空clip不会裁内容。root内同时含DeviceEntry/UDFPS/auth视觉，不可整root或Shade强alpha0/visibility隐藏；这两个容器继承ConstraintLayout且无自有draw/dispatchDraw，不能以getDeclaredMethod假称已适配。Root alpha Flow与通知原生多贡献min为真实候选，不能覆盖值后硬restore1，撤门必须让原生最新状态重算。将shouldDelayKeyguardShow复回true又会阻断当前ACK要求的真实locked/双showing，不能恢复旧1300ms猜改。尚无安全闭合的内容门实现；需同nonce/user/root下真实alpha/认证/转场边沿证据，再决定内容门与ACK/稳定AOD的撤门时机。不提前clip未swap壁纸、不修改认证/电源/亮度，timeout/wake/配置/用户/组件变化仍原生回退。
 

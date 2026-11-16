@@ -2,7 +2,14 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.5-alive-test4 / code152（静态卡片遮罩确认窄修；待真机）
+### 当前增量：0.11.5-alive-trace1 / code153（原生转场定位包；不是视觉修复）
+
+- 用户确认锁屏按电源息屏仍见壁纸及clock/notification原生效果；20:52:24该轮Alive起始帧约6ms、safe ACK约8ms、VISUAL约18ms，不能归因Hook未装或Alive未启动。原生锁屏→AOD状态、LightReveal、clock形变与通知是多路链，不全局禁动画、不改状态/电源/认证。
+- 仅[诊断接线](<alive-systemui.md>)新增同episode `ep`关联的有限边沿日志；保现有首swap/UID/nonce/真实showing与回退，未知ABI的观测独立失败，不改变原参数返回/Flow值。不截图、不记录通知内容、不逐帧刷日志，不新增scope。152后已提交的Alive图标也随本包纳入，不混入其他功能开发。
+- 目标“AOD开用Alive亮灭屏、关用原生”已确认，但本包不实施完整切换或视觉替换；scene0冷wake静态是条件性缺口，不说长期AOD必然释放。PhotoPicker实际用nav inset作wholebase底部margin，当前沉浸仍false，先验证既有开启路径，不新增MediaProvider scope。
+- 最小定向3项通过：新诊断值采样单用例覆盖限流/方向/端点/取消快照及100ms过期，既有AlivePhase两项保生命周期/保帧；未跑全套，也不把值测试当宿主Hook真机覆盖。独立只读复核的两项诊断问题（标识源于nonce、clock缺root匹配）均修正，冻结后无剩余可证P1/P2，Lead复核最终diff。release/R8、原签名、153身份/7入口3scope/Direct Boot/退役边界及诊断类保留核验通过；[定位主APK](<../../deliverables/NativeComplements-0.11.5-alive-trace1.apk>) SHA256 `74756c07e3f7555714dc58a7b5dacc2ddbdb4dc28e361a5700c73a5bca94f54f`；不自动安装/重启/改设置，使用者手动安装后完整重启，再单独标记一轮锁屏息屏复现。社区分支/适配贡献署名和反馈规划已[留档](<../community-adaptation-plan.md>)，Alive完善后再启动。
+
+### 历史增量：0.11.5-alive-test4 / code152（静态卡片遮罩确认窄修；待真机）
 
 - 用户151截图与保持页面采样：息屏球体可见、LOCK/HOME全黑；三个334/335px卡片的GL均成功init/first-frame/endpoint，View树三张ImageView cover仍V，优先定位预览遮罩确认，不是草稿未应用或无照片。原TextureUpdated同步回调处可能尚未RenderThread消费新buffer，却先比较timestamp；静态卡有限帧没有后续确认，AOD连续帧可重试。且同步回调属于draw，getBitmap不应在其中执行。
 - 本轮仅[预览](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)将确认移出绘制，submitted+updated后按16/50/150ms间隔（累计约16/66/216ms）合并为最多3次有界小图读回/同步消费，再比timestamp和原代际/renderer/texture/key/active/error门；确认后uncover，bitmap可用才cache；复制失败但已由新timestamp证实帧时不强迫缓存。每代3s单次watchdog兜缺submit/update，stop/accept取消，超时不直接露旧buffer。超时报告明确错误而不是空error永久黑，有限边沿日志定位，不逐帧。不改renderer/native/动画/睡眠/小窗。保同时间基假设的OEM边界，不将主机构建称所有设备native呈现已验证。
