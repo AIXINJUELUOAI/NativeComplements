@@ -1,6 +1,12 @@
 # Alive：阶段事实、AOD 实验与 Android 壁纸边界
 
-## 当前实现：0.11.3-alive-test1 / code146
+## 当前增量：0.11.3-alive-test2 / code147
+
+产品收回主模块：仅full构建，不再交付独立小窗；Alive仍在full源集。146只读证据已确证原Unlocked动画延迟真实锁屏约1300ms，见[系统侧147契约](<alive-systemui.md>)；新实现仅合格自有睡眠episode、原start动态范围选择原生不播放旧动画分支，不全局改电源/亮度/认证。视觉仍必须真实locked安全且自有可见有效Surface成功swap，保绝限7800和原生DOZE/OFF/SUSPEND，不保证完整1800ms。
+
+[Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)对native ambient duration0只在本Engine结构有效未过期PREPARE、已active/defaultON/非interactive时保留已有有界等待，不要求此刻已经visible/locked/有效Surface；实际绘制/ACK/透出仍分别校验这些真实条件，schema不冒充发送者认证。仅保持已有episode，不新建或重启。其他0时长继续endSleep；早DOZE只有ambient且已有成功sleep.start并未绝限才允许帧确认，不恢复隐藏scene、不强保ON。成功sleep.start回调补一次ack，保持render成功先于确认。初始化仍真实可见，旧首次safe布局可重发同nonce，所有UID/身份限制不变。早DOZE或native事件先后不同仍可能截短/安全回退，新包必须真机复核，不用146日志宣称修复已生效。
+
+## 历史实现：0.11.3-alive-test1 / code146
 
 全部现有功能解耦推送至 `5ee8e95` 后才开始Alive。code140普通照片、141实验AOD、142用户反馈可见、144启航/草稿/首帧确认、145静态端点保留均为历史。本节覆盖145“当前”表述：用户明确软件内及桌面熄屏仍先走系统动画/黑场，稍后才出现Alive。code146新增共用系统睡眠交接与唤醒轨/禁止补播修正，**新Handoff尚未真机验证**，不能把旧版可见反馈或主机检查当连续性PASS。独立小窗版不含Alive。
 

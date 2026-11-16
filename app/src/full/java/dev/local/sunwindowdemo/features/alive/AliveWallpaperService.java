@@ -82,18 +82,29 @@ public class AliveWallpaperService extends WallpaperService {
             if(renderer!=null)renderer.onUnavailable(null);
             if(old!=null)old.cancel();
         }
+        private boolean handoffDisplayReady(){
+            AlivePhase.DisplayState state=displayState();
+            return state==AlivePhase.DisplayState.ON
+                    ||state==AlivePhase.DisplayState.DOZE&&ambient&&sleep.holding(SystemClock.uptimeMillis());
+        }
+        private boolean keepPreparedSleep(){
+            return handoff!=null&&!handoff.expired()&&sleep.active(SystemClock.uptimeMillis())
+                    &&supportsOwnAmbient()&&!isPreview()&&!destroyed
+                    &&displayId==Display.DEFAULT_DISPLAY&&displayState()==AlivePhase.DisplayState.ON
+                    &&!getSystemService(PowerManager.class).isInteractive();
+        }
         private void acknowledgeHandoff(){
             AliveSleepHandoff.Request pending=handoff;
             if(pending==null||handoffAcknowledged)return;
             if(pending.expired()){cancelHandoff();return;}
             if(!supportsOwnAmbient()||isPreview()||!visible||destroyed
-                    ||displayId!=Display.DEFAULT_DISPLAY||displayState()!=AlivePhase.DisplayState.ON
+                    ||displayId!=Display.DEFAULT_DISPLAY||!handoffDisplayReady()
                     ||getSystemService(PowerManager.class).isInteractive()
                     ||!getSystemService(KeyguardManager.class).isKeyguardLocked()
                     ||!getSurfaceHolder().getSurface().isValid())return;
             renderer.presented(()->main.post(()->{
                 if(handoff!=pending||pending.expired()||destroyed||!visible
-                        ||displayState()!=AlivePhase.DisplayState.ON
+                        ||!handoffDisplayReady()
                         ||getSystemService(PowerManager.class).isInteractive()
                         ||!getSystemService(KeyguardManager.class).isKeyguardLocked()
                         ||!getSurfaceHolder().getSurface().isValid())return;
@@ -133,6 +144,7 @@ public class AliveWallpaperService extends WallpaperService {
                     if(sleep.start(presentedAt)){
                         sleep.visibility(visible,presentedAt);
                         main.removeCallbacks(sleepExpired);main.postDelayed(sleepExpired,sleep.remaining(presentedAt));
+                        acknowledgeHandoff();
                     }
                 }));
             }else if(!sleeping||sleep.presented()){
@@ -177,8 +189,12 @@ public class AliveWallpaperService extends WallpaperService {
         public void onAmbientModeChanged(boolean next,long duration){
             ambient=next;ambientDuration=duration;
             if(next){
-                if(duration<=0)endSleep();else beginSleep();
-                update("ambient",duration>0);
+                // Native screen-off admission may legitimately deliver duration=0. Keep only
+                // an already prepared ON wait; draw/ACK still require real visibility/lock/surface.
+                // Never start/renew an episode or initialize a hidden scene here.
+                boolean prepared=duration<=0&&keepPreparedSleep();
+                if(duration<=0){if(!prepared)endSleep();}else beginSleep();
+                update("ambient",duration>0||prepared);
             }else{
                 // Zero is the platform ambient-call duration, not an instruction to skip wake geometry.
                 wake();update("ambient-exit",true);recheckUnlock();

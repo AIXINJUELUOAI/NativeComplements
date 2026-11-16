@@ -1,4 +1,4 @@
-"""Build and verify same-source full/window APKs; never install, reboot or make backups."""
+"""Build and verify the integrated main APK; never install, reboot or make backups."""
 from pathlib import Path
 import hashlib
 import os
@@ -13,20 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CERTIFICATE = "28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104"
 SCOPE = ROOT / "app/src/main/resources/META-INF/xposed/scope.list"
 SYSTEM_SCOPES = {"system", "com.google.android.apps.nexuslauncher", "com.android.systemui"}
-BASE_ENTRIES = {"dev.local.sunwindowdemo." + name for name in ("SunWindowModule", "LauncherGuard", "BackBridge")}
-ENTRIES = {
-    "full": BASE_ENTRIES | {"dev.local.sunwindowdemo.features." + name for name in (
-        "callblocking.CallBlockingModule", "iconlayers.IconLayerModule", "iconlayers.SystemIconModule", "navbar.NavbarModule")},
-    "window": BASE_ENTRIES,
-}
-WINDOW_FORBIDDEN = {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
-    "SuggestionHost", "SuggestionInput", "BarrageHost", "RotationSuggestion", "LauncherRotationSuggestion",
-    "features/callblocking/CallBlockingModule", "features/navbar/NavbarModule", "features/iconlayers/IconLayerModule",
-    "features/iconlayers/SystemIconModule", "features/iconlayers/DrawerMonet", "features/motion/MotionAccess",
-    "features/edgetouch/EdgeInputFilter", "features/shade/LandscapeShade", "features/shade/StatusBarOffset", "features/shade/SignalDisplay",
-    "features/alive/AliveWallpaperService", "features/alive/AliveAssets", "features/alive/AlivePhase",
-    "features/alive/AliveAmbientWallpaperService", "features/alive/AliveAmbientAccess", "features/alive/AliveSystemUi", "features/alive/AliveSleepHandoff")}
-
+ENTRIES = {"dev.local.sunwindowdemo." + name for name in (
+    "SunWindowModule", "LauncherGuard", "BackBridge", "features.callblocking.CallBlockingModule",
+    "features.iconlayers.IconLayerModule", "features.iconlayers.SystemIconModule", "features.navbar.NavbarModule")}
 
 
 def check_scopes(text):
@@ -44,6 +33,7 @@ def main():
     check_scopes(SCOPE.read_text(encoding="utf-8"))
     gradle = (ROOT / "app/build.gradle.kts").read_text(encoding="utf-8")
     assert re.search(r"isMinifyEnabled\s*=\s*true", gradle), "Release must enable R8"
+    assert 'create("window")' not in gradle, "Retired standalone product must not be built"
     version = re.search(r'versionName = "([^"]+)"', gradle)[1]
     code = int(re.search(r'versionCode = (\d+)', gradle)[1])
     sdk = Path(os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
@@ -52,103 +42,74 @@ def main():
     jdk = Path(os.environ.get("JAVA_HOME", r"C:\Program Files\Android\Android Studio\jbr"))
     env = os.environ.copy(); env["JAVA_HOME"] = str(jdk)
     subprocess.run([str(ROOT / "gradlew.bat"), "--no-daemon", "--console=plain",
-                    ":app:assembleFullRelease", ":app:assembleWindowRelease"], cwd=ROOT, env=env, check=True)
-    verified = []
-    for product in ("full", "window"):
-        standalone = product == "window"
-        package = "dev.nativecomplements.window" if standalone else "dev.nativecomplements.module"
-        apk = ROOT / f"app/build/outputs/apk/{product}/release/app-{product}-release.apk"
-        mapping = ROOT / f"app/build/outputs/mapping/{product}Release/mapping.txt"
-        assert mapping.exists() and "# compiler: R8" in mapping.read_text(encoding="utf-8"), "R8 mapping missing"
-        check_r8(apk, window=standalone)
-        with zipfile.ZipFile(apk) as archive:
-            assert archive.testzip() is None, "APK CRC failure"
-            assert "assets/navbar/templates.json" not in archive.namelist(), "Removed navigation templates asset in APK"
-            check_scopes(archive.read("META-INF/xposed/scope.list").decode("utf-8"))
-            assert "staticScope=true" in archive.read("META-INF/xposed/module.prop").decode().splitlines()
-            entries = archive.read("META-INF/xposed/java_init.list").decode().splitlines()
-            assert len(entries) == len(ENTRIES[product]) and set(entries) == ENTRIES[product], (product, entries)
-            assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx")) for name in archive.namelist())
-            assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/")) for name in archive.namelist()), "Official Alive resources must remain user-imported, not bundled"
-            if not standalone:
-                assert "assets/licenses/openalive/LICENSE" in archive.namelist()
-                assert "assets/licenses/openalive/NOTICE.txt" in archive.namelist()
-                alive_types = {"Lorg/aliveclean/NativeScene;", "Lorg/aliveclean/AliveRenderer;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveWallpaperService;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveAmbientAccess;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveSystemUi;",
-                               "Ldev/local/sunwindowdemo/features/alive/AliveSleepHandoff;"}
-                found = set()
-                for name in archive.namelist():
-                    if name.endswith(".dex"):
-                        data = dex.Dex(archive.read(name))
-                        owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
-                        found |= owners & alive_types
-                assert found == alive_types, "Alive JNI/renderer/service missing after R8"
-            assert any(b'dev.local.sunwindowdemo.core.WindowBackendEligibility' in archive.read(name)
-                       for name in archive.namelist() if name.endswith('.dex')), "R8 must preserve the fixed own eligibility marker name in both products"
-            if standalone:
-                for name in archive.namelist():
-                    if not name.endswith(".dex"): continue
-                    data = dex.Dex(archive.read(name))
-                    owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
-                    forbidden = {owner for owner in owners if owner.split("$", 1)[0].rstrip(";") + ";" in WINDOW_FORBIDDEN}
-                    assert not forbidden, f"Non-window hooks in standalone DEX: {sorted(forbidden)}"
-        signature = run(jdk / "bin/java.exe", "-jar", tools / "lib/apksigner.jar", "verify", "--print-certs", apk)
-        assert re.search(r"certificate SHA-256 digest: (\w+)", signature)[1] == CERTIFICATE
-        badging = run(tools / "aapt2.exe", "dump", "badging", apk).splitlines()[0]
-        for expected in (f"name='{package}'", f"versionCode='{code}'", f"versionName='{version}'"):
-            assert expected in badging, badging
-        manifest = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
-        accessibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
-                              if block.lstrip().startswith('service') and 'WindowAccessibilityService' in block), '')
-        assert 'android.permission.BIND_ACCESSIBILITY_SERVICE' in accessibility and re.search(r'exported[^\n]*=true', accessibility), 'Missing system-bound accessibility button entry'
-        assert 'android.accessibilityservice.AccessibilityService' in manifest
-        assert package + ".CONTROL" in manifest and package + ".settings" in manifest
-        assert package + ".iconlayers" in manifest and package + ".diagnostics" in manifest
-        eligibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
-                            if block.lstrip().startswith('receiver') and 'WindowBackendEligibility' in block), '')
-        assert re.search(r'enabled[^\n]*=true', eligibility) and re.search(r'exported[^\n]*=false', eligibility), "Missing own eligibility migration receiver"
-        assert 'android.intent.action.BOOT_COMPLETED' in manifest and 'android.intent.action.MY_PACKAGE_REPLACED' in manifest
-        if standalone:
-            assert "WindowBackendSelection" not in manifest, "Only full exposes the pending backend choice marker"
-            assert "dev.nativecomplements.module." not in manifest, "Standalone manifest aliases full-product identity"
-            for feature in ("CallBlockingProvider", "MotionProvider", "EdgeTouchProvider", "ShadeProvider", "BarrageProvider", "SuggestionProvider", "NavbarProvider", "SuggestionSmsReceiver", "IconLayerProvider"):
-                assert feature not in manifest, (product, feature)
-            assert "WindowIconProvider" in manifest
-            assert "AliveWallpaperService" not in manifest and "AliveAmbientWallpaperService" not in manifest, "Alive must not enter the standalone window product"
-        else:
-            marker = next((block for block in re.split(r'(?m)^\s*E:', manifest)
-                           if block.lstrip().startswith('receiver') and 'WindowBackendSelection' in block), '')
-            assert re.search(r'enabled[^\n]*=false', marker) and re.search(r'exported[^\n]*=false', marker), "Missing private disabled backend marker"
-            assert "AliveWallpaperService" in manifest and "android.permission.BIND_WALLPAPER" in manifest
-            assert "android.permission.AMBIENT_WALLPAPER" not in manifest
-            assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
-        resources = run(tools / "aapt2.exe", "dump", "resources", apk)
-        if not standalone:
-            assert "AliveAmbientWallpaperService" in manifest
-            for xml, expected in (("alive_wallpaper", "false"), ("alive_ambient_wallpaper", "true")):
-                match = re.search(r"resource [^\n]+ xml/" + xml + r"\s+\(\) \(file\) (\S+)", resources)
-                assert match, "Missing wallpaper XML: " + xml
-                metadata = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", match[1])
-                assert re.search(r"supportsAmbientMode[^\n]*=" + expected + r"(?:\s|$)", metadata), metadata
-        accessibility_path = re.search(r"resource [^\n]+ xml/window_accessibility_service\s+\(\) \(file\) (\S+)", resources)
-        assert accessibility_path, 'Missing accessibility metadata'
-        accessibility_xml = run(tools / 'aapt2.exe', 'dump', 'xmltree', apk, '--file', accessibility_path[1])
-        for capability in ('canRetrieveWindowContent', 'canPerformGestures', 'canRequestTouchExplorationMode', 'canTakeScreenshot'):
-            assert re.search(capability + r'[^\n]*=false', accessibility_xml), 'Unrequested accessibility capability: ' + capability
-        assert 'accessibilityEventTypes' not in accessibility_xml or re.search(r'accessibilityEventTypes[^\n]*=0x0(?:\s|$)', accessibility_xml), 'Accessibility entry must not collect window events'
-        assert "WindowShortcutActivity" not in manifest and "android.app.shortcuts" not in manifest, "Window creation entry must be accessibility-only"
-        target = ROOT / f"deliverables/NativeComplements{'-Window' if standalone else ''}-{version}.apk"
-        verified.append((apk, target, badging))
-    # Publish neither deliverable until both products pass every check.
-    for apk, target, badging in verified:
-        target.parent.mkdir(exist_ok=True); shutil.copyfile(apk, target)
-        digest = hashlib.sha256(apk.read_bytes()).hexdigest()
-        assert hashlib.sha256(target.read_bytes()).hexdigest() == digest
-        print(badging); print(f"APK={target}"); print(f"SHA256={digest}")
-    print("Both original certificates, isolated identities, static scopes, entries and window-only Hook boundary verified; device effects unverified")
+                    ":app:assembleFullRelease"], cwd=ROOT, env=env, check=True)
+    package = "dev.nativecomplements.module"
+    apk = ROOT / "app/build/outputs/apk/full/release/app-full-release.apk"
+    mapping = ROOT / "app/build/outputs/mapping/fullRelease/mapping.txt"
+    assert mapping.exists() and "# compiler: R8" in mapping.read_text(encoding="utf-8"), "R8 mapping missing"
+    check_r8(apk)
+    with zipfile.ZipFile(apk) as archive:
+        names = archive.namelist()
+        assert archive.testzip() is None, "APK CRC failure"
+        assert "assets/navbar/templates.json" not in names, "Removed navigation templates asset in APK"
+        check_scopes(archive.read("META-INF/xposed/scope.list").decode("utf-8"))
+        assert "staticScope=true" in archive.read("META-INF/xposed/module.prop").decode().splitlines()
+        entries = archive.read("META-INF/xposed/java_init.list").decode().splitlines()
+        assert len(entries) == len(ENTRIES) and set(entries) == ENTRIES, entries
+        assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx")) for name in names)
+        assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/")) for name in names), "Official Alive resources must remain user-imported, not bundled"
+        assert "assets/licenses/openalive/LICENSE" in names
+        assert "assets/licenses/openalive/NOTICE.txt" in names
+        required_types = {"Lorg/aliveclean/NativeScene;", "Lorg/aliveclean/AliveRenderer;"} | {
+            "Ldev/local/sunwindowdemo/features/alive/" + name + ";" for name in (
+                "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveAmbientAccess", "AliveSystemUi", "AliveSleepHandoff")}
+        required_types |= {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
+            "CornerGesture", "FanView", "AndroidWindowAdmission", "WindowAdmission")}
+        found = set()
+        for name in names:
+            if not name.endswith(".dex"):
+                continue
+            data = dex.Dex(archive.read(name))
+            owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
+            assert "Ldev/local/sunwindowdemo/WindowAccessibilityService;" not in owners, "Retired accessibility entry in DEX"
+            found |= owners & required_types
+        assert found == required_types, "Integrated Alive/corner/admission runtime missing after R8: " + str(required_types - found)
+        assert any(b'dev.local.sunwindowdemo.core.WindowBackendEligibility' in archive.read(name)
+                   for name in names if name.endswith('.dex')), "Preserve own eligibility marker for old installations"
+    signature = run(jdk / "bin/java.exe", "-jar", tools / "lib/apksigner.jar", "verify", "--print-certs", apk)
+    assert re.search(r"certificate SHA-256 digest: (\w+)", signature)[1] == CERTIFICATE
+    badging = run(tools / "aapt2.exe", "dump", "badging", apk).splitlines()[0]
+    for expected in (f"name='{package}'", f"versionCode='{code}'", f"versionName='{version}'"):
+        assert expected in badging, badging
+    manifest = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
+    assert "WindowAccessibilityService" not in manifest and "android.accessibilityservice.AccessibilityService" not in manifest
+    for authority in ("CONTROL", "settings", "iconlayers", "diagnostics"):
+        assert package + "." + authority in manifest
+    eligibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
+                        if block.lstrip().startswith('receiver') and 'WindowBackendEligibility' in block), '')
+    assert re.search(r'enabled[^\n]*=true', eligibility) and re.search(r'exported[^\n]*=false', eligibility), "Missing own eligibility migration receiver"
+    assert 'android.intent.action.BOOT_COMPLETED' in manifest and 'android.intent.action.MY_PACKAGE_REPLACED' in manifest
+    marker = next((block for block in re.split(r'(?m)^\s*E:', manifest)
+                   if block.lstrip().startswith('receiver') and 'WindowBackendSelection' in block), '')
+    assert re.search(r'enabled[^\n]*=false', marker) and re.search(r'exported[^\n]*=false', marker), "Preserve private legacy backend marker"
+    assert "AliveWallpaperService" in manifest and "AliveAmbientWallpaperService" in manifest and "android.permission.BIND_WALLPAPER" in manifest
+    assert "android.permission.AMBIENT_WALLPAPER" not in manifest
+    assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
+    resources = run(tools / "aapt2.exe", "dump", "resources", apk)
+    for xml, expected in (("alive_wallpaper", "false"), ("alive_ambient_wallpaper", "true")):
+        match = re.search(r"resource [^\n]+ xml/" + xml + r"\s+\(\) \(file\) (\S+)", resources)
+        assert match, "Missing wallpaper XML: " + xml
+        metadata = run(tools / "aapt2.exe", "dump", "xmltree", apk, "--file", match[1])
+        assert re.search(r"supportsAmbientMode[^\n]*=" + expected + r"(?:\s|$)", metadata), metadata
+    assert "xml/window_accessibility_service" not in resources
+    assert "WindowShortcutActivity" not in manifest and "android.app.shortcuts" not in manifest, "Retired shortcut must remain absent"
+    # Copy only after all identity, signature, runtime and product checks pass.
+    target = ROOT / f"deliverables/NativeComplements-{version}.apk"
+    target.parent.mkdir(exist_ok=True); shutil.copyfile(apk, target)
+    digest = hashlib.sha256(apk.read_bytes()).hexdigest()
+    assert hashlib.sha256(target.read_bytes()).hexdigest() == digest
+    print(badging); print(f"APK={target}"); print(f"SHA256={digest}")
+    print("Original certificate, main identity, static scopes, entries and integrated window/Alive runtime verified; device effects unverified")
 
 
 if __name__ == "__main__":

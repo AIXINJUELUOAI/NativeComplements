@@ -86,7 +86,31 @@ public final class AliveSleepHandoff {
             hooks.add(module.hook(h.wake).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();h.main.post(()->{h.cancel("wake");h.sleepSignalled=false;});return result;
             }));
-            for(Method method:new Method[]{h.layout,h.draw,h.sleep,h.wake})
+            hooks.add(module.hook(h.sleepAnimations).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                if(Looper.myLooper()!=Looper.getMainLooper())return chain.proceed();
+                h.begin();Object previous=h.sleepScope.get();h.sleepScope.set(chain.getThisObject());
+                try{return chain.proceed();}finally{if(previous==null)h.sleepScope.remove();else h.sleepScope.set(previous);}
+            }));
+            hooks.add(module.hook(h.startAnimation).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object owner=chain.getThisObject(),previous=h.admissionScope.get();boolean eligible=false;
+                try{eligible=h.sleepScope.get()!=null&&h.admissionSafe(owner);}catch(ReflectiveOperationException|RuntimeException unknown){h.log.accept("ALIVE_HANDOFF_ADMISSION unavailable="+unknown.getClass().getSimpleName());}
+                h.log.accept("ALIVE_HANDOFF_ADMISSION enabled="+h.enabled+" selected="+eligible);
+                if(eligible)h.admissionScope.set(owner);else h.admissionScope.remove();
+                try{return chain.proceed();}finally{if(previous==null)h.admissionScope.remove();else h.admissionScope.set(previous);}
+            }));
+            hooks.add(module.hook(h.shouldPlay).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object result=chain.proceed();
+                if(Boolean.TRUE.equals(result)&&h.admissionScope.get()==chain.getThisObject()){
+                    try{
+                        if(h.admissionSafe(chain.getThisObject())){
+                            // Only original startAnimation's own false branch writes its native decision cache.
+                            h.log.accept("ALIVE_HANDOFF_ADMISSION selected=true native=true projected=false");return Boolean.FALSE;
+                        }
+                    }catch(ReflectiveOperationException|RuntimeException unknown){h.log.accept("ALIVE_HANDOFF_ADMISSION native-fallback="+unknown.getClass().getSimpleName());}
+                }
+                return result;
+            }));
+            for(Method method:new Method[]{h.layout,h.draw,h.sleep,h.wake,h.sleepAnimations,h.startAnimation,h.shouldPlay})
                 if(!module.deoptimize(method))throw new IllegalStateException("sleep handoff deoptimize");
             h.enabled=true;selection.changes(()->h.main.post(h::selectionChanged));
             log.accept("ALIVE_HANDOFF_READY native window and first-swap scoped");
@@ -102,7 +126,9 @@ public final class AliveSleepHandoff {
         final Selection selection;final Consumer<String> log;
         final Field root,params,state,keyguard,showing,occluded,going,fading,bouncer,depth,depthOwner,wallpapers,repository;
         final Field stateShowing,stateOccluded,stateBouncer,stateGoing;
-        final Method layout,apply,draw,sleep,wake;
+        final Method layout,apply,draw,sleep,wake,sleepAnimations,startAnimation,shouldPlay,lazyGet;
+        final Field nativeWindow,nativeScrim,nativePlaying,nativeAnimator,nativeDecision,animations;
+        final ThreadLocal<Object> sleepScope=new ThreadLocal<>(),admissionScope=new ThreadLocal<>();
         WeakReference<Object> window=new WeakReference<>(null);
         WeakReference<View> scrim=new WeakReference<>(null);
         boolean enabled,active,ready,visual,restoring,sleepSignalled,resent;
@@ -165,7 +191,19 @@ public final class AliveSleepHandoff {
             draw=type(loader,"com.android.systemui.statusbar.LightRevealScrim").getDeclaredMethod("onDraw",Canvas.class);
             Class<?> service=type(loader,"com.android.systemui.keyguard.KeyguardService$2");
             sleep=service.getDeclaredMethod("onStartedGoingToSleep",int.class);wake=service.getDeclaredMethod("onStartedWakingUp",int.class,boolean.class);
-            for(Method method:new Method[]{layout,apply,draw,sleep,wake}){method.setAccessible(true);if(method.getReturnType()!=void.class)throw new NoSuchMethodException("handoff ABI");}
+            Class<?> controller=type(loader,"com.android.systemui.statusbar.phone.ScreenOffAnimationController");
+            Class<?> unlocked=type(loader,"com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController");
+            sleepAnimations=controller.getDeclaredMethod("onStartedGoingToSleep");
+            animations=field(controller,"animations",java.util.List.class);
+            startAnimation=unlocked.getDeclaredMethod("startAnimation");shouldPlay=unlocked.getDeclaredMethod("shouldPlayUnlockedScreenOffAnimation");
+            nativeWindow=field(unlocked,"notifShadeWindowControllerLazy",type(loader,"dagger.Lazy"));
+            nativeScrim=field(unlocked,"lightRevealScrim",draw.getDeclaringClass());
+            nativePlaying=field(unlocked,"lightRevealAnimationPlaying",boolean.class);
+            nativeAnimator=field(unlocked,"lightRevealAnimator",android.animation.ValueAnimator.class);
+            nativeDecision=field(unlocked,"decidedToAnimateGoingToSleep",Boolean.class);
+            lazyGet=nativeWindow.getType().getDeclaredMethod("get");lazyGet.setAccessible(true);
+            for(Method method:new Method[]{layout,apply,draw,sleep,wake,sleepAnimations}){method.setAccessible(true);if(method.getReturnType()!=void.class)throw new NoSuchMethodException("handoff ABI");}
+            for(Method method:new Method[]{startAnimation,shouldPlay}){method.setAccessible(true);if(method.getReturnType()!=boolean.class)throw new NoSuchMethodException("admission ABI");}
             // DepthAnimation listener is exact to this native window; no global singleton guessed from a different display.
             depthOwner=field(depth.getType(),"this$0",blur);
         }
@@ -182,6 +220,23 @@ public final class AliveSleepHandoff {
         View view()throws IllegalAccessException {Object owner=window.get();return owner==null?null:(View)root.get(owner);}
         boolean sameRoot(View candidate)throws IllegalAccessException {
             View rootView=view();return rootView!=null&&candidate.isAttachedToWindow()&&candidate.getRootView()==rootView.getRootView();
+        }
+        boolean admissionSafe(Object animation)throws ReflectiveOperationException {
+            if(Looper.myLooper()!=Looper.getMainLooper()||!enabled||!active||SystemClock.uptimeMillis()>=expires)return false;
+            Object owner=window.get(),controller=sleepScope.get();View value=view();
+            if(owner==null||controller==null||value==null||!value.isAttachedToWindow()||value.getDisplay()==null
+                    ||value.getDisplay().getDisplayId()!=Display.DEFAULT_DISPLAY||value.getDisplay().getState()!=Display.STATE_ON)return false;
+            if(!((List<?>)animations.get(controller)).contains(animation)||lazyGet.invoke(nativeWindow.get(animation))!=owner)return false;
+            View reveal=(View)nativeScrim.get(animation);if(reveal==null||!sameRoot(reveal))return false;
+            if(nativePlaying.getBoolean(animation)||((android.animation.ValueAnimator)nativeAnimator.get(animation)).isStarted()
+                    ||nativeDecision.get(animation)!=null)return false;
+            PowerManager power=value.getContext().getSystemService(PowerManager.class);
+            if(power==null||power.isInteractive())return false;
+            Object token=selection.token(repo(owner));
+            if(!(identity instanceof AliveSystemUi.MatchToken old)||!(token instanceof AliveSystemUi.MatchToken now)||!old.same(now))return false;
+            Object guard=keyguard.get(owner),snapshot=state.get(owner);
+            return !occluded.getBoolean(guard)&&!going.getBoolean(guard)&&!fading.getBoolean(guard)&&!bouncer.getBoolean(guard)
+                &&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
         }
         boolean safe()throws ReflectiveOperationException {
             Object owner=window.get();View view=view();

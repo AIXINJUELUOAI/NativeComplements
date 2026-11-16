@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
@@ -36,16 +35,21 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
 
 @Composable
 fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, number: (String, Int) -> Unit) {
-    val context = LocalContext.current
     SettingsGroup {
-        SettingRow("无障碍按钮呼出菜单", "在系统设置中手动启用“小窗菜单按钮”并加入无障碍按钮，启用本身不呼出菜单；点击按钮沿用本版本的小窗限制，不支持借用另一版本后端。", onClick = {
-            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                .onFailure { android.widget.Toast.makeText(context, "系统无障碍设置暂不可用", android.widget.Toast.LENGTH_SHORT).show() }
-        })
+        SettingRow("角落滑动呼出", "从左下角或右下角向屏幕内斜向滑动，滑入扇区选择应用，松手打开；继续滑到菜单项可展开应用列表。不接管长侧滑返回。")
+    }
+    GroupTitle("触发与选中")
+    SettingsGroup {
+        SliderRow("角落热区边长", value = p.heat, range = 36..72, unit = " dp") { number("heat", it) }
+        SliderRow("触发滑动距离", value = p.distance, range = 24..100, unit = " dp") { number("distance", it) }
+        SliderRow("滑动选中距离", value = p.selectionDistance, range = 50..100, unit = "%") { number("selectionDistance", it) }
     }
     GroupTitle("菜单外观")
     SettingsGroup {
         ToggleRow("菜单背景模糊", value = p.menuBlur) { boolean("menuBlur", it) }
+        SliderRow("扇区快捷项数量", value = p.fanCount, range = 1..5, unit = " 个") { number("fanCount", it) }
+        SliderRow("扇形半径", value = p.radius, range = 120..260, unit = " dp") { number("radius", it) }
+        SliderRow("图标直径", value = p.icon, range = 32..56, unit = " dp") { number("icon", it) }
     }
 }
 
@@ -76,6 +80,9 @@ fun PreventionScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, b
 @Composable
 fun DiagnosticsScreen(controller: WindowController) {
     val runtime = controller.runtime
+    SettingsGroup {
+        ToggleRow("显示小窗触发热区", value = controller.preferences.showHeat) { controller.boolean("showHeat", it) }
+    }
     GroupTitle("小窗连接")
     SettingsGroup {
         SettingRow("系统后端", when {

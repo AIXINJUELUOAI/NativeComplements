@@ -1,6 +1,20 @@
 # Alive 实验 AOD：SystemUI 能力、doze 模糊与有界视觉交接
 
-当前为0.11.3-alive-test1/code146，覆盖145仅跳额外淡出的实现。此为用户追加授权的模块例外，不是普通应用获得签名权限；新Handoff尚未真机验证。仅主版安装 [AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)。明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通Alive仍为ambient=false回退。不新增全局enable偏好或Provider。
+## 当前增量：0.11.3-alive-test2 / code147
+
+146真机只读证据确认GONE→AOD原生shouldDelayKeyguardShow约1300ms，首帧已有但真实锁屏/视觉交接必须等待；不是首swap本身延迟。147新增下列精确ABI，并与原Handoff同组安装/deopt，任一失败unhook整组：
+
+- `ScreenOffAnimationController.onStartedGoingToSleep():void` 与 `animations:java.util.List`；主线程原动画循环前准备本次episode（重复不续期），循环及Fold候选保留。
+- `UnlockedScreenOffAnimationController.startAnimation():boolean`、`shouldPlayUnlockedScreenOffAnimation():boolean`；字段 `notifShadeWindowControllerLazy:dagger.Lazy`、`lightRevealScrim:LightRevealScrim`、`lightRevealAnimationPlaying:boolean`、`lightRevealAnimator:ValueAnimator`、`decidedToAnimateGoingToSleep:Boolean`。
+- 仅本次active未绝限、精确自有选中令牌/当前用户/AOD、默认屏ON且非interactive、同native窗口/root、实例确在动画列表、无occlusion/goingaway/fading/bouncer且原生未动画/decision仍null，进入原start同步动态ThreadLocal；原谓词先proceed，只有原true且重验上述门成立才投影false。原start自身走FALSEcache分支，不手写字段/强制showKeyguard。原 `maybeHandlePendingLock` 仍检查认证过渡并调用原 `doKeyguardLocked`。
+- 不全局改predicate/DozeParameters/PowerManager，也不改原1300ms状态流或亮度；原生后续查询自然读其FALSEcache并可能早DOZE。原wake清cache/handler/animator仍运行，ThreadLocal finally清理，不带到其他查询。取消后的“回原生”只指恢复窗口flag与绘制，不重放已选择不播放的旧动画；不能承诺原动画自动补播或完整1800ms。
+- admission是锁屏前的动画入场选择，故不要求already showing；**视觉safe仍要求两处真实showing且所有原安全门，FIRST_SWAP UID/nonce/期限/Surface验证不放宽**，没有准备好的可见帧就不透出。Service duration0只保已有未过期PREPARE/active/defaultON/noninteractive有界等待，不要求等待时已经可见/locked/Surface有效；绘制与ACK仍要求这些事实，命令schema不当发送者认证；DOZE回执只允许已start成功帧，OFF/SUSPEND仍撤回，不强保ON。
+
+新147尚未真机验证，其他scrim/opaque/原生亮度仍可能影响观感；不把ADMISSION/VISUAL日志当物理可见证据。
+
+## 历史实现：code146
+
+历史为0.11.3-alive-test1/code146，覆盖145仅跳额外淡出的实现。此为用户追加授权的模块例外，不是普通应用获得签名权限；新Handoff尚未真机验证。仅主版安装 [AliveSystemUi](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemUi.java>)。明确选择 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService` 才可能产生额外能力；普通Alive仍为ambient=false回退。不新增全局enable偏好或Provider。
 
 ## 已核宿主与事件输入
 
