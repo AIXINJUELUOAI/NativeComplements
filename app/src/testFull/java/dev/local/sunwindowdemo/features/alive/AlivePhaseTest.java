@@ -4,6 +4,60 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class AlivePhaseTest {
+    @Test public void wakeRetentionNeedsSuccessfulSleepAndNeverRenewsOrConsumesOnVisibility(){
+        AlivePhase.SleepWindow sleep=new AlivePhase.SleepWindow();
+        AlivePhase.WakeWindow wake=new AlivePhase.WakeWindow();
+        assertFalse(wake.arm(100,true,sleep)); // Ordinary app hide/show has no successful sleep frame.
+        sleep.begin(100);
+        assertFalse(wake.arm(110,true,sleep));
+        assertTrue(sleep.present(120));
+        assertFalse(wake.arm(130,true,sleep)); // present() only requests a frame; it is not its GL acknowledgement.
+        assertTrue(sleep.start(140));
+        assertFalse(wake.arm(145,true,sleep)); // Historical success without same-renderer eligibility is insufficient.
+        wake.presented(wake.epoch());
+        assertFalse(wake.arm(149,false,sleep)); // Ordinary component/preview/display/surface/lock gates remain outside.
+        wake.presented(wake.epoch());
+        for(long repeated:new long[]{147,148,149}){ // ambient, PREPARE/system-sleep, SCREEN_OFF after first swap.
+            boolean fresh=sleep.begin(repeated);
+            assertFalse(fresh);
+            if(fresh)wake.invalidate(); // Same service branch: repeats must preserve successful-renderer eligibility.
+        }
+        assertTrue(wake.arm(150,true,sleep));
+        sleep.wake();
+        assertEquals(2000,wake.remaining(150));
+        assertTrue(wake.active(170)); // Initial native visible=true while ambient is still true does not consume it.
+        assertTrue(wake.active(200)); // A subsequent hidden gap can still pause the existing scene.
+        assertFalse(wake.arm(250,true,sleep)); // Repeated SCREEN_ON/ambient-exit cannot renew.
+        assertEquals(1900,wake.remaining(250));
+        assertTrue(wake.active(300)); // Native visibility restored: still available for another short gap.
+        assertTrue(wake.active(2149));
+        assertFalse(wake.active(2150));
+        assertEquals(0,wake.remaining(2151));
+        assertFalse(wake.arm(2151,true,sleep)); // Timeout never manufactures another successful sleep.
+        assertTrue(sleep.begin(2200));wake.invalidate(); // Only a new episode clears retention/eligibility.
+        assertFalse(wake.active(2200));
+        assertFalse(wake.arm(2201,true,sleep));
+        assertTrue(sleep.present(2210));assertTrue(sleep.start(2220));
+        wake.presented(wake.epoch());
+        assertTrue(wake.arm(2230,true,sleep));
+        long oldEpoch=wake.epoch();
+        wake.invalidate(); // Surface/reload invalidates only wake eligibility, not legitimate sleep progress.
+        assertTrue(sleep.active(2240));assertTrue(sleep.holding(2240));
+        wake.presented(oldEpoch); // A late old-renderer callback must not make the replacement eligible.
+        assertFalse(wake.active(2240));
+        assertFalse(wake.arm(2240,true,sleep));
+        sleep.wake();sleep.begin(2300);
+        long seedEpoch=wake.epoch();
+        assertTrue(sleep.present(2310));
+        wake.invalidate(); // First surface can arrive while noninteractive; original seeded sleep remains legal.
+        assertTrue(sleep.active(2320));
+        assertTrue(sleep.start(2330));wake.presented(seedEpoch);
+        assertTrue(sleep.holding(2340));
+        assertFalse(wake.arm(2340,true,sleep));
+        sleep.end();wake.invalidate();
+        assertFalse(sleep.begin(2350)); // An ended episode is not a fresh sleep, even if duplicate signals follow.
+        assertFalse(wake.arm(2350,true,sleep));
+    }
     @Test public void phaseUsesCurrentFactsAndNeverLatchesAnUnlockCommand(){
         for(int bits=0;bits<8;bits++){
             boolean interactive=(bits&1)!=0,ambient=(bits&2)!=0,locked=(bits&4)!=0;
@@ -48,7 +102,7 @@ public class AlivePhaseTest {
         assertFalse(AlivePhase.drawable(true,false,false,false,AlivePhase.DisplayState.ON,true));
         assertFalse(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.OFF,true));
         assertFalse(AlivePhase.drawable(true,true,false,true,AlivePhase.DisplayState.UNKNOWN,true));
-        sleep.end();sleep.begin(2000); // Zero-duration/suspend/end cannot be rearmed by duplicate sleep.
+        sleep.end();assertFalse(sleep.begin(2000)); // Zero-duration/suspend/end cannot be rearmed by duplicate sleep.
         assertFalse(sleep.active(2000));
         sleep.wake();sleep.begin(3000);
         assertTrue(sleep.active(3000));

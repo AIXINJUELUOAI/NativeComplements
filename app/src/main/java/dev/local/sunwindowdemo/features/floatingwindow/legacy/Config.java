@@ -50,8 +50,8 @@ public final class Config {
     boolean endOnClose() { return prefs.getBoolean("endOnClose", false); }
     boolean keepEdgeAwake() { return prefs.getBoolean("keepEdgeAwake", false); }
     boolean doubleClose() { return prefs.getBoolean("doubleClose", false); }
-    boolean notificationWindow() { return false; }
-    boolean landscapeShareWindow() { return false; }
+    boolean notificationWindow() { return prefs.getBoolean("notificationWindow", true); }
+    boolean landscapeShareWindow() { return prefs.getBoolean("landscapeShareWindow", true); }
     boolean showHeat() { return prefs.getBoolean("showHeat", false); }
     boolean menuBlur() { return prefs.getBoolean("menuBlur", false); }
     int windowDim() { return number("windowDim",DEFAULT_WINDOW_DIM,0,100); }

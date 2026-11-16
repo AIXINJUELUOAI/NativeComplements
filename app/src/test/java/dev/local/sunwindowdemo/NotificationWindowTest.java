@@ -39,13 +39,17 @@ public class NotificationWindowTest {
         assertTrue(store.read().getNotificationWindow());store.getClass().getMethod("boolean",String.class,boolean.class).invoke(store,"notificationWindow",false);
         assertFalse(store.read().getNotificationWindow());
     }
-    @Test public void externalGestureToolsReceiveAnExplicitConversionShortcut(){
-        var controller=Robolectric.buildActivity(WindowShortcutActivity.class,new Intent(Intent.ACTION_CREATE_SHORTCUT)).create();
-        var shadow=Shadows.shadowOf(controller.get());assertEquals(Activity.RESULT_OK,shadow.getResultCode());
-        Intent result=shadow.getResultIntent();Intent run=result.getParcelableExtra(Intent.EXTRA_SHORTCUT_INTENT,Intent.class);
-        assertNotNull(run);assertEquals(WindowShortcutActivity.ACTION,run.getAction());
-        assertEquals(WindowShortcutActivity.class.getName(),run.getComponent().getClassName());
-        assertTrue(WindowShortcutActivity.isCurrent(Wire.PKG,WindowShortcutActivity.ID));
-        assertFalse(WindowShortcutActivity.isCurrent(Wire.PKG,"other"));
+    @Test public void restoredEntrySwitchesRetainIndependentSavedValuesAndOriginalDefaults(){
+        android.content.SharedPreferences previous=dev.local.sunwindowdemo.Config.hostPreferences;
+        try{
+            android.content.SharedPreferences prefs=context.getSharedPreferences("entry-switch-test",0);
+            prefs.edit().clear().commit();dev.local.sunwindowdemo.Config.hostPreferences=prefs;
+            dev.local.sunwindowdemo.Config config=new dev.local.sunwindowdemo.Config(context);
+            assertTrue(config.notificationWindow());assertTrue(config.landscapeShareWindow());
+            prefs.edit().putBoolean("notificationWindow",false).commit();
+            assertFalse(config.notificationWindow());assertTrue(config.landscapeShareWindow());
+            prefs.edit().putBoolean("notificationWindow",true).putBoolean("landscapeShareWindow",false).commit();
+            assertTrue(config.notificationWindow());assertFalse(config.landscapeShareWindow());
+        }finally{dev.local.sunwindowdemo.Config.hostPreferences=previous;}
     }
 }

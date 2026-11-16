@@ -2,7 +2,14 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.5-alive-test2 / code150（照片入口与卡片缓存）
+### 当前增量：0.11.5-alive-test3 / code151（唤醒短隐藏保帧与两类小窗入口）
+
+- 用户确认19:13:31第一轮唯一触发系统动画混入，后续连续反向未触发。只读样本：31.622 wake→31.631 visibility=false→31.632 force-endpoint0/release→31.648 ambient-exit hidden animate=false→31.711恢复visible→31.741静态LOCK重建；后续成功轮scene保留、mode0→1 animate=true。该轮sleep至wake约612ms，并非1800到期，不能把“约2s结束”举例固化为补丁。
+- 本轮仅窄修[Service](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)在成功sleep首帧后、真实ON/锁定唤醒时的既有scene资源保留：固定首wake≤2000ms，不重复延长，不是延迟动画；hidden pause不mode/不绘制/不初始化，真实ON/interactive/非ambient恢复时沿当前值反向。visible先恢复不提前消耗窗口，ambient未退不强端点；到期可见只撤资源保留资格，hidden才释放。真正新sleep、非ON、解锁、surface/reload/destroy均取消（同episode重复ambient/PREPARE/SCREEN_OFF不清成功资格、不续sleep期限；资源失效仅epoch撤资格，不闭锁原sleep），普通app隐藏仍原端点恢复，不复活旧解锁种子。动画/native/安全门不改。
+- 按用户追加授权，本包同时恢复应用间跳转与通知小窗：原`landscapeShareWindow`/`notificationWindow`两独立偏好及“窗口与多任务”开关，默认true但保已存false；复用原foreground/caller/租约与精确通知原PendingIntent路径，失败原生回退、已dispatch不重发。保规则/状态/执行分层，不恢复其他退役入口，详[小窗接入](<floating-window.md>)。
+- 该修复针对已证实visibility中断，不宣称消除所有系统Keyguard内容闪帧或所有结束边界冲突；原生转场与Alive时长不同、duration0和跨episode旧cancel仍是另行诊断，不顺手混改。既有通知/跨app/导航/宿主规则与恢复开关UI22项定向通过，Alive2项值状态含最终重复信号保资格重跑中；只读复核指出两项实现内回归（资源失效闭锁sleep、同episode重复信号清资格），均已定向修正，不是设备已验证的结论。最终AlivePhaseTest修正后2项重跑通过；release/R8/原签名/151身份/7入口3scope/Direct Boot及退役产品边界打包核验通过，主APK SHA256 `c82116891278eec4f90f8fe847bae5ed104f47367258d4d03c39c26bf5ab90b4`。本轮共24项必要定向检查，未跑全套；新包未安装、真机视觉与小窗效果待用户验证。
+
+### 保留增量：0.11.5-alive-test2 / code150（照片入口与卡片缓存）
 
 - [照片入口](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)由OpenDocument改为系统PickVisualMedia/ImageOnly；APK资源仍文件选择器，不新增图库权限，选中照片继续复制到CE草稿，取消不应用。
 - [真实卡片缓存](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreviewCache.kt>)为进程内LRU，≤4MiB/12项、单图长边≤512，完整snapshot/phase/真实DE资源revision/尺寸匹配，不持Context/View、不写磁盘或DE、不常驻GL。重进/START先盖匹配真实帧，同代成功swap及Texture更新确认后撤cover；每代最多一次缩略读回，旧renderer完全close再建，代际/identity/timestamp拒绝旧回调。cold进程、未缓存新样式/照片/尺寸或淘汰时仍需首次真实渲染，不承诺冷启动无黑。草稿先读后异步准备运行资源，不再等完整准备才建立卡片。

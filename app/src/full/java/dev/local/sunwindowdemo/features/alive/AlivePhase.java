@@ -9,7 +9,10 @@ public final class AlivePhase {
     public static final class SleepWindow {
         private long deadline,hardDeadline,hiddenAt=-1;
         private boolean signalled,presented,started;
-        public void begin(long now){if(!signalled){signalled=true;deadline=now+SLEEP_WAIT_MS;hardDeadline=deadline+SLEEP_WINDOW_MS;}}
+        public boolean begin(long now){
+            if(signalled)return false;
+            signalled=true;deadline=now+SLEEP_WAIT_MS;hardDeadline=deadline+SLEEP_WINDOW_MS;return true;
+        }
         /** Start the finite collapse once the platform actually exposes our Engine. */
         public boolean present(long now){
             if(!active(now)||presented)return false;
@@ -34,6 +37,24 @@ public final class AlivePhase {
         /** Stop this sleep episode without allowing duplicate sleep signals to restart it. */
         public void end(){signalled=true;deadline=hardDeadline=0;hiddenAt=-1;}
         public void wake(){signalled=false;presented=started=false;deadline=hardDeadline=0;hiddenAt=-1;}
+    }
+    /** Resource-retention cap only, not a wake delay or animation duration. */
+    public static final long WAKE_RETAIN_MS=2000;
+    public static final class WakeWindow {
+        private long deadline,epoch;
+        private boolean eligible;
+        public long epoch(){return epoch;}
+        public void presented(long renderEpoch){if(renderEpoch==epoch)eligible=true;}
+        /** Invalidate only wake retention, never the original sleep lifecycle. */
+        public void invalidate(){clear();eligible=false;epoch++;}
+        public boolean arm(long now,boolean ownAmbient,SleepWindow sleep){
+            boolean allowed=eligible;eligible=false;
+            if(deadline!=0||!allowed||!ownAmbient||!sleep.holding(now))return false;
+            deadline=now+WAKE_RETAIN_MS;return true;
+        }
+        public boolean active(long now){return deadline!=0&&now<deadline;}
+        public long remaining(long now){return active(now)?deadline-now:0;}
+        public void clear(){deadline=0;}
     }
     private AlivePhase() {}
     /** Ambient drawing is restricted to our ambient service and a visible, actually dozing engine. */

@@ -545,7 +545,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         OpenWaitState.Request request=openWaitState.cancel();removeOpenWait();
         if(request!=null)Wire.send(this,"CANCEL_OPEN",request.pkg(),-1,request.token(),false);
     }
-    boolean notificationWindowReady(){return false;} // Notification clicks never enter the window backend.
+    boolean notificationWindowReady(){
+        if(!ready()||!WindowHostPolicy.notificationConfigured(config.enabled(),config.notificationWindow(),backendReady,backendState))return false;
+        // Preserve the native short circuit: do not ask Keyguard while the screen is off.
+        if(!getSystemService(android.os.PowerManager.class).isInteractive())return false;
+        return !getSystemService(KeyguardManager.class).isKeyguardLocked();
+    }
     String notificationForegroundPackage(){
         try{
             // A normal window and a mini window can both sit above the fullscreen app.
@@ -560,7 +565,33 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             return null;
         }catch(RuntimeException unavailable){return null;}
     }
-    void openNotification(android.service.notification.StatusBarNotification notice,android.app.PendingIntent pending,Intent fill) {} // Retired entry.
+    void openNotification(android.service.notification.StatusBarNotification notice,android.app.PendingIntent pending,Intent fill){
+        if(Looper.myLooper()!=main.getLooper()){main.post(()->openNotification(notice,pending,fill));return;}
+        cancelOpenWait();hideFan();hidePanel();
+        ResultReceiver reply=new ResultReceiver(main){
+            private boolean completed;
+            // Runs in SystemUI, whose actual permission is checked below. The
+            // module APK's manifest does not describe this host UID's grants.
+            @android.annotation.SuppressLint("MissingPermission")
+            protected void onReceiveResult(int result,Bundle data){
+            if(completed)return;completed=true;
+            if(result==1||data!=null&&data.getBoolean("superseded"))return;
+            try{
+                if(data!=null&&data.getBoolean("dispatched")){
+                    int task=data.getInt("taskId",-1);
+                    if(task>=0&&checkSelfPermission(android.Manifest.permission.REORDER_TASKS)==android.content.pm.PackageManager.PERMISSION_GRANTED){
+                        getSystemService(android.app.ActivityManager.class).moveTaskToFront(task,0);return;
+                    }
+                    throw new IllegalStateException("notification target unavailable after dispatch");
+                }
+                android.app.ActivityOptions options=android.app.ActivityOptions.makeBasic();
+                options.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS);
+                pending.send(SystemUiHost.this,0,fill,null,null,null,options.toBundle());
+            }catch(Exception error){android.util.Log.w("NativeComplements","NOTIFICATION_WINDOW_FAILED "+error.getClass().getSimpleName());Toast.makeText(SystemUiHost.this,"通知页面打开失败，请从应用内查看",Toast.LENGTH_LONG).show();}
+        }};
+        try{Wire.openNotification(this,notice.getPackageName(),pending,fill,reply);}
+        catch(RuntimeException error){reply.send(0,null);}
+    }
     private void floatCurrent(int attempt,boolean quiet){
         if(!ready()||!WindowHostPolicy.slotConfigured(config.enabled(),backendReady,dropAvailable())||getSystemService(KeyguardManager.class).isKeyguardLocked()){
             Toast.makeText(this,"请先启用小窗控制，并留出默认小窗位置",Toast.LENGTH_SHORT).show();return;

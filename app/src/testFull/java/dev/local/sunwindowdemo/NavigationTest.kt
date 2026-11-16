@@ -86,6 +86,19 @@ class NavigationTest {
         compose.runOnIdle { android.provider.Settings.Secure.putString(resolver, "doze_always_on", null) }
     }
 
+    @Test fun restoredWindowLaunchSettingsKeepExistingPreferenceKeys() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val prefs = dev.local.sunwindowdemo.Config(context).prefs
+        prefs.edit().putBoolean("landscapeShareWindow", false).putBoolean("notificationWindow", false).commit()
+        launch(intent(Page.Behavior))
+        compose.onNodeWithText("应用间跳转小窗打开").assertIsDisplayed().performClick()
+        compose.onNodeWithText("通知小窗打开").assertIsDisplayed().performClick()
+        compose.runOnIdle {
+            assertTrue(prefs.getBoolean("landscapeShareWindow", false))
+            assertTrue(prefs.getBoolean("notificationWindow", false))
+        }
+    }
+
     @Test fun nestedSettingsUseNativeActivityBackAndKeepTheirParent() {
         val (homeScenario, home) = launch(intent())
         compose.onNodeWithText("小窗").performClick()

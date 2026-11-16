@@ -40,6 +40,7 @@ public final class BackBridge extends XposedModule {
         installEdgeTouchAdmission(p.getDefaultClassLoader());
         ProductFeatures.installNotifications(this,p.getDefaultClassLoader(),this::note);
         WindowTools.install(this,p.getDefaultClassLoader(),this::note);
+        NotificationWindow.install(this,p.getDefaultClassLoader(),this::note);
         installScreenshotHooks(p.getDefaultClassLoader());
     }
     // A transparent blocker consumes application touches, but native InputMonitor also sees DOWN.

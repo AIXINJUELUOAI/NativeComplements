@@ -1,6 +1,15 @@
 # 小窗：Hook、系统适配边界与决策／执行现状
 
-## 当前收口范围：0.11.3-alive-test2 / code147
+## 当前收口范围：0.11.5-alive-test3 / code151
+
+用户明确要求与Alive唤醒修复同包恢复两项：**应用间跳转小窗打开**、**通知小窗打开**。[行为设置](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/ui/WindowScreens.kt>)恢复原独立开关，复用`landscapeShareWindow`/`notificationWindow`旧键、默认true并保留已存false；“landscape”是历史键名，跨应用路由不只限横屏。
+
+- 前台全屏应用跨app仍通过[ShareWindow](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/ShareWindow.java>)与[WindowEngine](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java>)原有caller/realCaller/UID、当前前台任务与归属、host新鲜租约、安全界面、安装器/系统/同app/桌面排除及准入/恢复。只调整真实启动options，不重建Intent、不删grant/result、不把规则混进Hook。
+- 通知仅现有[NotificationWindow](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/NotificationWindow.java>)精确可选原生适配与[宿主](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)认证OPEN票据，转交原activity PendingIntent及草稿；Hook预检或dispatch前失败保原生，已派发后不再重发通知活动。前台/警报/呼叫等仍按原策略。
+- 不恢复长侧滑、无障碍按钮、shortcut、快捷建议小窗、独立window产品及小窗/遮罩Monet；不改protocol16/三个scope/原签名与后端owner恢复边界，不安装、重启或替用户改配置。
+- 既有通知、跨应用启动、导航/宿主规则与恢复开关UI定向检查共22项通过；Alive额外2项值状态检查最终重跑，未跑全套。小窗只读独立复核未发现可证P1/P2。release最终重建与签名核验见[总览](<README.md>)；不以主机构建代替当前真机通知/跨app效果验证。通知安全排除沿旧链，不能将跨应用路径的安装器排除扩称为通知所有真实PI目标均有专门系统/安装器排除；后端明确回报dispatched=true时不重发，同步广播异常沿旧fallback，不声称覆盖未知transport提交结果。
+
+## 历史收口范围：0.11.3-alive-test2 / code147
 
 code147按用户授权取消独立小窗产品，小窗继续由主模块提供；恢复的是**原生Hook左右下角滑动与扇区**，不使用无障碍区域或系统无障碍按钮。只定向接回角落输入、扇区展示、设置及取消清理，不整体回退code146，不恢复长侧滑、通知/分享/shortcut、快捷建议小窗或全屏跨应用自动小窗。小窗/遮罩Monet仍实际关闭并忽略旧值，抽屉Monet不变。本节是正在收口的实现契约，不预报构建、测试、提交或真机PASS；最终证据由[接入总览](<README.md>)统一记录。
 

@@ -60,6 +60,8 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, num
     }
     GroupTitle("窗口行为")
     SettingsGroup {
+        ToggleRow("应用间跳转小窗打开", "前台全屏应用跳转到其他应用时，符合安全条件则用小窗打开", value = p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
+        ToggleRow("通知小窗打开", "点击后台应用通知时，用小窗打开；不符合条件时保留系统原行为", value = p.notificationWindow) { boolean("notificationWindow", it) }
         ToggleRow("新开小窗时自动最小化", value = p.autoMinimizeOnOpen) { boolean("autoMinimizeOnOpen", it) }
         ToggleRow("双击空白处关闭", value = p.doubleClose) { boolean("doubleClose", it) }
         ToggleRow("贴边锁屏继续运行", value = p.keepEdgeAwake) { boolean("keepEdgeAwake", it) }
