@@ -1,6 +1,28 @@
 # 小窗：Hook、系统适配边界与决策／执行现状
 
-## 当前实施状态：0.10.0 / code139
+## 当前收口范围：0.11.3-alive-test2 / code147
+
+code147按用户授权取消独立小窗产品，小窗继续由主模块提供；恢复的是**原生Hook左右下角滑动与扇区**，不使用无障碍区域或系统无障碍按钮。只定向接回角落输入、扇区展示、设置及取消清理，不整体回退code146，不恢复长侧滑、通知/分享/shortcut、快捷建议小窗或全屏跨应用自动小窗。小窗/遮罩Monet仍实际关闭并忽略旧值，抽屉Monet不变。本节是正在收口的实现契约，不预报构建、测试、提交或真机PASS；最终证据由[接入总览](<README.md>)统一记录。
+
+### 产品合回，不回退其他ROM接入边界
+
+取消独立APK不等于把规则重新揉进Hook，也不等于已经兼容任意ROM。第一轮已完成的导航、恢复、生命周期与连续性规则提取继续保留；下方code139/138内容按历史阅读，不能用历史“未拆分”覆盖现有分层。适配贡献者仍遵循 **平台事件输入 → 共用规则/状态 → 平台执行及恢复**，复用同一引擎，不另复制ROM分叉。
+
+| 层次 | code147保留的责任 | 其他ROM接入时需核对 |
+|---|---|---|
+| 角落规则 | [CornerGesture](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/CornerGesture.java>)与[Rules](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/Rules.java>)判断左右角、斜向阈值、单指流、取消及完成，不持有原生InputMonitor | 向同一规则输入真实显示器、坐标、设备/流身份、时间和区域快照，不按ROM名改变安全规则 |
+| SystemUI原生适配 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)接原生输入、精确预检与deopt、达到阈值后才pilfer；[SystemUiHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)负责扇区/热区、配置、状态门控、保护矩形和回收 | 核输入回调/owner/monitor的实际类与字段类型、pilfer与finishInputEvent时机、宿主包及UID，核截图/安全界面/键盘/锁屏/旋转取消和Launcher冲突保护 |
+| 准入与窗口状态 | [WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>)等值规则保留；[AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>)读取真实task事实并生成恢复快照 | 规则结果不是执行成功；系统实际任务层级、Freeform能力、可调整性、用户与显示器身份必须核实 |
+| 系统执行与恢复 | [SunWindowModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>)、[FrameworkAccess](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/FrameworkAccess.java>)与[WindowEngine](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowEngine.java>)保留WM锁、Handler、Binder、Task/Surface/Insets及journal | 核Framework/SystemUI/Shell/Launcher确切版本、成员签名和调用顺序，保UID/protocol16/token/lease、安全窗口和失败恢复；不能只换类名或打开Freeform即称移植完成 |
+
+### 失败边界与最小接入步骤
+
+1. 先建立目标系统归档及成员/调用链差异，沿下方Hook清单定位原生适配，不把历史清单当当前目标ABI已通过；运行时仍精确预检，必需成员不符不安装该执行链，局部可选功能按现有局部回退，不强开系统能力。
+2. 角落观察不等于夺取输入：默认显示器、真实安全状态与可用后端先成立，规则达到斜向阈值后才接管；异常保留原生输入完成路径，隐藏/禁用/截图/安全界面/配置变化要撤销自有扇区与热区，不留透明层抢触摸。
+3. 复用现有规则检查、启动/Hook失败保护、UID边界及恢复检查，按实际改动最小定向验证，再由贡献者在目标系统手工核对角落输入、迷你/贴边恢复、IME、旋转、安全遮挡和退出恢复。不为每个功能新堆套件，也不以主机构建代替设备效果；fork/adapt/test后提交PR，由review与现设备回归决定合入。
+4. 主模块原签名、applicationId、恢复记录与静态作用域保持。停止独立产物不等于卸载设备上的旧独立包；[所有权保护](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendOwnership.java>)保留原key与first-claim，[资格投影](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendEligibility.java>)及[冲突回退](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowBackendConflict.java>)继续兼容旧包，不强抢、不热转交、不迁journal。用户应先在旧版恢复窗口，再手工停用/卸载旧独立模块，最后完整重启；模块不替用户操作LSPosed或设备设置。
+
+## 历史实施状态：0.10.0 / code139
 
 第一轮小窗纯规则/状态与原生执行边界已完成代码闭环，运行代码已 push 至 `a0f3a7b`；导航、恢复及窗口生命周期均已收口，集中证据见[最新进度](<README.md#最新进度恢复与生命周期闭环>)。原生 Hook/WM/事务/持久化保留适配侧，不是任意平台可替换或设备/LOS 兼容声明；下方 138 Hook 审计按历史阅读。
 

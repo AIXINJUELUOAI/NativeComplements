@@ -34,7 +34,7 @@ final class WindowBackendConflict {
                         .putExtra("supportsMultiWindow",false).putExtra("supportsFreeform",false)
                         .putExtra("hostConnected",false).putExtra("hasJournal",false)
                         .putExtra("report",(currentOwner.isEmpty()?"本次启动没有小窗后端接管":"本次启动的小窗接管归属："+currentOwner)+
-                            "。本版本未创建小窗引擎。小窗总开关决定下次完整重启的接管资格；两个版本都开启时保留先取得者，不强抢或热转移。旧安装首次升级请打开对应版本完成开关同步后再重启，恢复记录不跨版迁移。");
+                            "。本版本未创建小窗引擎。独立小窗版已停止维护；若旧版仍占用后端，请先在旧版恢复窗口，再手动停用或卸载旧独立模块，并完整重启。小窗开关决定下次启动资格；不强抢、不热转移，恢复记录不跨版迁移。");
                     String requestId=request.getStringExtra("requestId");
                     if(requestId!=null&&!requestId.isEmpty()&&requestId.length()<=128)status.putExtra("requestId",requestId);
                     var options=BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();

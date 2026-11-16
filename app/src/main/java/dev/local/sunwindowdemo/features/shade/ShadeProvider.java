@@ -13,14 +13,9 @@ public final class ShadeProvider extends ContentProvider {
     @Override public Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
         if ("drawer".equals(method)) {
-            String launcher = dev.local.sunwindowdemo.features.iconlayers.IconLayerStore.LAUNCHER;
-            try {
-                if (uid != getContext().getApplicationInfo().uid
-                        && uid != getContext().getPackageManager().getApplicationInfo(launcher, 0).uid)
-                    throw new SecurityException("drawer reader");
-            } catch (android.content.pm.PackageManager.NameNotFoundException e) {
-                throw new SecurityException(e);
-            }
+            if (uid != getContext().getApplicationInfo().uid
+                    && !dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(getContext(), uid))
+                throw new SecurityException("drawer reader");
             Bundle result = new Bundle();
             result.putBoolean("drawerMonet", ShadeStore.drawerMonet(getContext()));
             return result;

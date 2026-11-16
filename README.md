@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前运行源码版本：**0.9.48-fixes-test2**（versionCode 138）。目前暂停新功能开发，先整理跨系统接入与独立小窗边界，见[接入与架构索引](<docs/adaptation/README.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前运行源码版本：**0.9.48-fixes-test2**（versionCode 138）。目前暂停新功能开发，先整理跨系统接入与独立小窗边界，见[接入与架构索引](<docs/adaptation/README.md>)。LineageOS 24.0 已按官方源码加入静态接入，详见 [LineageOS 24.0 接入](<docs/adaptation/lineageos-24.0.md>)；仍需真机回归，不宣称设备兼容。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 
@@ -17,10 +17,10 @@
 需要已 root、安装兼容现代 libxposed API 101 的 LSPosed 环境。当前主要针对已核对的 **Android 17 / API 37** 系统接口适配；最低安装版本为 Android 14，但能安装不等于所有功能可用。
 
 1. 安装 APK，在 LSPosed 中启用“类原生补全计划”。
-2. 勾选模块既定的三个作用域：**系统框架、系统界面、Pixel 桌面**。
+2. 勾选模块既定的四个作用域：**系统框架、系统界面、Pixel 桌面、Launcher3**；只勾选当前 ROM 实际存在的桌面即可。
 3. 自行重启手机后，进入模块按需开启功能。
 
-作用域对应 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`。其他桌面不代表已适配。升级请使用相同签名的 APK，不要为了升级先卸载，以免丢失设置。
+作用域对应 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`、`com.android.launcher3`。PixelOS 使用 Pixel Launcher，LineageOS 24.0 使用 Launcher3；其他桌面不代表已适配。升级请使用相同签名的 APK，不要为了升级先卸载，以免丢失设置。
 
 ## 功能全览
 
@@ -126,7 +126,7 @@ python -X utf8 tests/package_release.py
 
 管理界面按功能组织，小窗运行代码保留 Demo8.2 包路径；不可变原始基线及变更登记用于回归检查，不能当作临时文件清理。开发约定见 [AGENTS.md](<AGENTS.md>)，小窗实机检查要点见 [DEVICE_ACCEPTANCE.md](<DEVICE_ACCEPTANCE.md>)。
 
-准备适配 LineageOS 等其他系统或拆分小窗时，请先读[跨系统接入索引](<docs/adaptation/README.md>)与[现有架构](<docs/adaptation/architecture.md>)，再按[小窗 Hook 边界](<docs/adaptation/floating-window.md>)、[其他系统功能](<docs/adaptation/system-features.md>)和[独立产物依赖](<docs/adaptation/standalone-window.md>)提交小步 PR。本轮文档不表示已经完成解耦或增加 ROM 支持。
+准备适配其他系统或拆分小窗时，请先读[跨系统接入索引](<docs/adaptation/README.md>)与[现有架构](<docs/adaptation/architecture.md>)，再按[小窗 Hook 边界](<docs/adaptation/floating-window.md>)、[其他系统功能](<docs/adaptation/system-features.md>)和[独立产物依赖](<docs/adaptation/standalone-window.md>)提交小步 PR。LineageOS 24.0 的静态接入范围和限制见[专项说明](<docs/adaptation/lineageos-24.0.md>)，不表示已完成真机兼容验证。
 
 ## 授权与致谢
 

@@ -48,7 +48,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AliveScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val prefs = remember(context) { context.getSharedPreferences("alive_wallpaper", 0) }
+    val prefs = remember(context) { AliveSettings.runtimePreferences(context) }
     val scope = rememberCoroutineScope()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val arm64 = remember { Process.is64Bit() && Build.SUPPORTED_64_BIT_ABIS.contains("arm64-v8a") }
@@ -72,6 +72,7 @@ fun AliveScreen(onBack: () -> Unit) {
     LaunchedEffect(context) {
         try {
             draft = withContext(Dispatchers.IO) {
+                AliveSettings.prepareRuntime(context)
                 if (entered) AliveSettings.readDraft(context) else AliveSettings.beginEdit(context)
             }
             entered = true

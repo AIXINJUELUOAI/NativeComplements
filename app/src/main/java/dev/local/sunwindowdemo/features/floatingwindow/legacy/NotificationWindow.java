@@ -53,9 +53,11 @@ final class NotificationWindow {
         return notificationPackage!=null&&foregroundPackage!=null&&!notificationPackage.equals(foregroundPackage);
     }
     private Click eligible(Object entry,PendingIntent pending)throws Exception{
-        SystemUiHost host=SystemUiHost.live;if(host==null||!host.notificationWindowReady()||entry==null)return null;
-        StatusBarNotification notice=(StatusBarNotification)sbn.get(entry);
-        if(notice==null||!contentLaunch(notice.getNotification(),pending)||!Process.myUserHandle().equals(notice.getUser())
+        return entry==null?null:eligible((StatusBarNotification)sbn.get(entry),pending);
+    }
+    private static Click eligible(StatusBarNotification notice,PendingIntent pending){
+        SystemUiHost host=SystemUiHost.live;if(host==null||!host.notificationWindowReady()||notice==null)return null;
+        if(!contentLaunch(notice.getNotification(),pending)||!Process.myUserHandle().equals(notice.getUser())
             ||!backgroundTarget(notice.getPackageName(),host.notificationForegroundPackage())
             ||!Process.myUserHandle().equals(pending.getCreatorUserHandle())
             ||Wire.PKG.equals(notice.getPackageName())||BackBridge.PACKAGE.equals(notice.getPackageName())||"android".equals(notice.getPackageName()))return null;
@@ -89,6 +91,50 @@ final class NotificationWindow {
             }));
             module.deoptimize(route.run);
             log.accept("NOTIFICATION_WINDOW_READY hooks="+hooks.size());
-        }catch(Throwable error){for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}log.accept("NOTIFICATION_WINDOW_UNAVAILABLE "+error.getClass().getSimpleName());}
+        }catch(Throwable legacyUnavailable){
+            for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}
+            installLineage(module,loader,log);
+        }
+    }
+    /**
+     * LineageOS 24.0 SystemUI has no StatusBarNotificationActivityStarter synthetic lambdas.
+     * It performs the click through a private sendPendingIntent(PendingIntent,Intent,Bundle,
+     * NotificationEntry) after the native animation gate. Intercept that exact send and keep the
+     * original PendingIntent/fill-in chain; the native fallback remains untouched on any mismatch.
+     */
+    private static void installLineage(XposedModule module,ClassLoader loader,Consumer<String> log){
+        List<XposedInterface.HookHandle> hooks=new ArrayList<>();
+        try{
+            Class<?> starter=Class.forName("com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter",false,loader);
+            Class<?> entry=Class.forName("com.android.systemui.statusbar.notification.collection.NotificationEntry",false,loader);
+            Method send=null;
+            for(Method candidate:starter.getDeclaredMethods()){
+                if(!candidate.getName().equals("sendPendingIntent")||candidate.getParameterCount()!=4)continue;
+                Class<?>[] types=candidate.getParameterTypes();
+                if(types[0]==PendingIntent.class&&types[1]==Intent.class
+                    &&types[2]==android.os.Bundle.class&&types[3]==entry){send=candidate;break;}
+            }
+            if(send==null)throw new NoSuchMethodException("sendPendingIntent");
+            Method getSbn=entry.getDeclaredMethod("getSbn");getSbn.setAccessible(true);
+            if(getSbn.getReturnType()!=StatusBarNotification.class)throw new NoSuchMethodException("getSbn");
+            send.setAccessible(true);
+            hooks.add(module.hook(send).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                try{
+                    Click selected=eligible((StatusBarNotification)getSbn.invoke(chain.getArg(3)),
+                        (PendingIntent)chain.getArg(0));
+                    SystemUiHost host=SystemUiHost.live;
+                    if(selected!=null&&host!=null&&host.notificationWindowReady()){
+                        host.openNotification(selected.notice,selected.pending,(Intent)chain.getArg(1));
+                        log.accept("NOTIFICATION_WINDOW_REQUEST package="+selected.notice.getPackageName());
+                        return 0;
+                    }
+                }catch(Exception error){log.accept("NOTIFICATION_WINDOW_NATIVE "+error.getClass().getSimpleName());}
+                return chain.proceed();
+            }));
+            log.accept("NOTIFICATION_WINDOW_READY lineage hooks="+hooks.size());
+        }catch(Throwable error){
+            for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}
+            log.accept("NOTIFICATION_WINDOW_UNAVAILABLE "+error.getClass().getSimpleName());
+        }
     }
 }

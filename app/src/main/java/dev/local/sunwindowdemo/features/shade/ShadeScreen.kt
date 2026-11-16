@@ -22,6 +22,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
     var systemThemed by remember { mutableStateOf(IconLayerStore.systemThemed(context)) }
+    var themedSupported by remember { mutableStateOf(IconLayerStore.themedIconSupported(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
     var systemIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, false)) }
@@ -58,9 +59,15 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
         GroupTitle("莫奈图标")
         SettingsGroup {
-            val hint = if (systemThemed) null else "需先在“壁纸与样式”中打开主题图标"
-            ToggleRow("抽屉莫奈图标", hint ?: "应用抽屉与推荐行使用和桌面相同的主题图标",
-                value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
+            val hint = when {
+                !themedSupported -> "当前系统不支持主题图标，抽屉莫奈不可用"
+                !systemThemed -> "开启后自动切换到“极简”图标样式；关闭时恢复"
+                else -> "应用抽屉与推荐行使用当前主题图标"
+            }
+            ToggleRow("抽屉莫奈图标", hint,
+                value = drawerMonet && themedSupported, enabled = themedSupported) {
+                ShadeStore.setDrawerMonet(context, it)
+            }
         }
         GroupTitle("通知与控制中心")
         SettingsGroup {

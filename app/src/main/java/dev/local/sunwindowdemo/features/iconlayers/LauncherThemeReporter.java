@@ -17,6 +17,9 @@ final class LauncherThemeReporter {
     private Handler worker;
     private HandlerThread thread;
     private Boolean reported;
+    private boolean retryPending, lastThemed;
+    private long retryDelay=3000,lastDeferredLog;
+    private final Runnable retryReport=()->{retryPending=false;if(worker!=null)worker.post(()->{if(context!=null)report(lastThemed);});};
     private final java.util.List<XposedInterface.HookHandle> hooks=new java.util.ArrayList<>();
 
     LauncherThemeReporter(Consumer<Boolean> listener){this.listener=listener;}
@@ -24,8 +27,10 @@ final class LauncherThemeReporter {
         Class<?> theme=Class.forName("com.android.launcher3.graphics.ThemeManager",false,loader);
         singleton=theme.getField("INSTANCE").get(null);
         get=singleton.getClass().getMethod("get",Context.class);
-        state=theme.getField("iconState");controller=state.getType().getField("themeController");
-        Method verify=theme.getDeclaredMethod("verifyIconState");
+        try{state=theme.getDeclaredField("iconState");state.setAccessible(true);
+            controller=state.getType().getDeclaredField("themeController");controller.setAccessible(true);
+        }catch(NoSuchFieldException kotlinProperties){state=null;controller=null;}
+        Method verify=theme.getDeclaredMethod("verifyIconState");verify.setAccessible(true);
         try{
             hooks.add(module.hook(verify).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();
@@ -40,19 +45,27 @@ final class LauncherThemeReporter {
                     return result;
                 }));
         }catch(RuntimeException|ReflectiveOperationException failure){close();throw failure;}
+        android.util.Log.i("NcLauncherTheme","installed");
     }
     synchronized void connect(Context app){
         if(context!=null)return;
         Context application=app.getApplicationContext();context=application!=null?application:app;
         thread=new HandlerThread("NcLauncherTheme");thread.start();worker=new Handler(thread.getLooper());
+        android.util.Log.i("NcLauncherTheme","connected");
         main.post(()->refresh(null));
     }
     private boolean read(Object manager){
         try{
             if(manager==null)manager=get.invoke(singleton,context);
-            Object iconState=manager==null?null:state.get(manager);
-            return iconState!=null&&controller.get(iconState)!=null;
-        }catch(ReflectiveOperationException|RuntimeException failure){return false;}
+            Object iconState=manager==null?null:(state!=null?state.get(manager):
+                    dev.local.sunwindowdemo.core.ReflectiveAccess.fieldOrGetter(
+                        manager,"iconState","getIconState"));
+            if(iconState==null)return false;
+            Object controllerValue=controller!=null?controller.get(iconState):
+                    dev.local.sunwindowdemo.core.ReflectiveAccess.fieldOrGetter(
+                        iconState,"themeController","getThemeController");
+            return controllerValue!=null;
+        }catch(Exception failure){return false;}
     }
     private void refresh(Object manager){
         if(context==null||worker==null)return;
@@ -61,18 +74,35 @@ final class LauncherThemeReporter {
         worker.post(()->report(themed));
     }
     private void report(boolean themed){
-        if(Boolean.valueOf(themed).equals(reported))return;
+        lastThemed=themed;
+        if(Boolean.valueOf(themed).equals(reported)){
+            main.removeCallbacks(retryReport);retryPending=false;return;
+        }
         try{
             Bundle report=new Bundle();report.putBoolean("systemThemed",themed);
             context.getContentResolver().call(IconLayerStore.URI,"report",null,report);
-            reported=themed;
-        }catch(RuntimeException failure){android.util.Log.w("NcLauncherTheme","theme report failed",failure);}
+            reported=themed;retryPending=false;retryDelay=3000;main.removeCallbacks(retryReport);
+            android.util.Log.i("NcLauncherTheme","reported systemThemed="+themed);
+        }catch(RuntimeException failure){
+            // The module provider can be unavailable while the device is locked/direct-boot.
+            long now=android.os.SystemClock.elapsedRealtime();
+            if(now-lastDeferredLog>60_000){
+                lastDeferredLog=now;
+                android.util.Log.w("NcLauncherTheme","theme report deferred",failure);
+            }
+            if(!retryPending){
+                retryPending=true;
+                main.postDelayed(retryReport,retryDelay);
+                retryDelay=Math.min(30000,retryDelay*2);
+            }
+        }
     }
     synchronized void close(){
         for(var hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
         hooks.clear();
+        main.removeCallbacks(retryReport);
         main.removeCallbacksAndMessages(null);
-        if(worker!=null)worker.removeCallbacksAndMessages(null);
+        if(worker!=null){worker.removeCallbacks(retryReport);worker.removeCallbacksAndMessages(null);}
         if(thread!=null)thread.quitSafely();
         worker=null;thread=null;context=null;
     }

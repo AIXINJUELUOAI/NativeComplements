@@ -51,10 +51,14 @@ public final class AliveRenderer implements AutoCloseable {
     public AliveRenderer(Context context,boolean preview){this(context,null,preview);}
     public AliveRenderer(Context context,AliveSettings.Snapshot snapshot){this(context,snapshot,false);}
     private AliveRenderer(Context context,AliveSettings.Snapshot snapshot,boolean preview){
-        this.context=context.getApplicationContext();settings=snapshot;this.preview=preview;reportAppliedStatus=snapshot==null&&!preview;
+        this.context=preview||snapshot!=null?AliveSettings.credential(context):AliveAssets.runtime(context);
+        settings=snapshot;this.preview=preview;reportAppliedStatus=snapshot==null&&!preview;
         thread.start();handler=new Handler(thread.getLooper());
     }
     private AliveSettings.Snapshot readSettings(){return preview?AliveSettings.readDraft(context):AliveSettings.readApplied(context);}
+    private void prepareStorage()throws IOException {
+        if(!AliveSettings.prepareRuntime(context)&&reportAppliedStatus)throw new IOException("Alive 开机壁纸尚未准备；请首次解锁后打开模块确认资源和照片");
+    }
     public String error(){return error;}
     /** Worker callback; the owner must marshal lifecycle changes to its own thread. */
     public void onUnavailable(Runnable callback){unavailable=callback;}
@@ -148,7 +152,7 @@ public final class AliveRenderer implements AutoCloseable {
             }
         }
     });}
-    public void reload(){post(()->reloadSettings(readSettings()));}
+    public void reload(){post(()->{try{prepareStorage();reloadSettings(readSettings());}catch(Exception|LinkageError failure){fail(failure);}});}
     public void reload(AliveSettings.Snapshot snapshot){
         if(snapshot==null)throw new IllegalArgumentException("snapshot");
         post(()->reloadSettings(snapshot));
@@ -177,10 +181,11 @@ public final class AliveRenderer implements AutoCloseable {
     }
     private void reportError(String value){
         error=value;if(!reportAppliedStatus||value.equals(reportedError))return;reportedError=value;
-        var prefs=context.getSharedPreferences("alive_wallpaper",0);
+        var prefs=AliveSettings.runtimePreferences(context);
         if(!value.equals(prefs.getString("backend_error","")))prefs.edit().putString("backend_error",value).apply();
     }
     private void init()throws IOException {
+        prepareStorage();
         if(settings==null)settings=readSettings();
         int style=settings.aod,lock=settings.lock,home=settings.home;
         if((style!=0&&!PhotoStyle.supported(style))||lock<0||lock>3||home<6||home>9)

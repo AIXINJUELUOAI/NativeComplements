@@ -1,6 +1,36 @@
 # Alive：阶段事实、AOD 实验与 Android 壁纸边界
 
-## 当前实现：0.11.3-alive-test1 / code146
+## 当前增量：0.11.4-alive-test1 / code148
+
+### code148：Direct Boot 数据边界
+
+本轮只处理首次凭据解锁前的数据可用性，保留147睡眠admission与严格视觉交接，不把Direct Boot当作解锁认证或动画修复。
+
+| 数据 | 存储与发布边界 |
+| --- | --- |
+| 已应用aod/lock/home/photo | 本用户应用私有DE的AtomicFile JSON为权威；不依赖SharedPreferences成功更新内存来宣布应用成功 |
+| 当前已应用照片 | 先复制并核验为DE不可变文件，再原子发布引用它的完整快照；旧发布失败不采用新配置 |
+| pinned native/shader/mask | 核心运行时代统一DE，固定来源SHA、资源白名单及验证不变，不随APK打包上游素材 |
+| 仅编辑、从未确认应用的草稿照片与编辑缩略图 | 仍留CE，未解锁不访问；预览不迁成锁前常驻数据 |
+| revision/error通知 | DE偏好只作变化通知，不是已应用配置权威 |
+
+[AliveAssets.runtime/migrate](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)在worker执行。DE已就绪可快返，未解锁不读取旧CE；旧CE核心代必须复用完整hash验证，再仅复制REQUIRED集合与manifest到新DE暂存目录。只读文件、文件及目录fsync、暂存完整验证后rename；不覆盖损坏或已有发布代，不删旧CE、不复制未核额外文件。真实renderer首次native加载使用DE，不能在同进程将已加载的native库切换路径；预览仍读取CE草稿，但核心库也使用同一DE代。
+
+[AliveSettings.prepareRuntime](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)先准备核心资源，再按已应用照片发布DE快照；有DE权威快照时不从CE旧applied刷新覆盖。缺失、损坏或迁移失败按不可用回退，不加载半份配置。[AliveBootReceiver](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveBootReceiver.java>)是私有且非directBoot的已解锁BOOT_COMPLETED/MY_PACKAGE_REPLACED worker；Engine初始化worker也准备资源，避免依赖用户先打开管理页。普通/实验两个service均directBootAware，接收器不会选壁纸、重绑或启动服务；仍由系统选择与生命周期决定运行。
+
+**首次使用/升级限制：**新安装须导入资源并应用一次；旧版须先在已解锁状态迁移，之后下一次开机才有锁前可用数据。未迁移的首次开机仍可能回退，不能把manifest声明当作迁移成功。
+
+**隐私变化：**用户应用的当前照片与已应用样式进入DE，首次凭据解锁前本应用即可读取，仍是每用户应用私有目录，不外部共享、不上传、不读取其他用户数据。从未确认应用的纯编辑草稿仍受CE保护；DE另保留历史已应用照片及确认应用中断后的候选。本轮不自动回收旧DE照片或设总量上限，以免删除活动旧Engine所需文件，因此不能承诺DE只存当前一张；应用越多照片占用会增加。DE可用不等于绕过系统锁屏、认证或AOD设置。
+
+code148主机定向检查、R8/原签名与Direct Boot服务声明打包核验通过，见[收口证据](<README.md>)；尚未验证首次解锁前真机显示。三种解锁现象仍在诊断；时钟下移/避让、照片防烧屏及通知/跨应用扩展未实现。147动画安全门、原生电源/亮度/认证边界不变。
+
+## 历史增量：0.11.3-alive-test2 / code147
+
+产品收回主模块：仅full构建，不再交付独立小窗；Alive仍在full源集。146只读证据已确证原Unlocked动画延迟真实锁屏约1300ms，见[系统侧147契约](<alive-systemui.md>)；新实现仅合格自有睡眠episode、原start动态范围选择原生不播放旧动画分支，不全局改电源/亮度/认证。视觉仍必须真实locked安全且自有可见有效Surface成功swap，保绝限7800和原生DOZE/OFF/SUSPEND，不保证完整1800ms。
+
+[Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)对native ambient duration0只在本Engine结构有效未过期PREPARE、已active/defaultON/非interactive时保留已有有界等待，不要求此刻已经visible/locked/有效Surface；实际绘制/ACK/透出仍分别校验这些真实条件，schema不冒充发送者认证。仅保持已有episode，不新建或重启。其他0时长继续endSleep；早DOZE只有ambient且已有成功sleep.start并未绝限才允许帧确认，不恢复隐藏scene、不强保ON。成功sleep.start回调补一次ack，保持render成功先于确认。初始化仍真实可见，旧首次safe布局可重发同nonce，所有UID/身份限制不变。早DOZE或native事件先后不同仍可能截短/安全回退，新包必须真机复核，不用146日志宣称修复已生效。
+
+## 历史实现：0.11.3-alive-test1 / code146
 
 全部现有功能解耦推送至 `5ee8e95` 后才开始Alive。code140普通照片、141实验AOD、142用户反馈可见、144启航/草稿/首帧确认、145静态端点保留均为历史。本节覆盖145“当前”表述：用户明确软件内及桌面熄屏仍先走系统动画/黑场，稍后才出现Alive。code146新增共用系统睡眠交接与唤醒轨/禁止补播修正，**新Handoff尚未真机验证**，不能把旧版可见反馈或主机检查当连续性PASS。独立小窗版不含Alive。
 
@@ -8,7 +38,7 @@
 
 - [普通服务](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>) 保留 `supportsAmbientMode=false`，作为原生普通壁纸回退。
 - [实验服务](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService.java>)复用Engine并声明自身ambient能力；[绑定例外](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAmbientAccess.java>)只在有效用户、该精确组件的单次bind同步作用域内，消费一次metadata检查，不是全包/全局权限grant，不授予其他签名权限。
-- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>) 分离 `alive_wallpaper_draft` 与 `alive_wallpaper` 已应用快照。照片使用不可变 UUID 文件名，编辑不覆盖当前照片；旧 `style` 1..5 与旧照片仍可读取，新编辑默认启航0。完整 aod/lock/home/photo 在一次偏好提交发布。
+- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>) 分离 `alive_wallpaper_draft` 与 `alive_wallpaper` 已应用快照。照片使用不可变 UUID 文件名，编辑不覆盖当前照片；旧 `style` 1..5 与旧照片仍可读取，新编辑默认启航0。历史版本以一次偏好提交发布；code148起运行时改用上文DE AtomicFile完整快照，CE草稿仍独立。
 - [全屏编辑页](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>) 顶部返回/编辑/设置壁纸；“设置壁纸”是应用，不是参数设置。编辑只改草稿，底部 Sheet 直接显示当前阶段真实可选样式与固定上游缩略图，背景保持同一真实预览。缩略图不是当前用户照片的实时渲染，缺少时明确提示补导，不伪造效果。
 - 同一目标组件已选且无普通/实验混用时，页面显式确认后提交；否则打开原生选择器，仅返回成功且核实目标组件后提交。取消/失败留在编辑页并保留草稿。应用成功后发 HOME Intent，再仅结束/移除本模块所属 app task；不结束桌面或其他任务。返回桌面失败会提示，不能把已应用误报成未提交。
 

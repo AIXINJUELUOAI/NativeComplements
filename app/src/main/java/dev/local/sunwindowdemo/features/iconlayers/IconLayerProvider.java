@@ -17,7 +17,13 @@ public final class IconLayerProvider extends ContentProvider {
         boolean owner = uid == getContext().getApplicationInfo().uid;
         String[] packages = getContext().getPackageManager().getPackagesForUid(uid);
         boolean sameUser = UserHandle.getUserHandleForUid(uid).equals(android.os.Process.myUserHandle());
-        boolean launcher = sameUser && packages != null && Arrays.asList(packages).contains(IconLayerStore.LAUNCHER);
+        boolean launcher = false;
+        if (sameUser && packages != null)
+            for (String name : packages)
+                if (dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(name)) {
+                    launcher = true;
+                    break;
+                }
         boolean systemUi = sameUser && packages != null && Arrays.asList(packages).contains(IconLayerStore.SYSTEM_UI);
         if (!owner && !launcher && !systemUi && uid != android.os.Process.SYSTEM_UID) throw new SecurityException("icon layer bridge");
         return launcher;

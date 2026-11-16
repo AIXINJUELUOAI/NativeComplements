@@ -60,6 +60,7 @@ final class NavbarHost {
             NavbarHost host = new NavbarHost(bar,
                     Class.forName("android.view.InsetsFrameProvider", false, loader));
             Method layout = bar.getDeclaredMethod("getBarLayoutParamsForRotation", int.class);
+            layout.setAccessible(true);
             if (layout.getReturnType() != WindowManager.LayoutParams.class)
                 throw new NoSuchMethodException("NavigationBar layout return type");
             Method init = bar.getDeclaredMethod("onInit");

@@ -47,6 +47,7 @@ public class AliveWallpaperService extends WallpaperService {
                 String action=intent.getAction();
                 if(Intent.ACTION_SCREEN_OFF.equals(action))beginSleep();
                 else if(Intent.ACTION_SCREEN_ON.equals(action)||Intent.ACTION_USER_PRESENT.equals(action))wake();
+                if(Intent.ACTION_USER_UNLOCKED.equals(action)&&renderer!=null)renderer.reload();
                 update("broadcast:"+action,true);
                 if(!Intent.ACTION_SCREEN_OFF.equals(action))recheckUnlock();
             }
@@ -59,10 +60,10 @@ public class AliveWallpaperService extends WallpaperService {
             super.onCreate(holder);
             setTouchEventsEnabled(false);
             renderer=new AliveRenderer(AliveWallpaperService.this,isPreview());
-            getSharedPreferences(AliveSettings.APPLIED,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
-            if(isPreview())getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
+            AliveSettings.runtimePreferences(AliveWallpaperService.this).registerOnSharedPreferenceChangeListener(changed);
+            if(isPreview())AliveSettings.credential(AliveWallpaperService.this).getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
             IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
-            filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);
+            filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);filter.addAction(Intent.ACTION_USER_UNLOCKED);
             registerReceiver(screens,filter,null,main,Context.RECEIVER_NOT_EXPORTED);registered=true;
             Display own=getDisplayContext().getDisplay();
             if(own!=null)displayId=own.getDisplayId();
@@ -82,18 +83,29 @@ public class AliveWallpaperService extends WallpaperService {
             if(renderer!=null)renderer.onUnavailable(null);
             if(old!=null)old.cancel();
         }
+        private boolean handoffDisplayReady(){
+            AlivePhase.DisplayState state=displayState();
+            return state==AlivePhase.DisplayState.ON
+                    ||state==AlivePhase.DisplayState.DOZE&&ambient&&sleep.holding(SystemClock.uptimeMillis());
+        }
+        private boolean keepPreparedSleep(){
+            return handoff!=null&&!handoff.expired()&&sleep.active(SystemClock.uptimeMillis())
+                    &&supportsOwnAmbient()&&!isPreview()&&!destroyed
+                    &&displayId==Display.DEFAULT_DISPLAY&&displayState()==AlivePhase.DisplayState.ON
+                    &&!getSystemService(PowerManager.class).isInteractive();
+        }
         private void acknowledgeHandoff(){
             AliveSleepHandoff.Request pending=handoff;
             if(pending==null||handoffAcknowledged)return;
             if(pending.expired()){cancelHandoff();return;}
             if(!supportsOwnAmbient()||isPreview()||!visible||destroyed
-                    ||displayId!=Display.DEFAULT_DISPLAY||displayState()!=AlivePhase.DisplayState.ON
+                    ||displayId!=Display.DEFAULT_DISPLAY||!handoffDisplayReady()
                     ||getSystemService(PowerManager.class).isInteractive()
                     ||!getSystemService(KeyguardManager.class).isKeyguardLocked()
                     ||!getSurfaceHolder().getSurface().isValid())return;
             renderer.presented(()->main.post(()->{
                 if(handoff!=pending||pending.expired()||destroyed||!visible
-                        ||displayState()!=AlivePhase.DisplayState.ON
+                        ||!handoffDisplayReady()
                         ||getSystemService(PowerManager.class).isInteractive()
                         ||!getSystemService(KeyguardManager.class).isKeyguardLocked()
                         ||!getSurfaceHolder().getSurface().isValid())return;
@@ -133,6 +145,7 @@ public class AliveWallpaperService extends WallpaperService {
                     if(sleep.start(presentedAt)){
                         sleep.visibility(visible,presentedAt);
                         main.removeCallbacks(sleepExpired);main.postDelayed(sleepExpired,sleep.remaining(presentedAt));
+                        acknowledgeHandoff();
                     }
                 }));
             }else if(!sleeping||sleep.presented()){
@@ -177,8 +190,12 @@ public class AliveWallpaperService extends WallpaperService {
         public void onAmbientModeChanged(boolean next,long duration){
             ambient=next;ambientDuration=duration;
             if(next){
-                if(duration<=0)endSleep();else beginSleep();
-                update("ambient",duration>0);
+                // Native screen-off admission may legitimately deliver duration=0. Keep only
+                // an already prepared ON wait; draw/ACK still require real visibility/lock/surface.
+                // Never start/renew an episode or initialize a hidden scene here.
+                boolean prepared=duration<=0&&keepPreparedSleep();
+                if(duration<=0){if(!prepared)endSleep();}else beginSleep();
+                update("ambient",duration>0||prepared);
             }else{
                 // Zero is the platform ambient-call duration, not an instruction to skip wake geometry.
                 wake();update("ambient-exit",true);recheckUnlock();
@@ -212,8 +229,8 @@ public class AliveWallpaperService extends WallpaperService {
             destroyed=true;cancelHandoff();main.removeCallbacks(refresh);main.removeCallbacks(sleepExpired);
             if(registered){unregisterReceiver(screens);registered=false;}
             if(displayRegistered){displays.unregisterDisplayListener(displayListener);displayRegistered=false;}
-            getSharedPreferences(AliveSettings.APPLIED,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
-            if(isPreview())getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
+            AliveSettings.runtimePreferences(AliveWallpaperService.this).unregisterOnSharedPreferenceChangeListener(changed);
+            if(isPreview())AliveSettings.credential(AliveWallpaperService.this).getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(changed);
             if(renderer!=null){renderer.close();renderer=null;}
             super.onDestroy();
         }

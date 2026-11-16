@@ -260,7 +260,7 @@ public class LinkedWindowsTest {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
         assertEquals(1,sent.size());
         assertEquals(WindowEngine.HISTORY,sent.get(0).getAction());
-        assertEquals(LauncherGuard.PACKAGE,sent.get(0).getPackage());
+        assertEquals(dev.local.sunwindowdemo.core.LauncherTargets.PIXEL,sent.get(0).getPackage());
         assertEquals(Wire.PROTOCOL,sent.get(0).getIntExtra("protocol",0));
         assertArrayEquals(new int[0],sent.get(0).getIntArrayExtra("hiddenTaskIds"));
     }

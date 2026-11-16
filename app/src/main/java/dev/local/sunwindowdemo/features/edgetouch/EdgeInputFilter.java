@@ -42,8 +42,8 @@ public final class EdgeInputFilter {
             Method inject=nativeField.getType().getMethod("injectInputEvent",InputEvent.class,boolean.class,int.class,int.class,int.class,int.class);inject.setAccessible(true);
             Method split=MotionEvent.class.getDeclaredMethod("split",int.class);split.setAccessible(true);
             Method display=InputEvent.class.getDeclaredMethod("getDisplayId");display.setAccessible(true);
-            Method incoming=manager.getDeclaredMethod("filterInputEvent",InputEvent.class,int.class);
-            Method setFilter=manager.getDeclaredMethod("setInputFilter",Class.forName("android.view.IInputFilter",false,loader));
+            Method incoming=manager.getDeclaredMethod("filterInputEvent",InputEvent.class,int.class);incoming.setAccessible(true);
+            Method setFilter=manager.getDeclaredMethod("setInputFilter",Class.forName("android.view.IInputFilter",false,loader));setFilter.setAccessible(true);
             java.util.concurrent.atomic.AtomicReference<EdgeInputFilter> host=new java.util.concurrent.atomic.AtomicReference<>();
             hooks.add(module.hook(manager.getDeclaredMethod("start")).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();

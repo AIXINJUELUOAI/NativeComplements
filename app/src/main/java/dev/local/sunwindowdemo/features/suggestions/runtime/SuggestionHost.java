@@ -49,9 +49,11 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private final Binder rotationLease=new Binder();
     void publishRotationSettings(){
         Bundle extras=new Bundle();extras.putBinder("lease",rotationLease);
-        context.sendBroadcast(new Intent(LauncherRotationSuggestion.CONFIG).setPackage(LauncherGuard.PACKAGE)
-            .putExtras(extras).putExtra("enabled",!closed&&wm!=null&&enabled("rotate")),null,
-            BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+        BroadcastOptions options=BroadcastOptions.makeBasic().setShareIdentityEnabled(true);
+        for(String launcher:dev.local.sunwindowdemo.core.LauncherTargets.targets(context))
+            context.sendBroadcast(new Intent(LauncherRotationSuggestion.CONFIG).setPackage(launcher)
+                .putExtras(extras).putExtra("enabled",!closed&&wm!=null&&enabled("rotate")),null,
+                options.toBundle());
     }
     private void restoreRotation(){
         Runnable restore=rotationRestore;rotationClick=null;rotationRestore=null;

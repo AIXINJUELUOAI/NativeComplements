@@ -37,8 +37,8 @@ final class BackVisual {
             Class<?> type=Class.forName("com.android.quickstep.LauncherBackAnimationController",false,loader);
             Field target=field(type,"mBackTarget"),launcher=field(type,"mLauncher"),startRect=field(type,"mStartRect");
             Class<?> targetType=target.getType();Field id=field(targetType,"taskId"),leash=field(targetType,"leash");
-            Method transform=type.getDeclaredMethod("applyTransform",RectF.class,float.class);
-            Method finish=type.getDeclaredMethod("onCancelFinished");
+            Method transform=type.getDeclaredMethod("applyTransform",RectF.class,float.class);transform.setAccessible(true);
+            Method finish=type.getDeclaredMethod("onCancelFinished");finish.setAccessible(true);
             hooks.add(module.hook(transform).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();
                 try{Object value=target.get(chain.getThisObject());
@@ -89,7 +89,7 @@ final class BackVisual {
         }catch(Exception ignored){}
     }
     static void receive(Context c,Intent i,int uid){
-        try{if(STATE.equals(i.getAction())&&uid==c.getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid)
+        try{if(STATE.equals(i.getAction())&&dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(c,uid))
             remote=i.getExtras()==null?null:i.getExtras().getBinder("channel");
         }catch(Exception ignored){}
     }

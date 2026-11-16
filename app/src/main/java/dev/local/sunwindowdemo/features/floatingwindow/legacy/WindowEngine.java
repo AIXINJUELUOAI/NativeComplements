@@ -367,7 +367,7 @@ final class WindowEngine {
                 }
             }, new IntentFilter(Wire.COMMAND), null, handler, Context.RECEIVER_EXPORTED);
             context.registerReceiver(new BroadcastReceiver(){public void onReceive(Context c,Intent i){
-                try{if(getSentFromUid()==context.getPackageManager().getApplicationInfo(LauncherGuard.PACKAGE,0).uid)pushHistory();}
+                try{if(dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(context,getSentFromUid()))pushHistory();}
                 catch(Exception ignored){}
             }},new IntentFilter(HISTORY_QUERY),null,handler,Context.RECEIVER_EXPORTED);
             try{continuation=new WindowContinuation(context,log);}catch(Exception e){log.accept("EDGE_CONTINUATION_UNAVAILABLE "+FrameworkAccess.reason(e));}
@@ -740,7 +740,7 @@ final class WindowEngine {
             ComponentName component=(ComponentName)a.field(task,"realActivity");
             if(component==null||!ticket.targetAllowed(component.getPackageName(),(Integer)a.field(task,"mUserId"))
                 ||Wire.PKG.equals(component.getPackageName())||BackBridge.PACKAGE.equals(component.getPackageName())
-                ||LauncherGuard.PACKAGE.equals(component.getPackageName())||a.integer(task,"getActivityType")!=1)return;
+                ||dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(component.getPackageName())||a.integer(task,"getActivityType")!=1)return;
             synchronized(ticket){
                 if(pendingShortcutLaunch.get()!=ticket||ticket.state.generation!=openGeneration)return;
                 ticket.task=task;ticket.state.bind((Integer)a.field(task,"mTaskId"),component.getPackageName());
@@ -2046,13 +2046,16 @@ final class WindowEngine {
             if(!force&&java.util.Arrays.equals(hidden,pushedHidden))return;
             pushedHidden=hidden;
         }
-        Intent state=new Intent(HISTORY).setPackage(LauncherGuard.PACKAGE).putExtra("protocol",Wire.PROTOCOL)
+        Intent state=new Intent(HISTORY).putExtra("protocol",Wire.PROTOCOL)
             .putExtra("hiddenTaskIds",hidden);
         // Callers can still own the WM lock. Snapshot now, but acquire AMS only
         // after this window operation unwinds, as the result broadcasts do.
         handler.post(()->{
-            try{context.sendBroadcast(state,null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());}
-            catch(Exception e){log.accept("HISTORY_PUBLISH_FAILED "+FrameworkAccess.reason(e));}
+            try{
+                android.os.Bundle options=android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();
+                for(String launcher:dev.local.sunwindowdemo.core.LauncherTargets.targets(context))
+                    context.sendBroadcast(new Intent(state).setPackage(launcher),null,options);
+            }catch(Exception e){log.accept("HISTORY_PUBLISH_FAILED "+FrameworkAccess.reason(e));}
         });
     }
     private int[] hiddenIds(){

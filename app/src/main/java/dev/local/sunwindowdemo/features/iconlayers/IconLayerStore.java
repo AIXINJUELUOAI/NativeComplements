@@ -3,6 +3,8 @@ package dev.local.sunwindowdemo.features.iconlayers;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -10,7 +12,9 @@ import android.os.SystemClock;
 /** User-selected icon assets and a narrowly scoped launcher bridge. */
 public final class IconLayerStore {
     public static final String TARGET = "dev.local.nativecomplements.lab";
-    public static final String LAUNCHER = "com.google.android.apps.nexuslauncher";
+    /** Kept for source compatibility; checks must use {@link LauncherTargets#isLauncher}. */
+    public static final String LAUNCHER = dev.local.sunwindowdemo.core.LauncherTargets.PIXEL;
+    public static final String LINEAGE_LAUNCHER = dev.local.sunwindowdemo.core.LauncherTargets.LINEAGE;
     public static final String SYSTEM_UI = "com.android.systemui";
     public static final String REFRESH = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.action("ICON_LAYERS_REFRESH");
     public static final String CONTROL = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.controlPermission();
@@ -78,6 +82,23 @@ public final class IconLayerStore {
     }
 
     public static boolean systemThemed(Context c) { return prefs(c).getBoolean("system_themed", false); }
+
+    /** True only when the active HOME exposes the themed-icon provider used by ThemePicker. */
+    public static boolean themedIconSupported(Context c) {
+        try {
+            Intent home = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME);
+            ResolveInfo resolved = c.getPackageManager().resolveActivity(
+                    home, PackageManager.MATCH_DEFAULT_ONLY | PackageManager.GET_META_DATA);
+            if (resolved == null || resolved.activityInfo == null
+                    || resolved.activityInfo.metaData == null) return false;
+            String authority = resolved.activityInfo.metaData.getString(
+                    "com.android.launcher3.themedicon.option");
+            return authority != null && !authority.isEmpty()
+                    && c.getPackageManager().resolveContentProvider(authority, 0) != null;
+        } catch (RuntimeException unavailable) {
+            return false;
+        }
+    }
 
     static void report(Context c, Bundle b) {
         if (b.containsKey("systemThemed")) {

@@ -2,14 +2,44 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.3-alive-test1 / code146
+### 当前增量：LineageOS 24.0 接入（未真机全覆盖）
+
+- 保留 PixelOS/Pixel Launcher 路径，同时按官方 LineageOS 24.0 源码接入 Launcher3、ThemePicker Minimal、SystemUI/Launcher/Telecom/Input 的 ABI 差异；Launcher 身份由 [LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>) 按实际 HOME 包解析，不按 ROM 名称分支。
+- 静态作用域为四个：`system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`、`com.android.launcher3`；PixelOS 与 LineageOS 各自只命中实际存在的桌面。
+- 抽屉莫奈开启时自动切换到 LineageOS 的 Minimal（`MONO_THEME_VALUE`），关闭恢复；HOME 没有 themedicon provider 时开关禁用并提示“当前系统不支持主题图标”。
+- 官方源码固定提交与支持矩阵见 [LineageOS 24.0 接入](<lineageos-24.0.md>)；`python tests/verify_lineageos24.py` 只校验源码合同。实机确认模块加载/四作用域、抽屉莫奈自动切换与恢复、LauncherGuard/旋转/Recents、Taskbar 沉浸路径、边缘防误触心跳和来电拦截配置；小窗实际呼出、弹幕、传感器限制、双栏开关视觉、信号视觉、实际来电和 Alive AOD 仍未验证。
+
+### 当前增量：0.11.4-alive-test1 / code148（Direct Boot，主机核验通过；待真机）
+
+- 仅full主模块，保code147角落小窗与Alive睡眠admission/严格视觉安全门，本轮不混入新的解锁或通知功能。[Direct Boot数据边界](<alive-platform.md#code148direct-boot-数据边界>)将已应用快照和当前照片发布到本用户应用私有DE；从未确认应用的纯编辑草稿照片及编辑缩略图仍为CE。DE会保留历史已应用照片及确认应用中断后的候选，本轮未加自动回收或总量上限，不能声称DE永远只有当前一张。**DE不是凭据解锁后才可读：已应用照片在首次解锁前可由本应用读取**，不外部共享、不跨用户读取，也不绕过系统认证。
+- [已应用配置](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)以DE的AtomicFile JSON为权威，照片先完整发布再提交快照；偏好仅通知revision/error，不能因SharedPreferences提交失败而采用未发布的新配置。[核心资源](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)固定上游SHA/白名单不变，旧CE代完整hash校验后仅复制指定资源与manifest，经只读文件、暂存校验、fsync及rename发布DE，不覆盖已有代、不删CE源，不把未核额外文件带入运行时。
+- [私有迁移接收器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveBootReceiver.java>)不是Direct Boot入口，仅在已解锁的BOOT_COMPLETED/MY_PACKAGE_REPLACED后台准备；Engine初始化worker也先准备，真实运行使用DE、预览仍用CE。两个壁纸service标记directBootAware，但不强选、重绑或启动壁纸，不新增认证Hook。
+- 新安装须导入并应用一次；旧版须在已解锁状态完成迁移，**之后的下一次开机**才有完整DE数据。未经迁移的首次开机仍安全回退，标记directBootAware不等于已有可用资源或首解锁前真机通过。
+- 本轮主版编译、既有`AliveAmbientAccessTest`/`AlivePhaseTest`定向检查通过，覆盖DE锁前快照读取、CE草稿隔离、同名照片变更拒绝、快照写入失败保旧；没有跑全功能套件。最终R8、原签名、148身份/7entry/4scope、两个壁纸service Direct Boot标志、迁移receiver非导出及原产品边界打包核验通过。独立审查发现AtomicFile.finishWrite静默失败可能误报成功，已补照片完整hash与快照字节读回后才通知，且以最终源码重新核验。不自动安装、重启或改设置，首次解锁前显示与147动画观感均待用户验证。
+- [主版APK](<../../deliverables/NativeComplements-0.11.4-alive-test1.apk>) SHA-256：`66cf6e329afde4363c0c28502cd8088c46d96bcd4c0380c8b53571937d07785e`。三种解锁场景仍在诊断，未宣称解决；新增五分钟只读样本仅AOD稳定态，无新的解锁对照。时钟下移/避让、照片burn-in及通知/跨应用扩展未实施。
+
+### 历史增量：0.11.3-alive-test2 / code147
+
+- 取消独立小窗产品维护，仅构建/交付主模块。保留 `full` 源集与主包身份、原签名、7入口/4scope，不搬迁Alive资源；独立源目录仅历史保留，不再产生window variant。旧独立包若仍激活，保留原跨ClassLoader owner key与资格门：不能双建引擎、强抢或迁移恢复记录，需用户先恢复旧窗再手动停用/卸载旧独立模块并完整重启。
+- [角落适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)恢复原生InputMonitor观察、达到斜向阈值后才pilfer；[宿主](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)恢复左右下角/扇区与保护矩形发布、截图/安全UI/锁屏/配置/lease取消。保[纯手势规则](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/CornerGesture.java>)和准入/生命周期分层，不恢复长侧滑、通知/shortcut/分享/跨app自动小窗、莫奈；无障碍service/按钮/设置全部移除。其他ROM按[小窗接入](<floating-window.md>)核对ABI与执行恢复，合回产品不是取消适配边界或宣称通用兼容。
+- code146本地私有只读新证据（不提交设备日志）：15:40:20.024原生GONE→AOD，20.093已有Alive帧，20.104原生明确shouldDelayKeyguardShow，21.323原生转场结束，21.375真实锁屏，21.418才局部透出。此前1530软件内壁纸延迟可见后初始化到首帧仅36ms；不是GL本身耗时1.46s。先前早透出样本是LOCKSCREEN→AOD，不能充当桌面/软件内已解决的证据。
+- [系统睡眠交接](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)只在本次合格自有壁纸睡眠、默认屏、非交互、无遮挡/认证退出/输入认证且原生未动画的条件下，在原 `UnlockedScreenOffAnimationController.startAnimation` 同步动态范围内将其原true入场判断投影false，由原方法自身写FALSE决策走不播放分支；保原ScreenOff动画列表/Fold、原锁屏处理和唤醒清理。不是全局禁动画，不直接写决策字段/认证/电源/亮度，不缩原生状态转场1300ms。真实锁屏安全门、成功swap/UID/nonce/期限确认与同root局部绘制交接仍必须成立，ABI/deopt失败全撤回本组。
+- [Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)仅本Engine结构有效未过期PREPARE、既有active/非interactive/defaultON时，允许原生ambient duration0保留已有有界等待；此时不要求已visible/locked/有效surface，但绘制、ACK与透出仍分别要求这些真实条件。不把命令schema当发送者认证。仅保已有sleep，不新建/续期；其他0时长/SUSPEND仍强端点。原生若早DOZE，只有既有sleep已成功start且未绝限才可确认其可见帧；不强保ON、不延7800、不保证完整1800ms。新code147仍待用户真机验证，不用旧日志宣称生效，照片burn-in/时钟避让未做。
+
+验证收口：主版编译及既有 `AlivePhaseTest`、`AliveAmbientAccessTest`、`WindowBackendOwnershipTest`、`WindowBackendConflictTest` 定向检查通过，原角落纯规则点击/长按透传、阈值claim、多指取消/显示器隔离检查通过；不是全功能套件。独立安全复核发现duration0在可见/锁定前终止等待的风险，已改为只保已有有界等待，绘制与ACK门未放宽，并重新打最终release，不沿用中间hash。最终R8、原签名、主包147身份、7entry/3scope、角落/Alive/Admission保留、无障碍/shortcut和独立variant移除、普通/实验ambient元数据边界通过。未自动安装、重启或改设置，新code147观感与其他ROM仍未验证。
+
+| code147 最终原签名产物 | SHA-256 |
+|---|---|
+| [主版 APK](<../../deliverables/NativeComplements-0.11.3-alive-test2.apk>) | `8244b4ff14dfc3ed184432432c870b6de24a00699939cba82d7be09fb12fb376` |
+
+### 历史增量：0.11.3-alive-test1 / code146
 
 - 用户明确桌面与应用内熄屏均先走系统动画、稍后才出现Alive，不是仅桌面回调问题。code145只读记录显示14:38:52.987开始睡眠、53.029提交首帧、54.830收拢预算到期，直到57.066才DOZE，期间native visible/draw均为true；不能把“已经画在下层但不可见”误判成没有渲染。旧版减少额外淡出不足以解决完整交接。
 - [共用系统睡眠交接](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSleepHandoff.java>)跟随原生KeyguardService睡眠事件，给当前壁纸发送一次episode命令；仅自有当前用户实验组件、AOD开启、默认显示器、非交互、真实锁屏且无遮挡/认证退出/输入认证时，临时保留原生壁纸显示flag。原系统黑层在准备阶段继续绘制，应用内容不转成球体。
 - [自有Engine](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)仅真实native visible、有效Surface及成功swap后返回UID/nonce/显示器/绝限校验回执；随后只对同一根窗口的LightReveal绘制做短时空clip，原onDraw、opaque、controller、认证、输入、电源和亮度仍执行。没有回执/ABI不符/异常回原生；不加wakelock、不逐帧IPC、不隐藏初始化。绝限7800ms不续期，隐藏、唤醒、渲染失败、AOD/用户/壁纸/配置变化及OFF/SUSPEND取消。只针对已核这一层，不能承诺所有其他原生遮挡消除或观感已通过。
 - [球体轨道](<../../app/src/full/java/org/aliveclean/SceneMotion.java>)修正快速0→1→2时的实际视觉来源：球体权重仍非零就继续AOD展开，而不是按未达到的LOCK逻辑目标选长尾轨，避免decorator从应有33ms退出变成1000ms造成色块拖尾。保留比例连续插值，不改固定native/shader；真正HOME终态不采球，未把截图当作永久终态污染的证据。
 - [渲染生命周期](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)不再为不可见/已销毁scene留下唤醒种子；重新可见与重新attach只显示当前端点，解锁回软件再返回桌面不应补播过去的解锁。真实可见的唤醒仍使用既有scene过渡。
-- 两包小窗只保留[系统无障碍按钮](<../../app/src/main/java/dev/local/sunwindowdemo/WindowAccessibilityService.java>)呼出菜单，删除长侧滑、角落/扇区、通知点击、桌面shortcut、全屏跨应用自动进入和快捷建议小窗入口；既有窗口内部导航、菜单操作、系统后端与安全规则保留。小窗及遮罩莫奈真实路径恒关并忽略旧值，抽屉莫奈不变。独立版移除“关于”，单独保留开源许可；主版“关于”不动。静态scope仍3个，full入口7个/window入口3个。
+- 两包小窗只保留系统无障碍按钮（已于147退役）呼出菜单，删除长侧滑、角落/扇区、通知点击、桌面shortcut、全屏跨应用自动进入和快捷建议小窗入口；既有窗口内部导航、菜单操作、系统后端与安全规则保留。小窗及遮罩莫奈真实路径恒关并忽略旧值，抽屉莫奈不变。独立版移除“关于”，单独保留开源许可；主版“关于”不动。静态scope仍3个，full入口7个/window入口3个。
 
 源码收口状态：Handoff与全部运行时代码已冻结，以下为最终产物而非执行中预报；四篇专项文档可按此快照完成末次复核。
 
@@ -26,7 +56,7 @@
 - [导入器](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)增加10张固定上游官方样式缩略PNG，各自SHA-256核验，只存私有独立可选目录，不把native已加载代替换。原来已经导入核心资源的用户，重新选择同一固定OpenAlive APK即可补齐缩略图；没有资源时不伪造图片。缩略为官方样式示意，背景才是本人的实时壁纸渲染。
 - 用户本轮桌面手动熄屏的只读日志确认：13:59:57.722开始收拢，59.112被系统隐藏、59.420再次可见，59.832模块窗口到期释放，14:00:01.745原生才进入DOZE，造成约1.9秒空档。新[生命周期](<alive-platform.md>)把收拢结束与资源释放分开，已经呈现的端点静态保留到原生交接；隐藏不绘制、不新建scene、不延长整个episode原7800ms绝对上限。唤醒／零时长进入／OFF／UNKNOWN／移除／SUSPEND仍结束。
 - [SystemUI局部衔接](<alive-systemui.md>)仅精确自有实验壁纸、当前用户、AOD、默认显示器非交互且真实锁屏安全条件下，一次性把原生LightReveal目标的额外333ms延迟＋733ms淡出改为立即提交**相同目标暗度**，不设透明0、不改原1300ms转场、controller、认证、电源。只是减少一层视觉叠加，不代表全部系统遮挡或先缩暗已被接管。
-- [无障碍服务](<../../app/src/main/java/dev/local/sunwindowdemo/WindowAccessibilityService.java>)是full/window可选的系统无障碍按钮入口，仅呼出现有小窗菜单；不读取页面／事件、不截图、不模拟手势或启用触摸探索。用户手动启用并加入系统按钮；请求仍受本包UID、协议16、enabled、后端及系统安全规则校验，不跨版控制。它不替换现有系统侧后端，仍需要Xposed生效，不能宣称“Freeform＋无障碍就免后端运行”。
+- 无障碍服务（已于147退役）是full/window可选的系统无障碍按钮入口，仅呼出现有小窗菜单；不读取页面／事件、不截图、不模拟手势或启用触摸探索。用户手动启用并加入系统按钮；请求仍受本包UID、协议16、enabled、后端及系统安全规则校验，不跨版控制。它不替换现有系统侧后端，仍需要Xposed生效，不能宣称“Freeform＋无障碍就免后端运行”。
 
 本轮不跑整套功能回归，仅生命周期定向检查、必要失败保护审查和最终双release/R8、原签名、身份／scope／入口／无障碍最小能力及独立版边界核验。日志仅证明旧code144的断点，不证明code145观感已通过；用户负责真机验证。没有安装、重启或写设备设置；时钟避让、自创效果、其他厂商引擎及照片防烧屏位移仍未实现，仅短时测试。
 

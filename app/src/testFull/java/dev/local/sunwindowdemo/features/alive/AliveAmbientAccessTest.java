@@ -42,12 +42,40 @@ public class AliveAmbientAccessTest {
         AliveSettings.saveDraft(context,next);
         assertEquals(next,AliveSettings.readDraft(context));assertEquals(old,AliveSettings.readApplied(context));
         java.io.File photo=next.photoFile(context);
+        var device=AliveAssets.runtime(context);
+        java.io.File runtimePhoto=next.photoFile(device);
+        java.io.File snapshot=new java.io.File(device.getNoBackupFilesDir(),"alive-applied.json");
+        var publish=AliveSettings.class.getDeclaredMethod("publish",android.content.Context.class,AliveSettings.Snapshot.class);
+        publish.setAccessible(true);
         try{
             try(var output=new java.io.FileOutputStream(photo)){output.write(1);}
-            assertEquals(next,AliveSettings.applyDraft(context));
-            assertEquals(next,AliveSettings.readApplied(context));
-            assertTrue(applied.contains("applied_revision"));
-        }finally{photo.delete();applied.edit().clear().commit();draft.edit().clear().commit();}
+            // Publication is checked independently of the imported, SHA-pinned 29 MiB native generation.
+            publish.invoke(null,context,next);
+            assertEquals(next,AliveSettings.readApplied(device));
+            assertTrue(runtimePhoto.isFile());assertNotEquals(photo.getCanonicalPath(),runtimePhoto.getCanonicalPath());
+            assertFalse(device.getSharedPreferences(AliveSettings.DRAFT,0).contains("photo"));
+            assertFalse(applied.contains("applied_revision"));
+            assertTrue(AliveSettings.runtimePreferences(context).contains("applied_revision"));
+            var users=context.getSystemService(android.os.UserManager.class);
+            org.robolectric.Shadows.shadowOf(users).setUserUnlocked(false);
+            assertEquals(next,AliveSettings.readApplied(device));
+            org.robolectric.Shadows.shadowOf(users).setUserUnlocked(true);
+            // A changed same-name source must not overwrite the photo or its published snapshot.
+            try(var output=new java.io.FileOutputStream(photo)){output.write(2);}
+            try{publish.invoke(null,context,next);fail("Changed immutable photo accepted");}
+            catch(java.lang.reflect.InvocationTargetException rejected){assertTrue(rejected.getCause() instanceof java.io.IOException);}
+            assertEquals(1,java.nio.file.Files.readAllBytes(runtimePhoto.toPath())[0]);
+            assertEquals(next,AliveSettings.readApplied(device));
+            java.io.File blocked=new java.io.File(snapshot.getPath()+".new");assertTrue(blocked.mkdir());
+            try{publish.invoke(null,context,new AliveSettings.Snapshot(1,2,8,next.photo));fail("Failed snapshot publication accepted");}
+            catch(java.lang.reflect.InvocationTargetException rejected){assertTrue(rejected.getCause() instanceof java.io.IOException);}
+            finally{blocked.delete();}
+            assertEquals(next,AliveSettings.readApplied(device));
+        }finally{
+            org.robolectric.Shadows.shadowOf(context.getSystemService(android.os.UserManager.class)).setUserUnlocked(true);
+            photo.delete();runtimePhoto.delete();new android.util.AtomicFile(snapshot).delete();
+            applied.edit().clear().commit();draft.edit().clear().commit();AliveSettings.runtimePreferences(context).edit().clear().commit();
+        }
     }
     @Test public void onlyExactAmbientComponentAndKnownUserCanConsumeOneBindException()throws Exception{
         Class<?> type=Class.forName(AliveAmbientAccess.class.getName()+"$BindScope");

@@ -1,6 +1,36 @@
 # 现有架构与需要划清的边界
 
-## 当前实施状态：0.11.3-alive-test1 / code146
+## 当前收口范围：0.11.4-alive-test1 / code148
+
+本轮仅增加Alive Direct Boot数据准备，保留147产品和动画边界；不改变规则/状态与平台执行恢复分层，不恢复独立小窗，不新增解锁、时钟或通知功能。验证与产物由Lead收口，此处不预报PASS/hash或设备效果。
+
+### Alive：CE编辑与DE已应用运行时分离
+
+- [AliveSettings](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSettings.java>)保留纯值Snapshot；CE纯编辑草稿照片/编辑缩略图不迁移。用户确认应用时才向本用户应用私有DE发布照片及完整样式，AtomicFile JSON是权威，先准备不可变照片再发布并读回校验快照。DE偏好只通知revision/error，不以SharedPreferences提交失败后的内存值冒充已发布状态。
+- [AliveAssets](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAssets.java>)统一核心运行时DE路径；固定来源SHA/native/shader/mask白名单不变。解锁后的迁移先完整核验CE旧代，仅复制指定集合与manifest，readonly/fsync/暂存再校验/rename，不覆盖旧DE代、不删除CE源、不复制额外文件。真实renderer首次native加载前准备同一DE代，不能同进程换已加载库路径；预览仍使用CE草稿。
+- [私有BootReceiver](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveBootReceiver.java>)只消费已解锁BOOT_COMPLETED/MY_PACKAGE_REPLACED并派worker，Engine初始化worker也准备；receiver非directBoot，不自动启动、重绑或选择壁纸。两个壁纸service声明directBootAware只表示可被系统锁前启动，不保证已有数据；新安装须应用一次，旧版须已解锁迁移后下一次开机才有效，首次未迁移仍回退。
+- DE保留历史已应用照片及确认应用中断候选，本轮无自动回收/总量上限；不能承诺只存当前照片。从未确认应用的纯编辑草稿仍只在CE。DE中的这些照片在首次凭据解锁前对本应用可读，仍每用户应用私有、不外部共享、不跨用户读取。此隐私取舍不授予锁屏认证能力、不放宽147视觉safe/UID/nonce/期限门，不改AOD/电源/亮度。三种解锁现象仍在诊断；时钟下移/避让、照片burn-in与通知/跨应用扩展未实现，首解锁前真机行为仍待验证。
+
+## 保留范围：0.11.3-alive-test2 / code147
+
+code147按用户授权只在主模块提供小窗：恢复原生Hook左右下角滑动与扇区，不做无障碍触发，不再构建或发布独立小窗variant。**产品合回不等于回退规则分层，更不等于其他ROM免适配可用。**本节覆盖下方146“当前”及更早历史；实施和核验仍由Lead收口，不预报执行中的PASS/hash/真机效果。
+
+### 小窗：产品收拢与平台边界各自处理
+
+- [构建配置](<../../app/build.gradle.kts>)保留`full` flavor和原主包身份，只停止`window` variant；Alive及其他主功能继续使用原`full`源集。旧独立源集暂留Git但不编译，既有未提交修改不覆盖；不整提交revert或旧文件restore，避免混退Alive、Monet删除及安全修复。
+- 仅接回角落输入、扇区/热区、相关设置与安全取消，不恢复长侧滑、通知/分享/shortcut、快捷建议小窗或全屏跨应用自动进入。无障碍按钮/区域不再作为入口，小窗/遮罩Monet实际恒关仍保留，抽屉Monet与主版About不变。
+- **平台事件输入 → 共用规则/状态 → 平台执行与恢复**继续成立：[CornerGesture](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/CornerGesture.java>)与[Rules](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/Rules.java>)只处理值与输入流状态；[BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)/[SystemUiHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)承载native输入、pilfer、宿主扇区与保护区域；[WindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAdmission.java>)与[AndroidWindowAdmission](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/AndroidWindowAdmission.java>)区分值决策与原生事实读取；WM锁、Task/Surface/Insets、Binder、journal及恢复继续留平台执行侧。
+- 其他ROM贡献者仍按[小窗接入文档](<floating-window.md>)核Framework/SystemUI/Shell/Launcher的精确ABI、资源与调用时机，保输入取消、真实安全界面、UID/protocol16/token/lease及恢复边界，复用既有规则和最小定向检查。fork/adapt/test后提PR，经review和现设备回归决定合入；Freeform或LSPosed激活不能单独证明所有操作兼容。
+
+### 旧独立包：停止产物，不删除防双接管保护
+
+[WindowBackendOwnership](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendOwnership.java>)保留原key和first-claim，[Eligibility](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendEligibility.java>)仍投影本包enabled作为下次启动资格，[Conflict](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowBackendConflict.java>)使非owner不建Engine；[旧选择marker](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendSelection.java>)仅兼容墓碑，不再提供选择器。不强抢、不换key、不热转移、不跨包迁journal，也不自动修改LSPosed或对方数据。旧版先取得owner时主版安全拒绝重复接管，用户须先在旧版恢复窗口，再手动停用/卸载旧独立模块并完整重启。主版其他功能仍独立早装，不能把整个[ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>)移进小窗owner分支。历史身份/隔离依据保留在[独立小窗历史](<standalone-window.md>)。
+
+### Alive：原生动画入场选择与视觉交接分离
+
+code146的能力投影、球体混合轨/禁止补播及有界交接保留。147因原生动画延迟锁屏的确证，新增仅合格自有episode的原Unlocked.start动态范围入场选择，让原start自己走不播放分支写FALSEcache，原Fold循环/认证/唤醒仍执行，非全局谓词替换。admission尚未showing不等于允许视觉透出；后者仍需双真实showing安全门和成功swap rawBinder UID/nonce/期限确认。Engine仅符合严格准备条件时保native duration0既有episode，早DOZE不强保ON、不保证1800完整。原生1300ms状态流/opaque/亮度仍保留，失败不补播已跳过的旧动画，不把回调/首buffer当物理呈现或承诺动画已消除。具体ABI及限制见[Alive系统专题](<alive-systemui.md>)及[接入总览](<README.md>)。
+
+## 历史实施状态：0.11.3-alive-test1 / code146
 
 现有功能规则/状态与原生执行解耦已在Alive前推送至 `5ee8e95`；code139闭环、code143选择器及code145可选呼出/额外淡出均为历史。本节以code146覆盖旧“当前”，下方138审计仅按历史阅读。当前代码实现不等于真机效果或设备/LOS兼容声明；新Handoff尚未真机验证。
 
@@ -14,7 +44,7 @@ ProductFeatures仍早装，小窗后端在已核WMS五参main before同步安装
 
 ## 小窗：仅无障碍呼出，仍使用自有系统后端
 
-code146两包仅允许 [WindowAccessibilityService](<../../app/src/main/java/dev/local/sunwindowdemo/WindowAccessibilityService.java>) 的系统无障碍按钮呼出菜单，由用户手动开启；启用服务本身不弹菜单。仅请求button，无事件订阅，不读内容、不截图、不模拟手势/触摸探索。移除长侧滑、角落/扇区与返回手势呼出Hook；通知点击、分享转小窗、shortcut、快捷建议小窗、全屏跨app自动转小窗均不再作为旁路，旧偏好不能重新启用这些入口。菜单内既有操作、已有窗口导航及必要后端不属于被删除的呼出手势。
+code146两包仅允许当时的 `WindowAccessibilityService`（code147已删除）通过系统无障碍按钮呼出菜单，由用户手动开启；启用服务本身不弹菜单。仅请求button，无事件订阅，不读内容、不截图、不模拟手势/触摸探索。移除长侧滑、角落/扇区与返回手势呼出Hook；通知点击、分享转小窗、shortcut、快捷建议小窗、全屏跨app自动转小窗均不再作为旁路，旧偏好不能重新启用这些入口。菜单内既有操作、已有窗口导航及必要后端不属于被删除的呼出手势。
 
 点击仅在本包enabled时发指定SystemUI包SHOW_MENU、protocol16并分享发送者身份；[SystemUiHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)核本包UID及既有enabled/backendReady/安全/openWait门控。任务/几何/恢复仍由原Xposed system_server后端执行，保认证、安全窗口、输入优先级与恢复保护；不能借另一版本后端。**无障碍只承担入口，Freeform＋无障碍本身不足以替代系统后端**，不声明免Xposed或通用ROM兼容。
 

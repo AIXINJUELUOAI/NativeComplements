@@ -1,6 +1,28 @@
-# 同源独立小窗：现状依赖与接入隔离审计
+# 独立小窗历史与code147主模块收拢
 
-## 当前实施状态：0.10.0 / code139
+## 当前收口范围：0.11.3-alive-test2 / code147
+
+用户已取消独立小窗产品；code147小窗继续集成在主模块，由主模块Hook左右下角滑动唤出扇区，不再制作无障碍区域/按钮入口。**停止独立产品，不撤回昨晚完成的规则/状态与系统执行分层，也不是其他ROM免适配可用的声明。**相关实际接入边界见[小窗接入](<floating-window.md>)与[架构](<architecture.md>)。本节覆盖下方历史“当前/双包交付”，不删除历史证据，不预报正在进行中的构建、测试、hash或真机结果。
+
+### 只收拢产品，不整库回溯
+
+- [构建配置](<../../app/build.gradle.kts>)仅保留`full` flavor，不再创建`window` variant；[打包入口](<../../tests/package_release.py>)转为主版单APK核验/发布。保留`full`源集承载Alive及主版功能，不为消除技术名称而大搬源码，也不整提交回退混有Alive修复的code146。
+- [旧独立源集](<../../app/src/window/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)暂留Git作为历史，不再进入产物；不为收拢产品覆盖旧独立页面已有修改。停止发布与删除设备旧包是不同操作，不自动清数据/卸载。
+- 主模块恢复仅角落Hook/扇区及其安全清理，不顺带恢复长侧滑、通知/分享/shortcut、建议小窗或跨应用自动进入。小窗/遮罩Monet仍实际恒关，主版About与抽屉Monet保留。UID/protocol16、任务恢复、真实安全状态和原签名身份不因合回而放宽。
+
+### 旧独立包共存：保留兼容墓碑，不抢后端
+
+[WindowBackendOwnership](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendOwnership.java>)继续使用原`dev.nativecomplements.window.backend.owner.v1`与跨ClassLoader first-claim保护；[WindowBackendEligibility](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendEligibility.java>)保留自包开关资格投影，[WindowBackendConflict](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowBackendConflict.java>)保证非owner不创建Engine。停止独立variant不能假设旧独立模块已停用；若它先claim，主版应安全拒绝重复接管，而非改key、覆盖owner或强建Engine。当前没有“主版必胜”的加载顺序承诺。
+
+[旧WindowBackendSelection marker](<../../app/src/main/java/dev/local/sunwindowdemo/core/WindowBackendSelection.java>)暂保留为code143旧独立包兼容墓碑，不重新提供选择器，不强写旧组件状态。既有同SystemUI有界环境快照可以继续供其他主版功能的安全暂停使用，不借旧独立Binder执行主版任务控制；[主版ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>)及Alive/其他能力不随小窗owner冲突被整组移除。
+
+迁回主模块由用户手工完成：**先在旧独立版恢复已管理窗口 → 停用或卸载旧独立模块 → 启用主模块小窗并完整重启**。不热转交、不跨版迁journal、不读对方私有偏好、不改LSPosed数据库；主版原恢复路径不变，旧记录不擅自清除。不同步或未知修改版不宣称能安全并用。
+
+### 给其他ROM贡献者的入口仍保留
+
+目标是贡献者可以在主模块内fork/adapt/test并提PR：复用[CornerGesture](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/CornerGesture.java>)等值规则，在[BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)/[SystemUiHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SystemUiHost.java>)与Framework/WM适配侧核精确ABI、输入归属、失败回退及恢复，不复制另一套引擎。Freeform+LSPosed只是前提，不证明任意LineageOS/其他ROM即装即用；仍需目标版本成员档案、最小定向检查和真机验证。下方拆分研究保留为历史，不再作为继续发布独立包的路线。
+
+## 历史实施状态：0.10.0 / code139
 
 同源 full/window 产品隔离与本轮规则边界已完成代码闭环，运行代码已 push 至 `a0f3a7b`；产品边界、恢复/生命周期与最终双包核验证据见[最新进度](<README.md#最新进度恢复与生命周期闭环>)。**交付原签名双 APK 供用户安装回归，不是设备效果或 LOS 兼容公告。**owner 门控不等于通用 OEM 共存协议；主题报告或 IPC 失效可能保留旧快照，不保证立即关闭。下方身份/依赖清单按 138 历史阅读。
 

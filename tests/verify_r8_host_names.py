@@ -22,7 +22,7 @@ REQUIRED = {
     (PREFIX + "features/navbar/NavbarTaskbarHost;", "install"): {
         "com.android.launcher3.taskbar.TaskbarInsetsController", "android.view.InsetsFrameProvider",
         "setProviderInsets", "draw", "dispatchDraw", "callApplicationOnCreate"},
-    (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit"},
+    (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit", "com.android.systemui.shared.system.InputMonitorCompat", "inputMonitorCompat", "mInputMonitor", "pilferPointers"},
     (PREFIX + "features/shade/ComposeShadeLayout;", "install"): {"kotlin.coroutines.Continuation"},
     (PREFIX + "features/shade/SignalDisplay;", "install"): {"kotlin.Pair"},
     (PREFIX + "features/shade/SignalDisplay;", "installStacked"): {
@@ -42,6 +42,8 @@ RUNTIME_METHODS = {
     "TaskCleanupGuard": {"install", "delay", "acquired", "check"},
     "LaunchCoverFlow": {"ready", "changed", "visibility"},
     "WindowControls": {"buildControlsRoot", "fillTouchRegion"},
+    "SystemUiHost": {"cornerInput", "cancelCornerInput", "showFan", "hideFan"},
+    "CornerGesture": {"event", "abandon"},
     "features/edgetouch/EdgeInputFilter": {"install", "sync"},
     "features/edgetouch/EdgeInputPolicy": {"accepted", "regions"},
     "features/iconlayers/IconOverrides": {"prune"},

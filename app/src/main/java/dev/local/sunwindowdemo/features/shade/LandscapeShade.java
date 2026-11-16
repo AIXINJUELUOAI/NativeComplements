@@ -66,18 +66,39 @@ public final class LandscapeShade {
                 throw new NoSuchMethodException("legacy shade signatures");
             // API37 PixelOS R8 removes isEnabled() entirely. Exact legacy panel/controller
             // signatures are the fallback; never write a flag or install a Scene hook.
+            Boolean scene = null;
             try {
                 Method sceneEnabled = Class.forName("com.android.systemui.scene.shared.flag.SceneContainerFlag", false, loader)
                         .getDeclaredMethod("isEnabled");
                 if (sceneEnabled.getReturnType() != boolean.class || !Modifier.isStatic(sceneEnabled.getModifiers()))
                     throw new IllegalStateException("scene flag signature");
                 sceneEnabled.setAccessible(true);
-                if ((Boolean) sceneEnabled.invoke(null)) throw new IllegalStateException("SceneContainer enabled");
-            } catch (ClassNotFoundException | NoSuchMethodException inlined) {
-                // Verified device has only isUnexpectedlyInLegacyMode(), not a readable getter.
+                scene = (Boolean) sceneEnabled.invoke(null);
+                if (scene != null) note("SHADE_SCENE_FLAG " + scene);
+            } catch (Exception inlined) {
+                // Missing/rewritten optional flag only removes this observation, not the shade.
+                note("SHADE_SCENE_FLAG_UNAVAILABLE " + inlined.getClass().getSimpleName());
+            }
+            main = new Handler(Looper.getMainLooper());
+            // Scene builds use the Compose repository when this product provides it (PixelOS).
+            // LineageOS 24.0 exposes the legacy controller but not ShadeModeInteractorImpl /
+            // ConfigurationRepositoryImpl, so the legacy path stays available as a verified
+            // fallback instead of rejecting the whole feature on the shared Scene flag.
+            if (Boolean.TRUE.equals(scene)) {
+                List<XposedInterface.HookHandle> composeHooks = new ArrayList<>();
+                try {
+                    ComposeShadeLayout.install(module, loader, composeHooks,
+                            value -> ready && forceSplit(enabled, value.getConfiguration()));
+                    hooks.addAll(composeHooks);
+                    ready = true;
+                    note("SHADE_READY scene repository");
+                    return;
+                } catch (Throwable unavailable) {
+                    for (XposedInterface.HookHandle hook : composeHooks) try { hook.unhook(); } catch (Throwable ignored) {}
+                    note("SHADE_SCENE_COMPOSE_UNAVAILABLE " + unavailable.getClass().getSimpleName());
+                }
             }
             updateResources.setAccessible(true);
-            main = new Handler(Looper.getMainLooper());
             hooks.add(module.hook(updateResources).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed();
                 remember(chain.getThisObject());
@@ -105,8 +126,19 @@ public final class LandscapeShade {
             // Install the shared getter before dropping compiled copies in all consumers.
             if (!module.deoptimize(updateResources)) throw new IllegalStateException("shade update deoptimize");
             deoptimizeCallers(module, loader);
-            ComposeShadeLayout.install(module, loader, hooks,
-                    value -> ready && forceSplit(enabled, value.getConfiguration()));
+            if (!Boolean.TRUE.equals(scene)) {
+                List<XposedInterface.HookHandle> composeHooks = new ArrayList<>();
+                try {
+                    ComposeShadeLayout.install(module, loader, composeHooks,
+                            value -> ready && forceSplit(enabled, value.getConfiguration()));
+                    hooks.addAll(composeHooks);
+                } catch (Throwable unavailable) {
+                    for (XposedInterface.HookHandle hook : composeHooks) try { hook.unhook(); } catch (Throwable ignored) {}
+                    // LineageOS 24.0 exposes the legacy controller but not the PixelOS hydrated
+                    // ShadeConfigRepository/ShadeModeInteractor pair. Keep the verified legacy path.
+                    note("SHADE_COMPOSE_UNAVAILABLE " + unavailable.getClass().getSimpleName());
+                }
+            }
             ready = true;
             note("SHADE_READY");
         } catch (Throwable failure) {

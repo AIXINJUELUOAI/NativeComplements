@@ -10,7 +10,6 @@ import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
-import dev.local.sunwindowdemo.home.LicensesScreen
 
 /** Product navigation only; all window settings and behavior use the same implementation. */
 @Composable
@@ -25,9 +24,6 @@ fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit
                 Page.Home, Page.Window -> {
                     WindowScreen(controller.preferences, navigate, controller::toggleControl,
                         controller.enablePrompt, controller.enableChecking, controller::dismissEnablePrompt, controller::confirmEnablePrompt)
-                    SettingsGroup {
-                        SettingRow("开源许可", onClick = { navigate(Page.Licenses) })
-                    }
                 }
                 Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                 Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean, controller::number)
@@ -37,7 +33,6 @@ fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit
                     SettingRow("小窗诊断与恢复", onClick = { navigate(Page.Diagnostics) })
                 }
                 Page.Logs -> dev.local.sunwindowdemo.features.diagnostics.DiagnosticsScreen(bottomInset)
-                Page.Licenses -> LicensesScreen()
                 else -> Text("此独立版本只包含小窗设置。")
             }
         }

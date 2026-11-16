@@ -28,6 +28,9 @@ public class AlivePhaseTest {
         sleep.begin(100);
         assertTrue(sleep.active(100+AlivePhase.SLEEP_WAIT_MS-1));
         sleep.begin(800); // Repeated signals cannot extend the wait for native visibility.
+        sleep.visibility(false,900); // Prepared ambient duration=0 may keep this bounded wait.
+        assertFalse(sleep.holding(900)); // A waiting episode alone cannot admit a DOZE ACK.
+        assertFalse(AlivePhase.drawable(true,false,false,true,AlivePhase.DisplayState.ON,sleep.active(900)));
         assertEquals(4300, sleep.remaining(1800));
         assertTrue(sleep.present(4200)); // Native late visibility still gets the full collapse.
         assertTrue(sleep.presented());

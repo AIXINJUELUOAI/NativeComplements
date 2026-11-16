@@ -61,9 +61,11 @@ final class NavbarTaskbarHost {
             host.module = module;
             // This exact three-argument ABI is verified against the live launcher's SHA-256.
             Method setter = controller.getDeclaredMethod("setProviderInsets", provider, int.class, int.class);
+            setter.setAccessible(true);
             Method rendererDraw = host.renderer.getType().getDeclaredMethod("draw", Canvas.class);
             Method backgroundDraw = host.background.getType().getDeclaredMethod("draw", Canvas.class);
             Method dispatchDraw = host.dragLayer.getType().getDeclaredMethod("dispatchDraw", Canvas.class);
+            dispatchDraw.setAccessible(true);
             if (!module.deoptimize(host.refreshInsets) || !module.deoptimize(dispatchDraw))
                 throw new IllegalStateException("Taskbar native caller deoptimize failed");
             hooks.add(module.hook(setter).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
@@ -131,7 +133,7 @@ final class NavbarTaskbarHost {
     }
 
     void connect(Application app) {
-        if (!"com.google.android.apps.nexuslauncher".equals(app.getPackageName())) return;
+        if (!dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(app.getPackageName())) return;
         if (Looper.myLooper() != Looper.getMainLooper()) { main.post(() -> connect(app)); return; }
         if (application != null) return;
         application = app;

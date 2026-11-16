@@ -23,7 +23,8 @@ public final class DiagnosticsProvider extends ContentProvider {
         if (UserHandle.getUserHandleForUid(uid).equals(Process.myUserHandle())) {
             if (packageUid(uid, "android")) return "system";
             if (packageUid(uid, "com.android.systemui")) return "systemui";
-            if (packageUid(uid, "com.google.android.apps.nexuslauncher")) return "launcher";
+            if (packageUid(uid, "com.google.android.apps.nexuslauncher")
+                    || packageUid(uid, "com.android.launcher3")) return "launcher";
         }
         throw new SecurityException("diagnostics caller");
     }

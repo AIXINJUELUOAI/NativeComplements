@@ -5,6 +5,8 @@ import android.content.*;
 import android.graphics.drawable.Drawable;
 import android.os.*;
 import android.telephony.*;
+import android.view.View;
+import android.widget.ImageView;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import java.lang.ref.WeakReference;
@@ -20,6 +22,12 @@ public final class SignalDisplay {
     private static final List<Paint> PAINTS=new ArrayList<>();
     private static final ThreadLocal<Binding> BINDING=new ThreadLocal<>();
     private static final List<XposedInterface.HookHandle> HOOKS=new ArrayList<>();
+    private static final Map<View,Integer> MOBILE_VIEWS=Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Map<Drawable,Integer> MOBILE_DRAWABLES=Collections.synchronizedMap(new WeakHashMap<>());
+    private static volatile int MOBILE_SIGNAL_ID;
+    private static volatile boolean MOBILE_LEVEL_ACTIVE;
+    private static final Set<Class<?>> TELEPHONY_CALLBACKS=Collections.synchronizedSet(new HashSet<>());
+    private static final Map<Object,Integer> CALLBACK_SUBS=Collections.synchronizedMap(new WeakHashMap<>());
     private static volatile boolean enabled;
     private static boolean installed,connected;
     private static Method primary,emergencyOnly;
@@ -140,8 +148,139 @@ public final class SignalDisplay {
             log.accept("SIGNAL_DISPLAY_READY standard mobile drawable");
         }catch(Throwable failure){
             enabled=false;for(var hook:HOOKS)try{hook.unhook();}catch(Throwable ignored){}HOOKS.clear();
+            log.accept("SIGNAL_DISPLAY_PIXELOS_UNAVAILABLE "+StackedSignalTargets.describe(failure));
+            installLineage(module,loader);
+        }
+    }
+    /**
+     * LineageOS 24.0 uses MobileIconBinder.bind and a single anonymous TelephonyCallback in each
+     * MobileConnectionRepositoryImpl. There is no published synthetic binder callback. Hook the
+     * verified bind entry to associate the actual mobile_signal drawable with its subscription,
+     * then observe the public TelephonyManager registration to retain the raw SignalStrength /
+     * ServiceState used by SignalDisplayPolicy.
+     */
+    private static void installLineage(XposedModule module,ClassLoader loader){
+        List<XposedInterface.HookHandle> hooks=new ArrayList<>();
+        try{
+            Class<?> binder=Class.forName("com.android.systemui.statusbar.pipeline.mobile.ui.binder.MobileIconBinder",false,loader);
+            Method bind=null;
+            for(Method candidate:binder.getDeclaredMethods()){
+                if(!candidate.getName().equals("bind")||candidate.getParameterCount()!=4)continue;
+                Class<?>[] types=candidate.getParameterTypes();
+                if(types[0]==android.view.ViewGroup.class&&types[2]==int.class
+                    &&"com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.LocationBasedMobileViewModel".equals(types[1].getName())
+                    &&types[3].getName().endsWith("MobileViewLogger")){bind=candidate;break;}
+            }
+            if(bind==null)throw new NoSuchMethodException("MobileIconBinder.bind");
+            bind.setAccessible(true);
+            hooks.add(module.hook(bind).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                // Associate the view before bind starts its initial state flow, otherwise the
+                // first setImageDrawable/setLevel pair can escape the subscription mapping.
+                try{
+                    android.view.ViewGroup group=(android.view.ViewGroup)chain.getArg(0);
+                    Object viewModel=chain.getArg(1);
+                    int subscription=(Integer)viewModel.getClass().getMethod("getSubscriptionId").invoke(viewModel);
+                    int id=group.getResources().getIdentifier("mobile_signal","id","com.android.systemui");
+                    if(id!=0){
+                        MOBILE_SIGNAL_ID=id;
+                        if(SubscriptionManager.isValidSubscriptionId(subscription)){
+                            View signal=group.findViewById(id);if(signal!=null)MOBILE_VIEWS.put(signal,subscription);
+                        }
+                    }
+                }catch(Exception failure){log.accept("SIGNAL_LINEAGE_BIND_PARTIAL "+StackedSignalTargets.describe(failure));}
+                return chain.proceed();
+            }));
+            Method setImage=ImageView.class.getDeclaredMethod("setImageDrawable",Drawable.class);
+            setImage.setAccessible(true);
+            hooks.add(module.hook(setImage).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object owner=chain.getThisObject();
+                int mobileId=MOBILE_SIGNAL_ID;
+                // This hook is process-wide in SystemUI; reject unrelated ImageViews with one integer check.
+                if(!(owner instanceof ImageView view)||mobileId==0||view.getId()!=mobileId)return chain.proceed();
+                Object result=chain.proceed();
+                try{
+                    Integer subscription=MOBILE_VIEWS.get(view);
+                    Drawable drawable=(Drawable)chain.getArg(0);
+                    if(subscription!=null&&drawable!=null){
+                        MOBILE_DRAWABLES.put(drawable,subscription);
+                        MOBILE_LEVEL_ACTIVE=true;
+                    }
+                }catch(RuntimeException failure){log.accept("SIGNAL_LINEAGE_VIEW_PARTIAL "+failure.getClass().getSimpleName());}
+                return result;
+            }));
+            Method setLevel=Drawable.class.getDeclaredMethod("setLevel",int.class);
+            setLevel.setAccessible(true);
+            hooks.add(module.hook(setLevel).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                if(!MOBILE_LEVEL_ACTIVE||MOBILE_DRAWABLES.isEmpty())return chain.proceed();
+                Object owner=chain.getThisObject();
+                if(!(owner instanceof Drawable drawable)||!signalDrawable.isInstance(drawable))
+                    return chain.proceed();
+                Integer subscription=MOBILE_DRAWABLES.get(drawable);
+                if(subscription==null)return chain.proceed();
+                int nativeState=(Integer)chain.getArg(0);
+                if(!remember(new Binding(drawable,subscription),nativeState))return chain.proceed();
+                int adjusted=adjusted(nativeState,subscription);
+                return adjusted==nativeState?chain.proceed():chain.proceed(new Object[]{adjusted});
+            }));
+            Method register=TelephonyManager.class.getMethod("registerTelephonyCallback",
+                java.util.concurrent.Executor.class,TelephonyCallback.class);
+            hooks.add(module.hook(register).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                // Install before native registration so the first callback burst is observed.
+                try{
+                    Object callback=chain.getArg(1);
+                    int subscription=((TelephonyManager)chain.getThisObject()).getSubscriptionId();
+                    if(callback!=null&&SubscriptionManager.isValidSubscriptionId(subscription))
+                        installLineageCallback(module,callback,subscription);
+                }catch(Exception failure){log.accept("SIGNAL_LINEAGE_REGISTER_PARTIAL "+failure.getClass().getSimpleName());}
+                return chain.proceed();
+            }));
+            HOOKS.addAll(hooks);
+            log.accept("SIGNAL_DISPLAY_READY lineage mobile_icon_binder");
+        }catch(Throwable failure){
+            for(var hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
+            enabled=false;
             log.accept("SIGNAL_DISPLAY_UNAVAILABLE "+StackedSignalTargets.describe(failure));
         }
+    }
+    private static void installLineageCallback(XposedModule module,Object callback,int subscription)throws Exception{
+        CALLBACK_SUBS.put(callback,subscription);
+        Class<?> type=callback.getClass();
+        if(!TELEPHONY_CALLBACKS.add(type))return;
+        Method strength=type.getDeclaredMethod("onSignalStrengthsChanged",SignalStrength.class);
+        Method service=type.getDeclaredMethod("onServiceStateChanged",ServiceState.class);
+        Method ntn=null;
+        try{ntn=type.getDeclaredMethod("onCarrierRoamingNtnModeChanged",boolean.class);}
+        catch(NoSuchMethodException optional){}
+        strength.setAccessible(true);service.setAccessible(true);
+        if(ntn!=null)ntn.setAccessible(true);
+        hookLineageCallback(module,strength,0);
+        hookLineageCallback(module,service,1);
+        if(ntn!=null)hookLineageCallback(module,ntn,2);
+    }
+    private static void hookLineageCallback(XposedModule module,Method method,int kind)throws Exception{
+        HOOKS.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+            Object result=chain.proceed();
+            try{
+                Object owner=chain.getThisObject();
+                Integer subscription=CALLBACK_SUBS.get(owner);
+                if(subscription==null)return result;
+                synchronized(RADIOS){
+                    RADIOS.entrySet().removeIf(e->e.getValue().owner.get()==null);
+                    Radio radio=RADIOS.get(subscription);
+                    if(radio==null||radio.owner.get()!=owner){radio=new Radio(owner);RADIOS.put(subscription,radio);}
+                    if(kind==0)radio.strength=(SignalStrength)chain.getArg(0);
+                    else if(kind==1){
+                        radio.service=(ServiceState)chain.getArg(0);
+                        if(!registeredNr(radio.service))radio.strength=null;
+                    }else{
+                        radio.ntn=(Boolean)chain.getArg(0);
+                        if(radio.ntn)radio.strength=null;
+                    }
+                }
+                requestRedraw();
+            }catch(Exception failure){log.accept("SIGNAL_LINEAGE_CALLBACK_PARTIAL "+failure.getClass().getSimpleName());}
+            return result;
+        }));
     }
     private static void installStacked(XposedModule module,ClassLoader loader){
         List<XposedInterface.HookHandle> hooks=new ArrayList<>();
