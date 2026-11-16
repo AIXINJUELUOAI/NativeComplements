@@ -4,6 +4,7 @@
 
 ### 当前增量：code166 / 0.12.0-community1
 
+- 用户已确认维护者提示与关于页界面效果；按要求移除本地临时首次打开预览、模拟参数及预览专用测试，恢复正式版本号。正式 UI 与已合并的 `78fe7c8` 保持一致，不保留开发者预览入口；本次仅记录界面确认，不表示新增实机功能验收。
 - 按2026-11-17授权集成 [LFRon 的 PR #4](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)，保留作者与 PR 祖先，保 code165 Alive 运行源码，不将 PR 旧实现覆盖最新视觉／AOD修复。具体取舍见[LOS24](<lineageos-24.0.md>)。
 - 相同 Hook 不动，真正不同的输入、通知、ActivityStarter、Legacy／Hydrated／信号接入收进最小目标解析与功能适配，规则、安全门和恢复共用。不建立 ROM 插件工厂。Launcher3加入第四静态作用域，桌面权限以已知系统实际 HOME／UID为准。
 - 首次一次维护者提示、关于页开发者下的适配者及反馈fallback已接入；不在首页常驻、不逐功能未适配／未验证提示、不凭ROM名禁用。PR自动Minimal主题切换不纳入，保系统主题门控，不改用户桌面偏好。[轻量协作](<../community-adaptation-plan.md>)同步启用短期任务分支。
