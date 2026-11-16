@@ -1,6 +1,10 @@
 # Alive 照片渲染内核
 
-## 当前增量：0.11.5-alive-test1 / code149
+## 当前增量：0.11.5-alive-test2 / code150
+
+[预览卡片](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreview.kt>)在TextureView上叠ImageView，仅以[成功真实帧内存缓存](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreviewCache.kt>)盖住重新进入/START重建：总缓存≤4MiB/12项、单图长边512；完整Snapshot/phase/DE实际resources_revision/实际尺寸匹配，LRU淘汰，不回收仍被cover引用的bitmap，由GC管理。没有磁盘/DE副本、Activity引用或后台常驻GL。cold进程/未命中仍要首次渲染。输入变化先关闭旧renderer再新建，代际+renderer/texture identity+单调buffer timestamp截止及presented成功swap/TextureUpdated共同确认后才撤cover/捕一张缩略图，失败不伪造缓存；停止仍按原completion释放精确SurfaceTexture。页内草稿先读再异步准备资源，资源未ready仅展示匹配缓存、不建GL。照片入口使用系统ImageOnly选择器，APK导入仍文件选择器。实际壁纸service、motion和睡眠协议均未改，不能用缓存宣称修复熄屏闪锁屏。
+
+## 保留增量：0.11.5-alive-test1 / code149
 
 AMBIENT位置与单页编辑见[平台契约](<alive-platform.md>)：lens及五photo默认anchorY=.05、中心45%屏高；LOCK/HOME端点不动，不改native/曲线/时长，不称动态时钟避让。顶部两/三卡各持有同一renderer类型的独立TextureView、GL worker/EGL context/native handle，按当前阶段静态端点初始化，无点击循环或3秒idle演示。按阶段聚合错误、移除时清理，健康卡不能清空失败卡；生命周期及精确Surface关闭回执不变。主机定向测试不等于native真机观感/性能通过。
 

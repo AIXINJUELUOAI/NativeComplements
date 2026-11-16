@@ -1,6 +1,10 @@
 # Alive：阶段事实、AOD 实验与 Android 壁纸边界
 
-## 当前增量：0.11.5-alive-test1 / code149
+## 当前增量：0.11.5-alive-test2 / code150
+
+仅修[照片入口](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)为系统ImageOnly Photo Picker及[卡片重建缓存](<alive-renderer.md>)；APK导入仍文件选择器，照片选择结果只复制CE草稿，不新增权限或自动应用。纯进程有界真实帧缓存不写CE/DE磁盘、不常驻GL；冷进程或新配置未命中仍有首次加载。保留149位置与147/148服务安全发布；应用/桌面熄屏先闪锁屏的新增反馈尚无新设备日志/视频，单独诊断，不宣称此轮修复。
+
+## 保留增量：0.11.5-alive-test1 / code149
 
 本轮只修改AMBIENT固定位置与Alive单页编辑，不修改147睡眠准入、解锁认证或系统电源逻辑。
 

@@ -2,7 +2,14 @@
 
 ## 当前状态：规则边界已拆分；Alive 原生 AOD 模块实验开发
 
-### 当前增量：0.11.5-alive-test1 / code149（AMBIENT位置与Alive单页，主机核验通过；待真机）
+### 当前增量：0.11.5-alive-test2 / code150（照片入口与卡片缓存）
+
+- [照片入口](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)由OpenDocument改为系统PickVisualMedia/ImageOnly；APK资源仍文件选择器，不新增图库权限，选中照片继续复制到CE草稿，取消不应用。
+- [真实卡片缓存](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AlivePreviewCache.kt>)为进程内LRU，≤4MiB/12项、单图长边≤512，完整snapshot/phase/真实DE资源revision/尺寸匹配，不持Context/View、不写磁盘或DE、不常驻GL。重进/START先盖匹配真实帧，同代成功swap及Texture更新确认后撤cover；每代最多一次缩略读回，旧renderer完全close再建，代际/identity/timestamp拒绝旧回调。cold进程、未缓存新样式/照片/尺寸或淘汰时仍需首次真实渲染，不承诺冷启动无黑。草稿先读后异步准备运行资源，不再等完整准备才建立卡片。
+- 本轮6项定向检查通过：Navigation单页用例追加验证ACTION_PICK_IMAGES及image/*，缓存单用例覆盖隔离/淘汰/尺寸上限，原AmbientAccess四项；未跑全套。独立只读复核无可证P1/P2；仍需真机确认OEM buffer timestamp与单调时基及首帧撤cover表现，单测不覆盖native呈现链。最终release/R8/原签名、150身份、7entry/3scope、Direct Boot及退役产品边界核验通过。[主版APK](<../../deliverables/NativeComplements-0.11.5-alive-test2.apk>) SHA-256：`7bd98ef631b65f12bdc97c05675236fefddd8e06e005960df7c2541cedf2c553`；位置/native/实际壁纸睡眠动画未改。
+- 用户另报应用/桌面熄屏先闪一帧锁屏，后确认含时钟/日期/通知。设备149手动复现只读日志：19:04:41.873 native keyguard shown→.933 engine visible→42.003 sleep-presented→42.010 safe FIRST_SWAP→42.016 VISUAL；桌面19:04:50.118 shown→.128 presented→.173 safe FIRST_SWAP→.174 VISUAL。两次admission投影生效，非Hook未装，也非旧~1.3s延迟；show到visual窗口分别约143/56ms，代码只clip LightReveal不控制Keyguard内容层。样本一直Display ON，不能把doze policy当真实DOZE；缺内容alpha/逐帧提交证据，不称完整根因确证或修复。新增用户边界线索：动画结束前后反向亮灭屏最容易与系统动画冲突，1.7~2.1s仅举例，尚无该窗口标注样本。保持147安全门，不猜固定延时、不恢复旧延迟或放宽认证，单独核查各episode收尾/反向衔接。
+
+### 历史增量：0.11.5-alive-test1 / code149（AMBIENT位置与Alive单页，主机核验通过；待真机）
 
 - 本轮仅两项：[AMBIENT固定下移与单页编辑契约](<alive-platform.md>)。启航与五照片样式的AMBIENT锚点统一`.05f`，中心约屏高45%；LOCK/HOME端点仍全屏居中，曲线/时长和147睡眠安全门不变。不是读取真实时钟边界的动态避让，不能保证所有时钟布局无重叠。
 - [Alive页面](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveScreen.kt>)顶部状态卡片点击即弹对应样式Sheet，点选保存草稿并即时刷新；无独立全屏预览/重复编辑入口/完成按钮，下方只保留照片与设置壁纸，资源导入和许可移至更多。复用SettingsPage/动态颜色/系统安全区；按阶段聚合真实预览错误，不允许健康卡片清除失败卡片状态。

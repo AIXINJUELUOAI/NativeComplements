@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import dev.local.sunwindowdemo.core.ui.SettingsPage
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -80,17 +81,18 @@ fun AliveScreen(onBack: () -> Unit) {
     val previewErrors = remember { mutableStateMapOf<Int, String>() }
     val previewError = previewErrors.values.firstOrNull { it.isNotBlank() }.orEmpty()
     var backendError by remember { mutableStateOf(prefs.getString("backend_error", "").orEmpty()) }
-    var resourcesRevision by remember { mutableIntStateOf(0) }
+    var resourcesRevision by remember { mutableLongStateOf(prefs.getLong("resources_revision", 0L)) }
     var refresh by remember { mutableIntStateOf(0) }
     val stages = listOf("息屏", "锁屏", "桌面")
 
     LaunchedEffect(context) {
         try {
             draft = withContext(Dispatchers.IO) {
-                if (arm64) AliveSettings.prepareRuntime(context)
                 if (entered) AliveSettings.readDraft(context) else AliveSettings.beginEdit(context)
             }
             entered = true
+            if (arm64) withContext(Dispatchers.IO) { AliveSettings.prepareRuntime(context) }
+            refresh++
         } catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { message = failure.message ?: "无法读取壁纸草稿" }
     }
@@ -109,6 +111,7 @@ fun AliveScreen(onBack: () -> Unit) {
     DisposableEffect(prefs, lifecycle) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
             if (key == "backend_error") backendError = prefs.getString("backend_error", "").orEmpty()
+            if (key == "resources_revision") { resourcesRevision = prefs.getLong("resources_revision", 0L); refresh++ }
         }
         fun refreshSystem() { systemAod = AliveSystemState.aod(context); refresh++ }
         val settingObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -162,7 +165,7 @@ fun AliveScreen(onBack: () -> Unit) {
                 }
                 draft = next
                 previewErrors.clear()
-                resourcesRevision++
+                resourcesRevision = prefs.getLong("resources_revision", 0L)
                 message = if (photo) "草稿照片已更新，尚未设置壁纸" else "资源已校验并导入，尚未设置壁纸"
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { message = failure.message ?: "导入失败，当前壁纸未更改" }
@@ -172,7 +175,7 @@ fun AliveScreen(onBack: () -> Unit) {
     val apkPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importAsset(uri, false)
     }
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) importAsset(uri, true)
     }
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -245,9 +248,10 @@ fun AliveScreen(onBack: () -> Unit) {
                             .background(Color.Black).semantics { contentDescription = "${stages[phase]}样式" }
                             .clickable(enabled = editable, role = Role.Button) { scene = phase; editing = true },
                             contentAlignment = Alignment.Center) {
-                            if (arm64 && ready && hasPhoto && input != null) {
+                            if (input != null) {
                                 DisposableEffect(phase) { onDispose { previewErrors.remove(phase) } }
-                                AlivePreview(input, phase, resourcesRevision, Modifier.fillMaxSize(), onError = { previewErrors[phase] = it })
+                                AlivePreview(input, phase, resourcesRevision, Modifier.fillMaxSize(),
+                                    renderEnabled = arm64 && ready && hasPhoto, onError = { previewErrors[phase] = it })
                             } else Text(stages[phase], color = Color.White, style = MaterialTheme.typography.labelLarge)
                         }
                         Text(stages[phase], style = MaterialTheme.typography.labelLarge)
@@ -255,7 +259,7 @@ fun AliveScreen(onBack: () -> Unit) {
                 } }
             }
             SettingsGroup {
-                SettingRow("照片", onClick = if (editable) ({ photoPicker.launch(arrayOf("image/*")) }) else null)
+                SettingRow("照片", onClick = if (editable) ({ photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) else null)
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             val status = when {
@@ -307,7 +311,7 @@ fun AliveScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun StyleGallery(scene: Int, names: List<String>, selected: Int, enabled: Boolean, revision: Int, choose: (Int) -> Unit) {
+private fun StyleGallery(scene: Int, names: List<String>, selected: Int, enabled: Boolean, revision: Long, choose: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         names.indices.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -336,7 +340,7 @@ private fun StyleGallery(scene: Int, names: List<String>, selected: Int, enabled
 }
 
 @Composable
-private fun styleThumbnail(scene: Int, index: Int, revision: Int): ImageBitmap? {
+private fun styleThumbnail(scene: Int, index: Int, revision: Long): ImageBitmap? {
     val context = LocalContext.current
     val path = thumbnailPath(scene, index)
     return produceState<ImageBitmap?>(null, context, path, revision) {

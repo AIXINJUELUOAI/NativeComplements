@@ -59,10 +59,16 @@ class NavigationTest {
         val resolver = context.contentResolver
         shadowOf(context.getSystemService(android.os.UserManager::class.java)).setUserUnlocked(true)
         android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 1)
-        launch(intent(Page.Alive))
+        val (_, alive) = launch(intent(Page.Alive))
         try {
             compose.waitUntil(10_000) { context.getSharedPreferences("alive_wallpaper_draft", 0).contains("aod") }
         } catch (failure: AssertionError) { throw AssertionError(compose.onRoot().printToString(), failure) }
+        compose.onNodeWithText("照片").performClick()
+        compose.runOnIdle {
+            val picker = requireNotNull(shadowOf(alive).nextStartedActivityForResult).intent
+            assertEquals(android.provider.MediaStore.ACTION_PICK_IMAGES, picker.action)
+            assertEquals("image/*", picker.type)
+        }
         compose.onNodeWithContentDescription("息屏样式").assertIsDisplayed().performClick()
         compose.onNodeWithContentDescription("星月").performClick()
         compose.waitUntil(10_000) { context.getSharedPreferences("alive_wallpaper_draft", 0).getInt("aod", -1) == 2 }
