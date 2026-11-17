@@ -66,7 +66,7 @@ class NavigationTest {
         compose.onNodeWithText("照片").performClick()
         compose.runOnIdle {
             val picker = requireNotNull(shadowOf(alive).nextStartedActivityForResult).intent
-            assertEquals(android.provider.MediaStore.ACTION_PICK_IMAGES, picker.action)
+            assertEquals(Intent.ACTION_GET_CONTENT, picker.action)
             assertEquals("image/*", picker.type)
         }
         compose.onNodeWithContentDescription("息屏样式").assertIsDisplayed().performClick()
@@ -106,11 +106,11 @@ class NavigationTest {
         homeScenario.moveToState(Lifecycle.State.CREATED)
         val (windowScenario, window) = launch(windowIntent)
         compose.onNodeWithTag("page-title-小窗设置").assertIsDisplayed()
-        compose.onNodeWithText("手势与菜单").performClick()
+        compose.onNodeWithText("小窗入口与菜单").performClick()
         val gestureIntent = nextPage(window, Page.Gestures)
         windowScenario.moveToState(Lifecycle.State.CREATED)
         val (gestureScenario, gesture) = launch(gestureIntent)
-        compose.onNodeWithTag("page-title-手势与菜单").assertIsDisplayed()
+        compose.onNodeWithTag("page-title-小窗入口与菜单").assertIsDisplayed()
         compose.runOnIdle {
             // No app callback intercepts the platform cross-activity predictive animation.
             assertFalse(gesture.onBackPressedDispatcher.hasEnabledCallbacks())
@@ -189,12 +189,37 @@ class NavigationTest {
         }
     }
 
-    @Test fun barrageEntryStartsNativeSettingsAboveHome() {
-        val (_, home) = launch(intent())
+    @Test fun gameModeOpensIndependentBarrageAndQuickManagement() {
+        val (homeScenario, home) = launch(intent())
         compose.onNodeWithText("游戏助手").assertDoesNotExist()
+        compose.onNodeWithText("游戏模式").performClick()
+        val gameIntent = nextPage(home, Page.GameMode)
+        homeScenario.moveToState(Lifecycle.State.CREATED)
+        val (gameScenario, gameMode) = launch(gameIntent)
+        compose.onNodeWithText("启用弹幕通知").assertDoesNotExist()
+        compose.onNodeWithText("同时显示条数").assertDoesNotExist()
+        compose.onNodeWithText("搜索应用").assertDoesNotExist()
+        compose.onNodeWithText("侧边小白条").assertDoesNotExist()
+        compose.onNodeWithText("固定屏幕亮度").assertDoesNotExist()
+        compose.onAllNodes(hasScrollToNodeAction()).assertCountEquals(1)
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("弹幕通知"))
         compose.onNodeWithText("弹幕通知").performClick()
-        nextPage(home, Page.Barrage)
-        compose.onNodeWithTag("page-title-类原生补全计划").assertIsDisplayed()
+        val barrageIntent = nextPage(gameMode, Page.Barrage)
+        gameScenario.moveToState(Lifecycle.State.CREATED)
+        val (barrageScenario, _) = launch(barrageIntent)
+        compose.onNodeWithTag("page-title-弹幕通知").assertIsDisplayed()
+        compose.onNodeWithText("启用弹幕通知").assertIsDisplayed()
+        barrageScenario.close()
+        gameScenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("快捷应用与功能"))
+        compose.onNodeWithText("快捷应用与功能").performClick()
+        val quickIntent = nextPage(gameMode, Page.GameQuick)
+        gameScenario.moveToState(Lifecycle.State.CREATED)
+        launch(quickIntent)
+        compose.onNodeWithTag("page-title-快捷应用与功能").assertIsDisplayed()
+        compose.onNodeWithText("应用", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithText("功能", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("已选功能", substring = true).assertIsDisplayed()
         compose.runOnIdle { assertFalse(home.onBackPressedDispatcher.hasEnabledCallbacks()) }
     }
 
@@ -236,9 +261,9 @@ class NavigationTest {
         compose.onNodeWithTag("page-title-小窗设置").assertIsDisplayed()
         scenario.close()
         val (routed, _) = launch(intent(Page.Gestures))
-        compose.onNodeWithTag("page-title-手势与菜单").assertIsDisplayed()
+        compose.onNodeWithTag("page-title-小窗入口与菜单").assertIsDisplayed()
         routed.recreate()
-        compose.onNodeWithTag("page-title-手势与菜单").assertIsDisplayed()
+        compose.onNodeWithTag("page-title-小窗入口与菜单").assertIsDisplayed()
     }
 
     @Test @Config(qualifiers = "zh-rCN-w915dp-h412dp-land-night-420dpi")

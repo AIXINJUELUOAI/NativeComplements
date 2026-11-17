@@ -30,7 +30,7 @@ class HostBridgeTest {
         var foreground: String? = null
         var blocked = false
         val extras = java.lang.reflect.Proxy.newProxyInstance(HostExtras::class.java.classLoader, arrayOf(HostExtras::class.java)) { _, method, args ->
-            if (method.name == "environment") { foreground = args[0] as String; blocked = args[1] as Boolean }
+            if (method.name == "environment") { foreground = args[0] as String; blocked = args[2] as Boolean }
             if (method.returnType == Boolean::class.javaPrimitiveType) false else null
         }
         fun field(name: String, value: Any) { SystemUiHost::class.java.getDeclaredField(name).apply { isAccessible = true }.set(host, value) }
@@ -42,7 +42,7 @@ class HostBridgeTest {
         val update = SystemUiHost::class.java.getDeclaredMethod("updateCompanionEnvironment").apply { isAccessible = true }
         val key = "dev.nativecomplements.window.companion.environment.v1"
         val snapshot = org.json.JSONObject().put("at", android.os.SystemClock.elapsedRealtime())
-            .put("foreground", "example.owner").put("title", "").put("system", false).put("keyboard", false)
+            .put("foreground", "example.owner").put("fullscreenApp", "example.owner").put("title", "").put("system", false).put("keyboard", false)
             .put("screenshot", false).put("panel", false).put("waiting", false).put("imeTop", Int.MAX_VALUE).put("rects", org.json.JSONArray())
         try {
             System.setProperty(key, snapshot.toString()); update.invoke(host)

@@ -14,6 +14,8 @@ import android.widget.TextView
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.*
@@ -26,6 +28,7 @@ import dev.local.sunwindowdemo.core.ui.SettingsPage
 import dev.local.sunwindowdemo.features.barrage.BarrageProvider
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
 import dev.local.sunwindowdemo.features.barrage.BarrageStore
+import dev.local.sunwindowdemo.features.gamemode.GameModeStore
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -219,7 +222,7 @@ class QuickFunctionsTest {
             captureView = LocalView.current
             ComplementsTheme {
                 SettingsPage(title = "弹幕通知") { bottom ->
-                    BarrageScreen(listOf(LaunchableApp("example.alpha", "示例应用")), true, bottom)
+                    BarrageScreen(bottom)
                 }
             }
         }
@@ -228,13 +231,96 @@ class QuickFunctionsTest {
         compose.runOnIdle { assertEquals(5,BarrageStore.read(context).getInt("lines")) }
         compose.onNodeWithContentDescription("同时显示条数").performSemanticsAction(SemanticsActions.SetProgress) { it(2f) }
         compose.runOnIdle { assertEquals(0,BarrageStore.read(context).getInt("lines")) }
-        compose.onNodeWithText("逐应用设置").assertIsDisplayed()
-        compose.onNodeWithText("示例应用").performScrollTo().performClick()
-        compose.runOnIdle {
-            assertTrue(BarrageStore.read(context).getBoolean("enabled"))
-            assertEquals(listOf("example.alpha"), BarrageStore.read(context).getStringArrayList("apps"))
-        }
+        compose.onNodeWithText("逐应用设置").assertDoesNotExist()
+        compose.onNodeWithText("还没有选择游戏。弹幕只在游戏模式里选中的游戏全屏前台时显示。").assertDoesNotExist()
         screenshot("barrage-settings")
+    }
+
+    @Test fun gameSelectionUsesSwitchesWithoutSearchAndQuickManagementReorders() {
+        GameModeStore.prefs(context).edit().clear().commit()
+        val apps = listOf(LaunchableApp("example.alpha", "甲应用", ColorDrawable(Color.BLUE)),
+            LaunchableApp("example.beta", "乙应用", ColorDrawable(Color.GREEN)))
+        var managing by androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent {
+            ComplementsTheme {
+                captureView = LocalView.current
+                SettingsPage(title = if (managing) "快捷应用与功能" else "游戏模式") { bottom ->
+                    if (managing) dev.local.sunwindowdemo.features.gamemode.GameQuickScreen(apps, true, bottom)
+                    else dev.local.sunwindowdemo.features.gamemode.GameModeScreen(apps, true, bottom, onQuick = { managing = true })
+                }
+            }
+        }
+        screenshot("game-mode-settings")
+        compose.onAllNodes(hasScrollToNodeAction()).assertCountEquals(1)
+        compose.onNodeWithText("搜索应用").assertDoesNotExist()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("甲应用"))
+        compose.onNodeWithContentDescription("甲应用").assertIsOff().performClick()
+        compose.onNodeWithContentDescription("甲应用").assertIsOn()
+        compose.runOnIdle {
+            assertEquals(listOf("example.alpha"), GameModeStore.read(context).getStringArrayList("apps"))
+            assertTrue(GameModeStore.read(context).getStringArrayList("quick_apps")!!.isEmpty())
+        }
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("快捷应用与功能"))
+        compose.onNodeWithText("快捷应用与功能").performClick()
+        compose.onNodeWithText("搜索应用").assertDoesNotExist()
+        compose.onNodeWithContentDescription("甲应用").performScrollTo().assertIsOff().performClick()
+        compose.onNodeWithContentDescription("甲应用，点击移除，长按拖动调整顺序").assertIsDisplayed()
+        compose.onNodeWithContentDescription("乙应用").performScrollTo().assertIsOff().performClick()
+        val alpha = compose.onNodeWithContentDescription("甲应用，点击移除，长按拖动调整顺序")
+        val beta = compose.onNodeWithContentDescription("乙应用，点击移除，长按拖动调整顺序")
+        val target = alpha.fetchSemanticsNode().boundsInRoot.center
+        val source = beta.fetchSemanticsNode().boundsInRoot.center
+        beta.performTouchInput {
+            down(center)
+            advanceEventTime(700)
+            moveTo(center + (target - source), delayMillis = 400)
+            up()
+        }
+        compose.runOnIdle {
+            assertEquals(listOf("example.beta", "example.alpha"), GameModeStore.read(context).getStringArrayList("quick_apps"))
+            assertEquals(listOf("example.alpha"), GameModeStore.read(context).getStringArrayList("apps"))
+        }
+        screenshot("game-quick-apps-settings")
+        compose.onNodeWithText("功能").performClick()
+        compose.onNodeWithText("已选功能").assertIsDisplayed()
+        compose.onNodeWithContentDescription("录屏，点击移除，长按拖动调整顺序").assertIsDisplayed()
+        val reorder = compose.onNodeWithContentDescription("录屏，点击移除，长按拖动调整顺序")
+            .fetchSemanticsNode().config[SemanticsActions.CustomActions]
+        compose.runOnIdle {
+            assertTrue(reorder.first { it.label == "前移" }.action())
+            assertEquals("record", GameModeStore.read(context).getStringArrayList("quick")!!.first())
+        }
+        screenshot("game-quick-functions-settings")
+    }
+
+    @Test fun gameModeEntrySwitchesStayIndependentAndBarrageDetailsStayInSync() {
+        GameModeStore.prefs(context).edit().clear().putBoolean("panel", false).commit()
+        BarrageStore.prefs(context).edit().clear().putBoolean("migrated", true).commit()
+        var details by androidx.compose.runtime.mutableStateOf(false)
+        compose.setContent {
+            captureView = LocalView.current
+            ComplementsTheme {
+                SettingsPage(title = if (details) "弹幕通知" else "游戏模式") { bottom ->
+                    if (details) BarrageScreen(bottom)
+                    else dev.local.sunwindowdemo.features.gamemode.GameModeScreen(emptyList(), true, bottom,
+                        onBarrage = { details = true })
+                }
+            }
+        }
+        compose.onNodeWithContentDescription("快捷应用与功能").assertIsOff().performClick()
+        compose.runOnIdle { assertTrue(GameModeStore.read(context).getBoolean("panel")) }
+        compose.onNodeWithContentDescription("弹幕通知").assertIsOff().performClick()
+        compose.runOnIdle { assertTrue(BarrageStore.read(context).getBoolean("enabled")) }
+        compose.onNodeWithText("弹幕通知").performClick()
+        compose.onNodeWithText("启用弹幕通知").assertIsOn().performClick()
+        compose.runOnIdle { assertFalse(BarrageStore.read(context).getBoolean("enabled")) }
+        screenshot("game-barrage-details-settings")
+        compose.runOnIdle { details = false }
+        compose.onNodeWithContentDescription("弹幕通知").assertIsOff()
+        compose.onNodeWithContentDescription("快捷应用与功能").assertIsOn()
+        compose.runOnIdle { BarrageStore.enabled(context, true) }
+        compose.onNodeWithContentDescription("弹幕通知").assertIsOn()
+        screenshot("game-mode-entry-switches-settings")
     }
 
     @Test fun providersCheckUidAndRejectRemovedTileAndSettingsActions() {

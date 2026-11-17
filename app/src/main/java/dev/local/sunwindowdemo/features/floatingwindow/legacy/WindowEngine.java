@@ -3321,6 +3321,14 @@ final class WindowEngine {
             if(focused!=null){Object top=a.call(focused,"topRunningActivity");if(top!=null)foreground=(String)a.field(top,"packageName");}
             out.putExtra("foreground",foreground);
             Object display=a.call(root,"getDefaultDisplay");
+            // The unmanaged fullscreen app of this user on the default display, even beneath a focused floating window.
+            Object full=null;
+            if(focused!=null&&a.integer(focused,"getWindowingMode")==1&&!owns(focused)&&a.call(focused,"getDisplayContent")==display)full=focused;
+            else if(!sessions.isEmpty())full=visibleFullscreen(display);
+            String fullscreenApp="";
+            if(full!=null&&(Integer)a.field(full,"mUserId")==0){
+                Object top=a.call(full,"topRunningActivity");if(top!=null)fullscreenApp=(String)a.field(top,"packageName");}
+            out.putExtra("fullscreenApp",fullscreenApp);
             Object ime=a.call(display,"getImeWindow");boolean visible=ime!=null&&a.bool(ime,"isVisible");
             Rect bounds=(Rect)a.call(display,"getBounds");
             Object state=a.call(a.call(display,"getInsetsStateController"),"getRawInsetsState");

@@ -16,6 +16,7 @@
 
 - JDK 17+、Android SDK `android-37.0`、Gradle Wrapper 8.14.4。机器路径通过 `JAVA_HOME`、`ANDROID_HOME` 等环境变量配置，不提交本机配置。
 - 必要定向：`gradlew.bat --no-daemon --console=plain :app:testFullDebugUnitTest --tests ...`。按风险选择现有检查，不因小改动反复全量回归或堆测试套件。
+- Release 版本命名：在 `main` 分支打包时，`versionName` 必须使用无后缀的正式版本号 `0.xx.xx`（如 `0.12.4`）；`test`、`preview` 及其他后缀仅允许用于非 `main` 分支的构建。合并测试分支后，在 `main` 打包前须去除后缀，并保持 `versionCode` 可升级；不得只改 APK 文件名冒充正式版本。
 - Release：`gradlew.bat --no-daemon --console=plain :app:assembleFullRelease`；正式签名产物用 [package_release.py](<tests/package_release.py>) 校验身份、8 入口、5 作用域、R8、Direct Boot 及退役边界。本地测试签名不能声称可覆盖正式安装。
 - [verify_runtime.py](<tests/verify_runtime.py>)读取不可变 Demo8.2 源码基线并运行主机检查；修改小窗运行文件需更新[差异原因](<tests/runtime-changes.json>)，不改[基线摘要](<baseline/runtime-sha256.json>)隐藏差异。
 - [verify_target.py](<tests/verify_target.py>)核对接口快照；[LOS24 合同检查](<tests/verify_lineageos24.py>)等依赖仓库外资料的检查，缺资料应明确 SKIP／不可执行，不记为通过。

@@ -117,9 +117,13 @@ public class PersistenceFailureTest {
             Context context=new ContextWrapper(app){
                 @Override public Object getSystemService(String name){return WINDOW_SERVICE.equals(name)?windows:super.getSystemService(name);}
             };
+            dev.local.sunwindowdemo.features.gamemode.GameModeStore.prefs(app).edit().clear()
+                .putStringSet("apps",java.util.Set.of("example.foreground")).commit();
+            Shadows.shadowOf(app.getSystemService(PowerManager.class)).setIsInteractive(true);
+            Shadows.shadowOf(app.getSystemService(android.app.KeyguardManager.class)).setKeyguardLocked(false);
             BarrageHost host=new BarrageHost(context);
             try{
-                drain(host);host.environment("example.foreground",false);host.environment("example.foreground",false);
+                drain(host);host.environment("example.foreground",true,false);host.environment("example.foreground",true,false);
                 NotificationListenerService listener=Robolectric.buildService(Listener.class).create().get();
                 Notification notification=new Notification();notification.extras.putString(Notification.EXTRA_TEXT,"message");
                 StatusBarNotification sbn=new StatusBarNotification("example.sender","example.sender",1,null,12345,0,0,notification,android.os.Process.myUserHandle(),System.currentTimeMillis());

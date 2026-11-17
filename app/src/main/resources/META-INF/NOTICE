@@ -3,6 +3,9 @@
 Game panel icons: Google Material Symbols Rounded, filled 24px Android vectors, Apache-2.0.
 Source: https://github.com/google/material-design-icons/tree/10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7/symbols/android
 Assets are stored as ic_game_*.xml; Compose supplies dynamic theme tint.
+Game companion controls gm_brightness.xml, gm_volume.xml, gm_previous.xml, gm_play.xml, gm_pause.xml, gm_next.xml and gm_chevron.xml adapt Google Material Icons Round 24px SVG paths from src/av, src/image and src/navigation at the same pinned revision above, Apache-2.0 (Google). SVG path geometry is unchanged; Android VectorDrawable supplies host-safe tint.
+gm_gamepad.xml preserves the gamepad SVG path supplied by the user; it was converted to Android VectorDrawable without geometry changes. No upstream revision is asserted for this supplied asset.
+GameSliders.kt adapts the HLG gamma transfer constants/formulas from AOSP SettingsLib BrightnessUtils.java (Copyright 2018 The Android Open Source Project, Apache-2.0): https://android.googlesource.com/platform/frameworks/base/+/android-15.0.0_r1/packages/SettingsLib/src/com/android/settingslib/display/BrightnessUtils.java . Display writes are temporary only and cleared on panel hide; no persistent brightness or mode setting is written.
 
 Geometry.java adapts the mini-window scale constants, 9:16 canvas ratio and opposite-orientation scale factor from WindowResizingAlgorithm.java, Copyright (C) 2023-2024 The Nameless-AOSP Project, SPDX-License-Identifier: Apache-2.0.
 

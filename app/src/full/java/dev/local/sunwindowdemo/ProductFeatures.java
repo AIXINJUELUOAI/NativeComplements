@@ -106,25 +106,33 @@ final class ProductFeatures {
         private final Context context;
         private SuggestionHost suggestions;
         private BarrageHost barrage;
+        private GameModeHost gameMode;
         private volatile dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost edgeTouch;
         FullHostExtras(Context context){this.context=context;}
         public void startCompanions(){
             try{suggestions=new SuggestionHost(context.getApplicationContext());}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","SUGGESTIONS_HOST_UNAVAILABLE");}
             edgeTouch=new dev.local.sunwindowdemo.features.edgetouch.EdgeTouchHost(context.getApplicationContext());
         }
-        public void startBarrage(){try{barrage=new BarrageHost(context);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}}
+        public void startBarrage(){
+            try{barrage=new BarrageHost(context);}catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","BARRAGE_HOST_UNAVAILABLE",unavailable);}
+            try{gameMode=new GameModeHost(context,pkg->{dev.local.sunwindowdemo.Wire.openApp(context,pkg,false);return kotlin.Unit.INSTANCE;},id->{quick(id);return kotlin.Unit.INSTANCE;});}
+            catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","GAMEMODE_HOST_UNAVAILABLE",unavailable);}
+        }
+        private void quick(String id){SystemUiHost host=SystemUiHost.live;if(host!=null)host.quickAction(id);}
         public void notification(NotificationListenerService source,StatusBarNotification notification){if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);}
         public void notificationRemoved(StatusBarNotification notification){if(suggestions!=null)suggestions.notificationRemoved(notification.getKey());if(barrage!=null)barrage.notificationRemoved(notification);}
         public boolean rotationSuggestion(Runnable click,Runnable restore){if(suggestions==null){RotationDiagnostics.update("host","建议宿主未初始化");return false;}return suggestions.rotationSuggestion(click,restore);}
         public void publishRotationSettings(){if(suggestions!=null)suggestions.publishRotationSettings();}
         public boolean blocksEdgeTouch(float x,float y){return edgeTouch!=null&&edgeTouch.blocks(x,y);}
-        public void environment(String foreground,boolean systemFocus,String title,boolean keyboard,boolean screenshotVisible,boolean panelShown,boolean openWaitShown,int imeTop){
-            if(barrage!=null)barrage.environment(foreground,BarrageHost.shouldSuspend(systemFocus,title,keyboard,panelShown,openWaitShown));
+        public void environment(String foreground,boolean fullscreen,boolean systemFocus,String title,boolean keyboard,boolean screenshotVisible,boolean panelShown,boolean openWaitShown,int imeTop,String actualForeground){
+            boolean suspended=BarrageHost.shouldSuspend(systemFocus,title,keyboard,panelShown,openWaitShown);
+            if(barrage!=null)barrage.environment(foreground,fullscreen,suspended,actualForeground);
+            if(gameMode!=null)gameMode.environment(foreground,fullscreen,suspended||screenshotVisible);
             if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panelShown||openWaitShown,imeTop);
         }
         public void edgeEnvironment(boolean systemOverlay,boolean keyboard){if(edgeTouch!=null)edgeTouch.setEnvironment(systemOverlay,keyboard);}
         public void protectedRects(int[] rectangles){if(edgeTouch!=null)edgeTouch.setProtectedRects(rectangles);}
-        public void closeBarrage(){if(barrage!=null){barrage.close();barrage=null;}}
+        public void closeBarrage(){if(barrage!=null){barrage.close();barrage=null;}if(gameMode!=null){gameMode.close();gameMode=null;}}
         public void close(){if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}}
     }
 }
