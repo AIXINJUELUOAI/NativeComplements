@@ -2,7 +2,7 @@
 
 ## 注册和宿主
 
-正式入口以[七项注册表](<../../app/src/full/resources/META-INF/xposed/java_init.list>)为准；[静态作用域](<../../app/src/main/resources/META-INF/xposed/scope.list>)是 system、SystemUI、Pixel Launcher、Launcher3。桌面只匹配主进程；IPC 权限另由[LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)验证已知系统实际 HOME 和本用户 UID，不因包存在或 ROM 名放行。
+正式入口以[八项注册表](<../../app/src/full/resources/META-INF/xposed/java_init.list>)为准；[静态作用域](<../../app/src/main/resources/META-INF/xposed/scope.list>)是 system、SystemUI、Pixel Launcher、Launcher3、电话（`com.android.phone`，仅短信拦截）。桌面只匹配主进程；IPC 权限另由[LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)验证已知系统实际 HOME 和本用户 UID，不因包存在或 ROM 名放行。
 
 | 入口 | 宿主及委托 |
 |---|---|
@@ -10,6 +10,7 @@
 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>) | SystemUI 主进程；Application 创建后连接共享宿主，安装原生角落 admission、通知观察、通知小窗、录屏／截图接入 |
 | [LauncherGuard](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/LauncherGuard.java>) | 已知 Launcher 主进程；旋转建议、受控角落流保护及可选历史任务过滤 |
 | [CallBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingModule.java>) | system_server；独立 Telecom 过滤，不依赖小窗总开关 |
+| [SmsBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingModule.java>) | `com.android.phone` 主进程；在原生屏蔽号码路径上判定短信，不依赖小窗总开关 |
 | [IconLayerModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerModule.java>) | 已知 Launcher 主进程；图标素材、系统主题上报、抽屉绑定与可选原生动画素材 |
 | [SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>) | SystemUI 主进程；通知标识图标和原生 splash |
 | [NavbarModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/navbar/NavbarModule.java>) | SystemUI／已知 Launcher 主进程；仅原生导航 owner 接入，无普通应用或 server 导航 Hook |
@@ -23,7 +24,7 @@
 | 导航、横屏双栏、状态栏位置／比例、信号 | [外观边界](<appearance-boundary.md>) |
 | 图标模式、素材、抽屉／通知／splash | [图标边界](<icon-boundary.md>) |
 | 弹幕、OTP／剪贴板／亮屏与旋转建议 | [通知与建议](<notification-boundary.md>) |
-| 通话、UID 传感器政策、输入过滤 | [系统策略](<system-policy-boundary.md>) |
+| 通话、短信、UID 传感器政策、输入过滤 | [系统策略](<system-policy-boundary.md>) |
 | 诊断、配置与身份 | [共享边界](<shared-boundary.md>) |
 | 角落输入、通知／跨应用小窗及恢复 | [小窗接入](<floating-window.md>) |
 | Alive 绑定、渲染和视觉交接 | [平台合同](<alive-platform.md>)、[SystemUI 合同](<alive-systemui.md>) |

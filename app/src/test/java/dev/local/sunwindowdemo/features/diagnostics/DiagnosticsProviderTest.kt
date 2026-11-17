@@ -68,6 +68,28 @@ class DiagnosticsProviderTest {
         try { provider.call("state", null, null); fail("third-party HOME UID") }
         catch (_: SecurityException) { }
     }
+    @Test fun phoneEventsRequireSameUserRealSystemPackage() {
+        val context = RuntimeEnvironment.getApplication()
+        val pm = org.robolectric.Shadows.shadowOf(context.packageManager)
+        fun installPhone(uid: Int, flags: Int) {
+            pm.installPackage(android.content.pm.PackageInfo().apply {
+                packageName = "com.android.phone"
+                applicationInfo = android.content.pm.ApplicationInfo().apply {
+                    packageName = "com.android.phone"; this.uid = uid; this.flags = flags
+                }
+            })
+        }
+        installPhone(54321, 0)
+        ShadowBinder.setCallingUid(54321)
+        assertThrows(SecurityException::class.java) { provider.call("state", null, null) }
+        installPhone(54321, android.content.pm.ApplicationInfo.FLAG_SYSTEM)
+        DiagnosticsStore.start()
+        provider.call("events", "phone:sms_blocked:", null)
+        assertTrue(DiagnosticsStore.state().getInt("bytes") > 0)
+        installPhone(154321, android.content.pm.ApplicationInfo.FLAG_SYSTEM)
+        ShadowBinder.setCallingUid(154321)
+        assertThrows(SecurityException::class.java) { provider.call("state", null, null) }
+    }
     @Test fun sourceSpoofRawValuesBundlesAndManagementAreRejected() {
         DiagnosticsStore.start()
         rejected { provider.call("events", "system:hook_installed:\n", null) }

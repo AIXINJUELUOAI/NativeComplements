@@ -11,7 +11,8 @@ import java.util.concurrent.TimeUnit;
 
 /** Safe hook API: no Binder, filesystem or raw exception inspection on the calling thread. */
 public final class Diagnostics {
-    public static final String APP = "app", SYSTEM = "system", SYSTEM_UI = "systemui", LAUNCHER = "launcher";
+    public static final String APP = "app", SYSTEM = "system", SYSTEM_UI = "systemui", LAUNCHER = "launcher",
+            PHONE = "phone";
     public static final Uri URI = Uri.parse("content://" + BuildConfig.APPLICATION_ID + ".diagnostics");
     private static final ArrayBlockingQueue<String> QUEUE = new ArrayBlockingQueue<>(64);
     private static volatile Context application;

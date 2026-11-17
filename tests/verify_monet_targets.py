@@ -3,6 +3,7 @@ import hashlib
 import zipfile
 from pathlib import Path
 import verify_signal_target as dex
+from verify_navbar_target import dex_views
 
 ROOT = Path(__file__).resolve().parents[1]
 L = "Lcom/android/launcher3/"
@@ -29,7 +30,8 @@ def load(path, targets, digest=None):
     classes = {}
     with zipfile.ZipFile(path) as z:
         for n in z.namelist():
-            if n.startswith("classes") and n.endswith(".dex"): classes.update(dex.Dex(z.read(n)).classes)
+            if n.startswith("classes") and n.endswith(".dex"):
+                for view in dex_views(z.read(n)): classes.update(view.classes)
     return classes
 
 
@@ -44,4 +46,8 @@ apk = ROOT / "verification/pixel-qpr2-20261113/apk/NexusLauncherRelease.apk"
 check(load(apk, launcher, "109196f424d10102896b2b6a96ac284ec42012db12fdf923632d4a9a7c58159c"), launcher, "launcher")
 check(load(ROOT / "verification/navbar-system/services.jar", services,
            "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"), services, "services")
-print("PASS drawer themed lookup, theme state and floating insets targets")
+check(load(ROOT / "verification/navbar-system/NexusLauncher.apk", launcher,
+           "3d7c14c02a7a42c9b88b0d5ced4662330ce6e6989563dab5abe9a8158cd70b56"), launcher, "PixelOS launcher")
+check(load(ROOT / "verification/pixel-qpr2-20261113/services.jar", services,
+           "382ed5d6b0e9ca464878ac6c87b655ab7f6009fd8463949aa43c23b738dbb7db"), services, "PixelUI services")
+print("PASS both archives: drawer themed lookup, theme state and floating insets targets")

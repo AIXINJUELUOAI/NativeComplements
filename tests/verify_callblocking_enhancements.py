@@ -25,7 +25,8 @@ with tempfile.TemporaryDirectory(prefix="callblocking-check-") as output:
                         str(stub), *map(str, source.glob("*.java")),
                         *map(str, (source.parent / "diagnostics").glob("*.java")),
                         str(source.parent.parent / "core/HostSnapshot.java"),
-                        str(source.parent.parent / "core/ModuleIdentity.java")], check=True)
+                        str(source.parent.parent / "core/ModuleIdentity.java"),
+                         str(source.parent.parent / "core/LauncherTargets.java")], check=True)
         print("Call blocking Android Java compilation: PASS")
 
 # Integration invariants that can be checked without Android or the Xposed runtime.

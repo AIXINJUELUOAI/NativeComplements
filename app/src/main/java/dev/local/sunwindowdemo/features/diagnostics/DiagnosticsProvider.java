@@ -17,11 +17,22 @@ public final class DiagnosticsProvider extends ContentProvider {
         try { return getContext().getPackageManager().getApplicationInfo(name, 0).uid == uid; }
         catch (android.content.pm.PackageManager.NameNotFoundException ignored) { return false; }
     }
+    private boolean phoneUid(int uid) {
+        try {
+            android.content.pm.ApplicationInfo info = getContext().getPackageManager()
+                    .getApplicationInfo("com.android.phone", 0);
+            return info.uid == uid && (info.flags & (android.content.pm.ApplicationInfo.FLAG_SYSTEM
+                    | android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP)) != 0;
+        } catch (android.content.pm.PackageManager.NameNotFoundException | RuntimeException unavailable) {
+            return false;
+        }
+    }
     private String source(int uid) {
         if (uid == getContext().getApplicationInfo().uid) return "app";
         // Exact UIDs also reject secondary-user callers and isolated processes.
         if (UserHandle.getUserHandleForUid(uid).equals(Process.myUserHandle())) {
             if (packageUid(uid, "android")) return "system";
+            if (phoneUid(uid)) return "phone";
             if (packageUid(uid, "com.android.systemui")) return "systemui";
             if (dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(getContext(), uid)) return "launcher";
         }

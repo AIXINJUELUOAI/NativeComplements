@@ -59,8 +59,8 @@ final class NavbarTaskbarHost {
             Class<?> provider = Class.forName("android.view.InsetsFrameProvider", false, loader);
             NavbarTaskbarHost host = new NavbarTaskbarHost(controller, provider);
             host.module = module;
-            // This exact three-argument ABI is verified against the live launcher's SHA-256.
-            Method setter = controller.getDeclaredMethod("setProviderInsets", provider, int.class, int.class);
+            // Both archived launchers retain provider at argument zero; QPR2 adds gravity/cutout inputs.
+            Method setter = providerSetter(controller, provider);
             setter.setAccessible(true);
             Method rendererDraw = host.renderer.getType().getDeclaredMethod("draw", Canvas.class);
             Method backgroundDraw = host.background.getType().getDeclaredMethod("draw", Canvas.class);
@@ -96,6 +96,13 @@ final class NavbarTaskbarHost {
             for (var hook : hooks) try { hook.unhook(); } catch (RuntimeException ignored) {}
             NavbarHost.log(module, "IMMERSIVE_TASKBAR_INSTALL_FAILED", error);
             return null;
+        }
+    }
+
+    static Method providerSetter(Class<?> controller, Class<?> provider) throws NoSuchMethodException {
+        try { return controller.getDeclaredMethod("setProviderInsets", provider, int.class, int.class); }
+        catch (NoSuchMethodException qpr2) {
+            return controller.getDeclaredMethod("setProviderInsets", provider, int.class, int.class, int.class, int.class);
         }
     }
 

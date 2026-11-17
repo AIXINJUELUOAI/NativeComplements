@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.features.callblocking.CallBlockingScreen
+import dev.local.sunwindowdemo.features.smsblocking.SmsBlockingScreen
 import dev.local.sunwindowdemo.features.callblocking.CallBlockingStore
 import dev.local.sunwindowdemo.features.darkaod.DarkAodStore
 import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
@@ -91,6 +92,7 @@ fun ModuleApp(
     ) { bottomInset ->
         when (page) {
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
+            Page.Sms, Page.SmsRecords -> SmsBlockingScreen(page == Page.SmsRecords, bottomInset, onRecords = { navigate(Page.SmsRecords) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
             Page.Shade -> ShadeScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
@@ -106,11 +108,23 @@ fun ModuleApp(
                 when (page) {
                     Page.Home -> HomeScreen(
                         onWindow = { navigate(Page.Window) }, onAbout = { navigate(Page.About) },
-                        onCalls = { navigate(Page.Calls) }, onEdgeTouch = { navigate(Page.EdgeTouch) },
+                        onHarassment = { navigate(Page.Harassment) },
+                        onEdgeTouch = { navigate(Page.EdgeTouch) },
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onBarrage = { navigate(Page.Barrage) },
                         onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
                     )
+                    Page.Harassment -> {
+                        SettingsGroup {
+                            SettingRow("来电拦截", onClick = { navigate(Page.Calls) }, leading = { Glyph("phone") })
+                            SettingRow("短信拦截", onClick = { navigate(Page.Sms) }, leading = { Glyph("sms") })
+                        }
+                        GroupTitle("拦截记录")
+                        SettingsGroup {
+                            SettingRow("来电记录", onClick = { navigate(Page.Records) })
+                            SettingRow("短信记录", onClick = { navigate(Page.SmsRecords) })
+                        }
+                    }
                     Page.Window -> {
                         WindowScreen(controller.preferences, navigate, controller::toggleControl,
                             enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
@@ -125,7 +139,7 @@ fun ModuleApp(
                         LaunchedEffect(Unit) {
                             withContext(Dispatchers.IO) {
                                 val c = context.createDeviceProtectedStorageContext()
-                                val keys = listOf("floating_window" to "corner", "barrage" to "barrage", "call_blocking" to "call_blocking", "edge_touch" to "edge_touch", "suggestions" to "suggestions", "motion" to "motion_access", "icon_layers" to "icon_layers", "shade" to "landscape_shade")
+                                val keys = listOf("floating_window" to "corner", "barrage" to "barrage", "call_blocking" to "call_blocking", "sms_blocking" to "sms_blocking", "edge_touch" to "edge_touch", "suggestions" to "suggestions", "motion" to "motion_access", "icon_layers" to "icon_layers", "shade" to "landscape_shade")
                                 keys.forEach { (name, prefs) ->
                                     val storeContext = if (name == "floating_window") context else c
                                     val snapshot = storeContext.getSharedPreferences(prefs, android.content.Context.MODE_PRIVATE)

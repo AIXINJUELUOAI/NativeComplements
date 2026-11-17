@@ -206,6 +206,13 @@ fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceCont
                     }
                     drawPath(star, foreground, style=line)
                 }
+                "sms" -> {
+                    drawRoundRect(foreground, point(.06f,.16f), Size(size.width*.88f,size.height*.6f), CornerRadius(4.dp.toPx()), style=line)
+                    drawLine(foreground,point(.28f,.76f),point(.28f,.92f),2.dp.toPx())
+                    drawLine(foreground,point(.28f,.92f),point(.46f,.76f),2.dp.toPx())
+                    drawLine(foreground,point(.24f,.36f),point(.76f,.36f),1.6.dp.toPx())
+                    drawLine(foreground,point(.24f,.56f),point(.6f,.56f),1.6.dp.toPx())
+                }
                 "check" -> {
                     drawCircle(foreground,size.width*.39f,style=line)
                     drawLine(foreground,point(.27f,.5f),point(.44f,.67f),2.dp.toPx())

@@ -129,21 +129,30 @@ final class ServerViewport {
         for(Method method:wms.getDeclaredMethods())if(method.getName().equals("relayoutWindow")||method.getName().equals("addWindow")){
             boolean initial=method.getName().equals("addWindow");
             Class<?>[] types=method.getParameterTypes();int client=-1,result=-1;
-            if(initial&&(method.getReturnType()!=int.class||types.length!=9
-                ||!types[0].getName().equals("com.android.server.wm.Session")
-                ||!types[1].getName().equals("android.view.IWindow")||types[2]!=android.view.WindowManager.LayoutParams.class
-                ||types[3]!=int.class||types[4]!=int.class||types[5]!=int.class||types[6]!=int.class
-                ||!types[7].getName().equals("android.view.InputChannel")||types[8]!=resultType))continue;
+            Field returnedRelayout=null,returnedCode=null;
+            if(initial){
+                boolean out=method.getReturnType()==int.class&&types.length==9
+                    &&types[7].getName().equals("android.view.InputChannel")&&types[8]==resultType;
+                boolean returned=method.getReturnType().getName().equals("android.view.AddWindowResult")&&types.length==7;
+                if(!(out||returned)||!types[0].getName().equals("com.android.server.wm.Session")
+                    ||!types[1].getName().equals("android.view.IWindow")||types[2]!=android.view.WindowManager.LayoutParams.class
+                    ||types[3]!=int.class||types[4]!=int.class||types[5]!=int.class||types[6]!=int.class)continue;
+                if(returned){
+                    returnedRelayout=a.field(method.getReturnType(),"relayoutResult");returnedCode=a.field(method.getReturnType(),"returnCode");
+                    if(returnedRelayout.getType()!=resultType||returnedCode.getType()!=int.class)continue;
+                }
+            }
             for(int i=0;i<types.length;i++){
                 if(types[i].getName().equals("android.view.IWindow"))client=i;
                 if(types[i]==resultType)result=i;
             }
-            if(client<0||result<0)continue;
-            final int clientIndex=client,resultIndex=result;method.setAccessible(true);
+            if(client<0||(result<0&&returnedRelayout==null))continue;
+            final int clientIndex=client,resultIndex=result;
+            final Field addRelayout=returnedRelayout,addCode=returnedCode;method.setAccessible(true);
             handles.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object value=chain.proceed();
-                if(value instanceof Integer&&(Integer)value<0)return value;
-                Object resultObject=chain.getArg(resultIndex);
+                if((value instanceof Integer&&(Integer)value<0)||(addCode!=null&&(value==null||addCode.getInt(value)<0)))return value;
+                Object resultObject=addRelayout==null?chain.getArg(resultIndex):addRelayout.get(value);
                 Object owner=resultObject==null?null:engine.clientOwner(chain.getArg(clientIndex));
                 if(owner!=null){
                     // addWindow fills Insets before the client's first layout, but not mergedConfiguration.

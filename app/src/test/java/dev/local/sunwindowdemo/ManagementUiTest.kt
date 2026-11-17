@@ -21,6 +21,7 @@ import dev.local.sunwindowdemo.features.floatingwindow.ui.GestureScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.WindowScreen
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
 import dev.local.sunwindowdemo.home.HomeScreen
+import dev.local.sunwindowdemo.navigation.ModuleApp
 import dev.local.sunwindowdemo.navigation.Page
 import org.junit.Assert.*
 import org.junit.Rule
@@ -53,22 +54,51 @@ class ManagementUiTest {
 
     @Test fun homeHasOnlyImplementedFeatureAndNavigates() {
         var selected = false
+        var harassmentSelected = false
         compose.setContent {
             captureView = LocalView.current
             ComplementsTheme(dynamic = false) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 32.dp)) {
                         androidx.compose.material3.Text("类原生补全", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 20.dp, 12.dp, 28.dp))
-                        HomeScreen(onWindow = { selected = true }, onAbout = {})
+                        HomeScreen(onWindow = { selected = true }, onAbout = {}, onHarassment = { harassmentSelected = true })
                     }
                 }
             }
         }
         compose.onNodeWithText("游戏工具").assertDoesNotExist()
         compose.onNodeWithText("小窗").assertIsDisplayed()
+        compose.onNodeWithText("来电拦截").assertDoesNotExist()
+        compose.onNodeWithText("短信拦截").assertDoesNotExist()
+        compose.onNodeWithText("骚扰拦截").assertIsDisplayed().performClick()
+        compose.runOnIdle { assertTrue(harassmentSelected) }
         screenshot("home-light")
         compose.onNodeWithText("小窗").performClick()
         compose.runOnIdle { assertTrue(selected) }
+    }
+
+    @Test fun harassmentPageNavigatesToExistingSettingsAndRecords() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        val controller = WindowController(activity.get())
+        var selected: Page? = null
+        var wentBack = false
+        try {
+            compose.setContent {
+                ComplementsTheme(dynamic = false) {
+                    ModuleApp(controller, Page.Harassment, { selected = it }, { wentBack = true })
+                }
+            }
+            compose.onNodeWithTag("page-title-骚扰拦截").assertIsDisplayed()
+            listOf("来电拦截" to Page.Calls, "短信拦截" to Page.Sms,
+                "来电记录" to Page.Records, "短信记录" to Page.SmsRecords).forEach { (label, page) ->
+                compose.onNodeWithText(label).performScrollTo().performClick()
+                compose.runOnIdle { assertEquals(page, selected) }
+            }
+            compose.onNodeWithContentDescription("返回").performClick()
+            compose.runOnIdle { assertTrue(wentBack) }
+        } finally {
+            controller.close(); activity.destroy()
+        }
     }
 
     @Test fun windowPageOffersSettingsWithoutDeveloperTools() {
@@ -85,26 +115,27 @@ class ManagementUiTest {
             }
         }
         screenshot("window-light")
-        compose.onNodeWithText("手势与菜单").performClick()
+        compose.onNodeWithText("小窗入口与菜单").performClick()
         compose.runOnIdle { assertEquals(Page.Gestures, page) }
         compose.onNodeWithText("快捷应用").assertDoesNotExist()
         compose.onNodeWithText("诊断与恢复").assertDoesNotExist()
         compose.onNodeWithText("启用小窗").assertExists()
     }
 
-    @Test fun gesturePageOffersIndependentLongBackToggle() {
-        var changed: Pair<String, Boolean>? = null
+    @Test fun gesturePageOffersCornerEntryWithoutRetiredToggles() {
         compose.setContent {
             ComplementsTheme(dynamic = false) {
                 Surface {
                     Column {
-                        GestureScreen(WindowPreferences(), { key, value -> changed = key to value }, { _, _ -> })
+                        GestureScreen(WindowPreferences(), { _, _ -> }, { _, _ -> })
                     }
                 }
             }
         }
-        compose.onNodeWithText("长侧滑打开小窗").assertExists().performClick()
-        compose.runOnIdle { assertEquals("longBackWindow" to true, changed) }
+        compose.onNodeWithText("角落滑动呼出").assertExists()
+        compose.onNodeWithText("菜单背景模糊").assertExists()
+        compose.onNodeWithText("长侧滑打开小窗").assertDoesNotExist()
+        compose.onNodeWithText("关闭顶部提示").assertDoesNotExist()
     }
 
     @Test fun suggestionPageUsesIconListAndButtonSheet() {
@@ -128,10 +159,11 @@ class ManagementUiTest {
             compose.onNodeWithText("验证码填充").assertExists()
             compose.onNodeWithText("链接与分享口令").assertExists()
             compose.onNodeWithText("地址与地点").assertExists()
-            compose.onNodeWithText("以小窗打开").assertExists()
+            compose.onNodeWithText("屏幕旋转").assertExists()
+            compose.onNodeWithText("以小窗打开").assertDoesNotExist()
             compose.onNodeWithText("短信读取").assertDoesNotExist()
             screenshot("suggestion-page")
-            compose.onNodeWithText("按钮显示").performClick()
+            compose.onNodeWithText("按钮显示").performScrollTo().performClick()
             compose.onNodeWithText("显示时长").assertExists()
             compose.onNodeWithText("按钮大小").assertExists()
         } finally {
@@ -149,14 +181,14 @@ class ManagementUiTest {
             ComplementsTheme(dark = true, dynamic = false) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        androidx.compose.material3.Text("手势与菜单", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 24.dp, 12.dp, 28.dp))
+                        androidx.compose.material3.Text("小窗入口与菜单", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.padding(12.dp, 24.dp, 12.dp, 28.dp))
                         GestureScreen(prefs, { key, value -> store.boolean(key, value); prefs = store.read() }, { key, value -> store.number(key, value); prefs = store.read() })
                     }
                 }
             }
         }
-        compose.onNodeWithText("关闭顶部提示").performClick()
-        compose.runOnIdle { assertTrue(Config(context).hideTopHint()); assertTrue(WindowPreferenceStore(context).read().hideTopHint) }
+        compose.onNodeWithText("菜单背景模糊").performScrollTo().performClick()
+        compose.runOnIdle { assertTrue(Config(context).menuBlur()); assertTrue(WindowPreferenceStore(context).read().menuBlur) }
         screenshot("gestures-dark")
     }
 

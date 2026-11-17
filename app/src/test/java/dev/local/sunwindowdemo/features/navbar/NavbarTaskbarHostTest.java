@@ -27,6 +27,17 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35, manifest = Config.NONE)
 public class NavbarTaskbarHostTest {
+    public static class LegacySetter { public void setProviderInsets(Object provider, int content, int tappable) {} }
+    public static class Qpr2Setter { public void setProviderInsets(Object provider, int content, int tappable, int gravity, int rotation) {} }
+    public static class UnknownSetter { public void setProviderInsets(Object provider, int content, int tappable, int gravity) {} }
+    @Test public void resolvesOnlyArchivedThreeAndFiveArgumentSetterAbis() throws Exception {
+        assertArrayEquals(new Class<?>[]{Object.class, int.class, int.class},
+                NavbarTaskbarHost.providerSetter(LegacySetter.class, Object.class).getParameterTypes());
+        assertArrayEquals(new Class<?>[]{Object.class, int.class, int.class, int.class, int.class},
+                NavbarTaskbarHost.providerSetter(Qpr2Setter.class, Object.class).getParameterTypes());
+        assertThrows(NoSuchMethodException.class, () -> NavbarTaskbarHost.providerSetter(UnknownSetter.class, Object.class));
+        assertThrows(NoSuchMethodException.class, () -> NavbarTaskbarHost.providerSetter(Qpr2Setter.class, String.class));
+    }
     private static Class<?> provider() throws Exception { return Class.forName("android.view.InsetsFrameProvider"); }
     private static Object source(int type, int bottom) throws Exception {
         Object result = provider().getConstructor(Object.class, int.class, int.class).newInstance(new Binder(), 0, type);

@@ -21,7 +21,8 @@ REQUIRED = {
         "mBarBackground", "isGestureNav", "onTaskbarOrBubblebarWindowHeightOrInsetsChanged", "getType", "setInsetsSize"},
     (PREFIX + "features/navbar/NavbarTaskbarHost;", "install"): {
         "com.android.launcher3.taskbar.TaskbarInsetsController", "android.view.InsetsFrameProvider",
-        "setProviderInsets", "draw", "dispatchDraw", "callApplicationOnCreate"},
+        "draw", "dispatchDraw", "callApplicationOnCreate"},
+    (PREFIX + "features/navbar/NavbarTaskbarHost;", "providerSetter"): {"setProviderInsets"},
     (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit", "com.android.systemui.shared.system.InputMonitorCompat", "inputMonitorCompat", "mInputMonitor", "pilferPointers"},
     (PREFIX + "features/shade/ComposeShadeLayout;", "resolve"): {"kotlin.coroutines.Continuation", "com.android.systemui.shade.data.repository.ShadeConfigRepository"},
     (PREFIX + "features/shade/MobileSignalBinder;", "install"): {"com.android.systemui.statusbar.pipeline.mobile.ui.binder.MobileIconBinder"},

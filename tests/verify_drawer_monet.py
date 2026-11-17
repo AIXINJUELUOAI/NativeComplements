@@ -3,6 +3,7 @@ import hashlib
 from pathlib import Path
 import zipfile
 import verify_signal_target as dex
+from verify_navbar_target import dex_views
 
 ROOT = Path(__file__).resolve().parents[1]
 APK = ROOT / "verification/pixel-qpr2-20261113/apk/NexusLauncherRelease.apk"
@@ -26,10 +27,10 @@ classes, code = {}, {}
 with zipfile.ZipFile(APK) as archive:
     for name in archive.namelist():
         if name.startswith("classes") and name.endswith(".dex"):
-            parsed = dex.Dex(archive.read(name))
-            classes.update(parsed.classes)
-            for key in parsed.code:
-                code[key] = parsed.instructions(*key)
+            for parsed in dex_views(archive.read(name)):
+                classes.update(parsed.classes)
+                for key in parsed.code:
+                    code[key] = parsed.instructions(*key)
 assert set(classes) == set(dex.TARGETS)
 assert classes[SEARCH]["superclass"] == RECYCLER
 
@@ -83,8 +84,8 @@ store = (src / "features/shade/ShadeStore.java").read_text(encoding="utf-8")
 provider = (src / "features/shade/ShadeProvider.java").read_text(encoding="utf-8")
 assert 'getBoolean("drawer_monet", false)' in store
 assert 'putBoolean("drawer_monet", enabled)' in store
-assert 'IconLayerStore.LAUNCHER), null' in store and "setShareIdentityEnabled(true)" in store
-assert '"drawer".equals(method)' in provider and 'getApplicationInfo(launcher, 0).uid' in provider
+assert 'LauncherTargets.targets(context)' in store and 'setPackage(launcher)' in store and "setShareIdentityEnabled(true)" in store
+assert '"drawer".equals(method)' in provider and 'LauncherTargets.isLauncherUid(getContext(), uid)' in provider
 projection = provider.split('if ("drawer".equals(method)) {', 1)[1].split('return result;', 1)[0]
 assert projection.count('result.put') == 1 and 'result.putBoolean("drawerMonet"' in projection
 assert 'throw new SecurityException("drawer reader")' in projection
@@ -96,7 +97,7 @@ assert 'view.getParent() == null' in drawer and '!searchRecycler.isInstance(crea
 assert 'eligibleItem(view, info)' in drawer and 'Object info = chain.getArg(0);' in drawer
 # Drawer lookups request themed cache entries; loaded items are upgraded through the native background reload.
 assert 'updateIconInBackground' in drawer and 'THEMED_LOOKUP = 8' in drawer
-assert 'IconRenderPolicy.themed(userEnabled,systemThemed)' in drawer
+assert 'IconRenderPolicy.themed(userEnabled, systemThemed)' in drawer
 assert 'return userEnabled&&systemThemed;' in (src / 'features/iconlayers/IconRenderPolicy.java').read_text(encoding='utf-8')
 assert 'predictionParent(view)' in drawer and 'PredictionRowView' in drawer
 assert not (src / 'features/iconlayers/DrawerMonetAssets.java').exists()
@@ -104,7 +105,7 @@ for forbidden in ['Bitmap.createBitmap', 'MaterialKey', 'loadMaterial', 'createT
                   'IconAssets.', 'create.invoke', 'getIcon(']:
     assert forbidden not in drawer, 'drawer must reuse native cached material without a second pipeline: ' + forbidden
 # Reading item.bitmap is allowed only to detect a cache entry stripped of its themed layer.
-assert drawer.count('bitmapField.get(') == 1 and 'themedField.get(bitmap) != null' in drawer
+assert drawer.count('bitmapField.get(') == 1 and 'LauncherIconAccess.themedBitmap(bitmap) != null' in drawer
 renderer = drawer.split('module.hook(create)', 1)[1].split('}));', 1)[0]
 assert 'chain.proceed(args)' in renderer and 'worker.post' not in renderer
 assert 'args[1] = themedFlags((Integer) args[1]);' in renderer
@@ -138,10 +139,10 @@ if len(sys.argv) > 1:
     with zipfile.ZipFile(sys.argv[1]) as archive:
         for name in archive.namelist():
             if name.startswith("classes") and name.endswith(".dex"):
-                parsed = dex.Dex(archive.read(name))
-                live_classes.update(parsed.classes)
-                for key in parsed.code:
-                    live_code[key] = parsed.instructions(*key)
+                for parsed in dex_views(archive.read(name)):
+                    live_classes.update(parsed.classes)
+                    for key in parsed.code:
+                        live_code[key] = parsed.instructions(*key)
     item_methods = [m for m in live_classes[ITEM]["methods"] if m["name"] == "newIcon"]
     supported = ["(Landroid/content/Context;I)", "(ILandroid/content/Context;)"]
     entry = next(m for m in item_methods if any(m["descriptor"].startswith(s) for s in supported))

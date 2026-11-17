@@ -10,6 +10,13 @@
 - Telecom 反射签名全部先解析，安装失败卸载已装 Hook；原生拒绝／ignore 结果不改。Builder、Binder identity、PhoneAccount、联系人权限／65 秒缓存、后台 Provider I/O 留适配侧；`finally` 恢复 Binder identity。未知联系人状态仅使陌生规则放行，显式规则仍优先。
 - [CallBlockingProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingProvider.java>)保持 system／管理器 UID、联系人权限校验；[Store](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingStore.java>)保留设备保护偏好、200 条本地记录与有界字段。未迁移磁盘格式，不记录异常消息中的号码。
 
+## 短信拦截
+
+- [SmsBlockingRules](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingRules.java>)只接收卡槽、发送方、正文与规则值：号码沿用电话规则的 +86 归一化，字母服务号按大写通配，关键词大小写不敏感、去控制字符，验证码豁免需同时命中标记词与 4–8 位数字。规则不持有 `SmsMessage`／tracker 对象。
+- [SmsBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingModule.java>)仅在 `com.android.phone` 主进程装配：`processMessagePart` 取事实并写调用线程 `ThreadLocal`，`BlockChecker.getBlockStatus` 读回并返回原生屏蔽状态。执行与清理全部交给原生 `processMessagePart`（永久删 raw 行、不投递广播），模块不写 Telephony 数据库、不接管默认短信应用。拒绝决定只存在于本次调用线程，不按发送方／reference number 跨短信缓存。多段或解码未知时不使用片段正文命中关键词；启用验证码豁免时，正文未知的陌生规则保守放行。记录须关联确切 handler／tracker 的原生永久删除，且实际影响行数大于零；未确认的异步过滤不记为已拦截。
+- 判定路径只做内存规则与一次订阅→槽位查询；Provider、联系人和记录写入都在 worker。Provider 只接受自身、system 与本用户实际系统电话包 UID，电话包解析失败不回退常量 UID，联系人快照仍由持 `READ_CONTACTS` 的模块进程生成（≤4000），缺失／过期只放开陌生规则。`Binder.clearCallingIdentity` 均 `finally` 恢复，异常只记类型与位置，不含号码或正文。
+- 作用域因此新增 `com.android.phone`：这是承载该功能所必需的宿主，不是给普通应用放权；未补勾时仅本功能不生效。
+
 ## 加速度传感器控制
 
 - [MotionPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/motion/MotionPolicy.java>)承载 UID／PID 前台七秒窗口、到期及 ALLOW/FIRST_SCREEN/ALWAYS 状态；UID 排除／shared UID 最强规则位于 `targets(List<App>, fallback, overrides)`。`App`只含 UID、包名、persistent 值，`Targets`为不可变规则和命令目标映射；排除低 UID、持久系统包、模块、SystemUI 与已知桌面包，保留枚举顺序下最后非 ALLOW 包作为命令目标。

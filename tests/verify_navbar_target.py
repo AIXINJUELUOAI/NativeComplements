@@ -102,16 +102,18 @@ def check(label, artifacts):
     print(f"PASS: {label}: archive hashes, exact navigation/Insets/background members, native refresh and background draw/animation calls")
 
 
-def check_taskbar():
+def check_taskbar(label, relative, digest, qpr2=False):
     base = "Lcom/android/launcher3/taskbar/"
     controller, owner = base + "TaskbarInsetsController;", base + "TaskbarActivityContext;"
     layer, renderer = base + "TaskbarDragLayer;", base + "TaskbarBackgroundRenderer;"
     controllers, buttons = base + "TaskbarControllers;", base + "NavbarButtonsViewController;"
     transitions = base + "TaskbarTransitions;"
+    setter = "(" + PROVIDER + ("IIII" if qpr2 else "II") + ")V"
+    notify_descriptor = "(Z)V" if qpr2 else "()V"
     methods = {
-        controller: [("setProviderInsets", "(" + PROVIDER + "II)V"),
+        controller: [("setProviderInsets", setter),
                      ("onTaskbarOrBubblebarWindowHeightOrInsetsChanged", "()V")],
-        owner: [("isGestureNav", "()Z"), ("notifyUpdateLayoutParams", "()V")],
+        owner: [("isGestureNav", "()Z"), ("notifyUpdateLayoutParams", notify_descriptor)],
         layer: [("dispatchDraw", "(Landroid/graphics/Canvas;)V")],
         renderer: [("draw", "(Landroid/graphics/Canvas;)V")],
         BACKGROUND: [("draw", "(Landroid/graphics/Canvas;)V")],
@@ -127,8 +129,8 @@ def check_taskbar():
         TRANSITIONS: [("mBarBackground", BACKGROUND)],
     }
     dex.TARGETS = set(methods) | set(fields) | {transitions}
-    path = ROOT / "verification/navbar-system/NexusLauncher.apk"
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == "3d7c14c02a7a42c9b88b0d5ced4662330ce6e6989563dab5abe9a8158cd70b56"
+    path = ROOT / relative
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == digest, relative
     classes, definitions = {}, {}
     with zipfile.ZipFile(path) as archive:
         for name in archive.namelist():
@@ -147,22 +149,32 @@ def check_taskbar():
     assert classes[transitions]["superclass"] == TRANSITIONS
     refresh = definitions[controller].instructions(controller, "onTaskbarOrBubblebarWindowHeightOrInsetsChanged", "()V")
     calls = [ins["method"] for ins in refresh if "method" in ins]
-    assert sum(m["owner"] == controller and m["name"] == "setProviderInsets" and m["descriptor"] == "(" + PROVIDER + "II)V" for m in calls) == 2
+    assert sum(m["owner"] == controller and m["name"] == "setProviderInsets" and m["descriptor"] == setter for m in calls) == 2
     assert any(ins.get("field", {}).get("name") == "paramsForRotation" for ins in refresh)
     assert any(m["owner"] == owner and m["name"] == "notifyUpdateLayoutParams" for m in calls)
-    notify = definitions[owner].instructions(owner, "notifyUpdateLayoutParams", "()V")
+    provider_calls = [i["method"] for i in definitions[controller].instructions(controller, "setProviderInsets", setter) if "method" in i]
+    assert any(m["owner"] == PROVIDER and m["name"] == "getType" for m in provider_calls)
+    assert any(m["owner"] == PROVIDER and m["name"] == "setInsetsSize" for m in provider_calls)
+    notify = definitions[owner].instructions(owner, "notifyUpdateLayoutParams", notify_descriptor)
     assert any(ins.get("method", {}).get("name") == "copyFrom" for ins in notify)
     assert any(ins.get("method", {}).get("name") == "updateViewLayout" for ins in notify)
     draw = definitions[layer].instructions(layer, "dispatchDraw", "(Landroid/graphics/Canvas;)V")
     assert any(ins.get("method", {}).get("owner") == renderer and ins["method"]["name"] == "draw" for ins in draw)
-    print("PASS: live-hash Pixel launcher: exact 3-argument provider ABI, native main/rotation refresh, shallow notify guard and owned backgrounds")
-    print("UNSUPPORTED: QPR2 launcher uses a different setter ABI; only its SystemUI path is verified here")
+    source = (ROOT / "app/src/main/java/dev/local/sunwindowdemo/features/navbar/NavbarTaskbarHost.java").read_text(encoding="utf-8")
+    assert 'Method setter = providerSetter(controller, provider);' in source
+    assert 'controller.getDeclaredMethod("setProviderInsets", provider, int.class, int.class)' in source
+    assert 'controller.getDeclaredMethod("setProviderInsets", provider, int.class, int.class, int.class, int.class)' in source
+    assert 'host.onProvider(chain.getThisObject(), chain.getArg(0))' in source
+    print(f"PASS: {label}: exact setter {setter}, native main/rotation refresh, notify {notify_descriptor} and owned backgrounds")
 
 
 def main():
     for label, artifacts in ARCHIVES.items():
         check(label, artifacts)
-    check_taskbar()
+    check_taskbar("PixelOS launcher", "verification/navbar-system/NexusLauncher.apk",
+                  "3d7c14c02a7a42c9b88b0d5ced4662330ce6e6989563dab5abe9a8158cd70b56")
+    check_taskbar("PixelUI QPR2 launcher", "verification/pixel-qpr2-20261113/apk/NexusLauncherRelease.apk",
+                  "109196f424d10102896b2b6a96ac284ec42012db12fdf923632d4a9a7c58159c", qpr2=True)
     print("UNVERIFIED: live gesture bar, IME, rotation, transitions and disable restoration; archive ABI evidence is not device behavior")
 
 
