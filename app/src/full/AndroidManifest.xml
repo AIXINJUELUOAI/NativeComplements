@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <provider android:name=".features.darkaod.DarkAodProvider" android:authorities="${applicationId}.darkaod" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <receiver android:name=".core.WindowBackendSelection" android:enabled="false" android:exported="false" />
         <receiver android:name=".features.alive.AliveBootReceiver" android:exported="false">
             <intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>

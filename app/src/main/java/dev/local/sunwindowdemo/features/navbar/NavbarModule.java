@@ -21,6 +21,9 @@ public final class NavbarModule extends XposedModule {
         installed = true;
         NavbarHost.log(this, "IMMERSIVE_PACKAGE_LOADED first=" + param.isFirstPackage(), null);
         if (launcher) NavbarTaskbarHost.install(this, param.getDefaultClassLoader());
-        else NavbarHost.install(this, param.getDefaultClassLoader());
+        else {
+            NavbarHost.install(this, param.getDefaultClassLoader());
+            dev.local.sunwindowdemo.features.darkaod.DarkAodHost.install(this, param.getDefaultClassLoader());
+        }
     }
 }

@@ -16,6 +16,7 @@ import static org.junit.Assert.*;
 @Config(sdk = 35, manifest = Config.NONE)
 public class NavbarModuleTest {
     private final List<String> events = new ArrayList<>();
+    private final List<String> darkAodEvents = new ArrayList<>();
     private final List<Throwable> failures = new ArrayList<>();
 
     private NavbarModule module() {
@@ -23,6 +24,10 @@ public class NavbarModuleTest {
         module.attachFramework((XposedInterface) Proxy.newProxyInstance(XposedInterface.class.getClassLoader(),
                 new Class<?>[]{XposedInterface.class}, (proxy, method, args) -> {
                     if (!"log".equals(method.getName())) throw new AssertionError("Unexpected framework call: " + method);
+                    if ("NativeDarkAod".equals(args[1])) {
+                        darkAodEvents.add((String) args[2]);
+                        return null;
+                    }
                     assertEquals("NativeNavbar", args[1]);
                     events.add((String) args[2]);
                     if (args.length == 4) failures.add((Throwable) args[3]);
@@ -60,6 +65,7 @@ public class NavbarModuleTest {
         module.onPackageLoaded(target());
         module.onPackageLoaded(target());
         assertEquals(3, events.size());
+        assertEquals(List.of("INSTALL_FAILED_NATIVE"), darkAodEvents);
         assertTrue(events.get(0).startsWith("IMMERSIVE_MODULE_LOADED version="));
         assertEquals("IMMERSIVE_PACKAGE_LOADED first=true", events.get(1));
         assertEquals("IMMERSIVE_INSTALL_FAILED rolledBack=0", events.get(2));

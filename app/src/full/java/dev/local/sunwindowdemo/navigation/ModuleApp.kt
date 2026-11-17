@@ -24,6 +24,7 @@ import dev.local.sunwindowdemo.*
 import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.features.callblocking.CallBlockingScreen
 import dev.local.sunwindowdemo.features.callblocking.CallBlockingStore
+import dev.local.sunwindowdemo.features.darkaod.DarkAodStore
 import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 import dev.local.sunwindowdemo.features.barrage.BarrageHistoryScreen
@@ -267,7 +268,26 @@ private fun AodWallpaperToggle() {
         }
         SettingRow(if (busy) "正在处理…" else if (state == null) "授权 root 并读取状态" else "重新读取状态",
             onClick = if (busy) null else ({ operate() }))
+        DarkAodControls()
     }
+}
+
+@Composable
+private fun DarkAodControls() {
+    val context = LocalContext.current
+    var config by remember { mutableStateOf(DarkAodStore.systemSnapshot(context)) }
+    ToggleRow("暗处暂停 AOD",
+        "LSPosed 实验，默认关闭。持续暗 10 秒暂停息屏显示，持续亮 2 秒恢复；不更改系统 AOD 开关，需系统息屏显示已开启。",
+        config.getBoolean("enabled")) {
+        DarkAodStore.setEnabled(context, it)
+        config = DarkAodStore.systemSnapshot(context)
+    }
+    SliderRow("暗处光照阈值", "默认 1 lux；亮处恢复阈值为 ${config.getFloat("bright_lux").toInt()} lux，可按传感器调整。",
+        value = config.getFloat("dark_lux").toInt(), range = 0..5, unit = " lux", steps = 4,
+        onCommit = {
+            DarkAodStore.setDarkLux(context, it.toFloat())
+            config = DarkAodStore.systemSnapshot(context)
+        })
 }
 
 
