@@ -41,6 +41,14 @@ public final class AppList {
             Consumer<ShortcutTarget> launch,SaveAction save,List<QuickEntry> quickEntries,Consumer<String> quickAction) {
         return new Tabs(c,new Panel(c,all,selected,launch,save,null,true),quickEntries,quickAction);
     }
+    /** In-game library: same application grid/index, without selected/recommended header or management. */
+    static View gameLibrary(Context c,List<AppCatalog.App> all,Consumer<String> launch){
+        Panel panel=new Panel(c,all,List.of(),target->launch.accept(target.pkg),(targets,done)->done.accept(false));
+        panel.removeView(panel.header);
+        panel.list.removeHeaderView(panel.selectedScroll);
+        panel.setBackground(null);
+        return panel;
+    }
     static boolean back(View content){
         if(content instanceof Tabs tabs&&tabs.quickShown){
             tabs.select(false);
@@ -92,7 +100,7 @@ public final class AppList {
     static View quickPage(Context c,List<QuickEntry> entries,Consumer<String> action){return new QuickPage(c,entries,action);}
     static void updateQuick(View page,List<QuickEntry> entries){((QuickPage)page).update(entries);}
     private static int pixels(Context c,float value){return Math.round(value*c.getResources().getDisplayMetrics().density);}
-    private static int themeColor(Context c,int attr,int fallback){
+    static int themeColor(Context c,int attr,int fallback){
         TypedValue value=new TypedValue();
         try{if(c.getTheme().resolveAttribute(attr,value,true))return value.resourceId!=0?c.getColor(value.resourceId):value.data;}
         catch(RuntimeException ignored){}
@@ -100,7 +108,7 @@ public final class AppList {
     }
 
     /** The same icon, caption, padding and touch feedback for applications and quick actions. */
-    private static final class IconTile extends LinearLayout {
+    static final class IconTile extends LinearLayout {
         final FrameLayout artwork;final ImageView image;final TextView title;
         IconTile(Context c,boolean compact,String label,Drawable icon,int text,int accent){
             this(c,compact,false,false,label,icon,text,accent);

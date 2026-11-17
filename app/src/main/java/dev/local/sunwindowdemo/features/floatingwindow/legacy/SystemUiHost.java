@@ -209,10 +209,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         if(!backendReady){
             cancelOpenWait();hideFan();hidePanel();hideControls();removeHot();
             // No owner environment is available: fail closed for shared overlays and edge admission.
-            foreground="";systemFocus=true;keyboard=true;updateOverlayPriority();publish(false);return;
+            foreground="";fullscreenApp="";systemFocus=true;keyboard=true;updateOverlayPriority();publish(false);return;
         }
         updateOpenWait(i);
-        if(i.hasExtra("foreground")){foreground=i.getStringExtra("foreground");keyboard=i.getBooleanExtra("imeVisible",false);systemFocus=i.getBooleanExtra("systemOverlay",false);
+        if(i.hasExtra("foreground")){foreground=i.getStringExtra("foreground");fullscreenApp=i.getStringExtra("fullscreenApp");
+            if(fullscreenApp==null||i.hasExtra("environmentError"))fullscreenApp="";
+            keyboard=i.getBooleanExtra("imeVisible",false);systemFocus=i.hasExtra("environmentError")||i.getBooleanExtra("systemOverlay",false);
             systemOverlayTitle=i.getStringExtra("systemOverlayTitle");
             suggestionImeTop=i.getIntExtra("imeTop",Integer.MAX_VALUE);
             updateOverlayPriority();controls.imeTop(suggestionImeTop);miniControls.imeTop(suggestionImeTop);refresh();}
@@ -231,6 +233,8 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private List<AppCatalog.App> all=List.of();
     private String foreground="";
+    /** The unmanaged fullscreen app beneath any focused floating window; empty unless one is visible. */
+    private String fullscreenApp="";
     private boolean keyboard,cleaned;
     private long lastOpen;
     static volatile String lastTouch="尚未收到角落触摸";
@@ -297,7 +301,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private void updateCompanionEnvironment(){
         if(extras==null)return;
         if(!delegatedToStandalone){
-            extras.environment(foreground,systemFocus,systemOverlayTitle,keyboard,screenshotVisible,panel!=null,openWait!=null,suggestionImeTop);
+            extras.environment(fullscreenApp,!fullscreenApp.isEmpty(),systemFocus,systemOverlayTitle,keyboard,screenshotVisible,panel!=null,openWait!=null,suggestionImeTop,foreground);
             extras.edgeEnvironment(screenshotVisible||systemFocus,keyboard);
             return;
         }
@@ -320,12 +324,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
                 rectangles[n]=rect.left;rectangles[n+1]=rect.top;rectangles[n+2]=rect.right;rectangles[n+3]=rect.bottom;
             }
             boolean blocked=snapshot.getBoolean("system")||screenshotVisible;
-            extras.environment(snapshot.getString("foreground"),blocked,snapshot.getString("title"),snapshot.getBoolean("keyboard"),
-                screenshotVisible||snapshot.getBoolean("screenshot"),snapshot.getBoolean("panel"),snapshot.getBoolean("waiting"),snapshot.getInt("imeTop"));
+            String game=snapshot.optString("fullscreenApp","");
+            extras.environment(game,!game.isEmpty(),blocked,snapshot.getString("title"),snapshot.getBoolean("keyboard"),
+                screenshotVisible||snapshot.getBoolean("screenshot"),snapshot.getBoolean("panel"),snapshot.getBoolean("waiting"),snapshot.getInt("imeTop"),snapshot.optString("foreground",""));
             extras.edgeEnvironment(blocked||snapshot.getBoolean("screenshot")||snapshot.getBoolean("panel")||snapshot.getBoolean("waiting"),snapshot.getBoolean("keyboard"));
             extras.protectedRects(rectangles);
         }catch(Exception unavailable){
-            extras.environment("",true,"",true,true,false,false,Integer.MAX_VALUE);
+            extras.environment("",false,true,"",true,true,false,false,Integer.MAX_VALUE,"");
             extras.edgeEnvironment(true,true);extras.protectedRects(new int[0]);
         }
     }
@@ -342,6 +347,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
                 if(rect.intersect(bounds)){clipped.put(rect.left);clipped.put(rect.top);clipped.put(rect.right);clipped.put(rect.bottom);}
             }
             org.json.JSONObject snapshot=new org.json.JSONObject().put("at",ownerEnvironmentAt).put("foreground",foreground==null?"":foreground)
+                .put("fullscreenApp",fullscreenApp==null?"":fullscreenApp)
                 .put("system",systemFocus).put("title",systemOverlayTitle==null?"":systemOverlayTitle).put("keyboard",keyboard)
                 .put("screenshot",screenshotVisible).put("panel",panel!=null).put("waiting",openWait!=null).put("imeTop",suggestionImeTop).put("rects",clipped);
             String encoded=snapshot.toString();
@@ -497,7 +503,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void backPanel(){if(menuContent==null||!AppList.back(menuContent))hidePanel();}
     private void hidePanel(){if(panel!=null){InputMethodManager imm=getSystemService(InputMethodManager.class);if(imm!=null)imm.hideSoftInputFromWindow(panel.getWindowToken(),0);remove(panel);panel=null;menuContent=null;updateOverlayPriority();publish(false);}}
-    private void quickAction(String id){if(quick!=null)quick.action(id);}
+    void quickAction(String id){if(quick!=null)quick.action(id);}
     private IntentFilter settingsFilter(){IntentFilter filter=new IntentFilter(ConfigProvider.CHANGED);return filter;}
     private void updateOpenWait(Intent frame){
         if(!frame.hasExtra("waitingOpen"))return;

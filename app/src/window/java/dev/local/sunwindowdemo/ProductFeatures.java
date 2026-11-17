@@ -25,7 +25,7 @@ final class ProductFeatures {
         public boolean rotationSuggestion(Runnable click,Runnable restore){return false;}
         public void publishRotationSettings() {}
         public boolean blocksEdgeTouch(float x,float y){return false;}
-        public void environment(String foreground,boolean systemFocus,String title,boolean keyboard,boolean screenshotVisible,boolean panelShown,boolean openWaitShown,int imeTop) {}
+        public void environment(String foreground,boolean fullscreen,boolean systemFocus,String title,boolean keyboard,boolean screenshotVisible,boolean panelShown,boolean openWaitShown,int imeTop,String actualForeground) {}
         public void edgeEnvironment(boolean systemOverlay,boolean keyboard) {}
         public void protectedRects(int[] rectangles) {}
         public void closeBarrage() {}

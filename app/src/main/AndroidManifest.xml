@@ -27,6 +27,7 @@
         <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="${applicationId}.edgetouch" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.shade.ShadeProvider" android:authorities="${applicationId}.shade" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.barrage.BarrageProvider" android:authorities="${applicationId}.barrage" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.gamemode.GameModeProvider" android:authorities="${applicationId}.gamemode" android:exported="true" android:directBootAware="true" />
         <receiver android:name=".features.suggestions.SuggestionSmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_SMS">
             <intent-filter><action android:name="android.provider.Telephony.SMS_RECEIVED" /></intent-filter>
         </receiver>

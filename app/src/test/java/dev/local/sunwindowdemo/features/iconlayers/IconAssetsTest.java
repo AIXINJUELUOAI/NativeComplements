@@ -79,9 +79,9 @@ public class IconAssetsTest {
         assertTrue(IconRenderPolicy.themed(true,true));assertFalse(IconRenderPolicy.themed(true,false));
         assertFalse(IconRenderPolicy.themed(false,true));assertFalse(IconRenderPolicy.themed(false,false));
     }
-    @Test public void startupRetriesNullAndEmptyTargetsWithoutExposingOriginalIcon()throws Exception{
+    @Test public void startupRetriesNullAndEmptyTargetsWhileMenuKeepsOriginalIcon()throws Exception{
         provider.nullReads=1;provider.emptyReads=1;
-        reload();assertFalse(IconAssets.ready());assertEquals(Color.TRANSPARENT,menuPixel());
+        reload();assertFalse(IconAssets.ready());assertEquals(Color.RED,menuPixel());
         idle(250);assertFalse(IconAssets.ready());assertEquals(0,callbacks);
         idle(1250);assertTrue(IconAssets.ready());assertEquals(3,provider.reads);assertEquals(1,callbacks);
         assertTrue(IconAssets.colored(context,PKG) instanceof ImportedIcon);

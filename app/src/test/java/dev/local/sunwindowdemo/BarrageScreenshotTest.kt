@@ -22,7 +22,8 @@ class BarrageScreenshotTest {
     }
 
     @Test fun screenshotDecisionKeepsTheSameVisibleLyricsAndDoesNotRestartIt() {
-        val lyrics = BarrageLyricsView(RuntimeEnvironment.getApplication(), "来源：连续弹幕", null) {}
+        val lyrics = BarrageLyricsView(RuntimeEnvironment.getApplication(), "来源：连续弹幕", null,
+            android.graphics.Color.WHITE, 100, 18) {}
         val width = View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY)
         val height = View.MeasureSpec.makeMeasureSpec(80, View.MeasureSpec.EXACTLY)
         lyrics.measure(width, height)

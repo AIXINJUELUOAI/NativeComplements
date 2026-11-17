@@ -20,7 +20,7 @@ fun HomeScreen(
     onSuggestions: () -> Unit = {},
     onMotion: () -> Unit = {},
     onIcons: () -> Unit = {},
-    onBarrage: () -> Unit = {},
+    onGameMode: () -> Unit = {},
     onShade: () -> Unit = {},
     onAlive: (() -> Unit)? = null,
 ) {
@@ -29,7 +29,7 @@ fun HomeScreen(
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
     SettingsGroup {
         FeatureRow("小窗", "window", onWindow)
-        FeatureRow("弹幕通知", "barrage", onBarrage)
+        FeatureRow("游戏模式", "game", onGameMode)
         FeatureRow("快捷建议", "spark", onSuggestions)
         FeatureRow("图标适配", "apps", onIcons)
         FeatureRow("骚扰拦截", "phone", onHarassment)

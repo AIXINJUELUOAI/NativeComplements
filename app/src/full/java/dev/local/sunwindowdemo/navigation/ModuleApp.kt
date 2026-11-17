@@ -30,6 +30,9 @@ import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 import dev.local.sunwindowdemo.features.barrage.BarrageHistoryScreen
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
+import dev.local.sunwindowdemo.features.gamemode.GameAppsScreen
+import dev.local.sunwindowdemo.features.gamemode.GameModeScreen
+import dev.local.sunwindowdemo.features.gamemode.GameQuickScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconDiagnosticsScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconLayerScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconBatchDialog
@@ -97,7 +100,11 @@ fun ModuleApp(
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
             Page.Shade -> ShadeScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
-            Page.Barrage -> BarrageScreen(controller.apps, controller.catalogLoaded, bottomInset, onHistory = { navigate(Page.BarrageHistory) })
+            Page.GameMode -> GameModeScreen(controller.apps, controller.catalogLoaded, bottomInset,
+                onQuick = { navigate(Page.GameQuick) }, onBarrage = { navigate(Page.Barrage) })
+            Page.GameApps -> GameAppsScreen(controller.apps, controller.catalogLoaded, bottomInset)
+            Page.GameQuick -> GameQuickScreen(controller.apps, controller.catalogLoaded, bottomInset)
+            Page.Barrage -> BarrageScreen(bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
             Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset, openIconApp,
                 selection = if (selectingIcons) selectedIcons else null, onSelect = { pkg ->
@@ -112,7 +119,7 @@ fun ModuleApp(
                         onHarassment = { navigate(Page.Harassment) },
                         onEdgeTouch = { navigate(Page.EdgeTouch) },
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
-                        onIcons = { navigate(Page.IconLayers) }, onBarrage = { navigate(Page.Barrage) },
+                        onIcons = { navigate(Page.IconLayers) }, onGameMode = { navigate(Page.GameMode) },
                         onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
                     )
                     Page.Harassment -> {

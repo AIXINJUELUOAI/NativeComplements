@@ -16,6 +16,7 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.view.WindowManager
 import dev.local.sunwindowdemo.features.barrage.BarrageStore
+import dev.local.sunwindowdemo.features.gamemode.GameModeStore
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -44,12 +45,13 @@ class BarrageHostTest {
         val history = mutableListOf<Bundle>()
         var lines = 3
         var save = true
+        var size = 18
         override fun onCreate() = true
         override fun call(method: String, arg: String?, extras: Bundle?): Bundle = when (method) {
             "read" -> Bundle().apply {
                 putBoolean("enabled", true)
                 putInt("lines",lines)
-                putStringArrayList("apps", arrayListOf("example.game"))
+                putInt("size",size)
             }
             "addHistory" -> {
                 history += Bundle(requireNotNull(extras))
@@ -76,13 +78,14 @@ class BarrageHostTest {
         provider = Provider()
         provider.attachInfo(context, ProviderInfo().apply { authority = BarrageStore.AUTHORITY })
         ShadowContentResolver.registerProviderInternal(BarrageStore.AUTHORITY, provider)
+        GameModeStore.prefs(context).edit().clear().putStringSet("apps", setOf("example.game")).commit()
         shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(true)
         shadowOf(context.getSystemService(android.app.KeyguardManager::class.java)).setKeyguardLocked(false)
         listener = Robolectric.buildService(Listener::class.java).create().get()
         host = BarrageHost(context)
         worker = ReflectionHelpers.getField(host, "worker")
         drain()
-        host.environment("example.game", false)
+        host.environment("example.game", true, false)
     }
 
     @After fun close() { host.close(); ShadowChoreographer.setPaused(false) }
@@ -116,6 +119,72 @@ class BarrageHostTest {
         listener.cancelNotification(sbn.key)
         shadowOf(listener).addActiveNotification(sbn)
         host.notification(listener, sbn)
+    }
+
+    @Test fun fullscreenGameAndActualForegroundKeepTheirNativeNotifications() {
+        host.environment("example.game", true, false, "example.qq")
+        val game = notification("游戏自身", 1, "example.game")
+        val foreground = notification("前台自身", 2)
+        post(game); post(foreground); drain()
+        assertTrue(entries().isEmpty())
+        assertTrue(provider.history.isEmpty())
+        assertEquals(setOf(game.key, foreground.key), listener.activeNotifications.map { it.key }.toSet())
+        post(notification("后台聊天", 3, "example.other")); drain()
+        assertEquals(listOf("QQ：后台聊天"), texts())
+    }
+
+    @Test fun focusChangeDropsOnlyItsOwnPlayingAndQueuedLinesWithoutCancellingNativeNotifications() {
+        val blocked = CountDownLatch(1)
+        worker.execute { blocked.await(5, TimeUnit.SECONDS) }
+        try {
+            post(notification("后台聊天", 1, "example.other"))
+            val original = entries().getValue(0)
+            post(notification("即将前台", 2))
+            post(notification("第三行", 3, "example.third"))
+            val queued = notification("前台排队", 4)
+            post(queued)
+            host.environment("example.game", true, false, "example.qq")
+            assertSame(original, entries().getValue(0))
+            assertEquals(listOf("QQ：后台聊天", "QQ：第三行"), texts())
+            blocked.countDown(); drain()
+            assertTrue(listener.activeNotifications.any { it.key == queued.key && it.postTime == 4L })
+            finish(0); finish(2)
+            assertTrue(entries().isEmpty())
+        } finally { blocked.countDown() }
+    }
+
+    @Test fun nativeProgressIsSkippedButDefaultProgressExtrasAndChatUpdatesStillDisplay() {
+        val progress = listOf(
+            notification("下载", 1, "example.download").apply { notification.extras.putInt(Notification.EXTRA_PROGRESS_MAX, 100) },
+            notification("上传", 2, "example.upload").apply { notification.extras.putInt(Notification.EXTRA_PROGRESS, 50) },
+            notification("安装", 3, "example.install").apply { notification.extras.putBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, true) },
+        )
+        progress.forEach(::post); drain()
+        assertTrue(entries().isEmpty())
+        assertTrue(provider.history.isEmpty())
+        assertEquals(progress.map { it.key }.toSet(), listener.activeNotifications.map { it.key }.toSet())
+        val chat = notification("聊天", 4).apply {
+            notification.extras.putInt(Notification.EXTRA_PROGRESS_MAX, 0)
+            notification.extras.putInt(Notification.EXTRA_PROGRESS, 0)
+            notification.extras.putBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+        }
+        post(chat); post(notification("聊天更新", 5)); drain()
+        assertEquals(listOf("QQ：聊天", "QQ：聊天更新"), texts())
+        assertEquals(2, provider.history.size)
+    }
+
+    @Test fun progressUpdateWithSameVersionAndTextIsNotCancelledByOlderHistoryCompletion() {
+        val blocked = CountDownLatch(1)
+        worker.execute { blocked.await(5, TimeUnit.SECONDS) }
+        try {
+            post(notification("相同正文", 1))
+            val progress = notification("相同正文", 1).apply {
+                notification.extras.putInt(Notification.EXTRA_PROGRESS_MAX, 100)
+            }
+            post(progress)
+            blocked.countDown(); drain()
+            assertTrue(listener.activeNotifications.any { it.key == progress.key })
+        } finally { blocked.countDown() }
     }
 
     @Test fun sameNotificationUpdatesKeepThreeIndependentLinesAndQueueTheFourth() {
@@ -205,6 +274,31 @@ class BarrageHostTest {
         } finally { blocked.countDown() }
     }
 
+    @Test fun pausedUpdateCannotBeCancelledByOlderHistoryCompletion() {
+        val blocked = CountDownLatch(1)
+        worker.execute { blocked.await(5, TimeUnit.SECONDS) }
+        try {
+            post(notification("旧消息", 1))
+            host.environment("example.game", true, true)
+            val newest = notification("暂停期间的新消息", 2)
+            post(newest)
+            blocked.countDown(); drain()
+            assertTrue(listener.activeNotifications.any { it.key == newest.key && it.postTime == 2L })
+        } finally { blocked.countDown() }
+    }
+
+    @Test fun largestTextUsesLargerLaneAndNonFullscreenNeverDisplays() {
+        provider.size = 32
+        host.javaClass.getDeclaredMethod("load").apply { isAccessible = true }.invoke(host)
+        drain()
+        post(notification("大字号", 1))
+        val height = (view(entries().getValue(0)).layoutParams as WindowManager.LayoutParams).height
+        assertTrue(height >= 32 * context.resources.displayMetrics.scaledDensity)
+        host.environment("example.game", false, false)
+        post(notification("非全屏", 2))
+        assertTrue(entries().isEmpty())
+    }
+
     @Test fun historyFailureKeepsNativeNotificationUntilTheSamePlayingDeliveryIsSaved() {
         provider.save=false
         val notice=notification("保存重试",100)
@@ -221,14 +315,14 @@ class BarrageHostTest {
     @Test fun suspensionPausesAllLinesAndResumesTheirExistingViews() {
         repeat(3) { post(notification("测试$it", it.toLong())) }
         val before = entries().mapValues { view(it.value) }
-        host.environment("example.game", true)
+        host.environment("example.game", true, true)
         before.values.forEach { assertEquals(android.view.View.INVISIBLE, it.visibility) }
-        host.environment("example.game", false)
+        host.environment("example.game", true, false)
         before.forEach { (lane, original) ->
             assertSame(original, view(entries().getValue(lane)))
             assertEquals(android.view.View.VISIBLE, original.visibility)
         }
-        host.environment("example.other", false)
+        host.environment("example.other", true, false)
         assertTrue(entries().isEmpty())
     }
 

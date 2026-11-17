@@ -23,11 +23,22 @@ public final class BarrageStore {
         migrate(c);SharedPreferences p=prefs(c);Bundle out=new Bundle();
         out.putBoolean("enabled",p.getBoolean("enabled",false));
         out.putInt("lines",lineLimit(p.getInt("lines",3)));
+        out.putInt("color",color(p.getInt("color",android.graphics.Color.WHITE)));
+        out.putInt("speed",speed(p.getInt("speed",100)));
+        out.putInt("size",size(p.getInt("size",18)));
         out.putStringArrayList("apps",new ArrayList<>(p.getStringSet("apps",Set.of())));return out;
     }
     public static void enabled(Context c,boolean enabled){migrate(c);prefs(c).edit().putBoolean("enabled",enabled).apply();changed(c);}
     public static int lineLimit(int value){return BarrageState.Companion.lineLimit(value);}
     public static void lines(Context c,int value){migrate(c);prefs(c).edit().putInt("lines",lineLimit(value)).apply();changed(c);}
+    public static int color(int value){return value==0?android.graphics.Color.WHITE:value|0xFF000000;}
+    public static int speed(int value){return Math.max(40,Math.min(240,value));}
+    public static int size(int value){return Math.max(12,Math.min(32,value));}
+    public static void color(Context c,int value){migrate(c);prefs(c).edit().putInt("color",color(value)).apply();changed(c);}
+    public static void speed(Context c,int value){migrate(c);prefs(c).edit().putInt("speed",speed(value)).apply();changed(c);}
+    public static void size(Context c,int value){migrate(c);prefs(c).edit().putInt("size",size(value)).apply();changed(c);}
+    /** The game-mode page owns the selection; barrage reloads when that list changes. */
+    public static void gamesChanged(Context c){changed(c);}
     public static void select(Context c,String pkg,boolean selected){
         if(!Rules.validPackage(pkg))throw new IllegalArgumentException("barrage package");
         migrate(c);Set<String> apps=new HashSet<>(prefs(c).getStringSet("apps",Set.of()));

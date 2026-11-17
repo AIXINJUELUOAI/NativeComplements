@@ -16,16 +16,19 @@ internal class BarrageLyricsView(
     context: Context,
     private val text: String,
     private val icon: Drawable?,
+    color: Int,
+    speedPercent: Int,
+    sizeSp: Int,
     private val onFinished: () -> Unit,
 ) : View(context) {
     private val density = resources.displayMetrics.density
     private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG).apply {
         typeface = Typeface.DEFAULT_BOLD
-        textSize = 18f * resources.displayMetrics.scaledDensity
-        color = Color.WHITE
+        textSize = sizeSp.coerceIn(12, 32) * resources.displayMetrics.scaledDensity
+        this.color = color
     }
-    private val speed = 100f * density / 1000f
-    private val iconSize = 20f * density
+    private val speed = speedPercent.coerceIn(40, 240) / 100f * 100f * density / 1000f
+    private val iconSize = (sizeSp.coerceIn(12, 32) + 2) * density
     private val iconGap = 6f * density
     private var animator: ValueAnimator? = null
     private var started = false

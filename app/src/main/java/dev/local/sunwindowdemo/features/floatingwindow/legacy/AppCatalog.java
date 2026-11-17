@@ -38,7 +38,7 @@ final class AppCatalog {
         return raster(c,new AdaptiveIconDrawable(new ColorDrawable(Color.WHITE),new InsetDrawable(new BitmapDrawable(c.getResources(),bitmap),.18f)));
     }
     static Drawable icon(Context c,String pkg,Drawable original){
-        if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return new ColorDrawable(Color.TRANSPARENT);
+        if(!dev.local.sunwindowdemo.features.iconlayers.IconAssets.ready())return normalized(c,original);
         Drawable adapted=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(c,pkg);
         return normalized(c,adapted!=null?adapted:original);
     }

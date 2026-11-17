@@ -13,8 +13,8 @@ interface HostExtras extends AutoCloseable {
     boolean rotationSuggestion(Runnable click, Runnable restore);
     void publishRotationSettings();
     boolean blocksEdgeTouch(float x, float y);
-    void environment(String foreground, boolean systemFocus, String overlayTitle, boolean keyboard,
-                     boolean screenshotVisible, boolean panelShown, boolean openWaitShown, int imeTop);
+    void environment(String foreground, boolean fullscreen, boolean systemFocus, String overlayTitle, boolean keyboard,
+                     boolean screenshotVisible, boolean panelShown, boolean openWaitShown, int imeTop, String actualForeground);
     void edgeEnvironment(boolean systemOverlay, boolean keyboard);
     void protectedRects(int[] rectangles);
     @Override void close();

@@ -5,11 +5,11 @@ import android.graphics.drawable.Drawable;
 import java.util.List;
 
 /** The fixed catalog of actions that can be mixed into the application shortcut list. */
-final class QuickActionCatalog {
+public final class QuickActionCatalog {
     record Action(String id, String label, int icon) {}
 
     static final String PREFIX = "quick:";
-    static final List<Action> ACTIONS = List.of(
+    public static final List<Action> ACTIONS = List.of(
         new Action("dnd", "免打扰", R.drawable.ic_game_do_not_disturb_on),
         new Action("wifi", "Wi-Fi", R.drawable.ic_game_wifi),
         new Action("rotation", "旋转锁定", R.drawable.ic_game_screen_rotation),
@@ -26,7 +26,7 @@ final class QuickActionCatalog {
 
     private QuickActionCatalog() {}
 
-    static Action find(String id) {
+    public static Action find(String id) {
         for (Action action : ACTIONS) if (action.id().equals(id)) return action;
         return null;
     }
@@ -40,7 +40,7 @@ final class QuickActionCatalog {
 
     static String key(String id) { return PREFIX + id; }
 
-    static Drawable icon(Context c, Action action) {
+    public static Drawable icon(Context c, Action action) {
         try {
             Context module = Wire.PKG.equals(c.getPackageName()) ? c : c.createPackageContext(Wire.PKG, 0);
             return module.getDrawable(action.icon());
@@ -55,5 +55,10 @@ final class QuickActionCatalog {
 
     static List<AppList.QuickEntry> entries(Context c) {
         return ACTIONS.stream().map(action -> entry(c, action)).toList();
+    }
+
+    /** Id and label pairs for settings screens outside this package. */
+    public static List<String[]> described() {
+        return ACTIONS.stream().map(action -> new String[] {action.id(), action.label()}).toList();
     }
 }

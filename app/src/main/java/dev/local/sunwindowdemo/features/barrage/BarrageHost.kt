@@ -52,7 +52,10 @@ class BarrageHost(private val context: Context): AutoCloseable {
     private val worker=Executors.newSingleThreadExecutor()
     private val wm=context.getSystemService(WindowManager::class.java)
     private var config=Bundle()
+    private var gamePackage=""
     private var foreground=""
+    private var fullscreen=false
+    private var games=emptySet<String>()
     private var blocked=true
     private var closed=false
     private data class Notice(
@@ -91,31 +94,45 @@ class BarrageHost(private val context: Context): AutoCloseable {
             val read=snapshot.read { context.contentResolver.call(Uri.parse("content://${BarrageStore.AUTHORITY}"),"read",null,null) }
             if(read.report())android.util.Log.w("NativeComplements","BARRAGE_SETTINGS ${read.summary()}")
             val next=read.config()
-            val delay=snapshot.retryDelay(3000)
+            val gameSnapshot=dev.local.sunwindowdemo.core.HostSnapshot.open(context,"gamemode")
+            val gamesRead=gameSnapshot.read { context.contentResolver.call(Uri.parse("content://${dev.local.sunwindowdemo.features.gamemode.GameModeStore.AUTHORITY}"),"read",null,null) }
+            if(gamesRead.report())android.util.Log.w("NativeComplements","BARRAGE_GAMES ${gamesRead.summary()}")
+            val gameList=gamesRead.config()?.getStringArrayList("apps")?.toSet()
+            val delay=maxOf(snapshot.retryDelay(3000),gameSnapshot.retryDelay(3000))
             main.post {
                 if(closed)return@post
-                config=next ?: Bundle();if(!eligible())hide() else drain()
-                if(!read.live())main.postDelayed({load()},delay)
+                config=next ?: Bundle();if(gameList!=null)games=gameList;if(!eligible())hide() else drain()
+                if(!read.live()||!gamesRead.live())main.postDelayed({load()},delay)
             }
         }
     }
-    fun environment(pkg: String?,suspended: Boolean) {
-        val changed=foreground!=pkg.orEmpty()
+    @JvmOverloads fun environment(gamePkg: String?,fullscreen: Boolean,suspended: Boolean,foregroundPkg: String? = gamePkg) {
+        val changed=gamePackage!=gamePkg.orEmpty()||this.fullscreen!=fullscreen
         if(changed)hide()
-        foreground=pkg.orEmpty();blocked=suspended
+        gamePackage=gamePkg.orEmpty();foreground=foregroundPkg.orEmpty();this.fullscreen=fullscreen;blocked=suspended
+        // Focus may move to a small window without ending the fullscreen game underneath.
+        pending.removeAll { it.packageName == foreground }
+        playing.filterValues { it.notice.packageName == foreground }.keys.toList().forEach { finish(it, advance = false) }
         if(changed)return
         if(suspended){playing.values.forEach { it.view.pause() };return}
         if(!eligible()){hide();return}
         playing.values.forEach { it.view.resume() }
         drain()
     }
-    private fun eligible()=BarrageState.enabled(closed,blocked,config.getBoolean("enabled"),config.getStringArrayList("apps")?.contains(foreground)==true)&&
+    private fun eligible()=fullscreen&&BarrageState.enabled(closed,blocked,config.getBoolean("enabled"),gamePackage in games)&&
         context.getSystemService(PowerManager::class.java).isInteractive&&!context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
-    fun notification(source: NotificationListenerService,sbn: StatusBarNotification) {
-        if(!eligible())return
+    private fun admissible(sbn: StatusBarNotification): Boolean {
         val n=sbn.notification
-        if(!BarrageState.admissible(sbn.user==Process.myUserHandle(),n.flags and Notification.FLAG_GROUP_SUMMARY!=0,
-            n.flags and Notification.FLAG_ONGOING_EVENT!=0,n.visibility==Notification.VISIBILITY_SECRET,n.category))return
+        return sbn.packageName != gamePackage && sbn.packageName != foreground &&
+            n.extras.getInt(Notification.EXTRA_PROGRESS_MAX) <= 0 &&
+            n.extras.getInt(Notification.EXTRA_PROGRESS) <= 0 &&
+            !n.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) &&
+            BarrageState.admissible(sbn.user==Process.myUserHandle(),n.flags and Notification.FLAG_GROUP_SUMMARY!=0,
+                n.flags and Notification.FLAG_ONGOING_EVENT!=0,n.visibility==Notification.VISIBILITY_SECRET,n.category)
+    }
+    fun notification(source: NotificationListenerService,sbn: StatusBarNotification) {
+        if(!eligible() || !admissible(sbn))return
+        val n=sbn.notification
         val appLabel=runCatching {context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(sbn.packageName,0)).toString()}
             .getOrDefault(sbn.packageName)
         val content = content(n, appLabel)
@@ -155,14 +172,15 @@ class BarrageHost(private val context: Context): AutoCloseable {
         var added: BarrageLyricsView? = null
         try {
             lateinit var lyrics: BarrageLyricsView
-            lyrics=BarrageLyricsView(context,line,icon) {
+            lyrics=BarrageLyricsView(context,line,icon,config.getInt("color",android.graphics.Color.WHITE),
+                config.getInt("speed",100),config.getInt("size",18)) {
                 main.post { if (playing[laneIndex]?.view === lyrics) finish(laneIndex) }
             }
             val density=context.resources.displayMetrics.density
             val metrics=wm.currentWindowMetrics
             val safe=metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.displayCutout() or WindowInsets.Type.systemBars())
             val width=(metrics.bounds.width()-safe.left-safe.right).coerceAtLeast(1)
-            val lane=maxOf((30*density).toInt(),(18f*context.resources.displayMetrics.scaledDensity+8*density).toInt())
+            val lane=maxOf((30*density).toInt(),(BarrageStore.size(config.getInt("size",18))*context.resources.displayMetrics.scaledDensity+8*density).toInt())
             @Suppress("WrongConstant")
             val p=WindowManager.LayoutParams(width,lane,SystemUiHost.OVERLAY_TYPE,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,PixelFormat.TRANSLUCENT)
@@ -195,6 +213,9 @@ class BarrageHost(private val context: Context): AutoCloseable {
             entry.saved = saved
             if (!BarrageState.canCancel(saved, saved && entry in playing.values,
                     saved && state.current(notice.key, notice.delivery, notice.postTime))) return@recordHistory
+            // Cancellation is key-based: recheck the native tray after asynchronous persistence.
+            val current = runCatching { notice.source.activeNotifications?.firstOrNull { it.key == notice.key } }.getOrNull()
+            if (current == null || !admissible(current) || current.postTime != notice.postTime || content(current.notification, notice.app) != notice.content) return@recordHistory
             val removal = Version(notice.key, notice.postTime)
             state.expectRemoval(removal)
             runCatching { notice.source.cancelNotification(notice.key) }
