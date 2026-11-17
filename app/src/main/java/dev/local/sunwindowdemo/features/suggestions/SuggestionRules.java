@@ -1,6 +1,8 @@
 package dev.local.sunwindowdemo.features.suggestions;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -40,19 +42,28 @@ public final class SuggestionRules {
     public static boolean validInput(boolean running,String digits,int delay){
         return !running&&digits!=null&&digits.matches("[0-9]{4,8}")&&delay>=50&&delay<=500;
     }
-    private record App(String pkg,String[] domains,String[] tokens) {}
+    private record App(String name,String pkg,String[] domains,String[] tokens) {}
     private static final App[] APPS={
-        new App("com.taobao.taobao",new String[]{"taobao.com","tmall.com","tb.cn"},new String[]{"淘口令","淘宝","天猫"}),
-        new App("com.jingdong.app.mall",new String[]{"jd.com","jd.cn","3.cn"},new String[]{"京东"}),
-        new App("com.xunmeng.pinduoduo",new String[]{"pinduoduo.com","yangkeduo.com"},new String[]{"拼多多"}),
-        new App("com.ss.android.ugc.aweme",new String[]{"douyin.com","iesdouyin.com"},new String[]{"抖音"}),
-        new App("com.smile.gifmaker",new String[]{"kuaishou.com","gifshow.com"},new String[]{"快手"}),
-        new App("tv.danmaku.bili",new String[]{"bilibili.com","b23.tv"},new String[]{}),
-        new App("com.xingin.xhs",new String[]{"xiaohongshu.com","xhslink.com"},new String[]{"小红书"}),
-        new App("com.zhihu.android",new String[]{"zhihu.com","zhihu.link"},new String[]{}),
-        new App("com.sina.weibo",new String[]{"weibo.com","weibo.cn","t.cn"},new String[]{}),
-        new App("com.sankuai.meituan",new String[]{"meituan.com","meituan.net","dpurl.cn","dianping.com"},new String[]{"美团"})
+        new App("淘宝","com.taobao.taobao",new String[]{"taobao.com","tmall.com","tb.cn"},new String[]{"淘口令","淘宝","天猫"}),
+        new App("京东","com.jingdong.app.mall",new String[]{"jd.com","jd.cn","3.cn"},new String[]{"京东"}),
+        new App("拼多多","com.xunmeng.pinduoduo",new String[]{"pinduoduo.com","yangkeduo.com"},new String[]{"拼多多"}),
+        new App("抖音","com.ss.android.ugc.aweme",new String[]{"douyin.com","iesdouyin.com"},new String[]{"抖音"}),
+        new App("快手","com.smile.gifmaker",new String[]{"kuaishou.com","gifshow.com"},new String[]{"快手"}),
+        new App("哔哩哔哩","tv.danmaku.bili",new String[]{"bilibili.com","b23.tv"},new String[]{}),
+        new App("小红书","com.xingin.xhs",new String[]{"xiaohongshu.com","xhslink.com"},new String[]{"小红书"}),
+        new App("知乎","com.zhihu.android",new String[]{"zhihu.com","zhihu.link"},new String[]{}),
+        new App("微博","com.sina.weibo",new String[]{"weibo.com","weibo.cn","t.cn"},new String[]{}),
+        new App("美团","com.sankuai.meituan",new String[]{"meituan.com","meituan.net","dpurl.cn","dianping.com"},new String[]{"美团"})
     };
+    /** Read-only display metadata derived from the very same rules used by link(). */
+    public record SupportedApp(String displayName,String packageName,List<String> domains,boolean supportsShareText) {
+        public SupportedApp { domains=List.copyOf(domains); }
+    }
+    public static List<SupportedApp> catalog() {
+        List<SupportedApp> result=new ArrayList<>();
+        for(App app:APPS)result.add(new SupportedApp(app.name,app.pkg,List.of(app.domains),app.tokens.length>0));
+        return List.copyOf(result);
+    }
     private static final Pattern URL=Pattern.compile("https?://[^\\s<>\\\"\\u3000，。；！？、（）【】]+",Pattern.CASE_INSENSITIVE);
     private static final Pattern CODE=Pattern.compile("(?<![0-9])([0-9]{4,8})(?![0-9])");
     private static final Pattern KEYWORD=Pattern.compile("验证码|校验码|动态码|动态密码|一次性密码|verification\\s*code|one[- ]time|\\botp\\b",Pattern.CASE_INSENSITIVE);

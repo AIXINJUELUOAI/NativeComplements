@@ -34,6 +34,19 @@ import dev.local.sunwindowdemo.core.ui.*
 private enum class SuggestionSheet { Bluetooth, Otp, Button }
 
 @Composable
+fun SuggestionAppsScreen() {
+    Hint("仅展示适配范围，未安装的应用仍会显示；本页不会自动启动应用、查询安装包或联网。")
+    Hint("使用本地启发式识别链接与分享口令/文本，不联网解析短链接或口令，也不保证所有分享内容均可识别。美团规则包含点评域名，不代表独立适配大众点评应用。")
+    GroupTitle("已适配应用")
+    SettingsGroup {
+        SuggestionRules.catalog().forEach { app ->
+            SettingRow(app.displayName(),
+                "${if (app.supportsShareText()) "链接与分享口令/文本" else "链接"}\n${app.domains().joinToString("、")}")
+        }
+    }
+}
+
+@Composable
 private fun SuggestionIcon(@DrawableRes icon: Int, tone: Color) {
     Box(Modifier.size(44.dp).background(tone.copy(alpha = .16f), CircleShape),
         contentAlignment = Alignment.Center) {
@@ -43,7 +56,7 @@ private fun SuggestionIcon(@DrawableRes icon: Int, tone: Color) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SuggestionScreen(controller: WindowController) {
+fun SuggestionScreen(controller: WindowController, onSupportedApps: () -> Unit) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var config by remember { mutableStateOf(SuggestionStore.read(context)) }
@@ -96,8 +109,8 @@ fun SuggestionScreen(controller: WindowController) {
             { sheet = SuggestionSheet.Bluetooth }, leading = { SuggestionIcon(R.drawable.ic_suggestion_bluetooth, bluetoothTone) })
         SplitSwitchRow("验证码填充", value = config.getBoolean("otp"), onToggle = { toggle("otp", it) },
             onDetails = { sheet = SuggestionSheet.Otp }, leading = { SuggestionIcon(R.drawable.ic_suggestion_otp, otpTone) })
-        IconToggleRow("链接与分享口令", value = config.getBoolean("links"), onChange = { toggle("links", it) },
-            leading = { SuggestionIcon(R.drawable.ic_suggestion_link, linkTone) })
+        SplitSwitchRow("链接与分享口令", "查看已适配应用与支持范围", value = config.getBoolean("links"), onToggle = { toggle("links", it) },
+            onDetails = onSupportedApps, leading = { SuggestionIcon(R.drawable.ic_suggestion_link, linkTone) })
         IconToggleRow("地址与地点", value = config.getBoolean("maps"), onChange = { toggle("maps", it) },
             leading = { SuggestionIcon(R.drawable.ic_suggestion_location, locationTone) })
         IconToggleRow("屏幕旋转", value = config.getBoolean("rotate"), onChange = { toggle("rotate", it) },

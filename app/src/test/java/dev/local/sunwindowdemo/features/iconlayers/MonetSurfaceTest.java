@@ -100,6 +100,21 @@ public class MonetSurfaceTest {
         assertNotNull(SystemIconModule.splashIcon(context,PKG,null));
         assertEquals(Color.GREEN,pixel(SystemIconModule.splashIcon(context,PKG,null)));
     }
+    @Test public void adaptedSplashUsesWholeIconSizeInLightDarkAndTransparentThemes()throws Exception{
+        Bitmap bg=IconImages.solid(Color.GREEN,32),fg=IconImages.solid(Color.TRANSPARENT,32);
+        snapshot(new IconAssets.Snapshot(Map.of(PKG,new IconAssets.Entry(bg,fg,null,null,true,false,false)),Map.of(),"",0,0,Set.of()));
+        Drawable replacement=SystemIconModule.splashIcon(context,PKG,null);
+        assertTrue("Shell must suppress its extra background layer",replacement instanceof AdaptiveIconDrawable);
+        for(int theme:new int[]{Color.WHITE,Color.BLACK,Color.TRANSPARENT,0xff1c1c1c}){
+            int background=SystemIconModule.splashIconBackground(theme);
+            assertNotEquals(Color.TRANSPARENT,background);
+            assertNotEquals(theme,background);
+            // SplashViewBuilder.build enlarges only transparent or theme-equal backgrounds.
+            int iconSize=240;
+            if(background==Color.TRANSPARENT||background==theme)iconSize*=1.2f;
+            assertEquals(240,iconSize);
+        }
+    }
     @Test public void opaqueLegacyArtworkKeepsTonalDetailAndBothSurfacesShareConvertedSource(){
         Bitmap photo=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);
         for(int y=0;y<32;y++)for(int x=0;x<32;x++)photo.setPixel(x,y,Color.rgb(x*8,y*8,(x+y)*4));

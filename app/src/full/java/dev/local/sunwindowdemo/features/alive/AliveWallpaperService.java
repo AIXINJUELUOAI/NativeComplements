@@ -14,6 +14,14 @@ public class AliveWallpaperService extends WallpaperService {
     protected boolean supportsOwnAmbient(){return false;}
     @Override public Engine onCreateEngine(){return new PhotoEngine();}
 
+    static void registerScreenEvents(Context context,BroadcastReceiver receiver,Handler handler){
+        // Only platform-protected actions: USER_PRESENT can come from SystemUI's separate UID,
+        // which NOT_EXPORTED rejects. Events trigger real KeyguardManager reads, never grant HOME.
+        IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);filter.addAction(Intent.ACTION_USER_UNLOCKED);
+        context.registerReceiver(receiver,filter,null,handler,Context.RECEIVER_EXPORTED);
+    }
+
     private final class PhotoEngine extends Engine {
         private AliveRenderer renderer;
         private boolean ambient,visible,registered,destroyed,displayRegistered,displayRemoved,sleepHidden;
@@ -90,9 +98,7 @@ public class AliveWallpaperService extends WallpaperService {
             catch(RuntimeException unavailable){systemAod=-1;}
             AliveSettings.runtimePreferences(AliveWallpaperService.this).registerOnSharedPreferenceChangeListener(changed);
             if(isPreview())AliveSettings.credential(AliveWallpaperService.this).getSharedPreferences(AliveSettings.DRAFT,MODE_PRIVATE).registerOnSharedPreferenceChangeListener(changed);
-            IntentFilter filter=new IntentFilter(Intent.ACTION_SCREEN_ON);
-            filter.addAction(Intent.ACTION_SCREEN_OFF);filter.addAction(Intent.ACTION_USER_PRESENT);filter.addAction(Intent.ACTION_USER_UNLOCKED);
-            registerReceiver(screens,filter,null,main,Context.RECEIVER_NOT_EXPORTED);registered=true;
+            registerScreenEvents(AliveWallpaperService.this,screens,main);registered=true;
             if(!isPreview())try{
                 handoffReceiver=AliveHandoffTransport.install(AliveWallpaperService.this,
                     envelope->acceptHandoff(envelope.action(),envelope.extras()));

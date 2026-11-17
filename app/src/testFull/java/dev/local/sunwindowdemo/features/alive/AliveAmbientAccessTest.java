@@ -37,6 +37,23 @@ public class AliveAmbientAccessTest {
         extras.putLong("expires",now+100);extras.putString("token","bad");assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,0));
         extras.putString("token",token);extras.putBinder("reply",null);assertNull(AliveSleepHandoff.parse(AliveSleepHandoff.ACTION_PREPARE,extras,0));
     }
+    @Test public void screenReceiverAllowsSystemUiUidButOnlyPlatformProtectedActions(){
+        final boolean[] registered={false};
+        android.content.Context context=new android.content.ContextWrapper(org.robolectric.RuntimeEnvironment.getApplication()){
+            @Override public android.content.Intent registerReceiver(android.content.BroadcastReceiver receiver,android.content.IntentFilter filter,
+                    String permission,android.os.Handler handler,int flags){
+                assertEquals(android.content.Context.RECEIVER_EXPORTED,flags);
+                assertEquals(4,filter.countActions());
+                for(String action:new String[]{android.content.Intent.ACTION_SCREEN_ON,android.content.Intent.ACTION_SCREEN_OFF,
+                        android.content.Intent.ACTION_USER_PRESENT,android.content.Intent.ACTION_USER_UNLOCKED})assertTrue(filter.hasAction(action));
+                assertNull(permission);registered[0]=true;return null;
+            }
+        };
+        AliveWallpaperService.registerScreenEvents(context,new android.content.BroadcastReceiver(){
+            @Override public void onReceive(android.content.Context c,android.content.Intent intent){}
+        },new android.os.Handler(android.os.Looper.getMainLooper()));
+        assertTrue(registered[0]);
+    }
     @Test public void systemAodPreferenceDistinguishesOffOnAndUnknown(){
         var resolver=org.robolectric.RuntimeEnvironment.getApplication().getContentResolver();
         android.provider.Settings.Secure.putString(resolver,AliveSystemState.AOD_SETTING,null);

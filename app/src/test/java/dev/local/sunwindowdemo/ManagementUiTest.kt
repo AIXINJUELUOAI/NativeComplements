@@ -20,6 +20,8 @@ import dev.local.sunwindowdemo.core.ui.ComplementsTheme
 import dev.local.sunwindowdemo.features.floatingwindow.ui.GestureScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.WindowScreen
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
+import dev.local.sunwindowdemo.features.suggestions.SuggestionRules
+import dev.local.sunwindowdemo.features.suggestions.SuggestionStore
 import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.navigation.ModuleApp
 import dev.local.sunwindowdemo.navigation.Page
@@ -147,7 +149,7 @@ class ManagementUiTest {
                 ComplementsTheme(dynamic = false) {
                     Surface(color = MaterialTheme.colorScheme.background) {
                         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            SuggestionScreen(controller)
+                            SuggestionScreen(controller, onSupportedApps = {})
                         }
                     }
                 }
@@ -167,6 +169,53 @@ class ManagementUiTest {
             compose.onNodeWithText("显示时长").assertExists()
             compose.onNodeWithText("按钮大小").assertExists()
         } finally {
+            controller.close(); activity.destroy()
+        }
+    }
+
+    @Test fun suggestionLinksNavigateToCatalogAndBackWithoutChangingSwitch() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup()
+        val context = activity.get()
+        val controller = WindowController(context)
+        SuggestionStore.preferences(context).edit().putBoolean("links", true).commit()
+        var page by mutableStateOf(Page.Suggestions)
+        try {
+            compose.setContent {
+                ComplementsTheme(dynamic = false) {
+                    ModuleApp(controller, page, { page = it }, { page = Page.Suggestions })
+                }
+            }
+            compose.onNodeWithContentDescription("链接与分享口令").performScrollTo().assertIsOn().performClick()
+            compose.runOnIdle {
+                assertEquals(Page.Suggestions, page)
+                assertFalse(SuggestionStore.read(context).getBoolean("links"))
+            }
+            compose.onNodeWithText("链接与分享口令").performScrollTo().performClick()
+            compose.runOnIdle {
+                assertEquals(Page.SuggestionApps, page)
+                assertFalse(SuggestionStore.read(context).getBoolean("links"))
+                assertTrue(controller.apps.none { installed -> SuggestionRules.catalog().any { it.packageName() == installed.packageName } })
+            }
+            compose.onNodeWithTag("page-title-链接与分享口令").assertExists()
+            compose.onNodeWithText("仅展示适配范围，未安装的应用仍会显示；本页不会自动启动应用、查询安装包或联网。").assertExists()
+            SuggestionRules.catalog().forEach { app ->
+                compose.onNodeWithText(app.displayName()).performScrollTo().assertIsDisplayed()
+                val support = if (app.supportsShareText()) "链接与分享口令/文本" else "链接"
+                compose.onNodeWithText("$support\n${app.domains().joinToString("、")}").performScrollTo().assertIsDisplayed()
+            }
+            compose.onNodeWithText("大众点评").assertDoesNotExist()
+            compose.onNodeWithContentDescription("返回").performClick()
+            compose.runOnIdle { assertEquals(Page.Suggestions, page) }
+            compose.onNodeWithContentDescription("链接与分享口令").performScrollTo().assertIsOff().performClick()
+            compose.runOnIdle { assertTrue(SuggestionStore.read(context).getBoolean("links")) }
+            compose.onNodeWithText("链接与分享口令").performClick()
+            compose.onNodeWithContentDescription("返回").performClick()
+            compose.onNodeWithContentDescription("链接与分享口令").performScrollTo().assertIsOn()
+            // Append-only: old saved ordinals must not move.
+            assertEquals(25, Page.Harassment.ordinal)
+            assertEquals(26, Page.SuggestionApps.ordinal)
+        } finally {
+            SuggestionStore.preferences(context).edit().remove("links").commit()
             controller.close(); activity.destroy()
         }
     }
