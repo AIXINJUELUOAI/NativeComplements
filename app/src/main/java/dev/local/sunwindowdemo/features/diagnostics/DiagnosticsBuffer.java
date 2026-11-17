@@ -8,17 +8,18 @@ final class DiagnosticsBuffer {
     static final long MAX_DURATION_MS = 10 * 60_000L;
     static final long RETENTION_MS = 24 * 60 * 60_000L;
     static final int MAX_BYTES = 256 * 1024;
-    static final Set<String> SOURCES = Set.of("app", "system", "systemui", "launcher");
+    static final Set<String> SOURCES = Set.of("app", "system", "systemui", "launcher", "phone");
     static final Set<String> EVENTS = Set.of("process_loaded", "hook_installed", "hook_failed",
             "enabled", "disabled", "operation_ok", "operation_failed",
             "rotation_proposed", "rotation_shown", "rotation_cancelled", "rotation_clicked",
             "window_opened", "window_closed",
-            "call_allowed", "call_blocked", "contacts_unavailable", "fan_shown");
+            "call_allowed", "call_blocked", "contacts_unavailable", "fan_shown",
+            "sms_allowed", "sms_blocked");
     static final Set<String> EXCEPTIONS = Set.of("", "SecurityException", "IllegalStateException",
             "IllegalArgumentException", "NoSuchMethodException", "ClassNotFoundException",
             "UnsupportedOperationException", "RuntimeException", "OtherException");
     static final Set<String> SETTINGS = Set.of("floating_window", "barrage", "call_blocking",
-            "edge_touch", "suggestions", "motion", "icon_layers", "shade");
+            "sms_blocking", "edge_touch", "suggestions", "motion", "icon_layers", "shade");
     private final StringBuilder lines = new StringBuilder();
     private boolean recording;
     private int bytes;

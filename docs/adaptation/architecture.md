@@ -9,10 +9,11 @@
 | 管理器 | [ModuleApp](<../../app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)提供配置、权限、诊断和用户请求；[WindowController](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/ui/WindowController.kt>)不直接持有系统 Task |
 | system_server | [SunWindowModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/SunWindowModule.java>)安装任务、视口、输入及恢复接入；[CallBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/callblocking/CallBlockingModule.java>)独立处理 Telecom |
 | SystemUI 主进程 | [BackBridge](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/BackBridge.java>)连接手势和共享宿主；系统图标、导航及各功能保留局部安装边界 |
+| 电话主进程 | [SmsBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingModule.java>)在短信投递路径上取事实并向原生屏蔽号码查询作答；删除与抑制投递由原生完成 |
 | 已知 Launcher 主进程 | 手势冲突保护、历史任务、图标和原生导航源；宿主匹配不替代桥接 UID 认证 |
 | 本应用壁纸进程 | Alive 在普通应用 UID、自有 Surface 中执行 JNI；不把渲染库注入系统进程，详[Alive 平台](<alive-platform.md>) |
 
-准确入口为[七项注册表](<../../app/src/full/resources/META-INF/xposed/java_init.list>)；[四项静态作用域](<../../app/src/main/resources/META-INF/xposed/scope.list>)为 system、SystemUI、Pixel Launcher、Launcher3。[LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)只允许白名单内系统／更新系统 HOME，授权时重新解析实际 HOME 与本用户真实 UID，不向已安装但非 HOME 的桌面回退。ROM 维护记录只用于署名和反馈，不授予 Hook 或 IPC 权限。
+准确入口为[八项注册表](<../../app/src/full/resources/META-INF/xposed/java_init.list>)；[五项静态作用域](<../../app/src/main/resources/META-INF/xposed/scope.list>)为 system、SystemUI、Pixel Launcher、Launcher3、电话。[LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)只允许白名单内系统／更新系统 HOME，授权时重新解析实际 HOME 与本用户真实 UID，不向已安装但非 HOME 的桌面回退。ROM 维护记录只用于署名和反馈，不授予 Hook 或 IPC 权限。
 
 ## 事件、规则与执行
 

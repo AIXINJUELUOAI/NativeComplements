@@ -16,6 +16,7 @@ fun HomeScreen(
     onWindow: () -> Unit,
     onAbout: () -> Unit,
     onCalls: () -> Unit = {},
+    onSms: () -> Unit = {},
     onEdgeTouch: () -> Unit = {},
     onSuggestions: () -> Unit = {},
     onMotion: () -> Unit = {},
@@ -33,6 +34,7 @@ fun HomeScreen(
         FeatureRow("快捷建议", "spark", onSuggestions)
         FeatureRow("图标适配", "apps", onIcons)
         FeatureRow("来电拦截", "phone", onCalls)
+        FeatureRow("短信拦截", "sms", onSms)
         FeatureRow("加速度传感器控制", "shake", onMotion)
         FeatureRow("边缘防误触", "edge", onEdgeTouch)
         FeatureRow("外观与控制", "window", onShade)

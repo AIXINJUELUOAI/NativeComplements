@@ -22,6 +22,7 @@ public final class DiagnosticsProvider extends ContentProvider {
         // Exact UIDs also reject secondary-user callers and isolated processes.
         if (UserHandle.getUserHandleForUid(uid).equals(Process.myUserHandle())) {
             if (packageUid(uid, "android")) return "system";
+            if (packageUid(uid, "com.android.phone")) return "phone";
             if (packageUid(uid, "com.android.systemui")) return "systemui";
             if (dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(getContext(), uid)) return "launcher";
         }

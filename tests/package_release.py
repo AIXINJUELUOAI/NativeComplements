@@ -12,15 +12,16 @@ import verify_signal_target as dex
 ROOT = Path(__file__).resolve().parents[1]
 CERTIFICATE = "28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104"
 SCOPE = ROOT / "app/src/main/resources/META-INF/xposed/scope.list"
-SYSTEM_SCOPES = {"system", "com.google.android.apps.nexuslauncher", "com.android.launcher3", "com.android.systemui"}
+SYSTEM_SCOPES = {"system", "com.google.android.apps.nexuslauncher", "com.android.launcher3",
+                 "com.android.systemui", "com.android.phone"}
 ENTRIES = {"dev.local.sunwindowdemo." + name for name in (
-    "SunWindowModule", "LauncherGuard", "BackBridge", "features.callblocking.CallBlockingModule",
+    "SunWindowModule", "LauncherGuard", "BackBridge", "features.callblocking.CallBlockingModule", "features.smsblocking.SmsBlockingModule",
     "features.iconlayers.IconLayerModule", "features.iconlayers.SystemIconModule", "features.navbar.NavbarModule")}
 
 
 def check_scopes(text):
     scopes = text.splitlines()
-    assert len(scopes) == len(SYSTEM_SCOPES) and set(scopes) == SYSTEM_SCOPES, "Expected exactly four system scopes"
+    assert len(scopes) == len(SYSTEM_SCOPES) and set(scopes) == SYSTEM_SCOPES, "Expected exactly five system scopes"
 
 
 def run(*args):
@@ -90,7 +91,7 @@ def main():
         assert expected in badging, badging
     manifest = run(aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
     assert "WindowAccessibilityService" not in manifest and "android.accessibilityservice.AccessibilityService" not in manifest
-    for authority in ("CONTROL", "settings", "iconlayers", "diagnostics"):
+    for authority in ("CONTROL", "settings", "iconlayers", "diagnostics", "smsblocking"):
         assert package + "." + authority in manifest
     eligibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
                         if block.lstrip().startswith('receiver') and 'WindowBackendEligibility' in block), '')

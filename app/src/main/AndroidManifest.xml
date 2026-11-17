@@ -21,6 +21,7 @@
         <activity android:name=".SettingsActivity" android:exported="false" android:excludeFromRecents="true" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|density" />
         <provider android:name=".features.diagnostics.DiagnosticsProvider" android:authorities="${applicationId}.diagnostics" android:exported="true" android:grantUriPermissions="false" />
         <provider android:name=".features.callblocking.CallBlockingProvider" android:authorities="${applicationId}.callblocking" android:exported="true" android:directBootAware="true" />
+        <provider android:name=".features.smsblocking.SmsBlockingProvider" android:authorities="${applicationId}.smsblocking" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.motion.MotionProvider" android:authorities="${applicationId}.motion" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.iconlayers.IconLayerProvider" android:authorities="${applicationId}.iconlayers" android:exported="true" android:directBootAware="true" />
         <provider android:name=".features.edgetouch.EdgeTouchProvider" android:authorities="${applicationId}.edgetouch" android:exported="true" android:directBootAware="true" />
