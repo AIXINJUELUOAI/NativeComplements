@@ -33,6 +33,26 @@ public class SuggestionRulesTest {
         assertNull(SuggestionRules.link("https://nottaobao.com/item"));
         assertEquals("https://v.douyin.com/Example/",SuggestionRules.link("复制 https://v.douyin.com/Example/ 打开抖音").value());
     }
+    @Test public void catalogIsReadOnlyAndMatchesLinkAndShareTextRules(){
+        var catalog=SuggestionRules.catalog();
+        assertEquals(java.util.List.of("淘宝","京东","拼多多","抖音","快手","哔哩哔哩","小红书","知乎","微博","美团"),
+                catalog.stream().map(SuggestionRules.SupportedApp::displayName).toList());
+        assertEquals(catalog.size(),catalog.stream().map(SuggestionRules.SupportedApp::packageName).distinct().count());
+        for(var app:catalog){
+            assertFalse(app.domains().isEmpty());
+            for(String domain:app.domains()){
+                var link=SuggestionRules.link("https://"+domain+"/share");
+                assertNotNull(domain,link);assertEquals(app.packageName(),link.packageName());assertFalse(link.token());
+            }
+            var text=SuggestionRules.link("复制这段分享文本，打开"+app.displayName()+"查看详情");
+            if(app.supportsShareText()){
+                assertNotNull(app.displayName(),text);assertEquals(app.packageName(),text.packageName());assertTrue(text.token());
+            }else assertNull(app.displayName(),text);
+        }
+        assertEquals("com.sankuai.meituan",SuggestionRules.link("https://dianping.com/shop/123").packageName());
+        try{catalog.clear();fail("catalog must be read-only");}catch(UnsupportedOperationException expected){}
+        try{catalog.get(0).domains().clear();fail("domains must be read-only");}catch(UnsupportedOperationException expected){}
+    }
     @Test public void tokensAreLaunchHintsRatherThanInventedProductUrls(){
         var token=SuggestionRules.link("￥AbCd1234EfGh￥");
         assertTrue(token.token());assertEquals("￥AbCd1234EfGh￥",token.value());

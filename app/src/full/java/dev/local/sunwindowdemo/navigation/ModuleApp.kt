@@ -36,6 +36,7 @@ import dev.local.sunwindowdemo.features.iconlayers.IconBatchDialog
 import dev.local.sunwindowdemo.features.motion.MotionScreen
 import dev.local.sunwindowdemo.features.motion.MotionStore
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
+import dev.local.sunwindowdemo.features.suggestions.SuggestionAppsScreen
 import dev.local.sunwindowdemo.features.shade.ShadeScreen
 import dev.local.sunwindowdemo.features.shade.ShadeStore
 import dev.local.sunwindowdemo.home.AboutScreen
@@ -130,7 +131,8 @@ fun ModuleApp(
                             enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
                             dismissEnablePrompt = controller::dismissEnablePrompt, confirmEnablePrompt = controller::confirmEnablePrompt)
                     }
-                    Page.Suggestions -> SuggestionScreen(controller)
+                    Page.Suggestions -> SuggestionScreen(controller, onSupportedApps = { navigate(Page.SuggestionApps) })
+                    Page.SuggestionApps -> SuggestionAppsScreen()
                     Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Prevention -> PreventionScreen(controller.preferences, controller::boolean, { navigate(Page.Blocked) })

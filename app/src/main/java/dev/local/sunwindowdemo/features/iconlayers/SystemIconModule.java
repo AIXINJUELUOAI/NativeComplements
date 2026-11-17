@@ -77,7 +77,7 @@ public final class SystemIconModule extends XposedModule {
         Class<?> drawer=Class.forName("com.android.wm.shell.startingsurface.SplashscreenContentDrawer",false,loader);
         Class<?> attrs=Class.forName("com.android.wm.shell.startingsurface.SplashscreenContentDrawer$SplashScreenWindowAttrs",false,loader);
         Field activity=field(builder,"mActivityInfo"),outer=field(builder,"this$0"),temporary=field(drawer,"mTmpAttrs");
-        Field icon=field(attrs,"mSplashScreenIcon"),background=field(attrs,"mIconBgColor"),suggest=field(builder,"mSuggestType");
+        Field icon=field(attrs,"mSplashScreenIcon"),background=field(attrs,"mIconBgColor"),suggest=field(builder,"mSuggestType"),theme=field(builder,"mThemeColor");
         Method build=builder.getDeclaredMethod("build");build.setAccessible(true);
         hook(build).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
             ActivityInfo target=(ActivityInfo)activity.get(chain.getThisObject());Context c=context;
@@ -88,10 +88,17 @@ public final class SystemIconModule extends XposedModule {
             Drawable replacement=splashIcon(c,target.packageName,previous instanceof Drawable drawable?drawable:null);
             if(replacement==null)return chain.proceed();
             int oldBackground=background.getInt(values);
-            try{icon.set(values,replacement);background.setInt(values,0);return chain.proceed();}
+            // Our adaptive artwork already includes its background. A transparent or theme-equal
+            // attribute instead selects Shell's enlarged foreground-only splash size.
+            try{icon.set(values,replacement);background.setInt(values,splashIconBackground(theme.getInt(chain.getThisObject())));return chain.proceed();}
             finally{icon.set(values,previous);background.setInt(values,oldBackground);}
         });
         note("SPLASH_READY");
+    }
+    // Shell suppresses its extra background for AdaptiveIconDrawable; this nontransparent,
+    // theme-distinct value selects the normal whole-icon size without drawing another layer.
+    static int splashIconBackground(int themeColor){
+        return themeColor==android.graphics.Color.BLACK?android.graphics.Color.WHITE:android.graphics.Color.BLACK;
     }
     /** Null keeps the native splash's own icon/fallback path; never replace it merely to obtain Monet. */
     static Drawable splashIcon(Context c,String pkg,Drawable original){
