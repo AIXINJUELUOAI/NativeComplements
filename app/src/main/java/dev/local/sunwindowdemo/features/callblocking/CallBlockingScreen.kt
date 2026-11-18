@@ -179,6 +179,12 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                     } else {
                         SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截全部来电"
                             else "跟随 SIM 1：${patterns.size} 条号码规则；陌生拦截${if (config.getBoolean("sim1_reject_strangers")) "开" else "关"}；重复放行${if (config.getBoolean("sim1_allow_repeat")) "开" else "关"}")
+                        Hint("跟随 SIM 1 时这张卡直接使用 SIM 1 的规则；下面只展示，不在这里增删。要改请到 SIM 1，或先关闭跟随。")
+                        patterns.forEach { SettingRow(it) }
+                        // Editing while following used to write this card's own hidden list, so surface it.
+                        val ownRules = config.getStringArray(ownPrefix + "patterns").orEmpty().size
+                        if (!config.getBoolean("sim1_reject_all") && ownRules > 0)
+                            Hint("SIM 2 自己另有 $ownRules 条号码规则，关闭「跟随 SIM 1」后才会生效。")
                     }
                 }
             }

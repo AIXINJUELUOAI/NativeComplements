@@ -202,10 +202,18 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
                                 leading = { Icon(Icons.Default.Add, null) })
                         }
                     } else {
-                        val patternCount = config.getStringArray("sim1_patterns").orEmpty().size
-                        val keywordCount = config.getStringArray("sim1_keywords").orEmpty().size
+                        val inheritedPatterns = config.getStringArray("sim1_patterns").orEmpty()
+                        val inheritedKeywords = config.getStringArray("sim1_keywords").orEmpty()
                         SettingRow("当前生效设置", if (config.getBoolean("sim1_reject_all")) "跟随 SIM 1：拦截该卡全部短信"
-                            else "跟随 SIM 1：$patternCount 条号码规则、$keywordCount 条关键词；陌生拦截${if (config.getBoolean("sim1_reject_strangers")) "开" else "关"}；验证码放行${if (config.getBoolean("sim1_allow_verification")) "开" else "关"}")
+                            else "跟随 SIM 1：${inheritedPatterns.size} 条号码规则、${inheritedKeywords.size} 条关键词；陌生拦截${if (config.getBoolean("sim1_reject_strangers")) "开" else "关"}；验证码放行${if (config.getBoolean("sim1_allow_verification")) "开" else "关"}")
+                        Hint("跟随 SIM 1 时这张卡直接使用 SIM 1 的规则；下面只展示，不在这里增删。要改请到 SIM 1，或先关闭跟随。")
+                        inheritedPatterns.forEach { SettingRow(it) }
+                        inheritedKeywords.forEach { SettingRow("关键词：$it") }
+                        // Editing while following used to write this card's own hidden list, so surface it.
+                        val ownPatterns = config.getStringArray(ownPrefix + "patterns").orEmpty().size
+                        val ownKeywords = config.getStringArray(ownPrefix + "keywords").orEmpty().size
+                        if (!config.getBoolean("sim1_reject_all") && ownPatterns + ownKeywords > 0)
+                            Hint("SIM 2 自己另有 $ownPatterns 条号码规则、$ownKeywords 条关键词，关闭「跟随 SIM 1」后才会生效。")
                     }
                 }
             }
