@@ -22,6 +22,8 @@ public class SwipeMiniTest {
         assertEquals("mRemoteTargetHandles",t.handles().getName());
         assertEquals("getCurrentRect",t.currentRect().getName());
         assertEquals("getCurrentCornerRadius",t.currentRadius().getName());
+        assertEquals("setTargetAlpha",t.targetAlpha().getName());
+        assertEquals("updatePaused",t.pause().getName());
     }
 
     @Test public void thresholdIsTwoFifthsOfDisplayHeight(){

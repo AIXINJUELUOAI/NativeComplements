@@ -225,6 +225,8 @@ final class TaskCover {
         motionAt=from.equals(to)&&radiusFrom==radiusTo?began-duration:began;
     }
     void resumeTo(RectF bounds,float radius){finishGesture(bounds,radius);}
+    /** Milliseconds until the current pose motion reaches its target; 0 when idle or done. */
+    long motionRemaining(long now){return motionAt<0?0:Math.max(0,motionAt+duration-now);}
     void delayEntry(long delay){notBefore=SystemClock.elapsedRealtime()+Math.max(0,delay);}
     boolean exiting(){return exiting;}
     long exit(){

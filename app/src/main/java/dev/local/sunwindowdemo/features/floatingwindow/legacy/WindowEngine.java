@@ -193,15 +193,27 @@ final class WindowEngine {
             log.accept((swipe?"SWIPE_PREPARED":"BACK_PREPARED")+" task="+id+" preview="+preview+" from="+from);return true;
         }catch(Throwable failure){cancelBackPreparation(token);log.accept("BACK_PREPARE_FAILED "+FrameworkAccess.reason(failure));return false;}}
     }
+    private long swipeMotionRemaining(Intent request){
+        if(!"mini".equals(request.getStringExtra("landing")))return 0;
+        synchronized(lock){
+            BackPreparation p=backPreparation;
+            if(p==null||p.cover==null||!p.token.equals(request.getStringExtra("token")))return 0;
+            return p.cover.motionRemaining(SystemClock.elapsedRealtime());
+        }
+    }
     /** Steps a prepared swipe cover until the open adopts it (pollCover) or the preparation ends. */
     private void driveSwipeCover(BackPreparation prepared){
         frames.postFrameCallback(new Choreographer.FrameCallback(){
+            long previous=-1,maxGap;int callbacks;
             public void doFrame(long frameTime){
                 synchronized(lock){
-                    if(backPreparation!=prepared||prepared.cover==null)return;
+                    if(backPreparation!=prepared||prepared.cover==null){
+                        log.accept("SWIPE_COVER_FRAMES callbacks="+callbacks+" maxGapMs="+(maxGap/1_000_000f));return;
+                    }
                     try{
                         long now=SystemClock.elapsedRealtime()-Math.max(0,System.nanoTime()-frameTime)/1_000_000L;
                         prepared.cover.step(false,true,now);
+                        callbacks++;if(previous>=0)maxGap=Math.max(maxGap,frameTime-previous);previous=frameTime;
                         frames.postFrameCallback(this);
                     }catch(Throwable error){
                         log.accept("SWIPE_COVER_FAILED "+FrameworkAccess.reason(error));
@@ -2231,6 +2243,17 @@ final class WindowEngine {
     }
     private void gestureStart(Intent request){
         try{
+            // Swipe-to-mini: let the prepared mask finish its card -> mini motion on the frame clock
+            // first; open attempts while it plays would compete with it on this thread.
+            long motion=swipeMotionRemaining(request);
+            if(motion>0){
+                long generation=openGeneration;
+                handler.postDelayed(()->{
+                    if(generation!=openGeneration){cancelBackPreparation(request.getStringExtra("token"));completeOpen(request,false);return;}
+                    gestureStart(request);
+                },motion);
+                return;
+            }
             if(waitForRecovery(request,()->gestureStart(request)))return;
             if(normalOccupied())throw new IllegalStateException("默认窗已被占用");
             synchronized(lock){
