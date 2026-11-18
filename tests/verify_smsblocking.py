@@ -73,7 +73,10 @@ assert 'catch(Exception unavailable){return false;}' in provider, "Phone lookup 
 assert 'p.getBoolean(key(slot, "reject_strangers"), false)' in store
 assert 'p.getBoolean(key(slot, "allow_verification"), false)' in store
 # Message bodies must never be persisted or logged.
-assert 'first.put("sender"' in store and 'body' not in store.split('recordBlocked', 1)[1]
+assert 'first.put("sender"' in store and 'first.put("body", bounded(value, "body", 700))' in store
+assert "body" not in module.split("private void note(", 1)[1], "Record text must not reach the log"
+assert 'current.text = assembled((byte[][]) chain.getArg(0), (Integer) chain.getArg(1),' in module
+assert 'destPort != -1 || format == null) return null' in module, "Port/WAP pdus are never decoded as SMS text"
 assert 'matched_pattern' in store and 'bounded(value, "matched_pattern", 64)' in store
 assert 'looksLikeVerification' in rules and 'VERIFICATION_CODE' in rules
 assert 'SmsBlockingScreen' in screen and 'confirmAll' in screen
