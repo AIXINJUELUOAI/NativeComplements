@@ -22,6 +22,8 @@ public final class SmsBlockingModule extends XposedModule {
     private static final String PHONE = "com.android.phone";
     /** BlockedNumberContract.STATUS_BLOCKED_IN_LIST; any non zero status means "blocked". */
     private static final int STATUS_BLOCKED_IN_LIST = 1;
+    /** Bound shared with SmsBlockingStore so one record cannot grow without limit. */
+    private static final int BODY_LIMIT = 700;
     private boolean eligible, attempted;
     private volatile Bundle config = Bundle.EMPTY;
     private Context context;
@@ -32,6 +34,8 @@ public final class SmsBlockingModule extends XposedModule {
     private static final class Pending {
         final Object handler, tracker;
         final Blocked decision;
+        /** Complete text of this one message, decoded from the native assembled pdus in filterSms. */
+        String text;
         boolean consulted, nativeConsumed, recorded;
         Pending(Object handler, Object tracker, Blocked decision) {
             this.handler = handler; this.tracker = tracker; this.decision = decision;
@@ -148,6 +152,15 @@ public final class SmsBlockingModule extends XposedModule {
             }));
             hooks.add(hook(filter).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Pending current = pending.get();
+                // filterSms receives the assembled pdus: decode here so the record can show the
+                // original words without guessing from a single segment or caching across messages.
+                if (current != null && current.decision != null && current.text == null
+                        && current.handler == chain.getThisObject() && current.tracker == chain.getArg(2)) {
+                    try {
+                        current.text = assembled((byte[][]) chain.getArg(0), (Integer) chain.getArg(1),
+                                (String) trackerFormat.invoke(current.tracker));
+                    } catch (Throwable e) { failure(e); }
+                }
                 Object out = chain.proceed();
                 if (current != null && current.decision != null && current.consulted
                         && current.handler == chain.getThisObject() && current.tracker == chain.getArg(2)
@@ -182,6 +195,7 @@ public final class SmsBlockingModule extends XposedModule {
                             && Arrays.equals((String[]) trackerDeleteArgs.invoke(current.tracker), (String[]) chain.getArg(2))) {
                         current.recorded = true;
                         Bundle entry = current.decision.entry;
+                        entry.putString("body", current.text == null ? "" : current.text);
                         worker.post(() -> record(entry));
                         Diagnostics.event(context, Diagnostics.PHONE, "sms_blocked");
                         note("SMS_BLOCKED sim=" + (entry.getInt("slot_index") + 1) + " reason=" + entry.getString("reason"));
@@ -268,6 +282,21 @@ public final class SmsBlockingModule extends XposedModule {
             SmsMessage message = SmsMessage.createFromPdu(pdu, format);
             return message == null ? null : message.getMessageBody();
         } catch (Throwable e) { return null; }
+    }
+
+    /** Joins the assembled segments of one message; port/WAP pushes stay unknown. */
+    private String assembled(byte[][] pdus, int destPort, String format) {
+        if (pdus == null || pdus.length == 0 || destPort != -1 || format == null) return null;
+        StringBuilder text = new StringBuilder();
+        for (byte[] pdu : pdus) {
+            try {
+                SmsMessage message = SmsMessage.createFromPdu(pdu, format);
+                String part = message == null ? null : message.getMessageBody();
+                if (part != null) text.append(part);
+            } catch (Throwable ignored) { }
+            if (text.length() >= BODY_LIMIT) break;
+        }
+        return text.length() == 0 ? null : text.toString();
     }
 
     private synchronized void connect(Context c) {

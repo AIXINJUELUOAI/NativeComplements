@@ -110,7 +110,7 @@ public final class SmsBlockingStore {
                 value.putLong("time", item.optLong("time"));
                 value.putInt("slot_index", item.optInt("slot_index", -1));
                 value.putInt("subscription_id", item.optInt("subscription_id", -1));
-                for (String field : new String[]{"sender", "sim_label", "reason", "matched_pattern"})
+                for (String field : new String[]{"sender", "sim_label", "reason", "matched_pattern", "body"})
                     value.putString(field, item.optString(field, ""));
                 records.add(value);
             }
@@ -123,7 +123,7 @@ public final class SmsBlockingStore {
         return text.substring(0, Math.min(text.length(), length));
     }
 
-    /** Only sender, slot and reason are stored; the message body never reaches disk or logs. */
+    /** Sender, slot, reason and a bounded text excerpt are stored; logs never carry the text. */
     public static synchronized boolean recordBlocked(Context context, Bundle value) {
         if (value == null) return false;
         try {
@@ -135,6 +135,8 @@ public final class SmsBlockingStore {
             first.put("sim_label", bounded(value, "sim_label", 80));
             first.put("reason", bounded(value, "reason", 128));
             first.put("matched_pattern", bounded(value, "matched_pattern", 64));
+            // Shown when a record is opened; bounded, local only, cleared with the list.
+            first.put("body", bounded(value, "body", 700));
             JSONArray old = new JSONArray(preferences(context).getString("records", "[]"));
             JSONArray result = new JSONArray().put(first);
             for (int i = 0; i < Math.min(old.length(), MAX_RECORDS - 1); i++) result.put(old.get(i));
