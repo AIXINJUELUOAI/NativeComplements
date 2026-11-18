@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 189
-        versionName = "0.12.7-swipe-mini-test1"
+        versionCode = 190
+        versionName = "0.12.7-swipe-mini-test2"
     }
     flavorDimensions += "product"
     productFlavors {

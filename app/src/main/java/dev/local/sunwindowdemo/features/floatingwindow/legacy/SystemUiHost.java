@@ -143,7 +143,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     void cancelCornerInput(){main.post(()->{hideFan();removeHot();});}
     private boolean publishedEnabled;
-    private boolean publishedDrop,publishedImmersive,publishedSwipe;
+    private boolean publishedDrop,publishedImmersive,publishedSwipe,publishedSwipeHint;
     private int activeTask=-1,pinnedTask=-1,publishedHidden=-2;
     private final android.os.Binder dropChannel=new android.os.Binder(){
         @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws android.os.RemoteException {
@@ -475,12 +475,12 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         enabled=(enabled&&count>0)||handles.length>0;
         android.graphics.Rect bounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();
         int hidden=config!=null&&config.hideRecents()?activeTask:-1;
-        boolean swipe=config!=null&&config.enabled()&&config.swipeMini();
-        if(!force&&publishedSwipe==swipe&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
-        publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;publishedSwipe=swipe;
+        boolean swipe=config!=null&&config.enabled()&&config.swipeMini(),swipeHint=config==null||config.swipeMiniHint();
+        if(!force&&publishedSwipe==swipe&&publishedSwipeHint==swipeHint&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
+        publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;publishedSwipe=swipe;publishedSwipeHint=swipeHint;
         publishedEnabled=enabled;publishedWidth=bounds.width();publishedHeight=bounds.height();published=rects.clone();publishedHandles=handles.clone();
         Intent state=new Intent(LauncherGuard.STATE).putExtra("enabled",enabled)
-            .putExtra("width",bounds.width()).putExtra("height",bounds.height()).putExtra("rects",rects).putExtra("swipeMini",swipe);
+            .putExtra("width",bounds.width()).putExtra("height",bounds.height()).putExtra("rects",rects).putExtra("swipeMini",swipe).putExtra("swipeMiniHint",swipeHint);
         state.putExtra("handleRects",handles).putExtra("immersive",immersive).putExtra("hiddenTask",hidden).putExtra("dropEnabled",dropEnabled).putExtra("density",getResources().getDisplayMetrics().density);
         android.os.Bundle extras=new android.os.Bundle();extras.putBinder("lease",lease);extras.putBinder("dropChannel",dropChannel);extras.putBinder("swipeChannel",swipeChannel);state.putExtras(extras);state.putExtras(extras);
         android.os.Bundle options=android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();

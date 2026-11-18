@@ -19,6 +19,9 @@ public class SwipeMiniTest {
         assertSame(GestureState.GestureEndTarget.RECENTS,t.recentsTarget());
         assertEquals("mRecentsView",t.recents().getName());
         assertEquals("mGestureState",t.gesture().getName());
+        assertEquals("mRemoteTargetHandles",t.handles().getName());
+        assertEquals("getCurrentRect",t.currentRect().getName());
+        assertEquals("getCurrentCornerRadius",t.currentRadius().getName());
     }
 
     @Test public void thresholdIsTwoFifthsOfDisplayHeight(){

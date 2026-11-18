@@ -53,6 +53,7 @@ public final class Config {
     boolean notificationWindow() { return prefs.getBoolean("notificationWindow", true); }
     boolean landscapeShareWindow() { return prefs.getBoolean("landscapeShareWindow", true); }
     boolean swipeMini() { return prefs.getBoolean("swipeMini", false); }
+    boolean swipeMiniHint() { return prefs.getBoolean("swipeMiniHint", true); }
     boolean showHeat() { return prefs.getBoolean("showHeat", false); }
     boolean menuBlur() { return prefs.getBoolean("menuBlur", false); }
     int windowDim() { return number("windowDim",DEFAULT_WINDOW_DIM,0,100); }

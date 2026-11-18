@@ -2,13 +2,10 @@ package dev.local.sunwindowdemo;
 
 import android.content.Context;
 import android.graphics.Color;
-import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.drawable.GradientDrawable;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.view.Gravity;
-import android.view.RoundedCorner;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
@@ -34,6 +31,7 @@ final class SwipeMini {
     /** Finger travel as a fraction of display height. */
     static final float THRESHOLD=0.4f;
     private static volatile IBinder sink;
+    private static volatile boolean showHint=true;
     private static Consumer<String> log=ignored->{};
     private static WeakReference<Object> owner=new WeakReference<>(null);
     private static float progress;
@@ -43,13 +41,15 @@ final class SwipeMini {
     private SwipeMini(){}
 
     /** SystemUI publishes the channel only while the feature is enabled; null disables. */
-    static void configure(IBinder channel){
+    static void configure(IBinder channel,boolean hintEnabled){
+        showHint=hintEnabled;
         sink=channel!=null&&channel.isBinderAlive()?channel:null;
-        if(sink==null)reset(null);
+        if(sink==null||!hintEnabled)reset(null);
     }
 
     record Targets(Method displacement,Method endTarget,Method haptic,Field recents,Field gesture,Field context,
-                   Method runningIds,Method nativeEnd,Method runningView,Method thumbnail,Object home,Object recentsTarget){}
+                   Method runningIds,Method nativeEnd,Field handles,Method simulator,Method currentRect,Method currentRadius,
+                   Object home,Object recentsTarget){}
 
     static Targets resolve(ClassLoader loader)throws Exception{
         Class<?> logic=Class.forName("com.android.quickstep.SwipeUpAnimationLogic",false,loader);
@@ -57,7 +57,8 @@ final class SwipeMini {
         Class<?> state=Class.forName("com.android.quickstep.GestureState",false,loader);
         Class<?> target=Class.forName("com.android.quickstep.GestureState$GestureEndTarget",false,loader);
         Class<?> recentsView=Class.forName("com.android.quickstep.views.RecentsView",false,loader);
-        Class<?> taskView=Class.forName("com.android.quickstep.views.TaskView",false,loader);
+        Class<?> handle=Class.forName("com.android.quickstep.RemoteTargetGluer$RemoteTargetHandle",false,loader);
+        Class<?> simulatorType=Class.forName("com.android.quickstep.util.TaskViewSimulator",false,loader);
         if(!logic.isAssignableFrom(handler)||!target.isEnum())throw new NoSuchMethodException("swipe handler hierarchy");
         Method displacement=exact(logic.getDeclaredMethod("updateDisplacement",float.class),void.class);
         // dada: (PointF,float,boolean,boolean,boolean); PixelUI QPR2 appends a float. Accept exactly one.
@@ -73,15 +74,18 @@ final class SwipeMini {
         Field recents=field(handler,"mRecentsView",recentsView),gesture=field(logic,"mGestureState",state),context=field(logic,"mContext",Context.class);
         Method runningIds=exact(state.getDeclaredMethod("getRunningTaskIds",boolean.class),int[].class);
         Method nativeEnd=exact(state.getDeclaredMethod("getEndTarget"),target);
-        Method runningView=exact(recentsView.getDeclaredMethod("getRunningTaskView"),taskView);
-        Method thumbnail=exact(taskView.getDeclaredMethod("getThumbnailBounds",Rect.class,boolean.class),void.class);
+        // The live tile is a transformed surface, not the overview TaskView: read its simulator pose.
+        Field handles=field(logic,"mRemoteTargetHandles",java.lang.reflect.Array.newInstance(handle,0).getClass());
+        Method simulator=exact(handle.getDeclaredMethod("getTaskViewSimulator"),simulatorType);
+        Method currentRect=exact(simulatorType.getDeclaredMethod("getCurrentRect"),RectF.class);
+        Method currentRadius=exact(simulatorType.getDeclaredMethod("getCurrentCornerRadius"),float.class);
         Object home=null,recentsTarget=null;
         for(Object value:target.getEnumConstants()){
             String name=((Enum<?>)value).name();
             if(name.equals("HOME"))home=value;else if(name.equals("RECENTS"))recentsTarget=value;
         }
         if(home==null||recentsTarget==null)throw new NoSuchFieldException("GestureEndTarget");
-        return new Targets(displacement,endTarget,haptic,recents,gesture,context,runningIds,nativeEnd,runningView,thumbnail,home,recentsTarget);
+        return new Targets(displacement,endTarget,haptic,recents,gesture,context,runningIds,nativeEnd,handles,simulator,currentRect,currentRadius,home,recentsTarget);
     }
 
     static void install(XposedModule module,ClassLoader loader,Consumer<String> logger){
@@ -135,16 +139,14 @@ final class SwipeMini {
         try{
             int[] ids=(int[])t.runningIds().invoke(t.gesture().get(handler),false);
             if(ids==null||ids.length!=1||ids[0]<=0)return false; // Split pairs keep native behavior.
-            View recents=(View)t.recents().get(handler);
-            Object view=recents==null?null:t.runningView().invoke(recents);
-            if(!(view instanceof View card))return false;
-            Rect bounds=new Rect();
-            t.thumbnail().invoke(card,bounds,true); // Relative to Launcher's DragLayer.
-            View layer=dragLayer(card);
-            int[] origin=new int[2];if(layer!=null)layer.getLocationOnScreen(origin);
-            RectF screen=new RectF(bounds);screen.offset(origin[0],origin[1]);
-            if(screen.isEmpty())return false;
-            float radius=cardRadius(card,screen);
+            Object[] remote=(Object[])t.handles().get(handler);
+            if(remote==null||remote.length!=1||remote[0]==null)return false;
+            Object simulator=t.simulator().invoke(remote[0]);
+            if(simulator==null)return false;
+            // Display-space pose of the live tile the user is holding at release.
+            RectF screen=new RectF((RectF)t.currentRect().invoke(simulator));
+            float radius=(Float)t.currentRadius().invoke(simulator);
+            if(screen.isEmpty()||!Float.isFinite(radius))return false;
             Parcel data=Parcel.obtain(),reply=Parcel.obtain();
             try{
                 data.writeInterfaceToken(CHANNEL);data.writeInt(ids[0]);data.writeTypedObject(screen,0);data.writeFloat(radius);
@@ -160,21 +162,6 @@ final class SwipeMini {
         }
     }
 
-    /** The card's visible corner scales with it; start from the display corner at that scale. */
-    private static float cardRadius(View card,RectF screen){
-        WindowInsets insets=card.getRootWindowInsets();
-        RoundedCorner corner=insets==null?null:insets.getRoundedCorner(RoundedCorner.POSITION_TOP_LEFT);
-        int width=card.getResources().getDisplayMetrics().widthPixels;
-        float display=corner==null?0:corner.getRadius();
-        return width<=0?0:display*screen.width()/width;
-    }
-
-    private static View dragLayer(View view){
-        for(Object v=view;v instanceof View current;v=current.getParent())
-            if(current.getClass().getName().endsWith(".DragLayer"))return current;
-        return null;
-    }
-
     private static void reset(Object handler){
         synchronized(SwipeMini.class){
             if(handler!=null&&owner.get()!=handler)return;
@@ -187,18 +174,18 @@ final class SwipeMini {
     private static void showHint(View anchor,boolean show){
         if(anchor==null)return;
         TextView view=hint.get();
-        if(!show){if(view!=null)hide(view);return;}
+        if(!show||!showHint){if(view!=null)hide(view);return;}
         View root=anchor.getRootView();
         if(!(root instanceof ViewGroup group))return;
         if(view==null||view.getParent()!=group){
             if(view!=null&&view.getParent() instanceof ViewGroup old)old.removeView(view);
             view=new TextView(anchor.getContext());
             float density=anchor.getResources().getDisplayMetrics().density;
-            view.setText("松手挂起为迷你窗");
-            view.setTextColor(Color.WHITE);view.setTextSize(14);
-            int h=Math.round(16*density),v=Math.round(9*density);view.setPadding(h,v,h,v);
-            GradientDrawable pill=new GradientDrawable();pill.setColor(0xCC202124);pill.setCornerRadius(24*density);
-            view.setBackground(pill);view.setAlpha(0);
+            view.setText("松手挂起小窗");
+            // No background: a soft shadow keeps white text legible over app content or wallpaper.
+            view.setTextColor(Color.WHITE);view.setTextSize(15);
+            view.setShadowLayer(6*density,0,density,0x99000000);
+            view.setAlpha(0);
             FrameLayout.LayoutParams lp=new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,Gravity.TOP|Gravity.CENTER_HORIZONTAL);
             WindowInsets insets=group.getRootWindowInsets();
             lp.topMargin=(insets==null?0:insets.getInsets(WindowInsets.Type.statusBars()).top)+Math.round(24*density);

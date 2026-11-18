@@ -180,9 +180,36 @@ final class WindowEngine {
                     .newInstance(leash,"NativeComplements-back-preview");
                 handler.postDelayed(owned::release,5000);mask.inTransaction(tx,owned);tx.apply();
             }
+            if(swipe&&preview){
+                // Play the card -> mini mask motion now; the window conversion waits for the native
+                // recents transition underneath and adopts this cover at its current pose.
+                Session probe=new Session();probe.task=task;probe.frame="mini";
+                probe.logicalShort=Math.min(bounds.width(),bounds.height());
+                prepareGeometry(probe);
+                cover.resumeTo(visualBounds(probe.placement),coverRadius(probe,probe.placement));
+                driveSwipeCover(prepared);
+            }
             handler.postDelayed(()->{synchronized(lock){if(backPreparation==prepared)cancelBackPreparation(token);}},6500);
             log.accept((swipe?"SWIPE_PREPARED":"BACK_PREPARED")+" task="+id+" preview="+preview+" from="+from);return true;
         }catch(Throwable failure){cancelBackPreparation(token);log.accept("BACK_PREPARE_FAILED "+FrameworkAccess.reason(failure));return false;}}
+    }
+    /** Steps a prepared swipe cover until the open adopts it (pollCover) or the preparation ends. */
+    private void driveSwipeCover(BackPreparation prepared){
+        frames.postFrameCallback(new Choreographer.FrameCallback(){
+            public void doFrame(long frameTime){
+                synchronized(lock){
+                    if(backPreparation!=prepared||prepared.cover==null)return;
+                    try{
+                        long now=SystemClock.elapsedRealtime()-Math.max(0,System.nanoTime()-frameTime)/1_000_000L;
+                        prepared.cover.step(false,true,now);
+                        frames.postFrameCallback(this);
+                    }catch(Throwable error){
+                        log.accept("SWIPE_COVER_FAILED "+FrameworkAccess.reason(error));
+                        cancelBackPreparation(prepared.token);
+                    }
+                }
+            }
+        });
     }
     private static boolean validBackPose(android.graphics.RectF p,Rect d){
         return p!=null&&Float.isFinite(p.left)&&Float.isFinite(p.top)&&Float.isFinite(p.right)&&Float.isFinite(p.bottom)

@@ -75,7 +75,8 @@ public final class LauncherGuard extends XposedModule {
             if(!STATE.equals(intent.getAction()))return;
             try{if(getSentFromUid()!=context.getPackageManager().getApplicationInfo(BackBridge.PACKAGE,0).uid)return;}catch(Exception e){return;}
             android.os.Bundle swipe=intent.getExtras();
-            SwipeMini.configure(intent.getBooleanExtra("swipeMini",false)&&swipe!=null?swipe.getBinder("swipeChannel"):null);
+            SwipeMini.configure(intent.getBooleanExtra("swipeMini",false)&&swipe!=null?swipe.getBinder("swipeChannel"):null,
+                intent.getBooleanExtra("swipeMiniHint",true));
             if(!intent.getBooleanExtra("enabled",false)){gate.disable();note("GUARD_STATE disabled");return;}
             android.os.Bundle extras=intent.getExtras();
             IBinder lease=extras==null?null:extras.getBinder("lease");
@@ -93,6 +94,6 @@ public final class LauncherGuard extends XposedModule {
             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
         context.sendBroadcast(new Intent(QUERY).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
-    private void disconnect(){gate.disable();SwipeMini.configure(null);visualLease=null;if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
+    private void disconnect(){gate.disable();SwipeMini.configure(null,true);visualLease=null;if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
     private void note(String s){try{log(4,"CornerGuard",s);}catch(Throwable ignored){}}
 }
