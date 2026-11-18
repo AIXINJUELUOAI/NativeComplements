@@ -107,9 +107,15 @@ final class WindowEngine {
     private final PathInterpolator modeCurve=new PathInterpolator(.2f,0,0,1);
     private final Binder controlChannel=new Binder(){
         @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags) throws RemoteException {
-            if(code==Wire.PREPARE_BACK||code==Wire.CANCEL_BACK||code==Wire.FINISH_BACK){
+            if(code==Wire.PREPARE_BACK||code==Wire.CANCEL_BACK||code==Wire.FINISH_BACK||code==Wire.PREPARE_SWIPE){
                 if(uiUid<0||Binder.getCallingUid()!=uiUid)return false;
                 data.enforceInterface(Wire.CHANNEL);
+                if(code==Wire.PREPARE_SWIPE){
+                    int task=data.readInt();String pkg=data.readString(),token=data.readString();
+                    android.graphics.RectF card=data.readTypedObject(android.graphics.RectF.CREATOR);float radius=data.readFloat();data.enforceNoDataAvail();
+                    boolean accepted=prepareBack(task,pkg,token,card,radius,null,true);
+                    if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;
+                }
                 if(code==Wire.CANCEL_BACK){String token=data.readString();data.enforceNoDataAvail();handler.post(()->cancelBackPreparation(token));return true;}
                 if(code==Wire.FINISH_BACK){
                     String token=data.readString();data.enforceNoDataAvail();if(reply==null)return false;
@@ -120,7 +126,7 @@ final class WindowEngine {
                 int task=data.readInt();String pkg=data.readString(),token=data.readString();
                 android.graphics.RectF pose=data.readTypedObject(android.graphics.RectF.CREATOR);float radius=data.readFloat();
                 android.view.SurfaceControl leash=data.readTypedObject(android.view.SurfaceControl.CREATOR);data.enforceNoDataAvail();
-                boolean accepted=prepareBack(task,pkg,token,pose,radius,leash);
+                boolean accepted=prepareBack(task,pkg,token,pose,radius,leash,false);
                 if(leash!=null)leash.release();
                 if(reply!=null){reply.writeNoException();reply.writeBoolean(accepted);}return true;
             }
@@ -143,13 +149,16 @@ final class WindowEngine {
     private volatile Session active,pinned;
     private BackPreparation backPreparation;
     private record BackPreparation(Object task,String token,TaskVisibilityGuard mask,TaskCover cover,IBinder lease){}
-    private boolean prepareBack(int id,String pkg,String token,android.graphics.RectF pose,float radius,android.view.SurfaceControl leash){
+    private boolean prepareBack(int id,String pkg,String token,android.graphics.RectF pose,float radius,android.view.SurfaceControl leash,boolean swipe){
         if(lock==null||handler==null||context==null||!Wire.allowedPackage(pkg)||!Wire.validToken(token))return false;
         synchronized(lock){try{
             if(!uiReady||uiLease==null||!uiLease.isBinderAlive()||SystemClock.elapsedRealtime()-uiSeen>3000
                 ||normalOccupied()||pendingStart!=null
                 ||screenBlocked())return false;
-            Object task=find(id);if(task==null||task!=a.focused.invoke(root)||sessionFor(task)!=null||a.integer(task,"getWindowingMode")!=1)return false;
+            // A swipe-up handoff runs inside the native recents transition, where focus may already
+            // belong to Home; it still requires the exact visible fullscreen task Launcher animated.
+            Object task=find(id);if(task==null||!swipe&&task!=a.focused.invoke(root)||swipe&&!a.bool(task,"isVisibleRequested")
+                ||sessionFor(task)!=null||a.integer(task,"getWindowingMode")!=1)return false;
             ComponentName component=(ComponentName)a.field(task,"realActivity");
             if(component==null||!pkg.equals(component.getPackageName()))return false;
             cancelBackPreparation(null);
@@ -172,7 +181,7 @@ final class WindowEngine {
                 handler.postDelayed(owned::release,5000);mask.inTransaction(tx,owned);tx.apply();
             }
             handler.postDelayed(()->{synchronized(lock){if(backPreparation==prepared)cancelBackPreparation(token);}},6500);
-            log.accept("BACK_PREPARED task="+id+" preview="+preview+" from="+from);return true;
+            log.accept((swipe?"SWIPE_PREPARED":"BACK_PREPARED")+" task="+id+" preview="+preview+" from="+from);return true;
         }catch(Throwable failure){cancelBackPreparation(token);log.accept("BACK_PREPARE_FAILED "+FrameworkAccess.reason(failure));return false;}}
     }
     private static boolean validBackPose(android.graphics.RectF p,Rect d){
@@ -220,6 +229,18 @@ final class WindowEngine {
     private void completeEntryInput(Session s)throws Exception{
         if(!visible(s)||s.restoring||s.closing||s.fullTransition||s.prioritySuspended||s.screenSuspended||entryInputPending(s))return;
         if("normal".equals(s.frame))focusExpanded(s);
+        else if(s.miniLanding&&"mini".equals(s.frame)){
+            // Same settle as a completed normal->mini morph: release focus to Home, keep the
+            // visible mini resumed, and report STATE_END so SystemUI builds the mini input layer.
+            s.miniLanding=false;
+            synchronized(lock){
+                a.call(s.task,"setFocusable",new Class<?>[]{boolean.class},false);
+                a.call(wms,"updateFocusedWindowLocked",new Class<?>[]{int.class,boolean.class},0,true);
+                a.call(root,"resumeFocusedTasksTopActivities");resumeMini(s);a.call(wms,"requestTraversal");
+            }
+            log.accept("SWIPE_MINI_LANDED task="+s.taskId);
+            report("STATE_END");
+        }
         Intent pending=s.entryControl;s.entryControl=null;
         frameReport("ENTRY_INPUT_READY");
         if(pending!=null)handler.post(()->{if(visible(s)&&!s.restoring&&!s.closing)command(pending);});
@@ -287,6 +308,7 @@ final class WindowEngine {
         Rect lastSurfaceCrop;
         String pkg, token, component, baseId;
         String frame="normal";
+        boolean miniLanding;
         TaskDecoration decoration; volatile boolean presented;
         Point crop; boolean closing; int animationRev; float defaultScale;
         long nextStatus;
@@ -497,17 +519,29 @@ final class WindowEngine {
                         prepareGeometry(s); // Bounds hook must know the canvas before switching mode.
                         s.decoration=new TaskDecoration(a);
                         s.entering=true;s.transitioning=true;s.opacity=0;s.barAlpha=0;
-                        if(previous!=null){
-                            if(displaced==null)pinned=previous;
-                            else {previous.parked=true;previous.opacity=0;a.opacity(previous.task,0);
-                                a.call(previous.task,"setFocusable",new Class<?>[]{boolean.class},false);
-                                if(previous.decoration!=null)previous.decoration.hide(previous.task);}
+                        BackPreparation prepared=backPreparation;
+                        boolean adopt=prepared!=null&&prepared.task==s.task&&prepared.token.equals(s.token)&&prepared.lease==lease;
+                        // Swipe-up handoff lands directly in the existing mini slot geometry; the mask
+                        // travels card -> mini, so no intermediate default-window pose is shown.
+                        s.miniLanding=adopt&&prepared.cover!=null&&"mini".equals(i.getStringExtra("landing"));
+                        if(s.miniLanding){
+                            Rect safe=safeArea(a.call(s.task,"getDisplayContent"),false);
+                            s.placement=WindowControl.miniTarget(s.placement,null,s.defaultScale,controlSafe(safe,s.placementMargin),s.miniLarge);
+                            s.miniPlacement=s.placement;s.frame="mini";
                         }
+                        for(Session old:new Session[]{previous,previousPinned}){
+                            if(old==null||old==s)continue;
+                            if(!s.miniLanding&&old==previous&&displaced==null){pinned=previous;continue;}
+                            if(!s.miniLanding&&old!=previous)continue;
+                            old.parked=true;old.opacity=0;a.opacity(old.task,0);
+                            a.call(old.task,"setFocusable",new Class<?>[]{boolean.class},false);
+                            if(old.decoration!=null)old.decoration.hide(old.task);
+                        }
+                        if(s.miniLanding)pinned=null;
                         active = s;
                         frameReport("ENTRY_TOUCH_GUARD");
                         a.call(a.field(s.task,"mTransitionController"),"setNoAnimation",new Class<?>[]{a.wc},s.task);
-                        BackPreparation prepared=backPreparation;
-                        if(prepared!=null&&prepared.task==s.task&&prepared.token.equals(s.token)&&prepared.lease==lease){
+                        if(adopt){
                             prepared.mask.adoptBackdrop();
                             backPreparation=null;
                             if(prepared.cover!=null){
@@ -533,7 +567,10 @@ final class WindowEngine {
                 }
                 history.windowed(new WindowHistory.Entry(s.taskId,s.userId,s.pkg,s.component,s.baseId));saveHistory();
                 notifyRecents();
-                settleNewDefault(displaced,s);
+                if(s.miniLanding){
+                    for(Session old:new Session[]{previous,previousPinned})
+                        if(old!=null&&old!=s&&sessions.contains(old)&&!old.restoring)finishGroup(old,false,"替换迷你窗");
+                }else settleNewDefault(displaced,s);
                 completeOpen(i,true);
                 note("ACTIVE：小窗已开启，无定时退出");
                 if(SystemClock.elapsedRealtime()>=s.nextStatus) {s.nextStatus=SystemClock.elapsedRealtime()+1000;report("TICK");}
@@ -2796,7 +2833,7 @@ final class WindowEngine {
                 log.accept("PRESENTED task="+s.taskId+" elapsedMs="+(SystemClock.elapsedRealtime()-s.startedAt));
                 if(s.entering&&!s.entryStarted){
                     s.entryStarted=true;
-                    if(s.cover!=null){s.entering=false;s.transitioning=false;s.opacity=1;s.barAlpha=1;try{synchronized(lock){renderFrame(s);}}catch(Exception e){failure(s,e);}}
+                    if(s.cover!=null){s.entering=false;s.transitioning=false;s.opacity=1;s.barAlpha="mini".equals(s.frame)?0:1;try{synchronized(lock){renderFrame(s);}}catch(Exception e){failure(s,e);}}
                     else visibility(s,true);
                 }
                 else report("PRESENTED");

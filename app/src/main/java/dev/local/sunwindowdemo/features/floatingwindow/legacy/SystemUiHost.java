@@ -143,7 +143,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     void cancelCornerInput(){main.post(()->{hideFan();removeHot();});}
     private boolean publishedEnabled;
-    private boolean publishedDrop,publishedImmersive;
+    private boolean publishedDrop,publishedImmersive,publishedSwipe;
     private int activeTask=-1,pinnedTask=-1,publishedHidden=-2;
     private final android.os.Binder dropChannel=new android.os.Binder(){
         @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws android.os.RemoteException {
@@ -159,6 +159,44 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         }
     };
     static volatile boolean connected;
+    private volatile long lastSwipe;
+    /** Launcher swipe-up handoff. Only the verified HOME UID may call; any rejection keeps native Home/Recents. */
+    private final android.os.Binder swipeChannel=new android.os.Binder(){
+        @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws android.os.RemoteException {
+            if(code!=android.os.IBinder.FIRST_CALL_TRANSACTION)return super.onTransact(code,data,reply,flags);
+            if(reply==null||!dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(SystemUiHost.this,android.os.Binder.getCallingUid()))return false;
+            data.enforceInterface(SwipeMini.CHANNEL);
+            int task=data.readInt();android.graphics.RectF card=data.readTypedObject(android.graphics.RectF.CREATOR);float radius=data.readFloat();
+            data.enforceNoDataAvail();
+            boolean accepted;
+            long identity=android.os.Binder.clearCallingIdentity();
+            try{accepted=swipeMini(task,card,radius);}finally{android.os.Binder.restoreCallingIdentity(identity);}
+            reply.writeNoException();reply.writeBoolean(accepted);return true;
+        }
+    };
+    private boolean swipeMini(int taskId,android.graphics.RectF card,float radius){
+        Config c=config;
+        if(c==null||!c.enabled()||!c.swipeMini()||!ready()||!backendReady||taskId<=0||taskId==activeTask||taskId==pinnedTask
+            ||card==null||!Float.isFinite(radius)||getSystemService(KeyguardManager.class).isKeyguardLocked()
+            ||getResources().getConfiguration().orientation!=Configuration.ORIENTATION_PORTRAIT)return false;
+        long now=android.os.SystemClock.elapsedRealtime();if(now-lastSwipe<800)return false;
+        try{
+            android.app.ActivityManager.RunningTaskInfo task=null;
+            for(var info:getSystemService(android.app.ActivityManager.class).getRunningTasks(8))if(info.taskId==taskId){task=info;break;}
+            if(task==null)return false;
+            ComponentName root=task.baseIntent==null?null:task.baseIntent.getComponent();
+            if(root==null)root=task.baseActivity;
+            String pkg=root==null?null:root.getPackageName();
+            if(pkg==null||c.blocked().contains(pkg)||!WindowHostPolicy.currentTarget(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task),Wire.PKG.equals(pkg),
+                "com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg),dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(pkg),Wire.allowedPackage(pkg)))return false;
+            String token=Wire.token();
+            if(!Wire.prepareSwipe(taskId,pkg,token,card,radius))return false;
+            lastSwipe=now;
+            main.post(this::cancelOpenWait);
+            Wire.swipeMini(this,pkg,taskId,token);
+            return true;
+        }catch(Exception error){return false;}
+    }
     private final Handler main=new Handler(Looper.getMainLooper());
     private Config config;
     private WindowManager wm;
@@ -437,13 +475,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         enabled=(enabled&&count>0)||handles.length>0;
         android.graphics.Rect bounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();
         int hidden=config!=null&&config.hideRecents()?activeTask:-1;
-        if(!force&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
-        publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;
+        boolean swipe=config!=null&&config.enabled()&&config.swipeMini();
+        if(!force&&publishedSwipe==swipe&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
+        publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;publishedSwipe=swipe;
         publishedEnabled=enabled;publishedWidth=bounds.width();publishedHeight=bounds.height();published=rects.clone();publishedHandles=handles.clone();
         Intent state=new Intent(LauncherGuard.STATE).putExtra("enabled",enabled)
-            .putExtra("width",bounds.width()).putExtra("height",bounds.height()).putExtra("rects",rects);
+            .putExtra("width",bounds.width()).putExtra("height",bounds.height()).putExtra("rects",rects).putExtra("swipeMini",swipe);
         state.putExtra("handleRects",handles).putExtra("immersive",immersive).putExtra("hiddenTask",hidden).putExtra("dropEnabled",dropEnabled).putExtra("density",getResources().getDisplayMetrics().density);
-        android.os.Bundle extras=new android.os.Bundle();extras.putBinder("lease",lease);extras.putBinder("dropChannel",dropChannel);state.putExtras(extras);
+        android.os.Bundle extras=new android.os.Bundle();extras.putBinder("lease",lease);extras.putBinder("dropChannel",dropChannel);extras.putBinder("swipeChannel",swipeChannel);state.putExtras(extras);state.putExtras(extras);
         android.os.Bundle options=android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();
         for(String launcher:dev.local.sunwindowdemo.core.LauncherTargets.targets(this))
             sendBroadcast(new Intent(state).setPackage(launcher),null,options);

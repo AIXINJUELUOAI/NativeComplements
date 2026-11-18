@@ -111,6 +111,21 @@ method("Lcom/android/quickstep/util/GroupTask;", "containsTask", "(I)Z")
 method("Lcom/android/quickstep/util/GroupTask;", "getTasks", "()Ljava/util/List;")
 method("Lcom/android/quickstep/LauncherBackAnimationController;", "applyTransform", "(Landroid/graphics/RectF;F)V")
 method("Lcom/android/quickstep/LauncherBackAnimationController;", "onCancelFinished", "()V")
+# Swipe-up mini handoff (SwipeMini.resolve): declared-member lookups on both launchers.
+QS = "Lcom/android/quickstep/"
+END_TARGET = QS + "GestureState$GestureEndTarget;"
+method(QS + "SwipeUpAnimationLogic;", "updateDisplacement", "(F)V")
+field(QS + "SwipeUpAnimationLogic;", "mGestureState", QS + "GestureState;")
+field(QS + "SwipeUpAnimationLogic;", "mContext", "Landroid/content/Context;")
+method(QS + "AbsSwipeUpHandler;", "performHapticFeedback", "()V")
+field(QS + "AbsSwipeUpHandler;", "mRecentsView", QS + "views/RecentsView;")
+method(QS + "GestureState;", "getRunningTaskIds", "(Z)[I")
+method(QS + "GestureState;", "getEndTarget", "()" + END_TARGET)
+for name in ("HOME", "RECENTS"):
+    field(END_TARGET, name, END_TARGET)
+method(QS + "views/RecentsView;", "getRunningTaskView", "()" + QS + "views/TaskView;")
+method(QS + "views/TaskView;", "getThumbnailBounds", "(Landroid/graphics/Rect;Z)V")
+method(WM + "Task;", "isVisibleRequested", "()Z")
 field(SYS + "screenshot/ScreenshotController;", "window", SYS + "screenshot/ScreenshotWindow;")
 method(SYS + "screenshot/ScreenshotWindow;", "removeWindow", "()V")
 field(SYS + "shared/system/InputMonitorCompat;", "mInputMonitor", "Landroid/view/InputMonitor;")
@@ -205,6 +220,7 @@ INHERITED = {
     (WM + "Task;", "methods", "setFocusable", "(Z)Z"),
     (WM + "Task;", "methods", "shouldSleepActivities", "()Z"),
     (WM + "Task;", "methods", "sleepIfPossible", "(Z)Z"),
+    (WM + "Task;", "methods", "isVisibleRequested", "()Z"),
 }
 
 
@@ -336,6 +352,10 @@ def main():
                 for name, signature in (("getCurrentView", "()Landroid/view/View;"), ("hide", "()Z")):
                     assert any(m["name"] == name and m["descriptor"] == signature for m in current[button]["methods"]), (label, button, name)
                 assert any(m["name"] == "onDestroy" and m["descriptor"] == "()V" for m in current[ROTATION]["methods"])
+                # SwipeMini accepts exactly one calculateEndTarget; its parameters differ per host.
+                ends = [m for m in current[QS + "AbsSwipeUpHandler;"]["methods"]
+                        if m["name"] == "calculateEndTarget" and m["descriptor"].endswith(")" + END_TARGET)]
+                assert len(ends) == 1, (label, "calculateEndTarget", ends)
             for owner, kind, member, signature in CHECKS:
                 if owner == ROTATION:
                     key = "descriptor" if kind == "methods" else "type"
