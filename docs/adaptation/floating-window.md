@@ -2,7 +2,7 @@
 
 ## 当前入口与分层
 
-小窗仅在主模块提供：原生角落输入／扇区、菜单操作、通知正文和跨应用启动路由。`notificationWindow`、`landscapeShareWindow`沿用旧键，默认 true 但保留已存 false；后者历史名称不表示仅横屏。长侧滑、无障碍按钮、桌面 shortcut、快捷建议小窗及窗口／遮罩莫奈已退役。
+小窗仅在主模块提供：原生角落输入／扇区、菜单操作、通知正文和跨应用启动路由。`notificationWindow`、`landscapeShareWindow`沿用旧键，默认 true 但保留已存 false；后者历史名称不表示仅横屏。长侧滑、无障碍按钮、桌面 shortcut 及窗口／遮罩莫奈已退役。快捷建议的「以小窗打开」是建议侧独立开关（`suggestions` 的 `window` 键，默认关闭），只在用户点击建议按钮且小窗总开关开启时经 [Wire.openIntent](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/Wire.java>) 走既有 OPEN 路由，不改变通知正文与跨应用入口的准入。
 
 | 层次 | 实际责任 |
 |---|---|

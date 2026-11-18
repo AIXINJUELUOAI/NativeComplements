@@ -162,7 +162,7 @@ class ManagementUiTest {
             compose.onNodeWithText("链接与分享口令").assertExists()
             compose.onNodeWithText("地址与地点").assertExists()
             compose.onNodeWithText("屏幕旋转").assertExists()
-            compose.onNodeWithText("以小窗打开").assertDoesNotExist()
+            compose.onNodeWithText("以小窗打开").assertExists()
             compose.onNodeWithText("短信读取").assertDoesNotExist()
             screenshot("suggestion-page")
             compose.onNodeWithText("按钮显示").performScrollTo().performClick()

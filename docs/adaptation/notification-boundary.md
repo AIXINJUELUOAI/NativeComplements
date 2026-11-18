@@ -14,6 +14,6 @@
 - 旋转由 [SystemUI 适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/RotationSuggestion.java>)与 [Launcher 适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/LauncherRotationSuggestion.java>)持有原生提议/按钮/Binder；只在用户点击且当前提议仍匹配时调用原生动作，不改自动旋转总开关。关闭恢复原生；Hook、窗口或主机确认失败放回原生展示，不吞原生按钮。
 - [SuggestionInput](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionInput.java>)复用纯数字/延迟校验；token、应用窗口类型与 UID、原生焦点同对象、IME 可见性、锁屏、WM 锁及定向 DOWN/UP 注入留原生，保持逐步短路重验；每个已提交 DOWN 始终配对 UP。
 
-原生通知观察由共享 BackBridge 在已投递／移除回调之后转发，不拦截普通应用发送或 NMS 投递前路径。短信需用户授予 RECEIVE_SMS，标准接收器仅向 SystemUI 定向发送命中 OTP 的有界内容并共享发送身份，不记录正文。两类功能独立于小窗总开关，但仍依赖 SystemUiHost；退役的快捷建议小窗动作不重新提供。
+原生通知观察由共享 BackBridge 在已投递／移除回调之后转发，不拦截普通应用发送或 NMS 投递前路径。短信需用户授予 RECEIVE_SMS，标准接收器仅向 SystemUI 定向发送命中 OTP 的有界内容并共享发送身份，不记录正文。两类功能独立于小窗总开关，但仍依赖 SystemUiHost。快捷建议的「以小窗打开」是建议侧独立开关（`suggestions` 的 `window` 键，默认关闭）：只有该开关与小窗总开关都开启、且用户点击建议按钮时，才用 `SuggestionRules.Attempt` 做单次代际与 15 秒超时，把原始 Intent 经 `Wire.openIntent` 交给既有 OPEN 路由；未回复或失败提示后保留原生展示，不改通知投递路径。
 
 Launcher 旋转桥接使用实际 SystemUI UID、Binder 租约及逐提议 ACK；超时／死亡恢复原生，Launcher 目标须为已知系统实际 HOME／本用户 UID。原生 Hook 可能局部安装，不承诺统一动态卸载；既有针对性检查不代替设备或跨系统兼容验证。
