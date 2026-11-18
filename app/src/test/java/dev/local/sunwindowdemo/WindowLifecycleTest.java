@@ -33,6 +33,29 @@ public class WindowLifecycleTest {
         assertFalse(permission.changed(true,false));assertTrue(external.changed(true,false));
         assertTrue(released.focusable(true,false,"normal"));assertFalse(released.focusable(true,false,"mini"));assertFalse(released.focusable(true,true,"normal"));
     }
+    @Test public void normalOnlyRisesAboveAnExistingHigherMini(){
+        assertTrue(WindowLifecycle.raiseNormal(2,3));
+        assertFalse(WindowLifecycle.raiseNormal(3,2));
+        assertFalse(WindowLifecycle.raiseNormal(-1,2));
+        assertFalse(WindowLifecycle.raiseNormal(2,-1));
+    }
+    @Test public void screenshotCallerIsSystemUiOrTheChooserRelayingIt(){
+        assertTrue(WindowLifecycle.screenshotCaller(10100,10100,10100,true));
+        assertTrue(WindowLifecycle.screenshotCaller(10100,1000,10100,true));
+        assertFalse(WindowLifecycle.screenshotCaller(10100,10200,10100,true));
+        assertFalse(WindowLifecycle.screenshotCaller(10100,1000,10200,true));
+        assertFalse(WindowLifecycle.screenshotCaller(10100,10100,10100,false));
+        assertFalse(WindowLifecycle.screenshotCaller(-1,-1,-1,true));
+    }
+    @Test public void screenshotFlowExcludesOrdinaryImageViewEditAndShare(){
+        String edit="android.intent.action.EDIT",view="android.intent.action.VIEW";
+        assertTrue(WindowLifecycle.screenshotIntent(edit,"image/png","content","screenshot"));
+        assertTrue(WindowLifecycle.screenshotIntent(view,"image/png","content","screenshot"));
+        assertFalse(WindowLifecycle.screenshotIntent(edit,"image/png","content",null));
+        assertFalse(WindowLifecycle.screenshotIntent(edit,"image/jpeg","content","screenshot"));
+        assertFalse(WindowLifecycle.screenshotIntent(view,"image/png","file","screenshot"));
+        assertFalse(WindowLifecycle.screenshotIntent("android.intent.action.SEND","image/png","content","screenshot"));
+    }
     @Test public void inputPermissionOverridePrecedesAllBlockedContentState(){
         assertEquals(WindowLifecycle.Input.ALLOW,WindowLifecycle.input(false,2));assertEquals(WindowLifecycle.Input.ALLOW,WindowLifecycle.input(true,1));
         assertEquals(WindowLifecycle.Input.BLOCK,WindowLifecycle.input(true,2));assertEquals(WindowLifecycle.Input.STATE,WindowLifecycle.input(true,0));

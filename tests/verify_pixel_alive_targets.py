@@ -2,8 +2,8 @@
 
 Python stdlib only; missing archives exit 2 (SKIP), missing targets exit 1.
 All reflective host targets in Alive (including optional visual/trace hooks) and
-DarkAodAccess are enumerated, not a sample. Default is dada; PixelUI is an
-explicit diagnostic (--host pixelui) with known unadapted targets and exits 1.
+DarkAodAccess are enumerated, not a sample. Default is dada; --host pixelui checks the
+QPR2 shapes the source resolves (see QPR2), --host all checks both.
 Launcher has no Alive/DarkAod hook (its supplied archive identity is checked).
 """
 from pathlib import Path
@@ -146,16 +146,53 @@ HASHES = {
 }
 
 
+COMBINED = K+"flow/FlowKt__ZipKt$combine$$inlined$combineUnsafe$FlowKt__ZipKt$1;"
+# PixelUI QPR2 shapes the source resolves after the older exact member is absent.
+# None means the source treats the member as optional and keeps an equivalent guard.
+QPR2 = {
+    (REPO, "lockscreenWallpaperInfo"): (REPO, "fields", "wallpaperChanged", K+"flow/FlowKt__EmittersKt$onStart$$inlined$unsafeFlow$1;"),
+    (REPO, "wallpaperInfo"): (REPO, "fields", "wallpaperInfo", K+"flow/StateFlow;"),
+    (S+"user/data/repository/UserRepositoryImpl;", "selectedUser"): (S+"user/data/repository/UserRepositoryImpl;", "fields", "selectedUser", K+"flow/StateFlow;"),
+    (K+"flow/FlowKt;", "combine"): (K+"flow/FlowKt__ZipKt;", "methods", "combine", "("+FLOW*4+"Lkotlin/jvm/functions/Function5;)"+COMBINED),
+    (K+"flow/FlowKt;", "flowOn"): (K+"flow/FlowKt__ContextKt;", "methods", "flowOn", "("+FLOW+"Lkotlin/coroutines/CoroutineContext;)"+FLOW),
+    (S+"util/settings/UserSettingsProxy;", "getIntForUser"): (S+"util/settings/UserSettingsProxy;", "methods", "getIntForUser", "(ILjava/lang/String;I)I"),
+    # No setter: the field is written only, so Alive skips the doze-blur projection.
+    (DEPTH, "setWakeAndUnlockBlurRadius"): (DEPTH, "fields", "wakeAndUnlockBlurRadius", "F"),
+    (COLLECTOR, "$r8$classId"): (COLLECTOR, "fields", "$r8$classId", "B"),
+    (S+"keyguard/domain/interactor/KeyguardTransitionInteractor$1$1;", "$r8$classId"): (S+"keyguard/domain/interactor/KeyguardTransitionInteractor$1$1;", "fields", "$r8$classId", "B"),
+    (S+"statusbar/policy/KeyguardStateControllerImpl;", "mPrimaryBouncerShowing"): None,
+    (UNLOCKED, "notifShadeWindowControllerLazy"): None,
+    (CLOCK, "access$handleDoze"): (CLOCK, "methods", "handleDoze", "(F)V"),
+    (NOTIFICATIONS, "setMaxAlphaForKeyguard"): (NOTIFICATIONS, "fields", "mMaxAlphaForKeyguard", "F"),
+}
+QPR2_CLASSES = {K+"flow/FlowKt;": {K+"flow/FlowKt__ZipKt;", K+"flow/FlowKt__ContextKt;"}}
+
+
+def required_classes(qpr2):
+    fallbacks = set().union(*QPR2_CLASSES.values())
+    if not qpr2:
+        return set(REQUIRED_CLASSES) - fallbacks
+    result = set()
+    for owner in REQUIRED_CLASSES - fallbacks:
+        result |= QPR2_CLASSES.get(owner, {owner})
+    return result
+
+
 def host_checks(qpr2):
-    """Current source contract, not a speculative PixelUI adapter.
+    """Current source contract: the older exact shape, or the QPR2 shape the source resolves.
 
     Only DEX covariance and fields whose Java access deliberately accepts the
     exact concrete/interface type are normalized; absent targets remain FAIL.
     """
     result = []
     for owner, kind, name, sig, inherited in CHECKS:
+        if qpr2 and (owner, name) in QPR2:
+            replacement = QPR2[(owner, name)]
+            if replacement is not None:
+                result.append((*replacement, inherited))
+            continue
         if owner == K+"flow/FlowKt;" and name == "combine":
-            sig = sig[:sig.index(")")+1]+K+"flow/FlowKt__ZipKt$combine$$inlined$combineUnsafe$FlowKt__ZipKt$1;"
+            sig = sig[:sig.index(")")+1]+COMBINED
         if owner == S+"doze/DozeSensors;" and name == "mProximitySensor" and not qpr2:
             sig = S+"util/sensors/ProximitySensor;"
         result.append((owner, kind, name, sig, inherited))
@@ -257,7 +294,8 @@ def main():
                 print("FAIL SHA256", label, path)
                 return 1
         expected = host_checks(label == "PixelUI")
-        targets = {c[0] for c in expected} | REQUIRED_CLASSES
+        required = required_classes(label == "PixelUI")
+        targets = {c[0] for c in expected} | required
         classes, dexes = {}, []
         for path in paths[:3]:
             current, parsed = read_with_code(ROOT/path, targets)
@@ -267,7 +305,7 @@ def main():
                     continue  # Android definitions must come from boot framework, not APK stubs.
                 classes.setdefault(owner, body)
         failures = []
-        missing_classes = REQUIRED_CLASSES-classes.keys()
+        missing_classes = required-classes.keys()
         for owner in sorted(missing_classes):
             print("FAIL CLASS", label, owner)
         failed |= bool(missing_classes)
@@ -283,7 +321,7 @@ def main():
         failed |= bool(failures or call_failures)
         print("ABI", label, len(expected)-len(failures), "/", len(expected), "exact targets")
         print("CALLS", label, call_count-len(call_failures), "/", call_count, "exact DEX invocation/field paths")
-        print("CLASSES", label, len(REQUIRED_CLASSES)-len(missing_classes), "/", len(REQUIRED_CLASSES), "literal reflection class targets")
+        print("CLASSES", label, len(required)-len(missing_classes), "/", len(required), "literal reflection class targets")
         if not failures and not call_failures and not missing_classes:
             print("PASS", label, "complete enumerated Alive/DarkAod reflection contract")
     print("LIMIT: archived ABI only; no ART install, sensor/display/visual/power/recovery acceptance")

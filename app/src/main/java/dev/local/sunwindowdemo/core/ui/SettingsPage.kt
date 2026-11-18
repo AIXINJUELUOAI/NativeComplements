@@ -20,6 +20,7 @@ fun SettingsPage(
     title: String,
     onBack: (() -> Unit)? = null,
     expandedTitle: Boolean = true,
+    titleContent: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (bottomInset: Dp) -> Unit,
 ) {
@@ -43,7 +44,7 @@ fun SettingsPage(
                 windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
             ) else TopAppBar(
-                title = { Text(title, Modifier.testTag("page-title-$title"), maxLines = 1) },
+                title = titleContent ?: { Text(title, Modifier.testTag("page-title-$title"), maxLines = 1) },
                 navigationIcon = navigation,
                 actions = barActions,
                 windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),

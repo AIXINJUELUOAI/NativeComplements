@@ -25,10 +25,10 @@
 系统文件仅保留在本地忽略的 `verification`，不随源码发布。当前 dada／PixelOS 样本为 Android 17、CP2A.260605.016；PixelUI 样本为 Pixel 10 Pro Android 17 QPR2、CP4A.261105.040.A1。ROM 名称不参与运行时目标选择。
 
 - [窗口与共享宿主](<../../tests/verify_pixel_window_targets.py>)、[外观／图标](<../../tests/verify_icon_target.py>)与[导航](<../../tests/verify_navbar_target.py>)直接读取两套归档，核实际声明、精确签名及列出的调用关系。
-- [Alive／暗处 AOD](<../../tests/verify_pixel_alive_targets.py>)默认核 dada；PixelUI 仍有已确认的接口差异，不能据局部兼容声称全部支持。
-- [来电](<../../tests/verify_pixel_call_targets.py>)与[短信](<../../tests/verify_pixel_sms_targets.py>)需对应 Telecom／Telephony 归档；dada 使用实际 APEX 与电话栈，PixelUI 缺少该批代码时明确未验证，不以相近 AOSP 或另一系统代替。
+- [Alive／暗处 AOD](<../../tests/verify_pixel_alive_targets.py>)默认核 dada，`--host pixelui`／`all` 核 QPR2 形态：锁屏壁纸流改由 WALLPAPER_CHANGED 流触发并自行重读、Flow 运算符取 `FlowKt__ZipKt`／`__ContextKt`、设置读取参数顺序、时钟 `handleDoze` 实例方法；QPR2 的唤醒模糊半径只写不读，该投影跳过；缺失的 bouncer 字段与窗口 Lazy 由窗口状态及揭示遮罩同根校验替代。
+- [来电](<../../tests/verify_pixel_call_targets.py>)与[短信](<../../tests/verify_pixel_sms_targets.py>)读取两套实际 Telecom（telephonycore APEX）／Telephony 归档；PixelUI 的 `isInEmergencySmsMode` 取自 framework.jar，不以相近 AOSP 或另一系统代替。
 
-这些检查证明所列目标和调用边界，不证明 ART 已安装命中、native SensorService 命令有效或设备视觉／功耗／恢复效果。PixelUI 剩余适配独立开展，不因缺资料阻断其他已完成改动，也不记作通过。
+这些检查证明所列目标和调用边界，不证明 ART 已安装命中、native SensorService 命令有效或设备视觉／功耗／恢复效果。
 
 ## 维护原则
 

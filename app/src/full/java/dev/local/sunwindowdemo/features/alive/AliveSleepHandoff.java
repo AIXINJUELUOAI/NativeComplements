@@ -237,7 +237,8 @@ public final class AliveSleepHandoff {
             Class<?> keyguardImpl=type(loader,"com.android.systemui.statusbar.policy.KeyguardStateControllerImpl");
             showing=field(keyguardImpl,"mShowing",boolean.class);occluded=field(keyguardImpl,"mOccluded",boolean.class);
             going=field(keyguardImpl,"mKeyguardGoingAway",boolean.class);fading=field(keyguardImpl,"mKeyguardFadingAway",boolean.class);
-            bouncer=field(keyguardImpl,"mPrimaryBouncerShowing",boolean.class);
+            // QPR2 removed the field; the window-state bouncerShowing check below remains authoritative.
+            bouncer=optionalField(keyguardImpl,"mPrimaryBouncerShowing",boolean.class);
             stateShowing=field(windowState,"keyguardShowing",boolean.class);stateOccluded=field(windowState,"keyguardOccluded",boolean.class);
             stateBouncer=field(windowState,"bouncerShowing",boolean.class);stateGoing=field(windowState,"keyguardGoingAway",boolean.class);
             Class<?> blur=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
@@ -255,12 +256,13 @@ public final class AliveSleepHandoff {
             sleepAnimations=controller.getDeclaredMethod("onStartedGoingToSleep");
             animations=field(controller,"animations",java.util.List.class);
             startAnimation=unlocked.getDeclaredMethod("startAnimation");shouldPlay=unlocked.getDeclaredMethod("shouldPlayUnlockedScreenOffAnimation");
-            nativeWindow=field(unlocked,"notifShadeWindowControllerLazy",type(loader,"dagger.Lazy"));
+            // QPR2 drives the shade through an interactor; then the reveal scrim's root identity binds the window.
+            nativeWindow=optionalField(unlocked,"notifShadeWindowControllerLazy",type(loader,"dagger.Lazy"));
             nativeScrim=field(unlocked,"lightRevealScrim",draw.getDeclaringClass());
             nativePlaying=field(unlocked,"lightRevealAnimationPlaying",boolean.class);
             nativeAnimator=field(unlocked,"lightRevealAnimator",android.animation.ValueAnimator.class);
             nativeDecision=field(unlocked,"decidedToAnimateGoingToSleep",Boolean.class);
-            lazyGet=nativeWindow.getType().getDeclaredMethod("get");lazyGet.setAccessible(true);
+            lazyGet=nativeWindow==null?null:nativeWindow.getType().getDeclaredMethod("get");if(lazyGet!=null)lazyGet.setAccessible(true);
             for(Method method:new Method[]{layout,apply,draw,sleep,wake,sleepAnimations}){method.setAccessible(true);if(method.getReturnType()!=void.class)throw new NoSuchMethodException("handoff ABI");}
             for(Method method:new Method[]{startAnimation,shouldPlay}){method.setAccessible(true);if(method.getReturnType()!=boolean.class)throw new NoSuchMethodException("admission ABI");}
             // DepthAnimation listener is exact to this native window; no global singleton guessed from a different display.
@@ -285,7 +287,7 @@ public final class AliveSleepHandoff {
             Object owner=window.get(),controller=sleepScope.get();View value=view();
             if(owner==null||controller==null||value==null||!value.isAttachedToWindow()||value.getDisplay()==null
                     ||value.getDisplay().getDisplayId()!=Display.DEFAULT_DISPLAY||value.getDisplay().getState()!=Display.STATE_ON)return false;
-            if(!((List<?>)animations.get(controller)).contains(animation)||lazyGet.invoke(nativeWindow.get(animation))!=owner)return false;
+            if(!((List<?>)animations.get(controller)).contains(animation)||nativeWindow!=null&&lazyGet.invoke(nativeWindow.get(animation))!=owner)return false;
             View reveal=(View)nativeScrim.get(animation);if(reveal==null||!sameRoot(reveal))return false;
             if(nativePlaying.getBoolean(animation)||((android.animation.ValueAnimator)nativeAnimator.get(animation)).isStarted()
                     ||nativeDecision.get(animation)!=null)return false;
@@ -294,7 +296,7 @@ public final class AliveSleepHandoff {
             Object token=selection.token(repo(owner));
             if(!(identity instanceof AliveSystemUi.MatchToken old)||!(token instanceof AliveSystemUi.MatchToken now)||!old.same(now))return false;
             Object guard=keyguard.get(owner),snapshot=state.get(owner);
-            return !occluded.getBoolean(guard)&&!going.getBoolean(guard)&&!fading.getBoolean(guard)&&!bouncer.getBoolean(guard)
+            return !occluded.getBoolean(guard)&&!going.getBoolean(guard)&&!fading.getBoolean(guard)&&!(bouncer!=null&&bouncer.getBoolean(guard))
                 &&!stateOccluded.getBoolean(snapshot)&&!stateBouncer.getBoolean(snapshot)&&!stateGoing.getBoolean(snapshot);
         }
         String contentEpisode(){
@@ -322,7 +324,7 @@ public final class AliveSleepHandoff {
             Object now=selection.token(repo(owner));
             if(!(identity instanceof AliveSystemUi.MatchToken old)||!(now instanceof AliveSystemUi.MatchToken current)||!old.same(current))return false;
             Object guard=keyguard.get(owner),snapshot=state.get(owner);
-            if(occluded.getBoolean(guard)||stateOccluded.getBoolean(snapshot)||bouncer.getBoolean(guard)||stateBouncer.getBoolean(snapshot))return false;
+            if(occluded.getBoolean(guard)||stateOccluded.getBoolean(snapshot)||bouncer!=null&&bouncer.getBoolean(guard)||stateBouncer.getBoolean(snapshot))return false;
             // Wake clips only a decorative reveal, never keyguard/input. Actual authenticated going/fading remains native.
             if(!awake&&(going.getBoolean(guard)||fading.getBoolean(guard)||stateGoing.getBoolean(snapshot)))return false;
             return !requireShowing||showing.getBoolean(guard)&&stateShowing.getBoolean(snapshot);
@@ -476,5 +478,10 @@ public final class AliveSleepHandoff {
     private static Class<?> type(ClassLoader loader,String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}
     private static Field field(Class<?> owner,String name,Class<?> type)throws ReflectiveOperationException {
         Field field=owner.getDeclaredField(name);field.setAccessible(true);if(field.getType()!=type)throw new NoSuchFieldException(name);return field;
+    }
+    /** Absent on newer SystemUI (null); a present member must still have the exact type. */
+    static Field optionalField(Class<?> owner,String name,Class<?> type)throws ReflectiveOperationException {
+        try{owner.getDeclaredField(name);}catch(NoSuchFieldException absent){return null;}
+        return field(owner,name,type);
     }
 }

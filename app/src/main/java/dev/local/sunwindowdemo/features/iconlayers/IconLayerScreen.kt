@@ -6,9 +6,9 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import dev.local.sunwindowdemo.LaunchableApp
+import dev.local.sunwindowdemo.features.gamemode.AppListPicker
 import dev.local.sunwindowdemo.core.ui.*
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -83,50 +84,34 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (S
     }
     val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { if (it != null) prepare(it, false) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { if (it != null) prepare(it, true) }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(bottom = 32.dp + bottomInset)) {
-            item {
-                if (selection == null) SettingsGroup {
-                    ToggleRow("启用图标适配", value = state.getBoolean("enabled")) {
-                        IconLayerStore.enabled(context, it); refreshState()
-                    }
-                    ToggleRow("通知图标替换", value = state.getBoolean("notifications")) {
-                        IconLayerStore.notifications(context, it); refreshState()
-                    }
-                    SettingRow("导入图标库",
-                        if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else "ZIP 或文件夹",
-                        onClick = if (busy || pending != null) null else { { showImport = true } },
-                        leading = { Icon(Icons.Default.Add, null) })
-                }
+    Column(Modifier.widthIn(max = 680.dp).fillMaxSize().padding(horizontal = 16.dp)) {
+        AppListPicker(installed, "逐应用设置", bottomInset, modifier = Modifier.weight(1f),
+            header = { if (selection == null) SettingsGroup {
+                ToggleRow("启用图标适配", value = state.getBoolean("enabled")) { IconLayerStore.enabled(context, it); refreshState() }
+                ToggleRow("通知图标替换", value = state.getBoolean("notifications")) { IconLayerStore.notifications(context, it); refreshState() }
+                SettingRow("导入图标库", if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else "ZIP 或文件夹",
+                    onClick = if (busy || pending != null) null else { { showImport = true } }, leading = { Icon(Icons.Default.Add, null) })
+            } },
+            footer = {
                 if (busy) {
-                    Spacer(Modifier.height(16.dp))
-                    if (fraction < 0f) LinearProgressIndicator(Modifier.fillMaxWidth())
-                    else LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
+                    if (fraction < 0f) LinearProgressIndicator(Modifier.fillMaxWidth()) else LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth())
                     Text(progress, Modifier.padding(12.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     TextButton(onClick = { cancel.set(true) }) { Text("取消导入") }
                 }
                 if (message.isNotBlank()) Hint(message)
-                GroupTitle("逐应用设置")
-            }
-            items(installed, key = { it.packageName }) { app ->
-                val policy = remember(app.packageName, state.getString("policies"), state.getStringArrayList("originals").toString()) { IconPolicy.read(context, app.packageName) }
-                SettingsGroup {
-                    SettingRow(app.label, when (policy.color) {
-                        IconPolicy.MANUAL -> "手动前后景"
-                        IconPolicy.ALGORITHM -> "算法补全"
-                        IconPolicy.ORIGINAL -> "彩色图标不处理"
-                        else -> if (app.packageName in library) "自动 · 素材库" else "自动 · 应用原图"
-                    }, onClick = { if (selection == null) onApp(app.packageName) else onSelect(app.packageName) },
-                        leading = { IconRowAppIcon(app) }, trailing = {
-                            if (selection == null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            else Checkbox(app.packageName in selection, onCheckedChange = null)
-                        })
-                }
-                Spacer(Modifier.height(2.dp))
-            }
-            item {
-                if (installed.isEmpty()) Hint("暂无可显示的应用")
                 if (!state.getString("error").isNullOrBlank()) Hint(state.getString("error")!!)
+            }) { app ->
+            val policy = remember(app.packageName, state.getString("policies"), state.getStringArrayList("originals").toString()) { IconPolicy.read(context, app.packageName) }
+            SettingsGroup {
+                SettingRow(app.label, when (policy.color) {
+                    IconPolicy.MANUAL -> "手动前后景"
+                    IconPolicy.ALGORITHM -> "算法补全"
+                    IconPolicy.ORIGINAL -> "彩色图标不处理"
+                    else -> if (app.packageName in library) "自动 · 素材库" else "自动 · 应用原图"
+                }, onClick = { if (selection == null) onApp(app.packageName) else onSelect(app.packageName) }, leading = { IconRowAppIcon(app) }, trailing = {
+                    if (selection == null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    else Checkbox(app.packageName in selection, onCheckedChange = null)
+                })
             }
         }
     }

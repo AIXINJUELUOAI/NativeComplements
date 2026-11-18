@@ -36,17 +36,15 @@ internal fun gameSliderIcon(context: Context, name: String): android.graphics.dr
     if (id == 0) null else module.getDrawable(id)
 }.getOrNull()
 
-private fun temporaryBrightnessWriter(context: Context): (Float) -> Unit {
-    var displayId: Int? = null
-    return { value ->
-        val id = displayId ?: (context.display ?: error("No display")).displayId.also { displayId = it }
-        val manager = context.getSystemService(DisplayManager::class.java)
-        manager.javaClass.getMethod("setTemporaryBrightness", Int::class.javaPrimitiveType, Float::class.javaPrimitiveType)
-            .invoke(manager, id, value)
-    }
+private fun systemBrightnessWriter(context: Context): (Float) -> Unit = { value ->
+    require(value.isFinite() && value in 0f..1f)
+    val display = context.display ?: error("No display")
+    val manager = context.getSystemService(DisplayManager::class.java)
+    manager.javaClass.getMethod("setBrightness", Int::class.javaPrimitiveType, Float::class.javaPrimitiveType)
+        .invoke(manager, display.displayId, value)
 }
 
-/** Only owned temporary previews; never persist brightness or change its automatic/manual mode. */
+/** Writes the shared system brightness value without changing automatic/manual mode. */
 internal class GameSliderState(
     private val context: Context,
     private val readBrightness: () -> Float? = {
@@ -57,7 +55,7 @@ internal class GameSliderState(
                 .invoke(manager, display.displayId) as Float
         }.getOrNull()
     },
-    private val writeBrightness: (Float) -> Unit = temporaryBrightnessWriter(context),
+    private val writeBrightness: (Float) -> Unit = systemBrightnessWriter(context),
     private val brightnessRange: () -> ClosedFloatingPointRange<Float> = {
         runCatching {
             val display = context.display ?: error("No display")
@@ -89,15 +87,9 @@ internal class GameSliderState(
     private var brightnessDragging = false
     private var volumeDragging = false
     private var range = 0f..1f
-    internal var lastPreview: Float? = null
-        private set
     private val observer = object : ContentObserver(main) {
         override fun onChange(selfChange: Boolean) {
-            if (observing) {
-                // Settings changes belong to the system/user, unlike our own display callbacks.
-                releaseBrightnessPreview()
-                refresh()
-            }
+            if (observing) refresh()
         }
     }
     private val receiver = object : BroadcastReceiver() {
@@ -119,7 +111,7 @@ internal class GameSliderState(
                         it.start >= 0f && it.endInclusive <= 1f && it.endInclusive > it.start)
                 }
             }.getOrDefault(0f..1f)
-            val value = lastPreview ?: runCatching { readBrightness() }.getOrNull()
+            val value = runCatching { readBrightness() }.getOrNull()
             brightnessEnabled = value != null && value.isFinite() && value in 0f..1f
             if (brightnessEnabled) brightness = gameBrightnessProgress(
                 (value!!.coerceIn(range.start, range.endInclusive) - range.start) / (range.endInclusive - range.start)).toFloat()
@@ -142,7 +134,6 @@ internal class GameSliderState(
             val next = progress.coerceIn(0f, 1000f)
             val value = range.start + gameBrightnessLinear(kotlin.math.round(next).toInt()) * (range.endInclusive - range.start)
             writeBrightness(value)
-            lastPreview = value
             brightness = next
         }.onFailure { brightnessEnabled = false }
     }
@@ -162,8 +153,6 @@ internal class GameSliderState(
 
     fun start() {
         if (observing) return
-        // A previous hide may have failed to clear; retry before accepting another preview.
-        releaseBrightnessPreview()
         observing = true
         runCatching {
             context.contentResolver.registerContentObserver(Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS), false, observer)
@@ -178,17 +167,7 @@ internal class GameSliderState(
         runCatching { context.registerReceiver(receiver, IntentFilter("android.media.VOLUME_CHANGED_ACTION"), null, main, Context.RECEIVER_EXPORTED) }
         refresh()
     }
-    internal fun releaseBrightnessPreview() {
-        if (lastPreview == null) return
-        // AOSP TemporaryBrightnessStrategy uses BRIGHTNESS_INVALID_FLOAT (NaN) for no override.
-        // Do not restore a captured value: automatic brightness must resume the current system policy.
-        runCatching { writeBrightness(Float.NaN) }
-            .onSuccess { lastPreview = null }
-            .onFailure { android.util.Log.w("NativeComplements", "GAMEMODE temporary brightness clear failed", it) }
-    }
-
     override fun close() {
-        releaseBrightnessPreview()
         brightnessDragging = false
         volumeDragging = false
         if (!observing) return

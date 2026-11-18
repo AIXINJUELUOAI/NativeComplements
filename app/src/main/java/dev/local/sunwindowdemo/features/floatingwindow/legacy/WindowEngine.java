@@ -42,6 +42,8 @@ final class WindowEngine {
     void visibleResumeReady(){visibleResumeReady=true;}
     private IBinder frameSink;
     private volatile int clientUid=-1,uiUid=-1;
+    private java.lang.ref.WeakReference<Object> screenshotEditor=new java.lang.ref.WeakReference<>(null);
+    private boolean screenshotWasForeground;
     private IBinder uiLease;
     private long uiSeen;
     private boolean uiReady;
@@ -1563,7 +1565,7 @@ final class WindowEngine {
         WindowControl.Previous decision=WindowControl.previous(true,true,false,previous.frame,autoMinimizeOnOpen,
             !"mini".equals(previous.frame)&&pinned!=null&&pinned!=previous&&live(pinned)&&"mini".equals(pinned.frame));
         if(decision==WindowControl.Previous.RETAIN_MINI){
-            previous.parked=false;previous.opacity=1;pinned=previous;renderFrame(previous);return;
+            previous.parked=false;previous.opacity=1;pinned=previous;renderFrame(previous);restoreSlotOrder();return;
         }
         if(decision==WindowControl.Previous.MINIMIZE){
             if(pinned!=null&&pinned!=previous)finishGroup(pinned,false,"清理失效迷你窗");
@@ -1590,7 +1592,7 @@ final class WindowEngine {
         Geometry.Placement start=s.placement;
         if(start==null){refresh(s);report("STATE");return;}
         Rect safe=new Rect();
-        synchronized(lock){safe.set(safeArea(a.call(s.task,"getDisplayContent"),false));}
+        synchronized(lock){restoreSlotOrder();safe.set(safeArea(a.call(s.task,"getDisplayContent"),false));}
         float margin=s.placementMargin;
         Geometry.Placement end=normalForIme(s);
         if("mini".equals(target)) {
@@ -2193,6 +2195,22 @@ final class WindowEngine {
         a.call(display,"setFocusedApp",new Class<?>[]{a.activity},top);
         a.call(wms,"updateFocusedWindowLocked",new Class<?>[]{int.class,boolean.class},0,true);
         log.accept("MINI_EXPAND_FOCUS task="+s.taskId+" window="+a.field(display,"mCurrentFocus"));
+    }
+    // Both root tasks already use native always-on-top. Correct only an inverted pair;
+    // TaskDisplayArea keeps its own higher priorities (e.g. pinned system tasks).
+    private void restoreSlotOrder(){
+        Session normal=active,mini=pinned;
+        if(normal==null||mini==null||!"normal".equals(normal.frame)||!"mini".equals(mini.frame)
+            ||normal.restoring||mini.restoring||normal.closing||mini.closing||normal.parked||mini.parked
+            ||normal.prioritySuspended||mini.prioritySuspended||normal.screenSuspended||mini.screenSuspended
+            ||normal.fullTransition||mini.fullTransition||normal.userId!=mini.userId)return;
+        try{
+            Object parent=a.call(normal.task,"getParent");
+            if(!a.tda.isInstance(parent)||parent!=a.call(mini.task,"getParent"))return;
+            java.util.List<?> children=(java.util.List<?>)a.field(parent,"mChildren");
+            if(WindowLifecycle.raiseNormal(children.indexOf(normal.task),children.indexOf(mini.task)))
+                a.call(parent,"positionChildAt",new Class<?>[]{int.class,a.wc,boolean.class},Integer.MAX_VALUE,normal.task,false);
+        }catch(Exception ignored){/* Optional ordering repair; retain native tasks on unknown ABI. */}
     }
     private void repairNormalFocus(Session s){
         try{synchronized(lock){
@@ -2846,13 +2864,49 @@ final class WindowEngine {
             }}catch(Exception error){log.accept("SYSTEM_PRIORITY_FAILED "+FrameworkAccess.reason(error));}
         });
     }
+    // Bind only a native successful start, including delivery to an existing ActivityRecord.
+    // Target ROMs leave config_screenshotEditor empty, so SystemUI sends an implicit
+    // EDIT that the user's default editor (or the system chooser acting as caller) handles.
+    void screenshotEditorStarted(Object request,Object started,Object resultTask,int realUid){
+        if(lock==null||!a.task.isInstance(resultTask)||request==null||sessions.isEmpty())return;
+        try{synchronized(lock){
+            Object top=a.call(resultTask,"topRunningActivity");if(top==null)return;
+            Object task=a.call(top,"getTask");if(task==null)return;
+            if(screenshotEditor.get()==top){screenshotEditor.clear();priorityWindowsChanged();}
+            if(started!=null&&a.call(started,"getTask")!=null&&started!=top)return;
+            if(!WindowLifecycle.screenshotCaller(uiUid,realUid,(Integer)a.field(request,"launchedFromUid"),
+                    BackBridge.PACKAGE.equals(a.field(request,"launchedFromPackage")))||owns(task)
+                ||(Integer)a.field(task,"mUserId")!=0||a.call(task,"getDisplayContent")!=a.call(root,"getDefaultDisplay"))return;
+            Intent intent=(Intent)a.field(request,"intent");
+            if(intent==null)return;
+            String mime=intent.getType();if(mime==null)mime=(String)a.field(request,"resolvedType");
+            if(!WindowLifecycle.screenshotIntent(intent.getAction(),mime,intent.getScheme(),intent.getStringExtra("edit_source")))return;
+            screenshotEditor=new java.lang.ref.WeakReference<>(top);screenshotWasForeground=false;
+            log.accept("SCREENSHOT_EDITOR_PRIORITY task="+a.field(task,"mTaskId"));
+            priorityWindowsChanged();
+        }}catch(Exception ignored){/* Unknown attribution keeps native ordering. */}
+    }
+    private boolean screenshotPriority(Object display,Session s){
+        Object editor=screenshotEditor.get();if(editor==null)return false;
+        try{
+            Object task=a.call(editor,"getTask");
+            if(s.userId!=0||display==null||display!=a.call(root,"getDefaultDisplay"))return false;
+            boolean foreground=task!=null&&!owns(task)&&a.call(task,"getDisplayContent")==display
+                &&a.bool(editor,"isVisibleRequested")&&a.call(task,"topRunningActivity")==editor&&task==visibleFullscreen(display);
+            if(foreground)screenshotWasForeground=true;
+            else if(screenshotWasForeground)screenshotEditor.clear();
+            return foreground;
+        }catch(Exception ignored){return false;}
+    }
     // 0=native exception/no match; 1=other UID inside this task; 2=external task/window.
     static int systemPriority(Object display,Object task,int uid,Object windowDisplay,Object windowTask,int windowUid,boolean visible){
         return WindowLifecycle.priority(display!=null&&display==windowDisplay,task==windowTask,uid,windowUid,visible);
     }
     private int priorityState(Session s)throws Exception{
+        Object display=a.call(s.task,"getDisplayContent");
+        if(screenshotPriority(display,s))return 2;
         if(a.overlayHidingWindows==null||wms==null)return 0;
-        Object display=a.call(s.task,"getDisplayContent");int result=0;
+        int result=0;
         for(Object window:(java.util.List<?>)a.overlayHidingWindows.get(wms)){
             result=Math.max(result,systemPriority(display,s.task,s.uid,a.call(window,"getDisplayContent"),
                 a.call(window,"getTask"),a.integer(window,"getOwningUid"),a.bool(window,"isVisible")));
@@ -2954,6 +3008,7 @@ final class WindowEngine {
                 Object display = a.call(s.task, "getDisplayContent");
                 if (display == null) throw new IllegalStateException("任务已离开显示器");
                 if(!a.animating(s.task))resumeMini(s);
+                if(s==active)restoreSlotOrder();
                 repairNormalFocus(s);traceVisibleRuntime(s,display);
                 Rect b = (Rect) a.call(display, "getBounds");
                 if ((!s.transitioning&&updateOrientation(s)) || s.displayW != b.width() || s.displayH != b.height()) { refresh(s); }

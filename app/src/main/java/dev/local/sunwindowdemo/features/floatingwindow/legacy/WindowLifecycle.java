@@ -22,6 +22,15 @@ final class WindowLifecycle {
     static int priority(boolean sameDisplay,boolean sameTask,int uid,int windowUid,boolean visible){
         return !visible||!sameDisplay||uid<0||windowUid<0||windowUid==uid?0:sameTask?1:2;
     }
+    static boolean screenshotIntent(String action,String mime,String scheme,String source){
+        return ("android.intent.action.EDIT".equals(action)||"android.intent.action.VIEW".equals(action))
+            &&"image/png".equals(mime)&&"content".equals(scheme)&&"screenshot".equals(source);
+    }
+    /** SystemUI itself, or the system chooser (SYSTEM_UID 1000) relaying SystemUI's start through startActivityAsCaller. */
+    static boolean screenshotCaller(int systemUiUid,int realUid,int launchedFromUid,boolean systemUiPackage){
+        return systemUiUid>=0&&launchedFromUid==systemUiUid&&systemUiPackage&&(realUid==systemUiUid||realUid==1000);
+    }
+    static boolean raiseNormal(int normalIndex,int miniIndex){return normalIndex>=0&&miniIndex>normalIndex;}
     record Priority(boolean blocked,boolean hide) {
         boolean changed(boolean previousBlocked,boolean previousHide){return blocked!=previousBlocked||hide!=previousHide;}
         boolean focusable(boolean previousFocusable,boolean parked,String form){

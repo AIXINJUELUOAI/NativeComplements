@@ -17,7 +17,7 @@ import java.util.Locale;
 import android.icu.text.Transliterator;
 import java.util.List;
 
-final class AppCatalog {
+public final class AppCatalog {
     static final class App {
         final String pkg, label, section, sortKey;
         final Drawable icon;
@@ -73,9 +73,10 @@ final class AppCatalog {
         try { return PINYIN.get().transliterate(value).toUpperCase(Locale.ROOT); }
         catch (RuntimeException unavailable) { return value.toUpperCase(Locale.ROOT); }
     }
-    private static String sectionFromKey(String key) {
+    static String sectionFromKey(String key) {
         return !key.isEmpty()&&key.charAt(0)>='A'&&key.charAt(0)<='Z'?key.substring(0,1):"#";
     }
     static String section(String label) { return sectionFromKey(sortKey(label)); }
+    public static String sectionForLabel(String label) { return section(label); }
 
 }

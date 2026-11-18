@@ -6,8 +6,7 @@ import android.graphics.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import dev.local.sunwindowdemo.features.gamemode.AppListPicker
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -39,17 +38,9 @@ fun MotionScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0
         apps.filter { it.packageName !in setOf("dev.nativecomplements.module", "com.android.systemui", "com.google.android.apps.nexuslauncher", "com.android.launcher3") }
             .sortedByDescending { selected[it.packageName] ?: defaultMode }
     }
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(Modifier.widthIn(max = 680.dp).fillMaxSize(), contentPadding = PaddingValues(16.dp, 4.dp, 16.dp, 32.dp + bottomInset),
-            verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            item { SettingsGroup { ToggleRow("启用控制", "默认：${modeLabel(defaultMode)}", enabled) { MotionStore.enabled(context, it) } } }
-            item { GroupTitle("逐应用设置") }
-            if (!loaded) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            if (loaded && visible.isEmpty()) item { Hint("暂无可显示的应用") }
-            items(visible, key = { it.packageName }) { app ->
-                SettingRow(app.label, modeLabel(selected[app.packageName] ?: defaultMode), onClick = { editing = app }, leading = { MotionAppIcon(app) })
-            }
-        }
+    AppListPicker(visible, "逐应用设置", bottomInset, modifier = Modifier.widthIn(max = 680.dp),
+        header = { SettingsGroup { ToggleRow("启用控制", "默认：${modeLabel(defaultMode)}", enabled) { MotionStore.enabled(context, it) } } }) { app ->
+        SettingRow(app.label, modeLabel(selected[app.packageName] ?: defaultMode), onClick = { editing = app }, leading = { MotionAppIcon(app) })
     }
     editing?.let { app ->
         AlertDialog(onDismissRequest = { editing = null }, title = { Text(app.label) }, text = {

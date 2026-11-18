@@ -72,7 +72,7 @@ class GameSlidersTest {
         state.close(); state.close(); controller.pause().stop().destroy()
     }
 
-    @Test fun gammaRangeAndDraggingRetainPreviewUntilExternalSettingsYield() {
+    @Test fun gammaRangeAndDraggingFollowSystemBrightness() {
         assertEquals(0f, gameBrightnessLinear(0), .00001f)
         assertEquals(1f, gameBrightnessLinear(1000), .00001f)
         assertEquals(1f / 12f, gameBrightnessLinear(500), .00001f)
@@ -81,7 +81,7 @@ class GameSlidersTest {
         val context = controller.get()
         var value = .4f
         val writes = mutableListOf<Float>()
-        val state = GameSliderState(context, { value }, { writes += it }, { .1f.. .8f })
+        val state = GameSliderState(context, { value }, { value = it; writes += it }, { .1f.. .8f })
         state.start(); state.beginBrightness(); state.setBrightnessProgress(500f)
         assertEquals(.1f + .7f / 12f, writes.single(), .00001f)
         state.refresh(); assertEquals(500f, state.brightness, 0f)
@@ -89,7 +89,7 @@ class GameSlidersTest {
         state.beginBrightness(); value = .8f
         context.contentResolver.notifyChange(Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS), null); idle()
         assertEquals(500f, state.brightness, 0f)
-        assertTrue(writes.last().isNaN()); assertNull(state.lastPreview)
+        assertEquals(1, writes.size)
         state.endBrightness(); assertEquals(1000f, state.brightness, 0f)
         state.setBrightnessProgress(-10f); state.setBrightnessProgress(1200f)
         assertEquals(.1f, writes[writes.lastIndex - 1], .00001f)
@@ -97,36 +97,19 @@ class GameSlidersTest {
         state.close(); controller.pause().stop().destroy()
     }
 
-    @Test fun closeClearsOnlyOwnedPreviewAndNeverPersistsBrightness() {
+    @Test fun closingAndReopeningKeepsTheLastSystemBrightnessAndMode() {
         val controller = activity()
         val context = controller.get()
-        Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 85)
+        var value = .3f
+        var writes = 0
         Settings.System.putInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE, 1)
-        val writes = mutableListOf<Float>()
-        val state = GameSliderState(context, { .3f }, { writes += it })
-        state.start(); state.close(); assertTrue(writes.isEmpty())
-        state.start(); state.setBrightnessProgress(1000f); state.refresh()
+        val state = GameSliderState(context, { value }, { value = it; writes++ })
+        state.start(); state.setBrightnessProgress(1000f); state.close()
+        state.setBrightnessProgress(500f); state.start()
+        assertEquals(1, writes)
         assertEquals(1000f, state.brightness, 0f)
-        state.close(); assertTrue(writes.last().isNaN()); assertNull(state.lastPreview)
-        val count = writes.size
-        state.setBrightnessProgress(500f); assertEquals(count, writes.size)
-        assertEquals(85, Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS))
         assertEquals(1, Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS_MODE))
-        controller.pause().stop().destroy()
-    }
-
-    @Test fun failedClearRetainsOwnershipUntilRetrySucceeds() {
-        val controller = activity()
-        var failClear = true
-        var attempts = 0
-        val state = GameSliderState(controller.get(), { .2f }, {
-            if (it.isNaN()) { attempts++; if (failClear) throw SecurityException("clear denied") }
-        })
-        state.start(); state.setBrightnessProgress(700f); state.close()
-        assertTrue(attempts > 0); assertNotNull(state.lastPreview)
-        failClear = false
-        state.close(); assertNull(state.lastPreview); assertTrue(attempts > 1)
-        controller.pause().stop().destroy()
+        state.close(); controller.pause().stop().destroy()
     }
 
     @Test fun iconsResolveThroughModuleContextRatherThanHostIds() {
