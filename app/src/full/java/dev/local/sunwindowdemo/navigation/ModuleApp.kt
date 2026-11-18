@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -30,7 +31,6 @@ import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 import dev.local.sunwindowdemo.features.barrage.BarrageHistoryScreen
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
-import dev.local.sunwindowdemo.features.gamemode.GameAppsScreen
 import dev.local.sunwindowdemo.features.gamemode.GameModeScreen
 import dev.local.sunwindowdemo.features.gamemode.GameQuickScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconDiagnosticsScreen
@@ -68,6 +68,17 @@ fun ModuleApp(
     fun cancelIconBatch() { iconBatch = false; showIconBatch = false; iconSelection = emptyList() }
     BackHandler(selectingIcons && !showIconBatch) { cancelIconBatch() }
     val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
+    var query by rememberSaveable(page) { mutableStateOf("") }
+    var searching by rememberSaveable(page) { mutableStateOf(false) }
+    var appsTab by rememberSaveable { mutableStateOf(true) }
+    val searchable = when (page) {
+        Page.GameMode, Page.Motion, Page.IconLayers, Page.Blocked -> true
+        Page.GameQuick -> appsTab
+        else -> false
+    }
+    fun closeSearch() { searching = false; query = "" }
+    val searchOpen = searchable && searching
+    BackHandler(searchOpen && !showIconBatch) { closeSearch() }
     // Standard Activity navigation leaves predictive Back and its animation with Android.
     SettingsPage(
         title = when (page) {
@@ -75,9 +86,14 @@ fun ModuleApp(
             Page.IconApp -> iconApp?.label ?: "图标设置"
             else -> page.title
         },
-        onBack = if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
-        expandedTitle = !selectingIcons,
+        onBack = if (searchOpen) ::closeSearch else if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
+        expandedTitle = !selectingIcons && !searchOpen,
+        titleContent = if (searchOpen) ({ AppQueryField(query) { query = it } }) else null,
         actions = {
+            if (searchable && !searchOpen) IconButton(onClick = { searching = true }) {
+                Icon(Icons.Default.Search, contentDescription = "搜索应用")
+            }
+            if (!searchOpen) {
             if (page == Page.Motion) MotionActions()
             if (page == Page.Shade) IconButton(onClick = {
                 ShadeStore.setIconScale(context, true, 100)
@@ -92,8 +108,10 @@ fun ModuleApp(
                 }, enabled = controller.catalogLoaded) { Text(if (selectedIcons.size == controller.apps.size) "全不选" else "全选") }
                 TextButton(onClick = { showIconBatch = true }, enabled = selectedIcons.isNotEmpty()) { Text("下一步") }
             } else if (page == Page.IconLayers) IconLayerActions(onBatch = { iconBatch = true })
+            }
         },
     ) { bottomInset ->
+        CompositionLocalProvider(LocalAppQuery provides (if (searchOpen) query else "")) {
         when (page) {
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.Sms, Page.SmsRecords -> SmsBlockingScreen(page == Page.SmsRecords, bottomInset, onRecords = { navigate(Page.SmsRecords) })
@@ -102,8 +120,10 @@ fun ModuleApp(
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.GameMode -> GameModeScreen(controller.apps, controller.catalogLoaded, bottomInset,
                 onQuick = { navigate(Page.GameQuick) }, onBarrage = { navigate(Page.Barrage) })
-            Page.GameApps -> GameAppsScreen(controller.apps, controller.catalogLoaded, bottomInset)
-            Page.GameQuick -> GameQuickScreen(controller.apps, controller.catalogLoaded, bottomInset)
+            Page.GameQuick -> GameQuickScreen(controller.apps, controller.catalogLoaded, bottomInset, onAppTabChanged = {
+                appsTab = it
+                if (!it) closeSearch()
+            })
             Page.Barrage -> BarrageScreen(bottomInset, onHistory = { navigate(Page.BarrageHistory) })
             Page.BarrageHistory -> BarrageHistoryScreen(controller.apps, bottomInset)
             Page.IconLayers -> IconLayerScreen(controller.apps, bottomInset, openIconApp,
@@ -166,6 +186,7 @@ fun ModuleApp(
                 }
             }
         }
+    }
     }
     if (selectingIcons && showIconBatch) IconBatchDialog(selectedIcons,
         onDismiss = { showIconBatch = false }, onApplied = {

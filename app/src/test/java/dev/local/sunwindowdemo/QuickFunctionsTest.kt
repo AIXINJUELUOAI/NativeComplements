@@ -236,23 +236,36 @@ class QuickFunctionsTest {
         screenshot("barrage-settings")
     }
 
-    @Test fun gameSelectionUsesSwitchesWithoutSearchAndQuickManagementReorders() {
+    @Test fun gameSelectionSearchesWithIcuRailAndQuickManagementReorders() {
         GameModeStore.prefs(context).edit().clear().commit()
         val apps = listOf(LaunchableApp("example.alpha", "甲应用", ColorDrawable(Color.BLUE)),
-            LaunchableApp("example.beta", "乙应用", ColorDrawable(Color.GREEN)))
+            LaunchableApp("example.beta", "乙应用", ColorDrawable(Color.GREEN)),
+            LaunchableApp("example.zeta", "Zebra", ColorDrawable(Color.RED)))
+        var query by androidx.compose.runtime.mutableStateOf("")
         var managing by androidx.compose.runtime.mutableStateOf(false)
         compose.setContent {
             ComplementsTheme {
                 captureView = LocalView.current
                 SettingsPage(title = if (managing) "快捷应用与功能" else "游戏模式") { bottom ->
-                    if (managing) dev.local.sunwindowdemo.features.gamemode.GameQuickScreen(apps, true, bottom)
-                    else dev.local.sunwindowdemo.features.gamemode.GameModeScreen(apps, true, bottom, onQuick = { managing = true })
+                    androidx.compose.runtime.CompositionLocalProvider(dev.local.sunwindowdemo.core.ui.LocalAppQuery provides query) {
+                        if (managing) dev.local.sunwindowdemo.features.gamemode.GameQuickScreen(apps, true, bottom)
+                        else dev.local.sunwindowdemo.features.gamemode.GameModeScreen(apps, true, bottom, onQuick = { managing = true })
+                    }
                 }
             }
         }
         screenshot("game-mode-settings")
         compose.onAllNodes(hasScrollToNodeAction()).assertCountEquals(1)
-        compose.onNodeWithText("搜索应用").assertDoesNotExist()
+        compose.onNodeWithContentDescription("跳转到J").assertDoesNotExist()
+        assertFalse(dev.local.sunwindowdemo.features.gamemode.indexRailVisible(0, 1, scrolling = true, railDragging = false))
+        assertFalse(dev.local.sunwindowdemo.features.gamemode.indexRailVisible(1, 1, scrolling = false, railDragging = false))
+        assertTrue(dev.local.sunwindowdemo.features.gamemode.indexRailVisible(1, 1, scrolling = true, railDragging = false))
+        assertTrue(dev.local.sunwindowdemo.features.gamemode.indexRailVisible(0, 1, scrolling = false, railDragging = true))
+        assertFalse(dev.local.sunwindowdemo.features.gamemode.indexRailVisible(5, null, scrolling = true, railDragging = false))
+        compose.runOnIdle { query = "example.beta" }
+        compose.onNodeWithContentDescription("乙应用").assertIsDisplayed()
+        compose.onNodeWithContentDescription("甲应用").assertDoesNotExist()
+        compose.runOnIdle { query = "" }
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("甲应用"))
         compose.onNodeWithContentDescription("甲应用").assertIsOff().performClick()
         compose.onNodeWithContentDescription("甲应用").assertIsOn()
@@ -262,7 +275,7 @@ class QuickFunctionsTest {
         }
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("快捷应用与功能"))
         compose.onNodeWithText("快捷应用与功能").performClick()
-        compose.onNodeWithText("搜索应用").assertDoesNotExist()
+        compose.onNodeWithContentDescription("跳转到J").assertDoesNotExist()
         compose.onNodeWithContentDescription("甲应用").performScrollTo().assertIsOff().performClick()
         compose.onNodeWithContentDescription("甲应用，点击移除，长按拖动调整顺序").assertIsDisplayed()
         compose.onNodeWithContentDescription("乙应用").performScrollTo().assertIsOff().performClick()
@@ -282,6 +295,7 @@ class QuickFunctionsTest {
         }
         screenshot("game-quick-apps-settings")
         compose.onNodeWithText("功能").performClick()
+        compose.onNodeWithText("搜索应用名或包名").assertDoesNotExist()
         compose.onNodeWithText("已选功能").assertIsDisplayed()
         compose.onNodeWithContentDescription("录屏，点击移除，长按拖动调整顺序").assertIsDisplayed()
         val reorder = compose.onNodeWithContentDescription("录屏，点击移除，长按拖动调整顺序")

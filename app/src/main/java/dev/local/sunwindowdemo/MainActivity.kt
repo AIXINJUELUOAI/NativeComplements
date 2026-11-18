@@ -42,6 +42,7 @@ class SettingsActivity : MainActivity() {
     override val initialPage: Page
         get() {
             val destination = intent.getStringExtra(PAGE_EXTRA) ?: return Page.Window
+            if (destination == "GameApps") return Page.GameMode
             return Page.entries.firstOrNull { it.name == destination } ?: Page.Home
         }
     override val initialAppPackage: String? get() = intent.getStringExtra(APP_EXTRA)
