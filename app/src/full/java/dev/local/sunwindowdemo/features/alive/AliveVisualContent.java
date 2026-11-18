@@ -42,7 +42,7 @@ public final class AliveVisualContent {
                 content.clockOwner=new WeakReference<>(owner);
                 content.capture(0,smallView);content.capture(1,largeView);
             };
-            content.after(method(clock,"access$handleDoze",clock,float.class),(owner,args)->captureClock.inspect(args[0],args));
+            content.after(clockDoze(clock),(owner,args)->captureClock.inspect(args.length==2?args[0]:owner,args));
             content.after(method(clock,"setClock",controller),(owner,args)->{
                 if(content.clockOwner.get()==owner)content.clearClock();
                 captureClock.inspect(owner,args);
@@ -179,5 +179,19 @@ public final class AliveVisualContent {
     }
     private static Method method(Class<?> owner,String name,Class<?>...args)throws ReflectiveOperationException {
         Method method=owner.getDeclaredMethod(name,args);method.setAccessible(true);return method;
+    }
+    /**
+     * Clock doze entry: the static R8 bridge {@code access$handleDoze(controller,amount)} on older
+     * SystemUI, or QPR2's instance {@code handleDoze(amount)} once the bridge is inlined away.
+     * Two arguments therefore mean (controller, amount); one means receiver + amount.
+     */
+    static Method clockDoze(Class<?> clock)throws ReflectiveOperationException {
+        Method doze;
+        try{doze=method(clock,"access$handleDoze",clock,float.class);}
+        catch(NoSuchMethodException inlined){doze=method(clock,"handleDoze",float.class);}
+        boolean bridge=doze.getParameterCount()==2;
+        if(java.lang.reflect.Modifier.isStatic(doze.getModifiers())!=bridge||doze.getReturnType()!=void.class)
+            throw new NoSuchMethodException("ClockEventController handleDoze shape");
+        return doze;
     }
 }

@@ -33,14 +33,21 @@ METHODS = {
 
 
 def check(folder, framework):
-    artifacts = [folder / "service-telecom.jar", framework, folder / "framework-telephony.jar"]
+    # PixelUI QPR2 keeps TelephonyManager in framework.jar; dada ships it in framework-telephony.jar.
+    artifacts = [folder / "service-telecom.jar", framework] + ([folder / "framework-telephony.jar"] if folder.name == "dada" else [])
     classes, definitions = {}, {}
     dex.TARGETS = set(METHODS) | {RESULT}
     expected = {
-        "service-telecom.jar": "d60afbb870a2bda729df3f2227932d73a8d71a6c12f1d81995184a726d02d91b",
-        "framework.jar": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f",
-        "framework-telephony.jar": "a2ee124b4d0eaae7af0c68b0fd1d37633bb2ef8175f7df0cf791e19c8b8ef662",
-    } if folder.name == "dada" else {}
+        "dada": {
+            "service-telecom.jar": "d60afbb870a2bda729df3f2227932d73a8d71a6c12f1d81995184a726d02d91b",
+            "framework.jar": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f",
+            "framework-telephony.jar": "a2ee124b4d0eaae7af0c68b0fd1d37633bb2ef8175f7df0cf791e19c8b8ef662",
+        },
+        "pixelui": {
+            "service-telecom.jar": "fb7ca8e304488293b112ce46cf2590c1cb970cd676edfcd5f2561e88a7c56da1",
+            "framework.jar": "466ba9aa9934aa5bc113f9ee738e3fd66cf92b0bb3d02a144d0669b59381015f",
+        },
+    }[folder.name]
     for path in artifacts:
         if not path.is_file():
             raise FileNotFoundError(f"UNVERIFIED: required host archive missing: {path}")

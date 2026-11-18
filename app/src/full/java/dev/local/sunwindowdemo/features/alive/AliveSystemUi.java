@@ -52,6 +52,13 @@ public final class AliveSystemUi {
         ThreadLocal<Object> producing=new ThreadLocal<>();
         try{
             Class<?> depth=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
+            try{depth.getDeclaredMethod("setWakeAndUnlockBlurRadius",float.class);}
+            catch(NoSuchMethodException qpr2){
+                // QPR2 writes wakeAndUnlockBlurRadius directly and never applies it (blur moved to
+                // WindowRootViewBlurInteractor), so there is no native doze blur contribution to project.
+                log.accept("ALIVE_SYSTEMUI_DOZE_BLUR_SKIPPED no native wake blur setter");
+                return;
+            }
             Class<?> callback=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$statusBarStateCallback$1");
             Class<?> collector=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$2$1");
             Class<?> interactor=type(loader,"com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor");
@@ -118,6 +125,10 @@ public final class AliveSystemUi {
         final Field ambient,lockInfo,homeInfo,settings,manager,background,selected,userInfo,userId,status;
         final Object complete;
         final Method combine,flowOn,current,getSetting,getInfo,getId,supports;
+        final boolean lockIsState,settingNameFirst;
+        int setting(Object secure,int user,String name)throws ReflectiveOperationException {
+            return (Integer)(settingNameFirst?getSetting.invoke(secure,0,name,user):getSetting.invoke(secure,0,user,name));
+        }
         private final Map<Object,Selection> selections=new WeakHashMap<>();
         private static final class Selection {
             final Object selected,lock,home;
@@ -132,7 +143,7 @@ public final class AliveSystemUi {
                 if(selection==null)return null;
                 MatchToken match=selection.match;
                 return match!=null&&current.invoke(selection.selected)==match.user
-                    &&status.get(match.user)==complete&&current.invoke(selection.lock)==match.lock
+                    &&status.get(match.user)==complete&&(!lockIsState||current.invoke(selection.lock)==match.lock)
                     &&current.invoke(selection.home)==match.home?match:null;
             }catch(ReflectiveOperationException|RuntimeException unknown){return null;}
         }
@@ -148,20 +159,37 @@ public final class AliveSystemUi {
                 android.content.Context.class,secure,type(loader,"com.android.systemui.common.ui.domain.interactor.ConfigurationInteractorImpl"));
             constructor.setAccessible(true);
             ambient=field(repository,"wallpaperSupportsAmbientMode",flow);
-            Class<?> readonly=type(loader,"kotlinx.coroutines.flow.ReadonlyStateFlow");
-            lockInfo=field(repository,"lockscreenWallpaperInfo",readonly);homeInfo=field(repository,"wallpaperInfo",readonly);
+            Class<?> state=type(loader,"kotlinx.coroutines.flow.StateFlow");
+            // QPR2 keeps the lock StateFlow local to the constructor; its WALLPAPER_CHANGED stream then
+            // re-runs the projection, and the transform re-reads the lock wallpaper id/info itself.
+            Field lockState;
+            try{lockState=repository.getDeclaredField("lockscreenWallpaperInfo");}catch(NoSuchFieldException absent){lockState=null;}
+            lockIsState=lockState!=null;
+            lockInfo=lockIsState?assignable(repository,"lockscreenWallpaperInfo",state):assignable(repository,"wallpaperChanged",flow);
+            homeInfo=assignable(repository,"wallpaperInfo",state);
             settings=field(repository,"secureSettings",secure);manager=field(repository,"wallpaperManager",WallpaperManager.class);
             background=field(repository,"bgDispatcher",dispatcher);
-            selected=field(type(loader,"com.android.systemui.user.data.repository.UserRepositoryImpl"),"selectedUser",readonly);
+            selected=assignable(type(loader,"com.android.systemui.user.data.repository.UserRepositoryImpl"),"selectedUser",state);
             Class<?> model=type(loader,"com.android.systemui.user.data.model.SelectedUserModel");
             Class<?> info=type(loader,"android.content.pm.UserInfo"),selection=type(loader,"com.android.systemui.user.data.model.SelectionStatus");
             userInfo=field(model,"userInfo",info);userId=field(info,"id",int.class);status=field(model,"selectionStatus",selection);
             complete=selection.getDeclaredField("SELECTION_COMPLETE").get(null);
-            current=type(loader,"kotlinx.coroutines.flow.StateFlow").getMethod("getValue");
-            Class<?> operators=type(loader,"kotlinx.coroutines.flow.FlowKt");
-            combine=operators.getDeclaredMethod("combine",flow,flow,flow,flow,function);
-            flowOn=operators.getDeclaredMethod("flowOn",flow,type(loader,"kotlin.coroutines.CoroutineContext"));
-            getSetting=type(loader,"com.android.systemui.util.settings.UserSettingsProxy").getMethod("getIntForUser",int.class,int.class,String.class);
+            current=state.getMethod("getValue");
+            // R8 may keep the kotlinx facade (FlowKt) or only its file parts (FlowKt__ZipKt/__ContextKt).
+            Class<?> context=type(loader,"kotlin.coroutines.CoroutineContext");
+            Method combined;
+            try{combined=type(loader,"kotlinx.coroutines.flow.FlowKt").getDeclaredMethod("combine",flow,flow,flow,flow,function);}
+            catch(ClassNotFoundException|NoSuchMethodException facade){combined=type(loader,"kotlinx.coroutines.flow.FlowKt__ZipKt").getDeclaredMethod("combine",flow,flow,flow,flow,function);}
+            combine=combined;
+            Method context2;
+            try{context2=type(loader,"kotlinx.coroutines.flow.FlowKt").getDeclaredMethod("flowOn",flow,context);}
+            catch(ClassNotFoundException|NoSuchMethodException facade){context2=type(loader,"kotlinx.coroutines.flow.FlowKt__ContextKt").getDeclaredMethod("flowOn",flow,context);}
+            flowOn=context2;
+            Class<?> proxy=type(loader,"com.android.systemui.util.settings.UserSettingsProxy");
+            Method setting;boolean nameFirst;
+            try{setting=proxy.getMethod("getIntForUser",int.class,int.class,String.class);nameFirst=false;}
+            catch(NoSuchMethodException older){setting=proxy.getMethod("getIntForUser",int.class,String.class,int.class);nameFirst=true;}
+            getSetting=setting;settingNameFirst=nameFirst;
             getInfo=WallpaperManager.class.getDeclaredMethod("getWallpaperInfo",int.class,int.class);
             getId=WallpaperManager.class.getDeclaredMethod("getWallpaperIdForUser",int.class,int.class);
             supports=WallpaperInfo.class.getDeclaredMethod("supportsAmbientMode");
@@ -184,7 +212,7 @@ public final class AliveSystemUi {
                         Object model=args[3];
                         if(model==null||current.invoke(selection)!=model||status.get(model)!=complete)return nativeValue;
                         int user=userId.getInt(userInfo.get(model));
-                        if(user<0||(Integer)getSetting.invoke(secure,0,user,"doze_always_on")!=1)return nativeValue;
+                        if(user<0||setting(secure,user,"doze_always_on")!=1)return nativeValue;
                         // A null lock WallpaperInfo may mean a distinct static lock wallpaper, not home inheritance.
                         int lockId=(Integer)getId.invoke(wallpaper,WallpaperManager.FLAG_LOCK,user);
                         WallpaperInfo actual=(WallpaperInfo)getInfo.invoke(wallpaper,WallpaperManager.FLAG_LOCK,user);
@@ -196,10 +224,10 @@ public final class AliveSystemUi {
                         boolean own=actualId>0&&actual!=null&&OWN.equals(actual.getComponent())&&(Boolean)supports.invoke(actual)
                             &&(Integer)getId.invoke(wallpaper,which,user)==actualId
                             &&(Integer)getId.invoke(wallpaper,WallpaperManager.FLAG_LOCK,user)==lockId
-                            &&(Integer)getSetting.invoke(secure,0,user,"doze_always_on")==1
+                            &&setting(secure,user,"doze_always_on")==1
                             &&current.invoke(selection)==model&&status.get(model)==complete;
                         // Gate publication precedes emission; the collector then recomputes only its doze contribution.
-                        if(own&&current.invoke(lock)==args[1]&&current.invoke(home)==args[2]){
+                        if(own&&(!lockIsState||current.invoke(lock)==args[1])&&current.invoke(home)==args[2]){
                             android.content.pm.ApplicationInfo app=(android.content.pm.ApplicationInfo)
                                 android.content.pm.PackageManager.class.getMethod("getApplicationInfoAsUser",String.class,int.class,int.class)
                                     .invoke(context.getPackageManager(),OWN.getPackageName(),0,user);
@@ -233,6 +261,12 @@ public final class AliveSystemUi {
     private static Field field(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {
         Field value=owner.getDeclaredField(name);value.setAccessible(true);
         if(value.getType()!=expected)throw new NoSuchFieldException(owner.getName()+"."+name);
+        return value;
+    }
+    /** Declared as a concrete or interface Flow type that must implement the expected host interface. */
+    private static Field assignable(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {
+        Field value=owner.getDeclaredField(name);value.setAccessible(true);
+        if(!expected.isAssignableFrom(value.getType()))throw new NoSuchFieldException(owner.getName()+"."+name);
         return value;
     }
 }

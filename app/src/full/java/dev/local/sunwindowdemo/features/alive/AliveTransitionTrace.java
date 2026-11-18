@@ -29,13 +29,13 @@ public final class AliveTransitionTrace {
             Class<?> owner=type(loader,"com.android.keyguard.ClockEventController");
             Field preview=field(owner,"isPreview",boolean.class);
             Field clockFrame=field(owner,"smallClockFrame",android.view.ViewGroup.class);
-            Method doze=method(owner,"access$handleDoze",owner,float.class);
-            if(!java.lang.reflect.Modifier.isStatic(doze.getModifiers()))throw new NoSuchMethodException("static handleDoze");
-            clock.hook(doze,(ignored,args)->{
-                Object controller=args[0];
+            Method doze=AliveVisualContent.clockDoze(owner);
+            clock.hook(doze,(receiver,args)->{
+                boolean bridge=args.length==2;
+                Object controller=bridge?args[0]:receiver;
                 View frame=(View)clockFrame.get(controller);
                 if(!preview.getBoolean(controller)&&frame!=null&&frame.isAttachedToWindow()&&sameRoot.test(frame))
-                    clock.value(controller,"doze",((Number)args[1]).floatValue());
+                    clock.value(controller,"doze",((Number)args[bridge?1:0]).floatValue());
             });
             clock.ready();
         } catch(Throwable failure) { clock.fail(failure); }
@@ -45,7 +45,12 @@ public final class AliveTransitionTrace {
             Class<?> owner=type(loader,"com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController");
             Field view=owner.getDeclaredField("mView");view.setAccessible(true);
             if(!View.class.isAssignableFrom(view.getType()))throw new NoSuchFieldException("notification mView");
-            notifications.hook(method(owner,"setMaxAlphaForKeyguard",String.class,float.class),(controller,args)->{
+            Method keyguardAlpha;
+            try{keyguardAlpha=method(owner,"setMaxAlphaForKeyguard",String.class,float.class);}
+            catch(NoSuchMethodException inlined){keyguardAlpha=null;}
+            // QPR2 inlines the setter; its mMaxAlphaForKeyguard field is then sampled at updateAlpha.
+            Field keyguardField=keyguardAlpha!=null?null:field(owner,"mMaxAlphaForKeyguard",float.class);
+            if(keyguardAlpha!=null)notifications.hook(keyguardAlpha,(controller,args)->{
                 View target=(View)view.get(controller);
                 if(target!=null&&sameRoot.test(target)) {
                     // Do not read the source string or notification contents.
@@ -54,7 +59,9 @@ public final class AliveTransitionTrace {
             });
             notifications.hook(method(owner,"updateAlpha"),(controller,args)->{
                 View target=(View)view.get(controller);
-                if(target!=null&&sameRoot.test(target))notifications.value(controller,"effectiveAlpha",target.getAlpha());
+                if(target==null||!sameRoot.test(target))return;
+                if(keyguardField!=null)notifications.value(controller,"keyguardAlpha",keyguardField.getFloat(controller));
+                notifications.value(controller,"effectiveAlpha",target.getAlpha());
             });
             notifications.ready();
         } catch(Throwable failure) { notifications.fail(failure); }
@@ -84,7 +91,7 @@ public final class AliveTransitionTrace {
             Class<?> step=type(loader,"com.android.systemui.keyguard.shared.model.TransitionStep");
             Class<?> state=type(loader,"com.android.systemui.keyguard.shared.model.KeyguardState");
             Class<?> status=type(loader,"com.android.systemui.keyguard.shared.model.TransitionState");
-            Field id=field(collector,"$r8$classId",int.class);
+            Field id=classId(collector);
             Field from=field(step,"from",state),to=field(step,"to",state),value=field(step,"value",float.class);
             Field phase=field(step,"transitionState",status);
             Handler main=new Handler(Looper.getMainLooper());
@@ -232,5 +239,11 @@ public final class AliveTransitionTrace {
     }
     private static Method method(Class<?> owner,String name,Class<?>... args)throws ReflectiveOperationException {
         Method method=owner.getDeclaredMethod(name,args);method.setAccessible(true);return method;
+    }
+    /** R8 class-merging discriminator: int on older SystemUI, byte on QPR2; Field.getInt widens both. */
+    static Field classId(Class<?> owner)throws ReflectiveOperationException {
+        Field field=owner.getDeclaredField("$r8$classId");
+        if(field.getType()!=int.class&&field.getType()!=byte.class)throw new NoSuchFieldException("$r8$classId");
+        field.setAccessible(true);return field;
     }
 }

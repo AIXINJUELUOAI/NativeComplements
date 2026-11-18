@@ -22,7 +22,8 @@ def check(host):
     if not path.is_file():
         print(f"SKIP: {host}: missing telephony-common.jar; no SMS target evidence")
         return False
-    expected = {"dada": "2e2f047c646e9eb74f9828e00abf668daebb0265a326ca8e362839d774018ff7"}
+    expected = {"dada": "2e2f047c646e9eb74f9828e00abf668daebb0265a326ca8e362839d774018ff7",
+                "pixelui": "bd752b8c16d0e2063ee1a9c894934a4eb9eb1257b1699c253a49d151d878302b"}
     assert host in expected, (host, "archive hash must be reviewed and pinned before validation")
     assert hashlib.sha256(path.read_bytes()).hexdigest() == expected[host], (host, "archive hash changed")
     dex.TARGETS = {HANDLER, TRACKER, CHECKER, HANDLER[:-1] + "$DeliveringState;"}
