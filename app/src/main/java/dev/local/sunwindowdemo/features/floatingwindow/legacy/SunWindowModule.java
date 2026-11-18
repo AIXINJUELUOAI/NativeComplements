@@ -300,6 +300,11 @@ public final class SunWindowModule extends XposedModule {
                     boolean success=false;
                     try{
                         Object result=chain.proceed();success=result!=null;
+                        // START_RETURN_INTENT_TO_CALLER (1) did not launch or deliver an activity.
+                        if(success&&(code==0||code==2||code==3))try{
+                            engine.screenshotEditorStarted(chain.getArg(0),lastStarted.get(chain.getThisObject()),result,
+                                realCallingUid.getInt(chain.getThisObject()));
+                        }catch(Exception e){note("SCREENSHOT_EDITOR_OBSERVE_FAILED "+FrameworkAccess.reason(e));}
                         if(success&&shortcutTicket!=null)try{
                             Object started=lastStarted.get(chain.getThisObject());
                             // Reused singleTask starts can return an existing task while
