@@ -171,6 +171,7 @@ final class WindowEngine {
             TaskCover cover=new TaskCover(a,context,task,parent,pkg,from,from,corner,corner,1,false);
             TaskVisibilityGuard mask=cover.mask;
             BackPreparation prepared=new BackPreparation(task,token,mask,cover,uiLease);backPreparation=prepared;
+            if(swipe)log.accept("SWIPE_COVER_ORDER independent="+cover.independentSwipeLayer());
             mask.preserveBackdrop();
             a.call(root,"ensureActivitiesVisible");
             a.call(wms,"requestTraversal");
@@ -585,7 +586,8 @@ final class WindowEngine {
                             backPreparation=null;
                             if(prepared.cover!=null){
                                 s.entryFade=false;s.cover=prepared.cover;s.coverDrawn=false;s.coverFullscreen=false;
-                                s.cover.entryDecorations(true);
+                                if(s.miniLanding)log.accept("SWIPE_COVER_ADOPT_ORDER independent="+s.cover.independentSwipeLayer());
+                                s.cover.entryDecorations(!s.miniLanding);
                                 s.cover.beforeReveal(()->renderFrame(s));
                                 s.cover.resumeTo(visualBounds(s.placement),a.config(s.task,false).densityDpi/160f*MotionStyle.radius(s.placement.scale(),s.defaultScale));
                                 coverTasks.put(s.task,s);pollCover(s,s.cover);

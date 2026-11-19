@@ -76,6 +76,8 @@ for name, signature in (
     ("relaunchActivityLocked", "(ZI)V"),
 ):
     method(WM + "ActivityRecord;", name, signature)
+method(WM + "WindowContainer;", "getLastLayer", "()I")
+method(WM + "WindowContainer;", "getLastRelativeLayer", "()Landroid/view/SurfaceControl;")
 method(WM + "WindowContainer;", "forAllTasks", "(Ljava/util/function/Consumer;)V")
 method(WM + "WindowContainer;", "forAllWindows", "(Ljava/util/function/Consumer;Z)V")
 method(WM + "RootWindowContainer;", "anyTaskForId", "(II)" + WM + "Task;")

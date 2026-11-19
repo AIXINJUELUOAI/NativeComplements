@@ -32,6 +32,8 @@ final class TaskCover {
     private long entryAt=-1,fadeAt=-1,hiddenAt=-1;
     private long frameClock=-1;
     private boolean closed,exiting;
+    private boolean independentLayer;
+    private int taskLayer;
     private float ownerAlpha;
     private boolean fadeIn;
     private TaskDecoration decoration;
@@ -102,6 +104,32 @@ final class TaskCover {
         }
         return (SurfaceControl)a.call(b,"build");
     }
+    /** A newly created swipe cover must survive the owner's native hidden bit at Home finish.
+     * Same-Z siblings sort by creation ID: this newer root stays above its existing task without
+     * consuming the next task's Z or escaping the original parent's system-window ordering. */
+    boolean independentSwipeLayer()throws Exception{
+        if(independentLayer)return true;
+        if(a.call(task,"getParent")!=parent||a.call(task,"getLastRelativeLayer")!=null)return false;
+        int nativeLayer=a.integer(task,"getLastLayer");
+        if(nativeLayer<0)return false;
+        taskLayer=nativeLayer;
+        try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
+            tx.setLayer(root,taskLayer).apply();
+        }
+        independentLayer=true;return true;
+    }
+    private void order(SurfaceControl.Transaction tx,SurfaceControl anchor)throws Exception{
+        if(!independentLayer){
+            a.call(tx,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},root,anchor,1);
+            return;
+        }
+        // Shell may temporarily reparent the native surface. Never treat a relative offset as Z.
+        if(a.call(task,"getParent")==parent&&a.call(task,"getLastRelativeLayer")==null){
+            int nativeLayer=a.integer(task,"getLastLayer");
+            if(nativeLayer>=0)taskLayer=nativeLayer;
+        }
+        tx.setLayer(root,taskLayer);
+    }
     void ownerAlpha(float alpha){ownerAlpha=alpha;}
     void beforeReveal(Reveal callback){beforeReveal=callback;}
     boolean canRetarget(){return !closed&&!exiting&&fadeAt<0&&mask.holding();}
@@ -121,7 +149,7 @@ final class TaskCover {
                 tx.apply();
             }
             mask.release(0);
-            mask=nextMask;task=nextTask;parent=nextParent;
+            mask=nextMask;task=nextTask;parent=nextParent;independentLayer=false;
             refreshScreenCorners();
             from.set(bounds);to.set(bounds);radiusFrom=radiusTo=cornerRadius(bounds,screenBounds,screenRadius,radius);
             began=SystemClock.elapsedRealtime();entryAt=fadeAt=hiddenAt=-1;
@@ -296,7 +324,7 @@ final class TaskCover {
         SurfaceControl anchor=(SurfaceControl)a.field(task,"mSurfaceControl");
         if(anchor==null||!anchor.isValid()||root==null||!root.isValid()||background==null||!background.isValid()||icon==null||!icon.isValid())throw new IllegalStateException("cover surface detached");
         try(SurfaceControl.Transaction tx=new SurfaceControl.Transaction()){
-            a.call(tx,"setRelativeLayer",new Class<?>[]{SurfaceControl.class,SurfaceControl.class,int.class},root,anchor,1);
+            order(tx,anchor);
             tx.setLayer(background,0).setLayer(icon,1);
             tx.setPosition(root,x-pb.left,y-pb.top);
             a.call(tx,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},background,color);
