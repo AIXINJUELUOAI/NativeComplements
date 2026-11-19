@@ -259,7 +259,7 @@ class NavigationTest {
         compose.onNodeWithContentDescription("角落防误触").assertIsOff().performClick()
         compose.runOnIdle { assertTrue(dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_rejection")) }
         compose.onNodeWithTag("game-corner-preview").assertDoesNotExist()
-        compose.onNodeWithContentDescription("扇区大小").assertDoesNotExist()
+        compose.onNodeWithContentDescription("大小").assertDoesNotExist()
         compose.onNodeWithText("角落防误触").performClick()
         val details = nextPage(game, Page.GameCorner)
         gameScenario.moveToState(Lifecycle.State.CREATED)
@@ -270,14 +270,31 @@ class NavigationTest {
         compose.runOnIdle { assertEquals(original, detail.requestedOrientation) }
         val preview = compose.onNodeWithTag("game-corner-preview").fetchSemanticsNode().boundsInRoot
         assertTrue(preview.width > preview.height)
-        val slider = compose.onNodeWithContentDescription("扇区大小").fetchSemanticsNode()
+        compose.onNodeWithText("范围预览").assertIsDisplayed()
+        compose.onNodeWithText("大小").assertIsDisplayed()
+        compose.onNodeWithText("短边的", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("红色：", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("在预览中", substring = true).assertDoesNotExist()
+        val slider = compose.onNodeWithContentDescription("大小").fetchSemanticsNode()
         assertEquals(0, slider.config[androidx.compose.ui.semantics.SemanticsProperties.ProgressBarRangeInfo].steps)
-        compose.onNodeWithContentDescription("扇区大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(16.375f) }
-        compose.runOnIdle { assertEquals(16.375f, dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getFloat("corner_radius_percent"), 0f) }
+        compose.onNodeWithContentDescription("大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(64.375f) }
+        val bounds = context.getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.bounds
+        val shortSideDp = minOf(bounds.width(), bounds.height()) / context.resources.displayMetrics.density
+        compose.runOnIdle { assertEquals(64.375f / shortSideDp * 100f,
+            dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getFloat("corner_radius_percent"), .0001f) }
         detailScenario.recreate()
         lateinit var recreated: MainActivity
         detailScenario.onActivity { recreated = it }
-        compose.onNodeWithText("扇区大小：短边的 16.38%").assertIsDisplayed()
+        compose.onNodeWithText("64.4 dp").assertIsDisplayed()
+        compose.runOnIdle {
+            val view = recreated.window.decorView
+            val screenshot = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+            view.draw(android.graphics.Canvas(screenshot))
+            val screenshotDir = java.io.File(requireNotNull(System.getProperty("nativecomplements.screenshots"))).apply { mkdirs() }
+            java.io.File(screenshotDir, "game-corner-test3.png").outputStream().use {
+                screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            }
+        }
         compose.runOnIdle { assertEquals(original, recreated.requestedOrientation) }
         detailScenario.close()
         assertEquals(original, recreated.requestedOrientation)

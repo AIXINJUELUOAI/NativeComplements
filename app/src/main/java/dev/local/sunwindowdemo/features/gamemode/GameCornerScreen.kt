@@ -8,13 +8,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -24,9 +26,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.local.sunwindowdemo.core.ui.GroupTitle
+import dev.local.sunwindowdemo.core.ui.SettingsGroup
 import java.util.Locale
 
-/** Preview only: no real input suppression is installed over this page or its controls. */
+/** The edge-touch phone preview, laid horizontally; this page never changes orientation. */
 @Composable
 fun GameCornerScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
@@ -40,37 +44,34 @@ fun GameCornerScreen(bottomInset: Dp = 0.dp) {
     var percent by remember(config.getFloat("corner_radius_percent", 10f)) {
         mutableFloatStateOf(config.getFloat("corner_radius_percent", 10f))
     }
-    val percentLabel = String.format(Locale.ROOT, "%.2f", percent).trimEnd('0').trimEnd('.')
     val configuration = LocalConfiguration.current
     val displayBounds = remember(context, configuration.orientation, configuration.screenWidthDp, configuration.screenHeightDp) {
         context.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
     }
-    // Model the full display in landscape, not the padded SettingsPage or this preview's bounds.
     val modelWidth = maxOf(displayBounds.width(), displayBounds.height()).coerceAtLeast(1)
     val modelHeight = minOf(displayBounds.width(), displayBounds.height()).coerceAtLeast(1)
+    // Convert the existing stored ratio to actual display dp, without changing saved configurations.
+    val shortSideDp = modelHeight / context.resources.displayMetrics.density
+    val radiusDp = shortSideDp * percent / 100f
+    val sizeLabel = String.format(Locale.ROOT, "%.1f", radiusDp).trimEnd('0').trimEnd('.')
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-        .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 16.dp + bottomInset)) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val controls: @Composable () -> Unit = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("扇区大小：短边的 $percentLabel%", style = MaterialTheme.typography.titleMedium)
-                    Slider(value = percent, onValueChange = {
-                        val next = it.coerceIn(4f, 24f)
-                        if (next != percent) { percent = next; GameModeStore.cornerRadius(context, next) }
-                    }, valueRange = 4f..24f,
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "扇区大小" })
-                    Text("仅左下、右下两个扇区，大小连续调节，范围 4%～24%。", style = MaterialTheme.typography.bodySmall)
-                    Text("红色：内起手，全程屏蔽\n绿色：外起手，全程放行", style = MaterialTheme.typography.bodyMedium)
-                    Text("在预览中按下并拖动，可同时测试多根手指。这里只模拟判断，不会屏蔽本页控件。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
+        GroupTitle("范围预览")
+        Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            CornerPreview(modelWidth, modelHeight, percent)
+        }
+        Spacer(Modifier.height(16.dp))
+        SettingsGroup {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("大小", style = MaterialTheme.typography.bodyLarge)
+                    Text("$sizeLabel dp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
-            }
-            if (maxWidth >= 560.dp) Row(horizontalArrangement = Arrangement.spacedBy(20.dp), verticalAlignment = Alignment.CenterVertically) {
-                CornerPreview(modelWidth, modelHeight, percent, Modifier.weight(1f))
-                Box(Modifier.width(220.dp)) { controls() }
-            } else Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                CornerPreview(modelWidth, modelHeight, percent, Modifier.fillMaxWidth())
-                controls()
+                Slider(value = radiusDp, onValueChange = {
+                    val next = (it / shortSideDp * 100f).coerceIn(4f, 24f)
+                    if (next != percent) { percent = next; GameModeStore.cornerRadius(context, next) }
+                }, valueRange = shortSideDp * .04f..shortSideDp * .24f,
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "大小" })
             }
         }
     }
@@ -79,52 +80,59 @@ fun GameCornerScreen(bottomInset: Dp = 0.dp) {
 private data class TrialTouch(val position: Offset, val blocked: Boolean)
 
 @Composable
-private fun CornerPreview(width: Int, height: Int, percent: Float, modifier: Modifier = Modifier) {
+private fun CornerPreview(width: Int, height: Int, percent: Float) {
     val touches = remember(width, height) { mutableStateMapOf<PointerId, TrialTouch>() }
     val currentPercent by rememberUpdatedState(percent)
     val background = MaterialTheme.colorScheme.surfaceContainerHighest
     val sector = MaterialTheme.colorScheme.primary
     val border = MaterialTheme.colorScheme.outline
-    val blockedColor = Color(0xffd32f2f)
-    val allowedColor = Color(0xff218739)
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("横屏范围与触摸预览", style = MaterialTheme.typography.titleSmall)
-        Canvas(Modifier.fillMaxWidth().aspectRatio(width.toFloat() / height).testTag("game-corner-preview")
-            .semantics { contentDescription = "底部左右双扇区预览，半径为屏幕短边的 $percent%，触点内起手红色、外起手绿色" }
-            .pointerInput(width, height) {
-                try {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            for (change in event.changes) {
-                                if (!change.pressed) { touches.remove(change.id); continue }
-                                val previous = touches[change.id]
-                                val blocked = previous?.blocked ?: GameCornerGeometry.inside(
-                                    change.position.x * width / size.width,
-                                    change.position.y * height / size.height, width, height, currentPercent)
-                                touches[change.id] = TrialTouch(change.position, blocked)
-                                // Consume only the miniature test surface so its drags do not scroll the page.
-                                change.consume()
-                            }
+    Canvas(Modifier.fillMaxWidth().height(240.dp).testTag("game-corner-preview").padding(20.dp)
+        .semantics { contentDescription = "底部左右双扇区预览" }
+        .pointerInput(width, height) {
+            try {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val scale = minOf(size.width, size.height).toFloat() / width
+                        val left = (size.width - width * scale) / 2
+                        val top = (size.height - height * scale) / 2
+                        for (change in event.changes) {
+                            if (!change.pressed) { touches.remove(change.id); continue }
+                            val previous = touches[change.id]
+                            if (previous == null && change.previousPressed) continue
+                            val x = (change.position.x - left) / scale
+                            val y = (change.position.y - top) / scale
+                            if (previous == null && (x < 0 || y < 0 || x >= width || y >= height)) continue
+                            val blocked = previous?.blocked ?: GameCornerGeometry.inside(x, y, width, height, currentPercent)
+                            touches[change.id] = TrialTouch(change.position, blocked)
+                            change.consume()
                         }
                     }
-                } finally { touches.clear() }
-            }) {
-            drawRect(background)
-            val scale = size.width / width
+                }
+            } finally { touches.clear() }
+        }) {
+        // Keep the original portrait sample's long-side size, simply laid on its side.
+        val scale = minOf(size.width, size.height) / width
+        val phoneWidth = width * scale
+        val phoneHeight = height * scale
+        val left = (size.width - phoneWidth) / 2
+        val top = (size.height - phoneHeight) / 2
+        val corner = CornerRadius(12.dp.toPx())
+        val phone = RoundRect(left, top, left + phoneWidth, top + phoneHeight, corner)
+        val outline = Path().apply { addRoundRect(phone) }
+        drawRoundRect(background, Offset(left, top), Size(phoneWidth, phoneHeight), corner)
+        clipPath(outline) {
             val radius = GameCornerGeometry.radius(width, height, percent) * scale
-            clipRect {
-                for (center in listOf(Offset(0f, size.height), Offset(size.width, size.height))) {
-                    drawCircle(sector.copy(alpha = .3f), radius, center)
-                    drawCircle(sector, radius, center, style = Stroke(1.dp.toPx()))
-                }
-                touches.values.forEach { touch ->
-                    val color = if (touch.blocked) blockedColor else allowedColor
-                    drawCircle(color.copy(alpha = .25f), 15.dp.toPx(), touch.position)
-                    drawCircle(color, 7.dp.toPx(), touch.position)
-                }
+            for (center in listOf(Offset(left, top + phoneHeight), Offset(left + phoneWidth, top + phoneHeight))) {
+                drawCircle(sector.copy(alpha = .3f), radius, center)
+                drawCircle(sector, radius, center, style = Stroke(1.dp.toPx()))
             }
-            drawRect(border, Offset.Zero, Size(size.width, size.height), style = Stroke(1.dp.toPx()))
+            touches.values.forEach { touch ->
+                val color = if (touch.blocked) Color(0xffd32f2f) else Color(0xff218739)
+                drawCircle(color.copy(alpha = .25f), 15.dp.toPx(), touch.position)
+                drawCircle(color, 7.dp.toPx(), touch.position)
+            }
         }
+        drawRoundRect(border, Offset(left, top), Size(phoneWidth, phoneHeight), corner, style = Stroke(1.dp.toPx()))
     }
 }
