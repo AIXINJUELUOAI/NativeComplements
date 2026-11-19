@@ -31,10 +31,14 @@ final class ProductFeatures {
         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}
         catch(RuntimeException unavailable){note.accept("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
         dev.local.sunwindowdemo.features.shade.SignalDisplay.connect(app);
+        DesktopSleepHost.connect(app,note);
         RotationSuggestion.connect(app);
     }
-    static void installLauncher(XposedModule module,ClassLoader loader,Consumer<String> note){LauncherRotationSuggestion.install(module,loader,note);}
-    static void connectLauncher(Context context){LauncherRotationSuggestion.connect(context);}
+    static void installLauncher(XposedModule module,ClassLoader loader,Consumer<String> note){
+        LauncherRotationSuggestion.install(module,loader,note);
+        DesktopDoubleTap.install(module,loader,note);
+    }
+    static void connectLauncher(Context context){LauncherRotationSuggestion.connect(context);DesktopDoubleTap.connect(context);}
     static Consumer<Intent> createInput(FrameworkAccess access,Context context,Object root,Object lock,Handler handler,Consumer<String> log){
         try{SuggestionInput input=new SuggestionInput(access,context,root,lock,handler);log.accept("SUGGESTIONS_INPUT_READY");return input::start;}
         catch(Exception unavailable){log.accept("SUGGESTIONS_INPUT_UNAVAILABLE "+unavailable.getClass().getSimpleName());return null;}

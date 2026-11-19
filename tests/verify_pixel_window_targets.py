@@ -30,7 +30,7 @@ def field(owner, name, signature):
 
 SOURCE = ROOT / "app/src/main/java/dev/local/sunwindowdemo/features"
 source_names = set()
-for folder in ("floatingwindow/legacy", "suggestions", "barrage", "motion", "edgetouch"):
+for folder in ("floatingwindow/legacy", "suggestions", "barrage", "motion", "edgetouch", "desktop"):
     for source in (SOURCE / folder).rglob("*"):
         if source.suffix in (".java", ".kt"):
             source_names.update(re.findall(r'"([A-Za-z_$][A-Za-z0-9_$]*)"', source.read_text(encoding="utf-8")))
@@ -117,6 +117,35 @@ method("Lcom/android/quickstep/util/GroupTask;", "containsTask", "(I)Z")
 method("Lcom/android/quickstep/util/GroupTask;", "getTasks", "()Ljava/util/List;")
 method("Lcom/android/quickstep/LauncherBackAnimationController;", "applyTransform", "(Landroid/graphics/RectF;F)V")
 method("Lcom/android/quickstep/LauncherBackAnimationController;", "onCancelFinished", "()V")
+# Desktop blank-cell double tap: both actual Launcher archives, without long-press field ABI assumptions.
+LAUNCHER = "Lcom/android/launcher3/"
+method(LAUNCHER + "touch/WorkspaceTouchListener;", "onTouch", "(Landroid/view/View;Landroid/view/MotionEvent;)Z")
+field(LAUNCHER + "touch/WorkspaceTouchListener;", "mLauncher", LAUNCHER + "Launcher;")
+field(LAUNCHER + "touch/WorkspaceTouchListener;", "mWorkspace", LAUNCHER + "Workspace;")
+field(LAUNCHER + "LauncherState;", "NORMAL", LAUNCHER + "LauncherState$3;")
+method(LAUNCHER + "statemanager/StatefulContainer;", "isInState", "(" + LAUNCHER + "statemanager/BaseState;)Z")
+method(LAUNCHER + "AbstractFloatingView;", "getTopOpenView", "(" + LAUNCHER + "views/ActivityContext;)" + LAUNCHER + "AbstractFloatingView;")
+for name in ("mIsSwitchingState", "mOverlayShown"):
+    field(LAUNCHER + "Workspace;", name, "Z")
+for name in ("isPageInTransition", "isHandlingTouch"):
+    method(LAUNCHER + "PagedView;", name, "()Z")
+method(LAUNCHER + "PagedView;", "getCurrentPage", "()I")
+method(LAUNCHER + "PagedView;", "getPageAt", "(I)Landroid/view/View;")
+method(LAUNCHER + "Launcher;", "getDragController", "()" + LAUNCHER + "dragndrop/DragController;")
+method(LAUNCHER + "dragndrop/DragController;", "isDragging", "()Z")
+method(LAUNCHER + "CellLayout;", "pointToCellExact", "(II[I)V")
+method(LAUNCHER + "CellLayout;", "isOccupied", "(II)Z")
+method(LAUNCHER + "CellLayout;", "cellToRect", "(IIIILandroid/graphics/Rect;)V")
+for name in ("mCountX", "mCountY"):
+    field(LAUNCHER + "CellLayout;", name, "I")
+method("Landroid/app/ActivityManager;", "getRunningTasks", "(I)Ljava/util/List;")
+field("Landroid/app/TaskInfo;", "displayId", "I")
+field("Landroid/app/TaskInfo;", "userId", "I")
+field("Landroid/app/TaskInfo;", "topActivity", "Landroid/content/ComponentName;")
+method("Landroid/app/KeyguardManager;", "isKeyguardLocked", "()Z")
+# PowerManager is absent from the newer framework archive: runtime preflight is required;
+# its goToSleep(JII)V use is evidenced separately by the newer SystemUI's actual call sites.
+
 # Swipe-up mini handoff (SwipeMini.resolve): declared-member lookups on both launchers.
 QS = "Lcom/android/quickstep/"
 END_TARGET = QS + "GestureState$GestureEndTarget;"

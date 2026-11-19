@@ -25,7 +25,18 @@ public final class ShadeStore {
         result.putInt("systemIconScale", iconScale(context, false));
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         result.putBoolean("drawerMonet", drawerMonet(context));
+        result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
         return result;
+    }
+
+    public static boolean desktopDoubleTapSleep(Context context) {
+        return preferences(context).getBoolean("desktop_double_tap_sleep", false);
+    }
+
+    public static void setDesktopDoubleTapSleep(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("desktop_double_tap_sleep", enabled).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 
     public static void setSignalDisplay(Context context, boolean enabled) {

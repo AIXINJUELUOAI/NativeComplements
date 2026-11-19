@@ -17,6 +17,12 @@
 | 状态栏位置／比例 | [StatusBarOffset](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/StatusBarOffset.java>)仅平移可见内容，不改高度／刘海。[StatusIconScale](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/StatusIconScale.java>)采样 bounds／matrix／padding／native scale，只在 draw 临时缩放并 finally 恢复；网络、电池、时钟不进系统槽位白名单 |
 | 信号 | [SignalDisplay](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/SignalDisplay.java>)保真实订阅、ServiceState／NR／NTN／primary及 Drawable 身份。synthetic emitter 路径或[MobileSignalBinder](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/MobileSignalBinder.java>)局部接入共用展示规则；[StackedSignalTargets](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/StackedSignalTargets.java>)校验不同 Compose 签名，[StackedSignalDisplay](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/StackedSignalDisplay.java>)只传展示副本，不改共享原生 model／Flow。模块 revision state仅触发重组 |
 
+## 桌面双击息屏
+
+[DesktopDoubleTap](<../../app/src/main/java/dev/local/sunwindowdemo/features/desktop/DesktopDoubleTap.java>)旁路观察 Workspace 空白网格触摸，不消费事件或替换原生监听器。开关默认关闭且独立于小窗；仅正常、无浮层、无拖动／页面切换的默认显示器桌面，同页单指两次短按且第二次松手后才请求。图标、小组件、底栏、长按、多指和滑动不参与。
+
+[DesktopSleepHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/desktop/DesktopSleepHost.java>)在 SystemUI 异步读取配置并向已验证系统 HOME 发布窄 Binder。接收及执行时核实际 HOME UID、事件时效、显示器、前台组件、亮屏与未锁定状态；普通 `PowerManager.goToSleep` 电源键路径，不使用设备管理器强制锁定或改变强认证策略。读取／反射／权限失败保持原生；不增加作用域或 Provider 读者。
+
 ## 授权与失败
 
 [NavbarProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/navbar/NavbarProvider.java>)只向自身、实际 SystemUI及已知系统实际 HOME／本用户 UID 返回只读开关；无普通 app 或 server 导航 Hook。配置线程异步读取，main 发布／重排。读取失败关闭覆盖、重建原生并延迟重试。

@@ -175,6 +175,20 @@ class NavigationTest {
         compose.onNodeWithText("选择位置并导出 ZIP").assertExists()
     }
 
+    @Test fun desktopDoubleTapSleepIsOptInAndPersistsIndependently() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        dev.local.sunwindowdemo.features.shade.ShadeStore.preferences(context).edit().clear().commit()
+        launch(intent(Page.Shade))
+        compose.runOnIdle { org.junit.Assert.assertFalse(dev.local.sunwindowdemo.features.shade.ShadeStore.desktopDoubleTapSleep(context)) }
+        compose.onNodeWithText("双击桌面锁屏").performScrollTo().performClick()
+        compose.runOnIdle {
+            org.junit.Assert.assertTrue(dev.local.sunwindowdemo.features.shade.ShadeStore.read(context).getBoolean("desktopDoubleTapSleep"))
+            org.junit.Assert.assertFalse(dev.local.sunwindowdemo.features.shade.ShadeStore.read(context).getBoolean("enabled"))
+        }
+        compose.onNodeWithText("双击桌面锁屏").performClick()
+        compose.runOnIdle { org.junit.Assert.assertFalse(dev.local.sunwindowdemo.features.shade.ShadeStore.desktopDoubleTapSleep(context)) }
+    }
+
     @Test fun shadeHasOneSignalDisplaySwitchAndPersistsIt() {
         launch(intent(Page.Shade))
         compose.onNodeWithText("信号显示调整").performScrollTo().assertIsDisplayed().performClick()
