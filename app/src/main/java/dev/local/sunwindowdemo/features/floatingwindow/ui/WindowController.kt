@@ -104,6 +104,7 @@ class WindowController(private val activity: Activity) {
     }
     fun number(key: String, value: Int) = store.number(key, value)
     fun blocked(packages: Set<String>) = store.blocked(packages)
+    fun windowExcludedPackages(packages: Set<String>) = store.windowExcludedPackages(packages)
     fun toggleControl() = setEnabled(!preferences.enabled && !enableChecking)
     fun dismissEnablePrompt() { enablePrompt = null }
     fun confirmEnablePrompt() {

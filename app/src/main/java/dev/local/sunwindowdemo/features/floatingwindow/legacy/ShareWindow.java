@@ -35,21 +35,27 @@ final class ShareWindow {
             ||"android.intent.action.INSTALL_PACKAGE".equals(intent.getAction())
             ||"android.content.pm.action.CONFIRM_INSTALL".equals(intent.getAction()));
     }
-    static boolean eligibleIntent(Intent intent,boolean chooser){
+    static boolean nativeFullscreenIntent(Intent intent){
         if(intent==null)return false;
-        // Installers also arrive as VIEW(content://..., APK MIME), not only INSTALL_PACKAGE.
-        if(installerIntent(intent))return false;
         String action=intent.getAction();
-        if(intent.hasCategory(Intent.CATEGORY_HOME)||Intent.ACTION_CHOOSER.equals(action)
+        return installerIntent(intent)||action!=null&&(action.startsWith("android.settings.")
+            ||"android.content.pm.action.REQUEST_PERMISSIONS".equals(action)
+            ||"android.app.action.CONFIRM_DEVICE_CREDENTIAL".equals(action)
+            ||"android.app.action.CONFIRM_DEVICE_CREDENTIAL_WITH_USER".equals(action)
             ||Intent.ACTION_OPEN_DOCUMENT.equals(action)||Intent.ACTION_OPEN_DOCUMENT_TREE.equals(action)
             ||Intent.ACTION_CREATE_DOCUMENT.equals(action)||Intent.ACTION_GET_CONTENT.equals(action)
             ||Intent.ACTION_PICK.equals(action)||Intent.ACTION_PICK_ACTIVITY.equals(action)
-            ||"android.provider.action.PICK_IMAGES".equals(action)
+            ||"android.provider.action.PICK_IMAGES".equals(action));
+    }
+    static boolean eligibleIntent(Intent intent,boolean chooser){
+        if(intent==null)return false;
+        // Installers also arrive as VIEW(content://..., APK MIME), not only INSTALL_PACKAGE.
+        if(nativeFullscreenIntent(intent))return false;
+        String action=intent.getAction();
+        if(intent.hasCategory(Intent.CATEGORY_HOME)||Intent.ACTION_CHOOSER.equals(action)
             ||Intent.ACTION_DIAL.equals(action)||Intent.ACTION_CALL.equals(action)
             ||"android.intent.action.CALL_EMERGENCY".equals(action)||"android.intent.action.CALL_PRIVILEGED".equals(action)
-            ||"android.content.pm.action.REQUEST_PERMISSIONS".equals(action)
-            ||"android.intent.action.INSTALL_PACKAGE".equals(action)||"android.intent.action.UNINSTALL_PACKAGE".equals(action)
-            ||action!=null&&action.startsWith("android.settings."))return false;
+            ||"android.intent.action.UNINSTALL_PACKAGE".equals(action))return false;
         String scheme=intent.getData()==null?null:intent.getData().getScheme();
         return !"tel".equalsIgnoreCase(scheme)&&!"voicemail".equalsIgnoreCase(scheme);
     }

@@ -249,7 +249,10 @@ final class FrameworkAccess {
         tx.setAlpha(surface,alpha);
     }
     void opacity(Object target,float alpha) throws Exception {
-        ((SurfaceControl.Transaction)transaction(target)).setAlpha((SurfaceControl)field(target,"mSurfaceControl"),alpha);
+        SurfaceControl surface=(SurfaceControl)field(target,"mSurfaceControl");
+        // A finished forwarding activity can lose its surface before its session is retired.
+        if(surface==null||!surface.isValid())return;
+        ((SurfaceControl.Transaction)transaction(target)).setAlpha(surface,alpha);
     }
     void style(Object target,int width,int height,float radius) throws Exception {
         Object surface=field(target,"mSurfaceControl"),transaction=transaction(target);

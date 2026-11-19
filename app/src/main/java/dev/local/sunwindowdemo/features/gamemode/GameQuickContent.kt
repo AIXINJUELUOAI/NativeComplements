@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -39,7 +40,8 @@ internal fun gameQuickFeedback(view: View) {
 internal data class GameQuickItem(val id: String, val label: String, val icon: ImageBitmap?)
 
 /** The existing native window owns blur and bounds; only its quick page composes Material controls. */
-internal class GameQuickView(context: Context, actions: List<QuickActionCatalog.Action>, quick: (String) -> Unit) : FrameLayout(context) {
+internal class GameQuickView(context: Context, actions: List<QuickActionCatalog.Action>, quick: (String) -> Unit,
+    private val themeChanged: (ColorScheme) -> Unit = {}) : FrameLayout(context) {
     internal val sliders = GameSliderState(context)
     private val media = GameMediaState(context)
     private val quickState = GameQuickState(context)
@@ -74,6 +76,9 @@ internal class GameQuickView(context: Context, actions: List<QuickActionCatalog.
             try {
                 addView(composition.view {
                     ComplementsTheme {
+                        val colors = MaterialTheme.colorScheme
+                        // Native chrome shares this configuration-aware palette, not a construction-time theme snapshot.
+                        SideEffect { themeChanged(colors) }
                         GameQuickContent(sliders, media, entries, { id ->
                             if (!suspended && isShown) {
                                 gameQuickFeedback(this@GameQuickView)
@@ -119,13 +124,17 @@ internal class GameQuickView(context: Context, actions: List<QuickActionCatalog.
     }
 }
 
+internal fun gamePanelSectionColor(colors: ColorScheme) =
+    if (colors.surface.luminance() > .5f) colors.surfaceContainerLow else colors.surfaceContainerHigh
+
 /** One shared content width, with no independent row padding: every item uses the same four columns. */
 @Composable
 internal fun GameQuickContent(sliders: GameSliderState, media: GameMediaState, entries: List<GameQuickItem>,
     quick: (String) -> Unit, states: Map<String, Boolean?> = emptyMap()) {
     val colors = MaterialTheme.colorScheme
+    val sectionColor = gamePanelSectionColor(colors)
     Column(Modifier.fillMaxSize().padding(10.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Surface(Modifier.testTag("brightness-section"), shape = RoundedCornerShape(20.dp), color = colors.surfaceContainerHigh) {
+        Surface(Modifier.testTag("brightness-section"), shape = RoundedCornerShape(20.dp), color = sectionColor) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Icon(painterResource(R.drawable.gm_brightness), null, Modifier.size(24.dp).testTag("brightness-icon"))
@@ -136,7 +145,7 @@ internal fun GameQuickContent(sliders: GameSliderState, media: GameMediaState, e
                         enabled = sliders.brightnessEnabled, valueRange = 0f..1000f, onValueChangeFinished = sliders::endBrightness)
                 }
         }
-        Surface(Modifier.testTag("volume-section"), shape = RoundedCornerShape(20.dp), color = colors.surfaceContainerHigh) {
+        Surface(Modifier.testTag("volume-section"), shape = RoundedCornerShape(20.dp), color = sectionColor) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         Icon(painterResource(R.drawable.gm_volume), null, Modifier.size(24.dp).testTag("volume-icon"))
@@ -148,7 +157,7 @@ internal fun GameQuickContent(sliders: GameSliderState, media: GameMediaState, e
                         onValueChangeFinished = sliders::endVolume)
                 }
         }
-        Surface(Modifier.testTag("media-section"), shape = RoundedCornerShape(20.dp), color = colors.surfaceContainerHigh) {
+        Surface(Modifier.testTag("media-section"), shape = RoundedCornerShape(20.dp), color = sectionColor) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(60.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         val cover = media.cover
@@ -175,7 +184,7 @@ internal fun GameQuickContent(sliders: GameSliderState, media: GameMediaState, e
                     }
                 }
         }
-        Surface(Modifier.weight(1f).fillMaxWidth().testTag("quick-section"), shape = RoundedCornerShape(20.dp), color = colors.surfaceContainerHigh) {
+        Surface(Modifier.weight(1f).fillMaxWidth().testTag("quick-section"), shape = RoundedCornerShape(20.dp), color = sectionColor) {
             LazyColumn(Modifier.fillMaxSize().testTag("quick-grid"), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)) {
                 itemsIndexed(entries.chunked(4)) { rowIndex, row ->
                     Row(Modifier.fillMaxWidth().height(76.dp)) {

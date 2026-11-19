@@ -73,11 +73,14 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, num
 }
 
 @Composable
-fun PreventionScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, blocked: () -> Unit) {
+fun PreventionScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, blocked: () -> Unit,
+                     windowExclusions: (() -> Unit)? = null) {
     SettingsGroup {
         ToggleRow("横屏时禁用", value = p.landscapeOff) { boolean("landscape", it) }
         ToggleRow("键盘弹出时禁用", value = p.keyboardOff) { boolean("keyboard", it) }
         SettingRow("指定应用内禁用", "已选择 ${p.blocked.size} 个应用", blocked)
+        if (windowExclusions != null) SettingRow("不以小窗打开的应用",
+            "已选择 ${p.windowExcludedPackages.size} 个应用；仅限制新开小窗，不改变已有窗口", windowExclusions)
     }
 }
 

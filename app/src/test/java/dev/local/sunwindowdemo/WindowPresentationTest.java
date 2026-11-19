@@ -5,6 +5,19 @@ import static org.junit.Assert.*;
 
 /** Framework-free policy checks; the Android executor keeps native state and WM lock ownership. */
 public class WindowPresentationTest {
+    @Test public void hiddenEdgeSubtreeIsAbsentButEntryAnimationAndContentDragStayVisible(){
+        assertTrue(WindowPresentation.edgeContentHidden(true,false,false,false));
+        assertTrue(WindowPresentation.edgeContentHidden(true,false,true,true));
+        assertFalse(WindowPresentation.edgeContentHidden(true,true,false,false));
+        assertFalse(WindowPresentation.edgeContentHidden(true,false,true,false));
+        assertFalse(WindowPresentation.edgeContentHidden(false,false,false,false));
+        assertEquals(WindowPresentation.Route.SUSPENDED,WindowPresentation.gate(facts(false,false,false,
+            WindowPresentation.edgeContentHidden(true,false,false,false),false,false)));
+    }
+    @Test public void handleHasContrastingDayAndNightColors(){
+        assertEquals(0xff34363b,WindowPresentation.handleColor(false));
+        assertEquals(0xfff0f2f2,WindowPresentation.handleColor(true));
+    }
     private static WindowPresentation.Facts facts(boolean priority,boolean external,boolean parked,boolean screen,boolean start,boolean rotation){
         return new WindowPresentation.Facts(true,true,false,true,priority,external,parked,screen,start,rotation);
     }

@@ -69,10 +69,12 @@ fun ModuleApp(
     fun cancelIconBatch() { iconBatch = false; showIconBatch = false; iconSelection = emptyList() }
     BackHandler(selectingIcons && !showIconBatch) { cancelIconBatch() }
     val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
+    var windowExclusions by rememberSaveable(page) { mutableStateOf(false) }
+    BackHandler(windowExclusions) { windowExclusions = false }
     var query by rememberSaveable(page) { mutableStateOf("") }
     var searching by rememberSaveable(page) { mutableStateOf(false) }
     var appsTab by rememberSaveable { mutableStateOf(true) }
-    val searchable = when (page) {
+    val searchable = windowExclusions || when (page) {
         Page.GameMode, Page.Motion, Page.IconLayers, Page.Blocked -> true
         Page.GameQuick -> appsTab
         else -> false
@@ -82,12 +84,12 @@ fun ModuleApp(
     BackHandler(searchOpen && !showIconBatch) { closeSearch() }
     // Standard Activity navigation leaves predictive Back and its animation with Android.
     SettingsPage(
-        title = when (page) {
+        title = if (windowExclusions) "不以小窗打开的应用" else when (page) {
             Page.IconLayers -> if (selectingIcons) "已选择 ${selectedIcons.size} 个应用" else page.title
             Page.IconApp -> iconApp?.label ?: "图标设置"
             else -> page.title
         },
-        onBack = if (searchOpen) ::closeSearch else if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
+        onBack = if (searchOpen) ::closeSearch else if (windowExclusions) ({ windowExclusions = false }) else if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
         expandedTitle = !selectingIcons && !searchOpen,
         titleContent = if (searchOpen) ({ AppQueryField(query) { query = it } }) else null,
         actions = {
@@ -113,7 +115,8 @@ fun ModuleApp(
         },
     ) { bottomInset ->
         CompositionLocalProvider(LocalAppQuery provides (if (searchOpen) query else "")) {
-        when (page) {
+        if (windowExclusions) AppPickerScreen(controller, bottomInset = bottomInset, windowExclusions = true)
+        else when (page) {
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.Sms, Page.SmsRecords -> SmsBlockingScreen(page == Page.SmsRecords, bottomInset, onRecords = { navigate(Page.SmsRecords) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
@@ -164,7 +167,8 @@ fun ModuleApp(
                     Page.SuggestionApps -> SuggestionAppsScreen()
                     Page.Gestures -> GestureScreen(controller.preferences, controller::boolean, controller::number)
                     Page.Behavior -> BehaviorScreen(controller.preferences, controller::boolean, controller::number)
-                    Page.Prevention -> PreventionScreen(controller.preferences, controller::boolean, { navigate(Page.Blocked) })
+                    Page.Prevention -> PreventionScreen(controller.preferences, controller::boolean, { navigate(Page.Blocked) },
+                        windowExclusions = { windowExclusions = true })
                     Page.About -> AboutScreen(onLicenses = { navigate(Page.Licenses) }, onTools = { navigate(Page.Tools) }, onLogs = { navigate(Page.Logs) })
                     Page.Logs -> {
                         LaunchedEffect(Unit) {

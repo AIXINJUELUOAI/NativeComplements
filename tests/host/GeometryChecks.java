@@ -56,6 +56,11 @@ public final class GeometryChecks {
             Geometry.Placement roundTrip=Geometry.remapMini(rotated,portraitCanvas,portraitCanvas.scale(),
                 140,0,2670,1200,12,0,100,1200,2600,32,large);
             check(Math.abs(roundTrip.x()-oldMini.x())<.02&&Math.abs(roundTrip.y()-oldMini.y())<.02,"rotation round trip does not drift");
+            int side=left?-1:1;
+            Geometry.Placement hiddenRotated=Geometry.offscreen(rotated,side,0,2670,12);
+            Geometry.Placement hiddenReturned=Geometry.offscreen(roundTrip,side,0,1200,32);
+            check(left?hiddenRotated.x()+hiddenRotated.width()*hiddenRotated.scale()<0:hiddenRotated.x()>2670,"rotated hidden mini stays outside display");
+            check(left?hiddenReturned.x()+hiddenReturned.width()*hiddenReturned.scale()<0:hiddenReturned.x()>1200,"returned hidden mini stays outside display");
         }
         Geometry.Placement docked=Geometry.miniTopRight(portraitCanvas,portraitCanvas.scale(),0,100,1200,2600,32);
         check(Geometry.hideSide(docked,docked.x(),0,1200,32)==0,"resting at edge does not hide");

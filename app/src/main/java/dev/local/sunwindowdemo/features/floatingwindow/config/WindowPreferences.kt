@@ -16,6 +16,7 @@ data class WindowPreferences(
     val endOnClose: Boolean = false, val keepEdgeAwake: Boolean = false,
     val hideRecents: Boolean = false, val doubleClose: Boolean = false, val notificationWindow: Boolean = true, val landscapeShareWindow: Boolean = true,
     val swipeMini: Boolean = false, val swipeMiniHint: Boolean = true,
+    val windowExcludedPackages: Set<String> = emptySet(),
 )
 
 class WindowPreferenceStore(private val context: Context) {
@@ -30,6 +31,7 @@ class WindowPreferenceStore(private val context: Context) {
         autoMinimizeOnOpen = config.autoMinimizeOnOpen(), endOnClose = config.endOnClose(), keepEdgeAwake = config.keepEdgeAwake(),
         hideRecents = config.hideRecents(), doubleClose = config.doubleClose(), notificationWindow = config.notificationWindow(), landscapeShareWindow = config.landscapeShareWindow(),
         swipeMini = config.swipeMini(), swipeMiniHint = config.swipeMiniHint(),
+        windowExcludedPackages = config.windowExcludedPackages().toSet(),
     )
     /** A user choice, not a claim that runtime compatibility has been verified. */
     internal fun enable() {
@@ -52,6 +54,10 @@ class WindowPreferenceStore(private val context: Context) {
         ConfigProvider.changed(context)
     }
     fun apps(packages: List<String>) { config.targets(packages.filter(ShortcutTarget::validKey).distinct()); ConfigProvider.changed(context) }
+    fun windowExcludedPackages(packages: Set<String>) {
+        config.windowExcludedPackages(packages)
+        ConfigProvider.changed(context)
+    }
     fun blocked(packages: Set<String>) {
         preferences.edit().putStringSet("blocked", packages.filter(Rules::validPackage).toSet()).apply()
         ConfigProvider.changed(context)
