@@ -62,7 +62,7 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, num
     SettingsGroup {
         ToggleRow("应用间跳转小窗打开", "前台全屏应用跳转到其他应用时，符合安全条件则用小窗打开", value = p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
         ToggleRow("通知小窗打开", "点击后台应用通知时，用小窗打开；不符合条件时保留系统原行为", value = p.notificationWindow) { boolean("notificationWindow", it) }
-        ToggleRow("上滑挂起为迷你窗", "全屏应用中从底部上滑超过屏幕 2/5 后松手，应用挂起为迷你窗", value = p.swipeMini) { boolean("swipeMini", it) }
+        ToggleRow("上滑挂起为迷你窗", "全屏应用中从底部上滑超过屏幕 1/3 后松手，应用挂起为迷你窗", value = p.swipeMini) { boolean("swipeMini", it) }
         ToggleRow("显示上滑提示", "超过阈值时在顶部显示“松手挂起小窗”", value = p.swipeMiniHint, enabled = p.swipeMini) { boolean("swipeMiniHint", it) }
         ToggleRow("新开小窗时自动最小化", value = p.autoMinimizeOnOpen) { boolean("autoMinimizeOnOpen", it) }
         ToggleRow("双击空白处关闭", value = p.doubleClose) { boolean("doubleClose", it) }

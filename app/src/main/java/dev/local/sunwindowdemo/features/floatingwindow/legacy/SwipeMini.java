@@ -29,7 +29,7 @@ import java.util.function.Consumer;
 final class SwipeMini {
     static final String CHANNEL=Wire.PKG+".swipeMini.v1";
     /** Finger travel as a fraction of display height. */
-    static final float THRESHOLD=0.4f;
+    static final float THRESHOLD=1f/3f;
     private static volatile IBinder sink;
     private static volatile boolean showHint=true;
     private static Consumer<String> log=ignored->{};
@@ -38,6 +38,47 @@ final class SwipeMini {
     private static float progress;
     private static boolean armed;
     private static WeakReference<TextView> hint=new WeakReference<>(null);
+    private static volatile HiddenCard hiddenCard;
+
+    /** A separate alpha channel: native TaskView alpha animations must remain untouched. */
+    private static final class HiddenCard implements Runnable,View.OnAttachStateChangeListener {
+        final WeakReference<View> view;
+        final WeakReference<Object> handler;
+        final Method setter;
+        final float alpha;
+        HiddenCard(View view,Object handler,Method setter,float alpha){
+            this.view=new WeakReference<>(view);this.handler=new WeakReference<>(handler);
+            this.setter=setter;this.alpha=alpha;
+        }
+        public void run(){
+            if(hiddenCard!=this)return;
+            View card=view.get();
+            try{
+                if(card!=null){setter.invoke(card,alpha);card.removeCallbacks(this);card.removeOnAttachStateChangeListener(this);}
+                hiddenCard=null;
+            }catch(Exception failure){log.accept("SWIPE_MINI_CARD_RESTORE_FAILED "+failure.getClass().getSimpleName());}
+        }
+        public void onViewAttachedToWindow(View view){}
+        public void onViewDetachedFromWindow(View view){run();}
+    }
+    static void restoreCard(Object handler){
+        HiddenCard card=hiddenCard;
+        if(card==null||(handler!=null&&card.handler.get()!=handler))return;
+        View view=card.view.get();
+        if(view!=null&&android.os.Looper.myLooper()!=android.os.Looper.getMainLooper())view.post(card);
+        else card.run();
+    }
+    static void hideCard(Targets t,Object recents,Object handler,int taskId)throws Exception{
+        View view=(View)t.taskView().invoke(recents,taskId);
+        if(view==null)return;
+        restoreCard(null);
+        HiddenCard card=new HiddenCard(view,handler,t.setTransitionAlpha(),(Float)t.transitionAlpha().invoke(view));
+        t.setTransitionAlpha().invoke(view,0f);
+        hiddenCard=card;
+        view.addOnAttachStateChangeListener(card);
+        // Safety ceiling if the launcher's completion callback is lost; never leave overview blank.
+        view.postDelayed(card,2000);
+    }
 
     private SwipeMini(){}
 
@@ -48,13 +89,14 @@ final class SwipeMini {
         sink=channel!=null&&channel.isBinderAlive()?channel:null;
         if(previouslyConnected!=(sink!=null)||previousHint!=hintEnabled)
             log.accept("SWIPE_MINI_CHANNEL connected="+(sink!=null)+" hint="+hintEnabled);
-        if(sink==null)reset(null);
+        if(sink==null){reset(null);restoreCard(null);}
         else if(!hintEnabled){TextView view=hint.get();if(view!=null)view.post(()->hide(view));}
     }
 
     record Targets(Method displacement,Method endTarget,Method haptic,Field recents,Field gesture,Field context,
                    Method runningIds,Method nativeEnd,Field handles,Method simulator,Method currentRect,Method currentRadius,
-                   Method transformParams,Method targetAlpha,Object home,Object recentsTarget){}
+                   Method transformParams,Method targetAlpha,Method taskView,Method invalidate,Method invalidateLauncher,
+                   Method transitionAlpha,Method setTransitionAlpha,Object home,Object recentsTarget){}
     /** Live-tile params of an accepted handoff: the system mask owns the visuals, so the native
      *  home fly-out (which shrinks toward the centre when no icon exists) stays invisible. */
     private static final java.util.Set<Object> hiddenTiles=java.util.Collections.synchronizedSet(
@@ -91,6 +133,13 @@ final class SwipeMini {
         Class<?> paramsType=Class.forName("com.android.quickstep.util.TransformParams",false,loader);
         Method transformParams=exact(handle.getDeclaredMethod("getTransformParams"),paramsType);
         Method targetAlpha=exact(paramsType.getDeclaredMethod("setTargetAlpha",float.class),paramsType);
+        Class<?> taskType=Class.forName("com.android.quickstep.views.TaskView",false,loader);
+        if(!View.class.isAssignableFrom(taskType))throw new NoSuchMethodException("TaskView hierarchy");
+        Method taskView=exact(recentsView.getDeclaredMethod("getTaskViewByTaskId",int.class),taskType);
+        Method invalidate=exact(handler.getDeclaredMethod("invalidateHandler"),void.class);
+        Method invalidateLauncher=exact(handler.getDeclaredMethod("invalidateHandlerWithLauncher"),void.class);
+        Method transitionAlpha=exact(View.class.getDeclaredMethod("getTransitionAlpha"),float.class);
+        Method setTransitionAlpha=exact(View.class.getDeclaredMethod("setTransitionAlpha",float.class),void.class);
         Object home=null,recentsTarget=null;
         for(Object value:target.getEnumConstants()){
             String name=((Enum<?>)value).name();
@@ -98,7 +147,7 @@ final class SwipeMini {
         }
         if(home==null||recentsTarget==null)throw new NoSuchFieldException("GestureEndTarget");
         return new Targets(displacement,endTarget,haptic,recents,gesture,context,runningIds,nativeEnd,handles,simulator,currentRect,currentRadius,
-            transformParams,targetAlpha,home,recentsTarget);
+            transformParams,targetAlpha,taskView,invalidate,invalidateLauncher,transitionAlpha,setTransitionAlpha,home,recentsTarget);
     }
 
     static void install(XposedModule module,ClassLoader loader,Consumer<String> logger){
@@ -132,7 +181,11 @@ final class SwipeMini {
             }));
             hooks.add(module.hook(t.targetAlpha()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->
                 hiddenTiles.contains(chain.getThisObject())?chain.proceed(new Object[]{0f}):chain.proceed()));
-            log.accept("SWIPE_MINI_READY hooks=3 endTarget="+t.endTarget().getParameterCount());
+            for(Method finish:new Method[]{t.invalidate(),t.invalidateLauncher()})
+                hooks.add(module.hook(finish).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                    try{return chain.proceed();}finally{restoreCard(chain.getThisObject());}
+                }));
+            log.accept("SWIPE_MINI_READY hooks=5 endTarget="+t.endTarget().getParameterCount());
         }catch(Throwable failure){
             for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}
             log.accept("SWIPE_MINI_DISABLED "+failure.getClass().getSimpleName()+": "+failure.getMessage());
@@ -148,8 +201,9 @@ final class SwipeMini {
             fresh=owner.get()!=handler;
             if(fresh){owner=new WeakReference<>(handler);armed=false;hiddenTiles.clear();}
             progress=-displacement/height;
-            was=armed;now=progress>=THRESHOLD;armed=now;
+            was=armed;now=progress>THRESHOLD;armed=now;
         }
+        if(fresh&&hiddenCard!=null&&hiddenCard.handler.get()!=handler)restoreCard(null);
         if(was==now&&!(fresh&&!now))return;
         log.accept("SWIPE_MINI_THRESHOLD armed="+now+" displacement="+displacement+" height="+height);
         if(now)t.haptic().invoke(handler);
@@ -178,6 +232,9 @@ final class SwipeMini {
                 reply.readException();
                 boolean accepted=reply.readBoolean();
                 log.accept("SWIPE_MINI_HANDOFF task="+ids[0]+" accepted="+accepted);
+                if(accepted)try{
+                    hideCard(t,t.recents().get(handler),handler,ids[0]);
+                }catch(Exception failure){log.accept("SWIPE_MINI_CARD_UNHIDDEN "+failure.getClass().getSimpleName());}
                 return accepted;
             }finally{data.recycle();reply.recycle();}
         }catch(Throwable failure){
