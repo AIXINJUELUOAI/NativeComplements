@@ -47,6 +47,32 @@ public class EdgeInputFilterTest {
         return MotionEvent.obtain(1,2,action,1,new MotionEvent.PointerProperties[]{pointer},new MotionEvent.PointerCoords[]{coords},
             0,0,1,1,7,0,InputDevice.SOURCE_TOUCHSCREEN,0);
     }
+    private MotionEvent timed(int action,long time,int... ids){
+        MotionEvent.PointerProperties[] props=new MotionEvent.PointerProperties[ids.length];
+        MotionEvent.PointerCoords[] coords=new MotionEvent.PointerCoords[ids.length];
+        for(int i=0;i<ids.length;i++){
+            props[i]=new MotionEvent.PointerProperties();props[i].id=ids[i];props[i].toolType=MotionEvent.TOOL_TYPE_FINGER;
+            coords[i]=new MotionEvent.PointerCoords();coords[i].x=100;coords[i].y=100;
+        }
+        return MotionEvent.obtain(100,time,action,ids.length,props,coords,0,0,1,1,7,0,InputDevice.SOURCE_TOUCHSCREEN,0);
+    }
+    @Test public void rejectedFirstFingerDoesNotAgeVisibleTouchesOrBreakTimingWhenItLifts(){
+        EdgeInputFilter.ForwardedTimes clock=new EdgeInputFilter.ForwardedTimes();
+        MotionEvent e=timed(MotionEvent.ACTION_DOWN,100,2);
+        assertEquals(100,clock.time(e,0,0));e.recycle();
+        e=timed(MotionEvent.ACTION_POINTER_DOWN|(1<<8),500,2,7);
+        assertEquals(500,clock.time(e,1<<7,0));assertTrue(clock.holding());e.recycle();
+        e=timed(MotionEvent.ACTION_POINTER_UP,550,2,7);
+        assertEquals(500,clock.time(e,1<<7,0));e.recycle();
+        e=timed(MotionEvent.ACTION_MOVE,600,7);
+        assertEquals(500,clock.time(e,1<<7,0));e.recycle();
+        e=timed(MotionEvent.ACTION_UP,650,7);
+        assertEquals(500,clock.time(e,1<<7,0));assertFalse(clock.holding());e.recycle();
+        e=timed(MotionEvent.ACTION_POINTER_DOWN|(1<<8),800,2,9);
+        assertEquals(800,clock.time(e,1<<9,0));e.recycle();
+        e=timed(MotionEvent.ACTION_CANCEL,850,2,9);
+        assertEquals(800,clock.time(e,1<<9,0));assertFalse(clock.holding());e.recycle();
+    }
     @Test public void disablingModuleRetainsAnExistingAccessibilityFilter()throws Exception{
         Manager manager=new Manager();EdgeInputFilter host=host(manager);
         ReflectionHelpers.setField(host,"regions",new int[]{0,0,20,1000});sync(host);assertTrue(manager.mNative.enabled);
@@ -66,6 +92,19 @@ public class EdgeInputFilterTest {
         assertTrue(manager.mNative.enabled);
         event=finger(MotionEvent.ACTION_UP);
         assertEquals(0,EdgeInputFilter.accepted(policy,event,0));event.recycle();sync(host);
+        assertFalse(manager.mNative.enabled);
+    }
+    @Test public void cornerLeaseExpiryDoesNotReleaseRejectedFingerOrDependOnEdgeToggle()throws Exception{
+        Manager manager=new Manager();EdgeInputFilter host=host(manager);
+        EdgeInputPolicy policy=ReflectionHelpers.getField(host,"policy");
+        policy.corners(2000,1000,24,new int[0]);ReflectionHelpers.setField(host,"cornersActive",true);sync(host);
+        assertTrue(manager.mNative.enabled);
+        MotionEvent event=finger(MotionEvent.ACTION_DOWN);
+        assertEquals(0,EdgeInputFilter.accepted(policy,event,0));event.recycle();
+        ReflectionHelpers.setField(host,"cornerSeen",SystemClock.uptimeMillis()-3000);
+        ReflectionHelpers.<Runnable>getField(host,"expireCorners").run();
+        assertFalse(ReflectionHelpers.getField(host,"cornersActive"));assertTrue(manager.mNative.enabled);
+        event=finger(MotionEvent.ACTION_UP);assertEquals(0,EdgeInputFilter.accepted(policy,event,0));event.recycle();sync(host);
         assertFalse(manager.mNative.enabled);
     }
     @Test public void failedBackendStaysDisabledAndLeavesNativeAccessibilityAvailable()throws Exception{

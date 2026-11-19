@@ -7,18 +7,26 @@ import java.util.Map;
 public final class EdgeInputPolicy {
     public enum Action { DOWN, POINTER_DOWN, POINTER_UP, UP, CANCEL, OTHER }
     private final Map<Long,Integer> suppressed=new HashMap<>();
-    private int[] rectangles=new int[0];
+    private int[] rectangles=new int[0],protectedCorners=new int[0];
+    private int cornerWidth,cornerHeight,cornerPercent;
+    public synchronized void corners(int width,int height,int percent,int[] protectedRects){
+        cornerWidth=width;cornerHeight=height;cornerPercent=percent;protectedCorners=protectedRects.clone();
+    }
 
     public synchronized void regions(int[] value){rectangles=value.clone();}
-    public synchronized void clear(){rectangles=new int[0];suppressed.clear();}
+    public synchronized void clear(){rectangles=new int[0];corners(0,0,0,new int[0]);suppressed.clear();}
     public synchronized boolean holding(){return !suppressed.isEmpty();}
 
     /** Eligible touchscreen facts only; the adapter passes other displays/sources through without entering. */
     public synchronized int accepted(long stream,Action action,int all,int changedPointer,
                                      boolean finger,float downX,float downY){
+        return accepted(stream,action,all,changedPointer,finger,downX,downY,true);
+    }
+    public synchronized int accepted(long stream,Action action,int all,int changedPointer,
+                                     boolean finger,float downX,float downY,boolean cornerEligible){
         int blocked=suppressed.getOrDefault(stream,0);
         if(action==Action.DOWN)blocked=0;
-        if((action==Action.DOWN||action==Action.POINTER_DOWN)&&finger&&inside(downX,downY))blocked|=changedPointer;
+        if((action==Action.DOWN||action==Action.POINTER_DOWN)&&finger&&inside(downX,downY,cornerEligible))blocked|=changedPointer;
         int accepted=all&~blocked;
         // The lifting finger is still suppressed in this event; release its bit only for following events.
         if(action==Action.POINTER_UP)blocked&=~changedPointer;
@@ -27,9 +35,12 @@ public final class EdgeInputPolicy {
         return accepted;
     }
 
-    private boolean inside(float x,float y){
+    private boolean inside(float x,float y,boolean cornerEligible){
         for(int i=0;i<rectangles.length;i+=4)
             if(x>=rectangles[i]&&x<rectangles[i+2]&&y>=rectangles[i+1]&&y<rectangles[i+3])return true;
-        return false;
+        if(!cornerEligible||!dev.local.sunwindowdemo.features.gamemode.GameCornerGeometry.inside(x,y,cornerWidth,cornerHeight,cornerPercent))return false;
+        for(int i=0;i<protectedCorners.length;i+=4)
+            if(x>=protectedCorners[i]&&x<protectedCorners[i+2]&&y>=protectedCorners[i+1]&&y<protectedCorners[i+3])return false;
+        return true;
     }
 }

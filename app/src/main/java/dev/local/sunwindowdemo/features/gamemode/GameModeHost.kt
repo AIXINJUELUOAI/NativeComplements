@@ -14,6 +14,7 @@ import android.view.*
 import android.widget.FrameLayout
 import dev.local.sunwindowdemo.features.gamemode.GameModePolicy
 import dev.local.sunwindowdemo.features.gamemode.GameModeStore
+import dev.local.sunwindowdemo.features.gamemode.GameCornerGeometry
 import java.util.concurrent.Executors
 
 /** Only this small edge target excludes Back; the rest of the display remains native. */
@@ -90,6 +91,45 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     private val prefs = context.getSharedPreferences("game_mode_host", Context.MODE_PRIVATE)
     private var config = Bundle()
     private var foreground = ""
+    private var actualForeground = ""
+    private var cornerConfigLive = false
+    private var loadRevision = 0
+    private var cornerProtected = intArrayOf()
+    private var cornerExclusions = intArrayOf()
+    private var cornerWidth = 0
+    private var cornerHeight = 0
+    private val cornerHeartbeat = object : Runnable {
+        override fun run() {
+            if (closed) return
+            publishCorners()
+            if (config.getBoolean("enabled") && config.getBoolean("corner_rejection")) main.postDelayed(this, 1000)
+        }
+    }
+    fun protectedRects(rectangles: IntArray) { cornerProtected = rectangles.clone(); publishCorners() }
+    fun blocksCorner(x: Float, y: Float): Boolean = GameCornerGeometry.inside(x, y, cornerWidth, cornerHeight,
+        config.getInt("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT)) && !protectedCorner(x, y)
+    private fun protectedCorner(x: Float, y: Float): Boolean = cornerExclusions.indices.step(4).any {
+        x >= cornerExclusions[it] && y >= cornerExclusions[it + 1] && x < cornerExclusions[it + 2] && y < cornerExclusions[it + 3]
+    }
+    private fun publishCorners() {
+        val bounds = wm.currentWindowMetrics.bounds
+        val enabled = !closed && cornerConfigLive && config.getBoolean("corner_rejection") && gaming() &&
+            foreground == actualForeground && !expanded && !collapsing
+        cornerWidth = if (enabled) bounds.width() else 0
+        cornerHeight = if (enabled) bounds.height() else 0
+        val protected = if (enabled && config.getBoolean("panel", true)) {
+            // The game's own non-focusable assistant handle must remain usable at the edge.
+            val p = params()
+            val left = if (right()) bounds.width() - p.x - p.width else p.x
+            cornerProtected + intArrayOf(left, p.y, left + p.width, p.y + p.height)
+        } else cornerProtected
+        cornerExclusions = protected
+        context.sendBroadcast(Intent(GameModeStore.CORNER_REGIONS).setPackage("android")
+            .putExtra("width", cornerWidth).putExtra("height", cornerHeight)
+            .putExtra("percent", config.getInt("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT))
+            .putExtra("protected", protected).putExtra("package", if (enabled) foreground else ""), null,
+            android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle())
+    }
     private var fullscreen = false
     private var blocked = true
     private var closed = false
@@ -107,7 +147,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     private val iconsReloaded = Runnable { main.post { if (!closed) load() } }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.action == Intent.ACTION_SCREEN_OFF) { hide(); return }
+            if (i.action == Intent.ACTION_SCREEN_OFF) { hide(); publishCorners(); return }
             if (sentFromUid == runCatching { context.packageManager.getApplicationInfo(Wire.PKG, 0).uid }.getOrDefault(-1)) load()
         }
     }
@@ -119,6 +159,8 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     }
     private fun load() {
         if (closed) return
+        val revision = ++loadRevision
+        cornerConfigLive = false; publishCorners()
         worker.execute {
             val snapshot = dev.local.sunwindowdemo.core.HostSnapshot.open(context, "game_mode")
             val read = snapshot.read { context.contentResolver.call(Uri.parse("content://${GameModeStore.AUTHORITY}"), "read", null, null) }
@@ -129,15 +171,17 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
             val selected = chosen.mapNotNull { pkg -> catalog.firstOrNull { it.pkg == pkg } }
             val shortcuts = next.getStringArrayList("quick").orEmpty().mapNotNull { QuickActionCatalog.find(it) }
             main.post {
-                if (closed) return@post
-                config = next; apps = selected; this.catalog = catalog; actions = shortcuts
+                if (closed || revision != loadRevision) return@post
+                config = next; cornerConfigLive = read.live(); apps = selected; this.catalog = catalog; actions = shortcuts
                 hide(); apply()
-                if (!read.live()) main.postDelayed({ load() }, snapshot.retryDelay(3000))
+                main.removeCallbacks(cornerHeartbeat); cornerHeartbeat.run()
+                if (!read.live()) main.postDelayed({ if (revision == loadRevision) load() }, snapshot.retryDelay(3000))
             }
         }
     }
-    fun environment(pkg: String?, fullscreen: Boolean, blocked: Boolean) {
+    fun environment(pkg: String?, fullscreen: Boolean, blocked: Boolean, actualForeground: String? = null) {
         foreground = pkg.orEmpty(); this.fullscreen = fullscreen; this.blocked = blocked
+        this.actualForeground = actualForeground.orEmpty()
         apply()
     }
     private fun gaming() = GameModePolicy.gaming(config.getBoolean("enabled"),
@@ -148,6 +192,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     private fun apply() {
         if (closed) return
         restoreLegacyBrightness()
+        publishCorners()
         if (!gaming() || !config.getBoolean("panel", true)) { hide(); return }
         val metrics = wm.currentWindowMetrics
         val key = "${metrics.bounds}:${metrics.windowInsets.displayCutout?.boundingRects}:${context.resources.configuration.orientation}"
@@ -178,6 +223,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
             }.also { it.start() }
         } else {
             expanded = !expanded
+            publishCorners()
             removeOverlay()
             show()
         }
@@ -276,7 +322,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     private fun hide() { removeOverlay(); expanded = false }
     override fun close() {
         if (closed) return
-        closed = true; hide(); restoreLegacyBrightness()
+        closed = true; hide(); publishCorners(); restoreLegacyBrightness()
         dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded)
         context.unregisterReceiver(receiver); main.removeCallbacksAndMessages(null); worker.shutdownNow()
     }

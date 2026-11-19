@@ -54,7 +54,7 @@ private fun gameConfig(): Bundle {
 
 @Composable
 fun GameModeScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0.dp,
-                   onQuick: () -> Unit = {}, onBarrage: () -> Unit = {}) {
+                   onQuick: () -> Unit = {}, onBarrage: () -> Unit = {}, onCorner: () -> Unit = {}) {
     val context = LocalContext.current
     val config = gameConfig()
     val chosen = config.getStringArrayList("apps").orEmpty().toSet()
@@ -73,6 +73,7 @@ fun GameModeScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp =
                 onClick = { GameModeStore.side(context, if (config.getString("side") == GameModeStore.SIDE_RIGHT) GameModeStore.SIDE_LEFT else GameModeStore.SIDE_RIGHT) })
             SplitSwitchRow("快捷应用与功能", value = config.getBoolean("panel"), onToggle = { GameModeStore.panel(context, it) }, onDetails = onQuick, leading = { Glyph("apps") })
             SplitSwitchRow("弹幕通知", value = barrage.getBoolean("enabled"), onToggle = { BarrageStore.enabled(context, it) }, onDetails = onBarrage, leading = { Glyph("barrage") })
+            SplitSwitchRow("角落防误触", value = config.getBoolean("corner_rejection"), onToggle = { GameModeStore.cornerRejection(context, it) }, onDetails = onCorner, leading = { Glyph("edge") })
         }
     }) { app ->
         AppChoice(app, app.packageName in chosen, { GameModeStore.select(context, app.packageName, it) },

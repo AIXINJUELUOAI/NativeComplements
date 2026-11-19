@@ -15,6 +15,19 @@ class GameModeStoreTest {
 
     @Before fun clear() { GameModeStore.prefs(context).edit().clear().commit() }
 
+    @Test fun cornerOptInAndClampedSizeAreIndependentOfPanel() {
+        assertFalse(GameModeStore.read(context).getBoolean("corner_rejection"))
+        assertEquals(10, GameModeStore.read(context).getInt("corner_radius_percent"))
+        GameModeStore.cornerRejection(context, true)
+        GameModeStore.panel(context, false)
+        assertTrue(GameModeStore.read(context).getBoolean("corner_rejection"))
+        assertFalse(GameModeStore.read(context).getBoolean("enabled"))
+        GameModeStore.cornerRadius(context, 100)
+        assertEquals(24, GameModeStore.read(context).getInt("corner_radius_percent"))
+        GameModeStore.cornerRadius(context, -1)
+        assertEquals(4, GameModeStore.read(context).getInt("corner_radius_percent"))
+    }
+
     @Test fun legacyGamesStayGamesAndQuickAppsRemainIndependent() {
         val prefs = GameModeStore.prefs(context)
         prefs.edit().putStringSet("games", setOf("example.legacy")).commit()

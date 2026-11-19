@@ -240,6 +240,36 @@ class NavigationTest {
         compose.runOnIdle { assertFalse(home.onBackPressedDispatcher.hasEnabledCallbacks()) }
     }
 
+    @Test @Config(qualifiers = "zh-rCN-w915dp-h412dp-land-420dpi")
+    fun gameCornerHasSeparateToggleAndLandscapeDetailWithPersistentSize() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        dev.local.sunwindowdemo.features.gamemode.GameModeStore.prefs(context).edit()
+            .remove("corner_rejection").remove("corner_radius_percent").commit()
+        val (gameScenario, game) = launch(intent(Page.GameMode))
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasContentDescription("角落防误触"))
+        compose.onNodeWithContentDescription("角落防误触").assertIsOff().performClick()
+        compose.runOnIdle { assertTrue(dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_rejection")) }
+        compose.onNodeWithTag("game-corner-preview").assertDoesNotExist()
+        compose.onNodeWithContentDescription("扇区大小").assertDoesNotExist()
+        compose.onNodeWithText("角落防误触").performClick()
+        val details = nextPage(game, Page.GameCorner)
+        gameScenario.moveToState(Lifecycle.State.CREATED)
+        val (detailScenario, detail) = launch(details)
+        val original = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        compose.onNodeWithTag("page-title-角落防误触").assertIsDisplayed()
+        compose.onNodeWithTag("game-corner-preview").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, detail.requestedOrientation) }
+        compose.onNodeWithContentDescription("扇区大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(16f) }
+        compose.runOnIdle { assertEquals(16, dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getInt("corner_radius_percent")) }
+        detailScenario.recreate()
+        lateinit var recreated: MainActivity
+        detailScenario.onActivity { recreated = it }
+        compose.onNodeWithText("扇区大小：短边的 16%").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, recreated.requestedOrientation) }
+        detailScenario.close()
+        assertEquals(original, recreated.requestedOrientation)
+    }
+
     @Test fun navbarImmersiveIsOnlyUnderAppearanceAndControl() {
         val (homeScenario, home) = launch(intent())
         compose.onNodeWithText("导航栏适配").assertDoesNotExist()

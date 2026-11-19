@@ -146,6 +146,21 @@ method("Landroid/app/KeyguardManager;", "isKeyguardLocked", "()Z")
 # PowerManager is absent from the newer framework archive: runtime preflight is required;
 # its goToSleep(JII)V use is evidenced separately by the newer SystemUI's actual call sites.
 
+# Game-corner input uses the existing filter; live WMS focus is checked at each new pointer.
+field(WM + "WindowManagerService;", "mGlobalLock", WM + "WindowManagerGlobalLock;")
+field(WM + "WindowManagerService;", "mRoot", WM + "RootWindowContainer;")
+method(WM + "RootWindowContainer;", "getDisplayContent", "(I)" + WM + "DisplayContent;")
+field(WM + "DisplayContent;", "mCurrentFocus", WM + "WindowState;")
+method(WM + "DisplayContent;", "getImeWindow", "()" + WM + "WindowState;")
+method(WM + "WindowState;", "isVisible", "()Z")
+field(WM + "WindowState;", "mAttrs", "Landroid/view/WindowManager$LayoutParams;")
+method(WM + "WindowState;", "getOwningUid", "()I")
+method(WM + "WindowState;", "getTask", "()" + WM + "Task;")
+# getWindowingMode is inherited from ConfigurationContainer, not declared on Task.
+method(WM + "ConfigurationContainer;", "getWindowingMode", "()I")
+field("Landroid/view/WindowManager$LayoutParams;", "packageName", "Ljava/lang/String;")
+method("Landroid/view/MotionEvent;", "setDownTime", "(J)V")
+
 # Swipe-up mini handoff (SwipeMini.resolve): declared-member lookups on both launchers.
 QS = "Lcom/android/quickstep/"
 END_TARGET = QS + "GestureState$GestureEndTarget;"

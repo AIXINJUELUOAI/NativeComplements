@@ -9,6 +9,7 @@ import java.util.*;
 public final class GameModeStore {
     public static final String AUTHORITY="dev.nativecomplements.module.gamemode";
     public static final String CHANGED="dev.nativecomplements.module.GAMEMODE_CHANGED";
+    public static final String CORNER_REGIONS="dev.nativecomplements.module.GAME_CORNER_REGIONS";
     public static final int APP_LIMIT=512;
     public static final int QUICK_LIMIT=12;
     public static final String SIDE_LEFT="left",SIDE_RIGHT="right";
@@ -20,6 +21,8 @@ public final class GameModeStore {
         out.putBoolean("panel",p.getBoolean("panel",true));
         out.putString("side",side(p.getString("side",SIDE_LEFT)));
         out.putBoolean("brightness",p.getBoolean("brightness",false));
+        out.putBoolean("corner_rejection",p.getBoolean("corner_rejection",false));
+        out.putInt("corner_radius_percent",GameCornerGeometry.clamp(p.getInt("corner_radius_percent",GameCornerGeometry.DEFAULT_PERCENT)));
         out.putStringArrayList("apps",new ArrayList<>(games(p)));
         out.putStringArrayList("quick_apps",new ArrayList<>(quickApps(p)));
         out.putStringArrayList("quick",new ArrayList<>(quick(p)));
@@ -28,6 +31,8 @@ public final class GameModeStore {
     public static void enabled(Context c,boolean enabled){prefs(c).edit().putBoolean("enabled",enabled).apply();changed(c);}
     public static void panel(Context c,boolean panel){prefs(c).edit().putBoolean("panel",panel).apply();changed(c);}
     public static void side(Context c,String side){prefs(c).edit().putString("side",side(side)).apply();changed(c);}
+    public static void cornerRejection(Context c,boolean enabled){prefs(c).edit().putBoolean("corner_rejection",enabled).apply();changed(c);}
+    public static void cornerRadius(Context c,int percent){prefs(c).edit().putInt("corner_radius_percent",GameCornerGeometry.clamp(percent)).apply();changed(c);}
     public static void brightness(Context c,boolean brightness){prefs(c).edit().putBoolean("brightness",brightness).apply();changed(c);}
     public static void select(Context c,String pkg,boolean selected){
         if(!Rules.validPackage(pkg))throw new IllegalArgumentException("game package");

@@ -23,6 +23,14 @@
 
 [DesktopSleepHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/desktop/DesktopSleepHost.java>)在 SystemUI 异步读取配置并向已验证系统 HOME 发布窄 Binder。接收及执行时核实际 HOME UID、事件时效、显示器、前台组件、亮屏与未锁定状态；普通 `PowerManager.goToSleep` 电源键路径，不使用设备管理器强制锁定或改变强认证策略。读取／反射／权限失败保持原生；不增加作用域或 Provider 读者。
 
+## 游戏角落防误触
+
+[GameModeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameModeStore.java>)独立默认关闭；仅游戏模式已启用、选中应用实际前台全屏且亮屏解锁时生效，不依赖游戏助手面板开关。[GameCornerGeometry](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameCornerGeometry.java>)定义屏幕四角的四分之一圆，半径为短边的 4～24%，默认 10%。[详情页](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameCornerScreen.kt>)临时请求横屏并在退出恢复原方向策略，预览和命中共用几何，仅在预览内模拟多指，不屏蔽设置控件。
+
+[GameModeHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameModeHost.kt>)只以实时配置授权；读取失败立即撤销角落资格并重试。使用独立、只接受真实 SystemUI UID 的三秒租约广播，不覆盖原边缘矩形。[EdgeInputFilter](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilter.java>)复用唯一系统输入过滤链路与原生无障碍过滤；[GameCornerAccess](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/GameCornerAccess.java>)在新触点落下时再核默认显示器实时尺寸、当前 WMS 焦点窗口、全屏 Task、键盘不可见、真实包 UID、同用户及亮屏解锁，系统面板获得焦点后不新增角落屏蔽，反射失败仅关闭游戏角落判定。
+
+每个手指只在自身 DOWN 判定：内起点屏蔽至抬起，外起点进入角落仍放行；半径／资格／租约变化只影响新触点。混合输入用原生 `MotionEvent.split` 保留有效 pointer ID、action 与历史；首个有效手指晚于被拒手指时修正整段可见流的 downTime。系统浮层／键盘／截图／展开助手暂停新角落屏蔽，模块保护触区保持可用。不用外接显示器、鼠标或普通应用 Hook 扩大范围；主机检查不能代替设备游戏多指、系统面板及旋转验收。
+
 ## 授权与失败
 
 [NavbarProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/navbar/NavbarProvider.java>)只向自身、实际 SystemUI及已知系统实际 HOME／本用户 UID 返回只读开关；无普通 app 或 server 导航 Hook。配置线程异步读取，main 发布／重排。读取失败关闭覆盖、重建原生并延迟重试。
