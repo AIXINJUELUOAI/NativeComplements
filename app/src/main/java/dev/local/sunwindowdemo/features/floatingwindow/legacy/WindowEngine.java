@@ -2048,10 +2048,22 @@ final class WindowEngine {
         if(a.integer(s.task,"getWindowingMode")!=(s.coverFullscreen?1:5))return false;
         Configuration reported=(Configuration)a.call(a.field(window,"mLastReportedConfiguration"),"getMergedConfiguration");
         Object wc=a.field(reported,"windowConfiguration"),display=a.call(s.task,"getDisplayContent");
-        if(display==null||a.integer(wc,"getWindowingMode")!=(s.coverFullscreen?1:5)
-            ||a.integer(wc,"getRotation")!=a.integer(display,"getRotation"))return false;
+        if(display==null||a.integer(wc,"getRotation")!=a.integer(display,"getRotation"))return false;
         Rect actual=(Rect)a.call(wc,"getBounds"),expected=s.coverFullscreen?(Rect)a.call(display,"getBounds"):new Rect(0,0,s.placement.width(),s.placement.height());
-        return actual.width()==expected.width()&&actual.height()==expected.height();
+        if(s.coverFullscreen)return a.integer(wc,"getWindowingMode")==1&&actual.width()==expected.width()&&actual.height()==expected.height();
+        // Non-resizable activities may retain native floating size-compat insets inside the
+        // correct task canvas. Match their current resolved window viewport, not task height.
+        // Read WM's native cached report, never the outgoing client fullscreen facade.
+        Configuration live=a.config(window,false);
+        Object current=a.field(live,"windowConfiguration");
+        Rect resolved=(Rect)a.call(current,"getBounds");
+        return expected.equals(a.call(s.task,"getBounds"))&&!resolved.isEmpty()&&expected.contains(resolved)
+            &&a.integer(current,"getWindowingMode")==5
+            &&a.integer(wc,"getWindowingMode")==5
+            &&a.integer(current,"getRotation")==a.integer(display,"getRotation")
+            &&actual.equals(resolved)&&reported.densityDpi==live.densityDpi
+            &&reported.orientation==live.orientation&&reported.screenWidthDp==live.screenWidthDp&&reported.screenHeightDp==live.screenHeightDp
+            &&java.util.Objects.equals(a.call(wc,"getAppBounds"),a.call(current,"getAppBounds"));
     }
     void drawingFinished(Object window,int seq){
         if(lock==null)return;
