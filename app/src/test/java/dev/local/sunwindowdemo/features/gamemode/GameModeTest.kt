@@ -120,13 +120,17 @@ class GameModeTest {
             org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
             val config = Bundle().apply {
                 putBoolean("enabled", true); putBoolean("panel", false); putBoolean("corner_rejection", true)
-                putInt("corner_radius_percent", 10); putStringArrayList("apps", arrayListOf("example.game"))
+                putFloat("corner_radius_percent", 10.375f); putStringArrayList("apps", arrayListOf("example.game"))
             }
             org.robolectric.util.ReflectionHelpers.setField(host, "config", config)
             org.robolectric.util.ReflectionHelpers.setField(host, "cornerConfigLive", true)
             host.environment("example.game", true, false, "example.game")
-            assertTrue(host.blocksCorner(1f, 1f))
-            config.putBoolean("panel", true); config.putInt("corner_radius_percent", 24)
+            val bottom = context.getSystemService(android.view.WindowManager::class.java).currentWindowMetrics.bounds.height() - 1f
+            assertFalse(host.blocksCorner(1f, 1f))
+            assertTrue(host.blocksCorner(1f, bottom))
+            val published = org.robolectric.Shadows.shadowOf(context).broadcastIntents.last { it.action == GameModeStore.CORNER_REGIONS }
+            assertEquals(10.375f, published.getFloatExtra("percent", 0f), 0f)
+            config.putBoolean("panel", true); config.putFloat("corner_radius_percent", 24f)
             host.environment("example.game", true, false, "example.game")
             val handle = host.params()
             assertFalse(host.blocksCorner(1f, handle.y + 1f))
@@ -134,14 +138,14 @@ class GameModeTest {
             assertTrue(exclusions.size >= 4)
             config.putBoolean("panel", false)
             host.environment("example.game", true, false, "example.other")
-            assertFalse(host.blocksCorner(1f, 1f))
+            assertFalse(host.blocksCorner(1f, bottom))
             host.environment("example.game", true, true, "example.game")
-            assertFalse(host.blocksCorner(1f, 1f))
+            assertFalse(host.blocksCorner(1f, bottom))
             host.environment("example.game", false, false, "example.game")
-            assertFalse(host.blocksCorner(1f, 1f))
+            assertFalse(host.blocksCorner(1f, bottom))
             org.robolectric.util.ReflectionHelpers.setField(host, "cornerConfigLive", false)
             host.environment("example.game", true, false, "example.game")
-            assertFalse(host.blocksCorner(1f, 1f))
+            assertFalse(host.blocksCorner(1f, bottom))
         } finally { host.close() }
     }
 

@@ -8,8 +8,9 @@ public final class EdgeInputPolicy {
     public enum Action { DOWN, POINTER_DOWN, POINTER_UP, UP, CANCEL, OTHER }
     private final Map<Long,Integer> suppressed=new HashMap<>();
     private int[] rectangles=new int[0],protectedCorners=new int[0];
-    private int cornerWidth,cornerHeight,cornerPercent;
-    public synchronized void corners(int width,int height,int percent,int[] protectedRects){
+    private int cornerWidth,cornerHeight;
+    private float cornerPercent;
+    public synchronized void corners(int width,int height,float percent,int[] protectedRects){
         cornerWidth=width;cornerHeight=height;cornerPercent=percent;protectedCorners=protectedRects.clone();
     }
 

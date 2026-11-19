@@ -99,7 +99,7 @@ public class EdgeInputFilterTest {
         EdgeInputPolicy policy=ReflectionHelpers.getField(host,"policy");
         policy.corners(2000,1000,24,new int[0]);ReflectionHelpers.setField(host,"cornersActive",true);sync(host);
         assertTrue(manager.mNative.enabled);
-        MotionEvent event=finger(MotionEvent.ACTION_DOWN);
+        MotionEvent event=finger(MotionEvent.ACTION_DOWN);event.setLocation(5,990);
         assertEquals(0,EdgeInputFilter.accepted(policy,event,0));event.recycle();
         ReflectionHelpers.setField(host,"cornerSeen",SystemClock.uptimeMillis()-3000);
         ReflectionHelpers.<Runnable>getField(host,"expireCorners").run();

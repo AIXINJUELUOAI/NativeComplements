@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 198
-        versionName = "0.12.8-game-corner-test1"
+        versionCode = 199
+        versionName = "0.12.8-game-corner-test2"
     }
     flavorDimensions += "product"
     productFlavors {

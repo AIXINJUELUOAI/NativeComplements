@@ -17,15 +17,19 @@ class GameModeStoreTest {
 
     @Test fun cornerOptInAndClampedSizeAreIndependentOfPanel() {
         assertFalse(GameModeStore.read(context).getBoolean("corner_rejection"))
-        assertEquals(10, GameModeStore.read(context).getInt("corner_radius_percent"))
+        assertEquals(10f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        GameModeStore.prefs(context).edit().putInt("corner_radius_percent", 13).commit()
+        assertEquals(13f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        GameModeStore.cornerRadius(context, 13.375f)
+        assertEquals(13.375f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
         GameModeStore.cornerRejection(context, true)
         GameModeStore.panel(context, false)
         assertTrue(GameModeStore.read(context).getBoolean("corner_rejection"))
         assertFalse(GameModeStore.read(context).getBoolean("enabled"))
-        GameModeStore.cornerRadius(context, 100)
-        assertEquals(24, GameModeStore.read(context).getInt("corner_radius_percent"))
-        GameModeStore.cornerRadius(context, -1)
-        assertEquals(4, GameModeStore.read(context).getInt("corner_radius_percent"))
+        GameModeStore.cornerRadius(context, 100f)
+        assertEquals(24f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        GameModeStore.cornerRadius(context, -1f)
+        assertEquals(4f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
     }
 
     @Test fun legacyGamesStayGamesAndQuickAppsRemainIndependent() {

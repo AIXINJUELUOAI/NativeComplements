@@ -143,7 +143,16 @@ class NavigationTest {
         homeScenario.moveToState(Lifecycle.State.CREATED)
         val (_, shade) = launch(shadeIntent)
         compose.onNodeWithTag("page-title-外观与控制").assertIsDisplayed()
-        compose.onNodeWithText("横屏双栏").assertIsDisplayed()
+        compose.onNodeWithText("桌面").assertIsDisplayed()
+        compose.onNodeWithText("双击桌面锁屏").assertExists()
+        compose.onNodeWithText("抽屉莫奈图标").assertExists()
+        compose.onNodeWithText("小白条沉浸").assertExists()
+        compose.onNodeWithText("莫奈图标").assertDoesNotExist()
+        compose.onNodeWithText("导航栏").assertDoesNotExist()
+        compose.onNodeWithText("通知与控制中心").assertDoesNotExist()
+        compose.onNodeWithText("状态栏").assertDoesNotExist()
+        compose.onNodeWithText("状态栏与控制中心").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("横屏双栏").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("图标垂直位置").performScrollTo().assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.runOnIdle { assertTrue(shade.isFinishing) }
@@ -240,8 +249,8 @@ class NavigationTest {
         compose.runOnIdle { assertFalse(home.onBackPressedDispatcher.hasEnabledCallbacks()) }
     }
 
-    @Test @Config(qualifiers = "zh-rCN-w915dp-h412dp-land-420dpi")
-    fun gameCornerHasSeparateToggleAndLandscapeDetailWithPersistentSize() {
+    @Test @Config(qualifiers = "zh-rCN-w412dp-h915dp-port-420dpi")
+    fun gameCornerShowsLandscapePreviewWithoutRotatingPageAndPersistsContinuousSize() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         dev.local.sunwindowdemo.features.gamemode.GameModeStore.prefs(context).edit()
             .remove("corner_rejection").remove("corner_radius_percent").commit()
@@ -258,14 +267,18 @@ class NavigationTest {
         val original = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         compose.onNodeWithTag("page-title-角落防误触").assertIsDisplayed()
         compose.onNodeWithTag("game-corner-preview").assertIsDisplayed()
-        compose.runOnIdle { assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, detail.requestedOrientation) }
-        compose.onNodeWithContentDescription("扇区大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(16f) }
-        compose.runOnIdle { assertEquals(16, dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getInt("corner_radius_percent")) }
+        compose.runOnIdle { assertEquals(original, detail.requestedOrientation) }
+        val preview = compose.onNodeWithTag("game-corner-preview").fetchSemanticsNode().boundsInRoot
+        assertTrue(preview.width > preview.height)
+        val slider = compose.onNodeWithContentDescription("扇区大小").fetchSemanticsNode()
+        assertEquals(0, slider.config[androidx.compose.ui.semantics.SemanticsProperties.ProgressBarRangeInfo].steps)
+        compose.onNodeWithContentDescription("扇区大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(16.375f) }
+        compose.runOnIdle { assertEquals(16.375f, dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getFloat("corner_radius_percent"), 0f) }
         detailScenario.recreate()
         lateinit var recreated: MainActivity
         detailScenario.onActivity { recreated = it }
-        compose.onNodeWithText("扇区大小：短边的 16%").assertIsDisplayed()
-        compose.runOnIdle { assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, recreated.requestedOrientation) }
+        compose.onNodeWithText("扇区大小：短边的 16.38%").assertIsDisplayed()
+        compose.runOnIdle { assertEquals(original, recreated.requestedOrientation) }
         detailScenario.close()
         assertEquals(original, recreated.requestedOrientation)
     }

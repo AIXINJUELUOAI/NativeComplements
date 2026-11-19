@@ -25,7 +25,7 @@
 
 ## 游戏角落防误触
 
-[GameModeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameModeStore.java>)独立默认关闭；仅游戏模式已启用、选中应用实际前台全屏且亮屏解锁时生效，不依赖游戏助手面板开关。[GameCornerGeometry](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameCornerGeometry.java>)定义屏幕四角的四分之一圆，半径为短边的 4～24%，默认 10%。[详情页](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameCornerScreen.kt>)临时请求横屏并在退出恢复原方向策略，预览和命中共用几何，仅在预览内模拟多指，不屏蔽设置控件。
+[GameModeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameModeStore.java>)独立默认关闭；仅游戏模式已启用、选中应用实际前台全屏且亮屏解锁时生效，不依赖游戏助手面板开关。[GameCornerGeometry](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameCornerGeometry.java>)定义屏幕左下、右下两个四分之一圆，半径为短边的 4～24%，默认 10%，连续浮点调节并兼容旧整数配置。[详情页](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameCornerScreen.kt>)不改变页面方向，只将示例按横向屏幕比例绘制，调节效果实时显示在示例上，预览和命中共用几何，仅在预览内模拟多指，不屏蔽设置控件。
 
 [GameModeHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/gamemode/GameModeHost.kt>)只以实时配置授权；读取失败立即撤销角落资格并重试。使用独立、只接受真实 SystemUI UID 的三秒租约广播，不覆盖原边缘矩形。[EdgeInputFilter](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilter.java>)复用唯一系统输入过滤链路与原生无障碍过滤；[GameCornerAccess](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/GameCornerAccess.java>)在新触点落下时再核默认显示器实时尺寸、当前 WMS 焦点窗口、全屏 Task、键盘不可见、真实包 UID、同用户及亮屏解锁，系统面板获得焦点后不新增角落屏蔽，反射失败仅关闭游戏角落判定。
 

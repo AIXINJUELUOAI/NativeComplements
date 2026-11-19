@@ -107,7 +107,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     }
     fun protectedRects(rectangles: IntArray) { cornerProtected = rectangles.clone(); publishCorners() }
     fun blocksCorner(x: Float, y: Float): Boolean = GameCornerGeometry.inside(x, y, cornerWidth, cornerHeight,
-        config.getInt("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT)) && !protectedCorner(x, y)
+        config.getFloat("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT.toFloat())) && !protectedCorner(x, y)
     private fun protectedCorner(x: Float, y: Float): Boolean = cornerExclusions.indices.step(4).any {
         x >= cornerExclusions[it] && y >= cornerExclusions[it + 1] && x < cornerExclusions[it + 2] && y < cornerExclusions[it + 3]
     }
@@ -126,7 +126,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
         cornerExclusions = protected
         context.sendBroadcast(Intent(GameModeStore.CORNER_REGIONS).setPackage("android")
             .putExtra("width", cornerWidth).putExtra("height", cornerHeight)
-            .putExtra("percent", config.getInt("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT))
+            .putExtra("percent", config.getFloat("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT.toFloat()))
             .putExtra("protected", protected).putExtra("package", if (enabled) foreground else ""), null,
             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle())
     }

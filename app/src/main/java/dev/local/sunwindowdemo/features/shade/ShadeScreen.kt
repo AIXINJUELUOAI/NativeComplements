@@ -63,25 +63,16 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             ToggleRow("双击桌面锁屏", "双击桌面空白处息屏，效果等同按下电源键", value = desktopDoubleTapSleep) {
                 ShadeStore.setDesktopDoubleTapSleep(context, it)
             }
-        }
-        GroupTitle("莫奈图标")
-        SettingsGroup {
             val hint = if (systemThemed) null else "需先在“壁纸与样式”中打开主题图标"
             ToggleRow("抽屉莫奈图标", hint ?: "应用抽屉与推荐行使用和桌面相同的主题图标",
                 value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
-        }
-        GroupTitle("通知与控制中心")
-        SettingsGroup {
-            ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
-        }
-        GroupTitle("导航栏")
-        SettingsGroup {
             ToggleRow("小白条沉浸", "保留原生手势条，取消底部占位", value = navbarImmersive) {
                 NavbarStore.setEnabled(context, it)
             }
         }
-        GroupTitle("状态栏")
+        GroupTitle("状态栏与控制中心")
         SettingsGroup {
+            ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
             ToggleRow("信号显示调整", "调整 5G 信号格分档，仅影响显示，不增强信号", value = signalDisplay) {
                 ShadeStore.setSignalDisplay(context, it)
             }
