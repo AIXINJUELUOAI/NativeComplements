@@ -76,6 +76,10 @@ for name, signature in (
     ("relaunchActivityLocked", "(ZI)V"),
 ):
     method(WM + "ActivityRecord;", name, signature)
+method("Landroid/view/Choreographer;", "postVsyncCallback", "(Landroid/view/Choreographer$VsyncCallback;)V")
+method("Landroid/view/Choreographer$FrameData;", "getFrameTimeNanos", "()J")
+method("Landroid/view/Choreographer$FrameData;", "getPreferredFrameTimeline", "()Landroid/view/Choreographer$FrameTimeline;")
+method("Landroid/view/Choreographer$FrameTimeline;", "getVsyncId", "()J")
 method(WM + "WindowContainer;", "getLastLayer", "()I")
 method(WM + "WindowContainer;", "getLastRelativeLayer", "()Landroid/view/SurfaceControl;")
 method(WM + "WindowContainer;", "forAllTasks", "(Ljava/util/function/Consumer;)V")

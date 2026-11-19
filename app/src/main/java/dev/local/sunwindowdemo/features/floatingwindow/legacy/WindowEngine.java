@@ -30,7 +30,7 @@ final class WindowEngine {
     private Context context;
     private Object wms, root, lock, atm;
     private Handler handler;
-    private Choreographer frames;
+    private Choreographer frames,swipeFrames;
     private WindowAudio audio;
     private TaskCleanupGuard cleanup;
     void installCleanupGuard(io.github.libxposed.api.XposedModule module,ClassLoader loader){
@@ -204,18 +204,20 @@ final class WindowEngine {
     }
     /** Steps a prepared swipe cover until the open adopts it (pollCover) or the preparation ends. */
     private void driveSwipeCover(BackPreparation prepared){
-        frames.postFrameCallback(new Choreographer.FrameCallback(){
+        swipeFrames.postVsyncCallback(new Choreographer.VsyncCallback(){
             long previous=-1,maxGap;int callbacks;
-            public void doFrame(long frameTime){
+            public void onVsync(Choreographer.FrameData data){
+                long frameTime=data.getFrameTimeNanos();
+                long vsyncId=data.getPreferredFrameTimeline().getVsyncId();
                 synchronized(lock){
                     if(backPreparation!=prepared||prepared.cover==null){
                         log.accept("SWIPE_COVER_FRAMES callbacks="+callbacks+" maxGapMs="+(maxGap/1_000_000f));return;
                     }
                     try{
                         long now=SystemClock.elapsedRealtime()-Math.max(0,System.nanoTime()-frameTime)/1_000_000L;
-                        prepared.cover.step(false,true,now);
+                        prepared.cover.step(false,true,now,vsyncId);
                         callbacks++;if(previous>=0)maxGap=Math.max(maxGap,frameTime-previous);previous=frameTime;
-                        frames.postFrameCallback(this);
+                        swipeFrames.postVsyncCallback(this);
                     }catch(Throwable error){
                         log.accept("SWIPE_COVER_FAILED "+FrameworkAccess.reason(error));
                         cancelBackPreparation(prepared.token);
@@ -402,6 +404,7 @@ final class WindowEngine {
                 catch(RuntimeException unavailable){log.accept("ICON_ASSETS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
                 audio=WindowAudio.create(context,handler,log);
                 suggestionInput=ProductFeatures.createInput(a,context,root,lock,handler,log);
+                swipeFrames=Choreographer.getInstance();
                 try{frames=(Choreographer)Choreographer.class.getDeclaredMethod("getSfInstance").invoke(null);}
                 catch(Exception e){frames=Choreographer.getInstance();log.accept("SF_CLOCK_FALLBACK "+e.getClass().getSimpleName());}
             });

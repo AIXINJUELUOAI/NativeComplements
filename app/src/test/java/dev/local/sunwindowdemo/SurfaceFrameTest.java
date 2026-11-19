@@ -61,7 +61,7 @@ public class SurfaceFrameTest {
     private static TaskCover coverFixture()throws Exception{
         TaskCover cover=allocate(TaskCover.class);
         set(cover,"root",ReflectionHelpers.callConstructor(SurfaceControl.class));
-        set(cover,"motionAt",-1L);set(cover,"gestureAt",-1L);set(cover,"decorationAt",-1L);set(cover,"frameClock",-1L);
+        set(cover,"motionAt",-1L);set(cover,"gestureAt",-1L);set(cover,"decorationAt",-1L);set(cover,"frameClock",-1L);set(cover,"frameVsyncId",-1L);
         set(cover,"presentationVisible",true);set(cover,"exitAlpha",1f);set(cover,"exitCoverAlpha",1f);
         return cover;
     }
@@ -213,9 +213,12 @@ public class SurfaceFrameTest {
         SurfaceControl background=ReflectionHelpers.getField(cover,"background");
         assertEquals(96,lastApplied.radii.get(background),0);
         long clock=android.os.SystemClock.elapsedRealtime();
-        cover.step(false,true,clock+8);
+        cover.step(false,true,clock+8,1234);
+        assertEquals(1234,lastApplied.vsyncId);assertTrue(lastApplied.animation);
+        assertEquals(-1L,ReflectionHelpers.<Long>getField(cover,"frameVsyncId").longValue());
         float first=((RectF)ReflectionHelpers.getField(cover,"decorationBounds")).left;
         cover.step(false,true,clock+16);
+        assertEquals(-1,lastApplied.vsyncId);assertFalse(lastApplied.animation);
         assertTrue(((RectF)ReflectionHelpers.getField(cover,"decorationBounds")).left>first);
         assertEquals(2.5f,cover.preparedDensity(),0);
         assertFalse(cover.reusesPresentation(new Geometry.Placement(1000,1600,.7f,200,300)));
@@ -275,6 +278,9 @@ public class SurfaceFrameTest {
     @Implements(SurfaceControl.Transaction.class)
     public static class TransactionShadow {
         @RealObject SurfaceControl.Transaction real;
+        long vsyncId=-1;boolean animation;
+        @Implementation protected SurfaceControl.Transaction setFrameTimelineVsync(long id){vsyncId=id;return real;}
+        @Implementation protected SurfaceControl.Transaction setAnimationTransaction(){animation=true;return real;}
         final Map<SurfaceControl,Float> alpha=new IdentityHashMap<>();
         final Map<SurfaceControl,Integer> layers=new IdentityHashMap<>();
         final Map<SurfaceControl,SurfaceControl> relativeTo=new IdentityHashMap<>();

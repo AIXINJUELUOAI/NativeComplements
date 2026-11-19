@@ -30,7 +30,7 @@ final class TaskCover {
     private long began=SystemClock.elapsedRealtime(),notBefore;
     private final long duration,fadeDuration;
     private long entryAt=-1,fadeAt=-1,hiddenAt=-1;
-    private long frameClock=-1;
+    private long frameClock=-1,frameVsyncId=-1;
     private boolean closed,exiting;
     private boolean independentLayer;
     private int taskLayer;
@@ -268,9 +268,12 @@ final class TaskCover {
         return step(ready,visible,SystemClock.elapsedRealtime());
     }
     boolean step(boolean ready,boolean visible,long now)throws Exception{
-        frameClock=now;
+        return step(ready,visible,now,-1);
+    }
+    boolean step(boolean ready,boolean visible,long now,long vsyncId)throws Exception{
+        frameClock=now;frameVsyncId=vsyncId;
         try{return stepFrame(ready,visible,now);}
-        finally{frameClock=-1;}
+        finally{frameClock=-1;frameVsyncId=-1;}
     }
     private boolean stepFrame(boolean ready,boolean visible,long now)throws Exception{
         if(closed)return false;
@@ -340,6 +343,12 @@ final class TaskCover {
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},background);
             a.call(tx,"show",new Class<?>[]{SurfaceControl.class},icon);
             decorate(tx,false);
+            if(frameVsyncId>=0){
+                // Frame-pacing experiment: carry the same transaction metadata as the native
+                // SurfaceAnimationRunner; device comparison still determines the visual result.
+                a.call(tx,"setAnimationTransaction");
+                a.call(tx,"setFrameTimelineVsync",new Class<?>[]{long.class},frameVsyncId);
+            }
             tx.apply();
             drawnAlpha=alpha;drawnRadius=radius;
         }
