@@ -38,46 +38,17 @@ final class SwipeMini {
     private static float progress;
     private static boolean armed;
     private static WeakReference<TextView> hint=new WeakReference<>(null);
-    private static volatile HiddenCard hiddenCard;
+    private static final java.util.Set<Object> acceptedHandlers=java.util.Collections.synchronizedSet(
+        java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>()));
 
-    /** A separate alpha channel: native TaskView alpha animations must remain untouched. */
-    private static final class HiddenCard implements Runnable,View.OnAttachStateChangeListener {
-        final WeakReference<View> view;
-        final WeakReference<Object> handler;
-        final Method setter;
-        final float alpha;
-        HiddenCard(View view,Object handler,Method setter,float alpha){
-            this.view=new WeakReference<>(view);this.handler=new WeakReference<>(handler);
-            this.setter=setter;this.alpha=alpha;
-        }
-        public void run(){
-            if(hiddenCard!=this)return;
-            View card=view.get();
-            try{
-                if(card!=null){setter.invoke(card,alpha);card.removeCallbacks(this);card.removeOnAttachStateChangeListener(this);}
-                hiddenCard=null;
-            }catch(Exception failure){log.accept("SWIPE_MINI_CARD_RESTORE_FAILED "+failure.getClass().getSimpleName());}
-        }
-        public void onViewAttachedToWindow(View view){}
-        public void onViewDetachedFromWindow(View view){run();}
-    }
-    static void restoreCard(Object handler){
-        HiddenCard card=hiddenCard;
-        if(card==null||(handler!=null&&card.handler.get()!=handler))return;
-        View view=card.view.get();
-        if(view!=null&&android.os.Looper.myLooper()!=android.os.Looper.getMainLooper())view.post(card);
-        else card.run();
-    }
-    static void hideCard(Targets t,Object recents,Object handler,int taskId)throws Exception{
-        View view=(View)t.taskView().invoke(recents,taskId);
-        if(view==null)return;
-        restoreCard(null);
-        HiddenCard card=new HiddenCard(view,handler,t.setTransitionAlpha(),(Float)t.transitionAlpha().invoke(view));
-        t.setTransitionAlpha().invoke(view,0f);
-        hiddenCard=card;
-        view.addOnAttachStateChangeListener(card);
-        // Safety ceiling if the launcher's completion callback is lost; never leave overview blank.
-        view.postDelayed(card,2000);
+    static void acceptHandler(Object handler){acceptedHandlers.add(handler);}
+    static void finishHandler(Object handler){acceptedHandlers.remove(handler);}
+    static Object workspaceTarget(Object handler,Object nativeTarget){
+        if(!acceptedHandlers.contains(handler))return nativeTarget;
+        // Use the native no-workspace-icon branch: no FloatingIcon/Widget or copied TaskView
+        // is created, while normal HOME state/controller completion still runs.
+        log.accept("SWIPE_MINI_HOME_FALLBACK hadTarget="+(nativeTarget!=null));
+        return null;
     }
 
     private SwipeMini(){}
@@ -89,14 +60,14 @@ final class SwipeMini {
         sink=channel!=null&&channel.isBinderAlive()?channel:null;
         if(previouslyConnected!=(sink!=null)||previousHint!=hintEnabled)
             log.accept("SWIPE_MINI_CHANNEL connected="+(sink!=null)+" hint="+hintEnabled);
-        if(sink==null){reset(null);restoreCard(null);}
+        if(sink==null){reset(null);acceptedHandlers.clear();}
         else if(!hintEnabled){TextView view=hint.get();if(view!=null)view.post(()->hide(view));}
     }
 
     record Targets(Method displacement,Method endTarget,Method haptic,Field recents,Field gesture,Field context,
                    Method runningIds,Method nativeEnd,Field handles,Method simulator,Method currentRect,Method currentRadius,
-                   Method transformParams,Method targetAlpha,Method taskView,Method invalidate,Method invalidateLauncher,
-                   Method transitionAlpha,Method setTransitionAlpha,Object home,Object recentsTarget){}
+                   Method transformParams,Method targetAlpha,Method workspaceView,Method invalidate,Method invalidateLauncher,
+                   Object home,Object recentsTarget){}
     /** Live-tile params of an accepted handoff: the system mask owns the visuals, so the native
      *  home fly-out (which shrinks toward the centre when no icon exists) stays invisible. */
     private static final java.util.Set<Object> hiddenTiles=java.util.Collections.synchronizedSet(
@@ -134,12 +105,11 @@ final class SwipeMini {
         Method transformParams=exact(handle.getDeclaredMethod("getTransformParams"),paramsType);
         Method targetAlpha=exact(paramsType.getDeclaredMethod("setTargetAlpha",float.class),paramsType);
         Class<?> taskType=Class.forName("com.android.quickstep.views.TaskView",false,loader);
-        if(!View.class.isAssignableFrom(taskType))throw new NoSuchMethodException("TaskView hierarchy");
-        Method taskView=exact(recentsView.getDeclaredMethod("getTaskViewByTaskId",int.class),taskType);
+        Class<?> launcherHandler=Class.forName("com.android.quickstep.LauncherSwipeHandlerV2",false,loader);
+        if(!handler.isAssignableFrom(launcherHandler))throw new NoSuchMethodException("launcher handler hierarchy");
+        Method workspaceView=exact(launcherHandler.getDeclaredMethod("findWorkspaceView",List.class,taskType),View.class);
         Method invalidate=exact(handler.getDeclaredMethod("invalidateHandler"),void.class);
         Method invalidateLauncher=exact(handler.getDeclaredMethod("invalidateHandlerWithLauncher"),void.class);
-        Method transitionAlpha=exact(View.class.getDeclaredMethod("getTransitionAlpha"),float.class);
-        Method setTransitionAlpha=exact(View.class.getDeclaredMethod("setTransitionAlpha",float.class),void.class);
         Object home=null,recentsTarget=null;
         for(Object value:target.getEnumConstants()){
             String name=((Enum<?>)value).name();
@@ -147,7 +117,7 @@ final class SwipeMini {
         }
         if(home==null||recentsTarget==null)throw new NoSuchFieldException("GestureEndTarget");
         return new Targets(displacement,endTarget,haptic,recents,gesture,context,runningIds,nativeEnd,handles,simulator,currentRect,currentRadius,
-            transformParams,targetAlpha,taskView,invalidate,invalidateLauncher,transitionAlpha,setTransitionAlpha,home,recentsTarget);
+            transformParams,targetAlpha,workspaceView,invalidate,invalidateLauncher,home,recentsTarget);
     }
 
     static void install(XposedModule module,ClassLoader loader,Consumer<String> logger){
@@ -177,15 +147,18 @@ final class SwipeMini {
                 if(!selected||(result!=t.home()&&result!=t.recentsTarget()))return result;
                 if(!handoff(t,handler))return result;
                 hideLiveTile(t,handler);
+                acceptHandler(handler);
                 return t.home();
             }));
             hooks.add(module.hook(t.targetAlpha()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->
                 hiddenTiles.contains(chain.getThisObject())?chain.proceed(new Object[]{0f}):chain.proceed()));
+            hooks.add(module.hook(t.workspaceView()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->
+                workspaceTarget(chain.getThisObject(),chain.proceed())));
             for(Method finish:new Method[]{t.invalidate(),t.invalidateLauncher()})
                 hooks.add(module.hook(finish).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                    try{return chain.proceed();}finally{restoreCard(chain.getThisObject());}
+                    try{return chain.proceed();}finally{finishHandler(chain.getThisObject());}
                 }));
-            log.accept("SWIPE_MINI_READY hooks=5 endTarget="+t.endTarget().getParameterCount());
+            log.accept("SWIPE_MINI_READY hooks=6 endTarget="+t.endTarget().getParameterCount());
         }catch(Throwable failure){
             for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}
             log.accept("SWIPE_MINI_DISABLED "+failure.getClass().getSimpleName()+": "+failure.getMessage());
@@ -203,7 +176,6 @@ final class SwipeMini {
             progress=-displacement/height;
             was=armed;now=progress>THRESHOLD;armed=now;
         }
-        if(fresh&&hiddenCard!=null&&hiddenCard.handler.get()!=handler)restoreCard(null);
         if(was==now&&!(fresh&&!now))return;
         log.accept("SWIPE_MINI_THRESHOLD armed="+now+" displacement="+displacement+" height="+height);
         if(now)t.haptic().invoke(handler);
@@ -232,9 +204,6 @@ final class SwipeMini {
                 reply.readException();
                 boolean accepted=reply.readBoolean();
                 log.accept("SWIPE_MINI_HANDOFF task="+ids[0]+" accepted="+accepted);
-                if(accepted)try{
-                    hideCard(t,t.recents().get(handler),handler,ids[0]);
-                }catch(Exception failure){log.accept("SWIPE_MINI_CARD_UNHIDDEN "+failure.getClass().getSimpleName());}
                 return accepted;
             }finally{data.recycle();reply.recycle();}
         }catch(Throwable failure){

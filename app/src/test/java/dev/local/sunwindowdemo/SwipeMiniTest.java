@@ -23,6 +23,7 @@ public class SwipeMiniTest {
         assertEquals("getCurrentRect",t.currentRect().getName());
         assertEquals("getCurrentCornerRadius",t.currentRadius().getName());
         assertEquals("setTargetAlpha",t.targetAlpha().getName());
+        assertEquals("findWorkspaceView",t.workspaceView().getName());
     }
 
     @Test public void thresholdIsStrictlyMoreThanOneThird()throws Exception{
@@ -46,48 +47,22 @@ public class SwipeMiniTest {
         }finally{SwipeMini.configure(null,true);}
     }
 
-    @Test public void onlyMatchingCardIsHiddenAndOriginalTransitionAlphaIsRestored()throws Exception{
-        var context=org.robolectric.RuntimeEnvironment.getApplication();
-        var recents=new com.android.quickstep.views.RecentsView(context);
-        recents.taskId=42;recents.card=new com.android.quickstep.views.TaskView(context);
-        var targets=SwipeMini.resolve(getClass().getClassLoader());
-        Object handler=new Object();
-        targets.setTransitionAlpha().invoke(recents.card,.7f);
+    @Test public void onlyAcceptedHandlerUsesNativeNoIconBranch(){
+        Object handler=new Object(),other=new Object(),icon=new Object();
         try{
-            SwipeMini.hideCard(targets,recents,handler,99);
-            assertEquals(.7f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-            SwipeMini.hideCard(targets,recents,handler,42);
-            assertEquals(0f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-            recents.card.setAlpha(.5f); // Native card alpha must not unhide our separate channel.
-            assertEquals(0f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-            SwipeMini.restoreCard(new Object());
-            assertEquals(0f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-            SwipeMini.restoreCard(handler);
-            assertEquals(.7f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-            assertEquals(.5f,recents.card.getAlpha(),0);
-            SwipeMini.hideCard(targets,recents,handler,42);
+            assertSame(icon,SwipeMini.workspaceTarget(handler,icon));
+            SwipeMini.acceptHandler(handler);
+            assertNull(SwipeMini.workspaceTarget(handler,icon));
+            assertNull(SwipeMini.workspaceTarget(handler,null));
+            assertSame(icon,SwipeMini.workspaceTarget(other,icon));
+            SwipeMini.finishHandler(other);
+            assertNull(SwipeMini.workspaceTarget(handler,icon));
+            SwipeMini.finishHandler(handler);
+            assertSame(icon,SwipeMini.workspaceTarget(handler,icon));
+            SwipeMini.acceptHandler(handler);
             SwipeMini.configure(null,true);
-            assertEquals(.7f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-        }finally{SwipeMini.restoreCard(null);}
-    }
-
-    @Test @org.robolectric.annotation.LooperMode(org.robolectric.annotation.LooperMode.Mode.PAUSED)
-    public void detachedCardAndLostCompletionBothRestore()throws Exception{
-        var activity=org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
-        var recents=new com.android.quickstep.views.RecentsView(activity);
-        recents.taskId=42;recents.card=new com.android.quickstep.views.TaskView(activity);
-        recents.addView(recents.card);activity.setContentView(recents);
-        var targets=SwipeMini.resolve(getClass().getClassLoader());
-        try{
-            targets.setTransitionAlpha().invoke(recents.card,.8f);
-            SwipeMini.hideCard(targets,recents,new Object(),42);
-            recents.removeView(recents.card);
-            assertEquals(.8f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-            recents.addView(recents.card);
-            SwipeMini.hideCard(targets,recents,new Object(),42);
-            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(2001));
-            assertEquals(.8f,(Float)targets.transitionAlpha().invoke(recents.card),0);
-        }finally{SwipeMini.restoreCard(null);activity.finish();}
+            assertSame(icon,SwipeMini.workspaceTarget(handler,icon));
+        }finally{SwipeMini.finishHandler(handler);}
     }
 
     @Test public void pauseDetectorIsNotRequiredToResolve()throws Exception{
