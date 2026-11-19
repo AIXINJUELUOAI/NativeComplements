@@ -93,7 +93,7 @@ private fun CornerPreview(width: Int, height: Int, percent: Float) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
-                        val scale = minOf(size.width, size.height).toFloat() / width
+                        val scale = minOf(size.width.toFloat() / width, size.height.toFloat() / height)
                         val left = (size.width - width * scale) / 2
                         val top = (size.height - height * scale) / 2
                         for (change in event.changes) {
@@ -111,8 +111,7 @@ private fun CornerPreview(width: Int, height: Int, percent: Float) {
                 }
             } finally { touches.clear() }
         }) {
-        // Keep the original portrait sample's long-side size, simply laid on its side.
-        val scale = minOf(size.width, size.height) / width
+        val scale = minOf(size.width / width, size.height / height)
         val phoneWidth = width * scale
         val phoneHeight = height * scale
         val left = (size.width - phoneWidth) / 2

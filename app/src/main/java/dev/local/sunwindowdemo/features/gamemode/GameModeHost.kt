@@ -89,6 +89,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     private val worker = Executors.newSingleThreadExecutor()
     private val wm = context.getSystemService(WindowManager::class.java)
     private val prefs = context.getSharedPreferences("game_mode_host", Context.MODE_PRIVATE)
+    private val cornerOverlay = GameCornerOverlay(context)
     private var config = Bundle()
     private var foreground = ""
     private var actualForeground = ""
@@ -124,6 +125,9 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
             cornerProtected + intArrayOf(left, p.y, left + p.width, p.y + p.height)
         } else cornerProtected
         cornerExclusions = protected
+        cornerOverlay.update(cornerWidth, cornerHeight,
+            config.getFloat("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT.toFloat()), protected,
+            enabled && config.getBoolean("corner_show_regions"))
         context.sendBroadcast(Intent(GameModeStore.CORNER_REGIONS).setPackage("android")
             .putExtra("width", cornerWidth).putExtra("height", cornerHeight)
             .putExtra("percent", config.getFloat("corner_radius_percent", GameCornerGeometry.DEFAULT_PERCENT.toFloat()))
@@ -147,7 +151,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     private val iconsReloaded = Runnable { main.post { if (!closed) load() } }
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.action == Intent.ACTION_SCREEN_OFF) { hide(); publishCorners(); return }
+            if (i.action == Intent.ACTION_SCREEN_OFF) { blocked = true; hide(); publishCorners(); return }
             if (sentFromUid == runCatching { context.packageManager.getApplicationInfo(Wire.PKG, 0).uid }.getOrDefault(-1)) load()
         }
     }

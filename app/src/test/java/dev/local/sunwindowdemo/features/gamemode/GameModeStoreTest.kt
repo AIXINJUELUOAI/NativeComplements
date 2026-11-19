@@ -17,6 +17,10 @@ class GameModeStoreTest {
 
     @Test fun cornerOptInAndClampedSizeAreIndependentOfPanel() {
         assertFalse(GameModeStore.read(context).getBoolean("corner_rejection"))
+        assertFalse(GameModeStore.read(context).getBoolean("corner_show_regions"))
+        GameModeStore.showCornerRegions(context, true)
+        assertTrue(GameModeStore.read(context).getBoolean("corner_show_regions"))
+        assertFalse(GameModeStore.read(context).getBoolean("enabled"))
         assertEquals(10f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
         GameModeStore.prefs(context).edit().putInt("corner_radius_percent", 13).commit()
         assertEquals(13f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)

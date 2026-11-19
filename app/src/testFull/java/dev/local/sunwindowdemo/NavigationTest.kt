@@ -291,7 +291,7 @@ class NavigationTest {
             val screenshot = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
             view.draw(android.graphics.Canvas(screenshot))
             val screenshotDir = java.io.File(requireNotNull(System.getProperty("nativecomplements.screenshots"))).apply { mkdirs() }
-            java.io.File(screenshotDir, "game-corner-test3.png").outputStream().use {
+            java.io.File(screenshotDir, "game-corner-test4.png").outputStream().use {
                 screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
             }
         }
@@ -313,6 +313,21 @@ class NavigationTest {
         compose.onNodeWithText("逐应用设置").assertDoesNotExist()
         compose.onNodeWithContentDescription("返回").performClick()
         compose.runOnIdle { assertTrue(shade.isFinishing) }
+    }
+
+    @Test fun developerToolsCanShowGameCornerRangeWithoutEnablingRejection() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val store = dev.local.sunwindowdemo.features.gamemode.GameModeStore.prefs(context)
+        store.edit().remove("corner_show_regions").putBoolean("corner_rejection", false).commit()
+        val (scenario, _) = launch(intent(Page.Tools))
+        compose.onNodeWithText("显示游戏防误触范围").assertIsOff().performClick()
+        compose.runOnIdle {
+            assertTrue(dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_show_regions"))
+            assertFalse(dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_rejection"))
+        }
+        scenario.recreate()
+        compose.onNodeWithText("显示游戏防误触范围").assertIsOn().performClick()
+        compose.runOnIdle { assertFalse(dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_show_regions")) }
     }
 
     @Test fun developerToolsNoLongerExposeNavbarDiagnostics() {

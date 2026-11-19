@@ -249,6 +249,15 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
     val context = LocalContext.current
     var calls by remember { mutableStateOf(CallBlockingStore.readConfig(context)) }
     var motion by remember { mutableStateOf(MotionStore.read(context)) }
+    var gameRegions by remember { mutableStateOf(dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_show_regions")) }
+    DisposableEffect(context) {
+        val prefs = dev.local.sunwindowdemo.features.gamemode.GameModeStore.prefs(context)
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            gameRegions = dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getBoolean("corner_show_regions")
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     fun rotationStatus(): String {
         val p = context.createDeviceProtectedStorageContext().getSharedPreferences("rotation_status", 0)
         return listOf("version", "hook", "launcher_hook", "request", "host", "settings", "window", "click").joinToString("\n") {
@@ -259,6 +268,9 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
     SettingsGroup {
         SettingRow("小窗诊断与恢复", onClick = onWindow)
         SettingRow("图标实验与诊断", onClick = onIcons)
+        ToggleRow("显示游戏防误触范围", value = gameRegions) {
+            dev.local.sunwindowdemo.features.gamemode.GameModeStore.showCornerRegions(context, it)
+        }
     }
     GroupTitle("其他服务")
     SettingsGroup {
