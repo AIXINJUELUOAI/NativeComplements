@@ -131,11 +131,11 @@ final class ProductFeatures {
         public void environment(String foreground,boolean fullscreen,boolean systemFocus,String title,boolean keyboard,boolean screenshotVisible,boolean panelShown,boolean openWaitShown,int imeTop,String actualForeground){
             boolean suspended=BarrageHost.shouldSuspend(systemFocus,title,keyboard,panelShown,openWaitShown);
             if(barrage!=null)barrage.environment(foreground,fullscreen,suspended,actualForeground);
-            if(gameMode!=null)gameMode.environment(foreground,fullscreen,suspended||screenshotVisible);
+            if(gameMode!=null)gameMode.environment(foreground,fullscreen,suspended||screenshotVisible,actualForeground);
             if(suggestions!=null)suggestions.environment(screenshotVisible||systemFocus||panelShown||openWaitShown,imeTop);
         }
         public void edgeEnvironment(boolean systemOverlay,boolean keyboard){if(edgeTouch!=null)edgeTouch.setEnvironment(systemOverlay,keyboard);}
-        public void protectedRects(int[] rectangles){if(edgeTouch!=null)edgeTouch.setProtectedRects(rectangles);}
+        public void protectedRects(int[] rectangles){if(edgeTouch!=null)edgeTouch.setProtectedRects(rectangles);if(gameMode!=null)gameMode.protectedRects(rectangles);}
         public void closeBarrage(){if(barrage!=null){barrage.close();barrage=null;}if(gameMode!=null){gameMode.close();gameMode=null;}}
         public void close(){if(suggestions!=null){suggestions.close();suggestions=null;}if(edgeTouch!=null){edgeTouch.close();edgeTouch=null;}}
     }

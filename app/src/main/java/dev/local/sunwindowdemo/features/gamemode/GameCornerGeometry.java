@@ -1,0 +1,16 @@
+package dev.local.sunwindowdemo.features.gamemode;
+
+/** The same bottom-left/right quarter circles are used by the input filter and scaled preview. */
+public final class GameCornerGeometry {
+    public static final int MIN_DP=50,MAX_DP=200,DEFAULT_PERCENT=10;
+    private GameCornerGeometry(){}
+    public static float clamp(float percent){return Float.isFinite(percent)?Math.max(0,Math.min(100,percent)):DEFAULT_PERCENT;}
+    public static float radius(int width,int height,float percent){
+        return width>0&&height>0?Math.min(width,height)*clamp(percent)/100f:0;
+    }
+    public static boolean inside(float x,float y,int width,int height,float percent){
+        if(!Float.isFinite(x)||!Float.isFinite(y)||x<0||y<0||x>=width||y>=height)return false;
+        float dx=Math.min(x,width-x),dy=height-y,r=radius(width,height,percent);
+        return r>0&&dx*dx+dy*dy<=r*r;
+    }
+}

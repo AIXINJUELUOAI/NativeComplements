@@ -96,6 +96,75 @@ class GameModeTest {
         assertEquals(0, android.provider.Settings.System.getInt(resolver, key))
     }
 
+    @Test fun staleAsyncGameSettingsCannotReauthorizeCornerAfterNewerReload() {
+        val context = RuntimeEnvironment.getApplication()
+        val host = dev.local.sunwindowdemo.GameModeHost(context, {}, {})
+        try {
+            org.robolectric.util.ReflectionHelpers.getField<java.util.concurrent.ExecutorService>(host, "worker")
+                .submit {}.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            org.robolectric.util.ReflectionHelpers.setField(host, "loadRevision", 2)
+            // Revision 1 has posted its result, but a newer reload has already revoked authorization.
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertFalse(org.robolectric.util.ReflectionHelpers.getField<Boolean>(host, "cornerConfigLive"))
+        } finally { host.close() }
+    }
+
+    @Test fun cornerNeedsLiveConfigAndActualForegroundButNotPanel() {
+        val context = RuntimeEnvironment.getApplication()
+        org.robolectric.Shadows.shadowOf(context.getSystemService(android.os.PowerManager::class.java)).setIsInteractive(true)
+        org.robolectric.Shadows.shadowOf(context.getSystemService(android.app.KeyguardManager::class.java)).setKeyguardLocked(false)
+        val host = dev.local.sunwindowdemo.GameModeHost(context, {}, {})
+        try {
+            org.robolectric.util.ReflectionHelpers.getField<java.util.concurrent.ExecutorService>(host, "worker")
+                .submit {}.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            val config = Bundle().apply {
+                putBoolean("enabled", true); putBoolean("panel", false); putBoolean("corner_rejection", true)
+                putFloat("corner_radius_percent", 10.375f); putStringArrayList("apps", arrayListOf("example.game"))
+                putBoolean("corner_show_regions", true)
+            }
+            org.robolectric.util.ReflectionHelpers.setField(host, "config", config)
+            org.robolectric.util.ReflectionHelpers.setField(host, "cornerConfigLive", true)
+            host.environment("example.game", true, false, "example.game")
+            val bottom = context.getSystemService(android.view.WindowManager::class.java).currentWindowMetrics.bounds.height() - 1f
+            assertFalse(host.blocksCorner(1f, 1f))
+            assertTrue(host.blocksCorner(1f, bottom))
+            val published = org.robolectric.Shadows.shadowOf(context).broadcastIntents.last { it.action == GameModeStore.CORNER_REGIONS }
+            assertEquals(10.375f, published.getFloatExtra("percent", 0f), 0f)
+            val range = org.robolectric.util.ReflectionHelpers.getField<Any>(host, "cornerOverlay")
+            fun rangeViews() = org.robolectric.util.ReflectionHelpers.getField<List<android.view.View>>(range, "views")
+            assertEquals(2, rangeViews().size)
+            context.sendBroadcast(android.content.Intent(android.content.Intent.ACTION_SCREEN_OFF))
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+            assertTrue(rangeViews().isEmpty())
+            host.environment("example.game", true, false, "example.game")
+            assertEquals(2, rangeViews().size)
+            config.putBoolean("panel", true); config.putFloat("corner_radius_percent", 24f)
+            host.environment("example.game", true, false, "example.game")
+            val handle = host.params()
+            assertFalse(host.blocksCorner(1f, handle.y + 1f))
+            val exclusions = org.robolectric.util.ReflectionHelpers.getField<IntArray>(host, "cornerExclusions")
+            assertTrue(exclusions.size >= 4)
+            config.putBoolean("panel", false)
+            host.environment("example.game", true, false, "example.other")
+            assertFalse(host.blocksCorner(1f, bottom))
+            assertTrue(rangeViews().isEmpty())
+            host.environment("example.game", true, true, "example.game")
+            assertFalse(host.blocksCorner(1f, bottom))
+            host.environment("example.game", false, false, "example.game")
+            assertFalse(host.blocksCorner(1f, bottom))
+            org.robolectric.util.ReflectionHelpers.setField(host, "cornerConfigLive", false)
+            host.environment("example.game", true, false, "example.game")
+            assertFalse(host.blocksCorner(1f, bottom))
+            assertTrue(rangeViews().isEmpty())
+            org.robolectric.util.ReflectionHelpers.setField(host, "cornerConfigLive", true)
+            host.environment("example.game", true, false, "example.game")
+            assertEquals(2, rangeViews().size)
+            host.close()
+            assertTrue(rangeViews().isEmpty())
+        } finally { host.close() }
+    }
+
     @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     fun panelReusesMenuMaterialAndShowsAllTwelveFunctionsInScrollableGrid() {
         val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup()
