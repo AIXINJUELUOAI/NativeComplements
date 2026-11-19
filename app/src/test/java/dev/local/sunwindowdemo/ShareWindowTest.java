@@ -41,6 +41,16 @@ public class ShareWindowTest {
         assertTrue(content.filterEquals(saved));assertEquals(saved.getFlags(),content.getFlags());
         assertEquals(73,content.getIntExtra("original",0));
     }
+    @Test public void systemInteractionsRequireNativeFullscreenButPackagePrefixesDoNot(){
+        assertTrue(ShareWindow.nativeFullscreenIntent(new Intent("android.settings.action.MANAGE_OVERLAY_PERMISSION")));
+        assertTrue(ShareWindow.nativeFullscreenIntent(new Intent("android.app.action.CONFIRM_DEVICE_CREDENTIAL")));
+        assertTrue(ShareWindow.nativeFullscreenIntent(new Intent(Intent.ACTION_OPEN_DOCUMENT)));
+        assertFalse(ShareWindow.nativeFullscreenIntent(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)));
+        assertFalse(ShareWindow.nativeFullscreenIntent(new Intent(Intent.ACTION_CHOOSER)));
+        assertFalse(ShareWindow.nativeFullscreenIntent(new Intent("sample.app.PAY").setPackage("com.example.payment")));
+        assertTrue(ShareWindow.eligibleIntent(new Intent("sample.app.PAY").setPackage("org.example.payment"),false));
+        assertFalse(ShareWindow.eligibleIntent(new Intent("android.app.action.CONFIRM_DEVICE_CREDENTIAL"),false));
+    }
     @Test public void earlyRoutingCopiesOptionsWithoutChangingTheOriginal()throws Exception{
         ActivityOptions original=ActivityOptions.makeBasic().setLaunchBounds(new Rect(10,20,110,220));
         Rect target=new Rect(0,0,1200,2133);ActivityOptions next=ShareWindow.launchOptions(original,target);

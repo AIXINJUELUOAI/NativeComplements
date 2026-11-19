@@ -116,4 +116,14 @@ public final class Config {
     }
     void apps(List<String> apps) { targets(apps); }
     Set<String> blocked() { return new LinkedHashSet<>(prefs.getStringSet("blocked", Set.of())); }
+    public Set<String> windowExcludedPackages() {
+        Set<String> result = new LinkedHashSet<>();
+        for (String pkg : prefs.getStringSet("windowExcludedPackages", Set.of())) if (Rules.validPackage(pkg)) result.add(pkg);
+        return result;
+    }
+    void windowExcludedPackages(Set<String> packages) {
+        Set<String> clean = new LinkedHashSet<>();
+        for (String pkg : packages) if (Rules.validPackage(pkg)) clean.add(pkg);
+        prefs.edit().putStringSet("windowExcludedPackages", clean).apply();
+    }
 }

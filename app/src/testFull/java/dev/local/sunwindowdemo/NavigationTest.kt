@@ -86,6 +86,18 @@ class NavigationTest {
         compose.runOnIdle { android.provider.Settings.Secure.putString(resolver, "doze_always_on", null) }
     }
 
+    @Test fun targetExclusionsOpenInSharedPickerAndReturnToPrevention() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        dev.local.sunwindowdemo.Config(context).prefs.edit().remove("windowExcludedPackages").commit()
+        val (_, activity) = launch(intent(Page.Prevention))
+        compose.onNodeWithText("不以小窗打开的应用").assertIsDisplayed().performClick()
+        compose.onNodeWithTag("page-title-不以小窗打开的应用").assertIsDisplayed()
+        compose.onNodeWithText("已选择 0 个应用").assertExists()
+        compose.runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
+        compose.onNodeWithText("指定应用内禁用").assertIsDisplayed()
+        assertTrue(dev.local.sunwindowdemo.Config(context).windowExcludedPackages().isEmpty())
+    }
+
     @Test fun restoredWindowLaunchSettingsKeepExistingPreferenceKeys() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val prefs = dev.local.sunwindowdemo.Config(context).prefs

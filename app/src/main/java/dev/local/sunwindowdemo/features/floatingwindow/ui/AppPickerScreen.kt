@@ -19,24 +19,25 @@ import dev.local.sunwindowdemo.LaunchableApp
 import dev.local.sunwindowdemo.WindowController
 import dev.local.sunwindowdemo.core.ui.*
 
-/** The only remaining application picker: apps that suppress new window gestures. */
+/** Shared picker for gesture suppression and target-window exclusions; the two lists stay separate. */
 @Composable
-fun AppPickerScreen(controller: WindowController, bottomInset: Dp = 0.dp) {
-    val excluded = controller.preferences.blocked
+fun AppPickerScreen(controller: WindowController, bottomInset: Dp = 0.dp, windowExclusions: Boolean = false) {
+    val excluded = if (windowExclusions) controller.preferences.windowExcludedPackages else controller.preferences.blocked
+    val save: (Set<String>) -> Unit = if (windowExclusions) controller::windowExcludedPackages else controller::blocked
     val catalog = controller.apps
-    dev.local.sunwindowdemo.features.gamemode.AppListPicker(catalog, "已禁用 ${excluded.size} 个应用", bottomInset,
+    dev.local.sunwindowdemo.features.gamemode.AppListPicker(catalog, "已选择 ${excluded.size} 个应用", bottomInset,
         modifier = Modifier.widthIn(max = 680.dp), loaded = controller.catalogLoaded) { app ->
         val checked = app.packageName in excluded
         Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().clickable {
-                controller.blocked(if (checked) excluded - app.packageName else excluded + app.packageName)
+                save(if (checked) excluded - app.packageName else excluded + app.packageName)
             }.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 AppIcon(app)
                 Column(Modifier.weight(1f)) {
                     Text(app.label, style = MaterialTheme.typography.titleMedium)
                     Text(app.packageName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked, { controller.blocked(if (checked) excluded - app.packageName else excluded + app.packageName) },
+                Switch(checked, { save(if (checked) excluded - app.packageName else excluded + app.packageName) },
                     modifier = Modifier.semantics { contentDescription = app.label })
             }
         }

@@ -5,7 +5,8 @@ import android.view.SurfaceControl;
 
 /** Fixed SunOS handle and a non-interactive backdrop below its task, in one transaction. */
 final class TaskDecoration {
-    private static final int EDGE_BAR_COLOR=0xfff0f2f2;
+    private int handleColor=WindowPresentation.handleColor(true);
+    void dark(boolean dark){handleColor=WindowPresentation.handleColor(dark);}
     private float dimAmount=Config.DEFAULT_WINDOW_DIM/100f;
     void dimAmount(int percent){dimAmount=Rules.clamp(percent,0,100)/100f;}
     private final FrameworkAccess a;
@@ -28,7 +29,7 @@ final class TaskDecoration {
         dim=null;dimReady=false;dimEnabled=false;
     }
     private int color;
-    int color(){return EDGE_BAR_COLOR;}
+    int color(){return handleColor;}
     private Rect parentBounds;
     TaskDecoration(FrameworkAccess access){a=access;}
     static void preflight(FrameworkAccess a) throws Exception {
@@ -112,7 +113,7 @@ final class TaskDecoration {
         SurfaceControl surface=(SurfaceControl)a.field(task,"mSurfaceControl");
         if(drawn&&alpha>0){
         if(bar==null)bar=layer(parent,"SunWindow-handle");
-        if(color!=EDGE_BAR_COLOR){color=EDGE_BAR_COLOR;tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,
+        if(color!=handleColor){color=handleColor;tx(t,"setColor",new Class<?>[]{SurfaceControl.class,float[].class},bar,
             new float[]{((color>>16)&255)/255f,((color>>8)&255)/255f,(color&255)/255f});}
         MotionStyle.Bar b=MotionStyle.bar(p.scale());
         float length=b.length()*density,thickness=b.thickness()*density,gap=b.margin()*density;

@@ -17,7 +17,7 @@ import org.robolectric.annotation.Config;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk=35)
+@Config(sdk=35,shadows=LinkedWindowsTest.LiveSurfaceShadow.class)
 public class LinkedWindowsTest {
     @Rule public TemporaryFolder temporary=new TemporaryFolder();
     private WindowEngine engine;
@@ -64,6 +64,26 @@ public class LinkedWindowsTest {
         assertEquals(1.1f,((Configuration)get(records.get(0),"originalConfig")).fontScale,0.001f);
         assertEquals(1.3f,((Configuration)get(records.get(1),"originalConfig")).fontScale,0.001f);
         assertEquals(token,get(records.get(1),"token"));
+    }
+    @Test public void completedForwardingTaskIsNotMinimizedByQueuedShareResult()throws Throwable{
+        Object forwarding=create(97,1),destination=create(98,1);
+        set(destination,"token",Wire.token());save(forwarding);save(destination);
+        set(engine,"active",destination);set(forwarding,"restoring",true);
+        // No native reflection adapter: touching the finished task would fail this test.
+        call("settleNewDefault",new Class<?>[]{session,session},forwarding,destination);
+        assertSame(destination,get(engine,"active"));assertNull(get(engine,"pinned"));
+        call("forget",new Class<?>[]{session},forwarding);
+        call("settleNewDefault",new Class<?>[]{session,session},forwarding,destination);
+        assertSame(destination,get(engine,"active"));assertNull(get(engine,"pinned"));
+    }
+    @Test public void targetExclusionIsDeferredUntilExistingManagedFlowEnds()throws Throwable{
+        set(engine,"windowExcludedPackages",java.util.Set.of("com.example.app"));
+        assertEquals(true,call("excludedNewWindow",new Class<?>[]{String.class},"com.example.app"));
+        Object main=create(97,1);save(main);
+        assertEquals(false,call("excludedNewWindow",new Class<?>[]{String.class},"com.example.app"));
+        set(main,"restoring",true);
+        assertEquals(true,call("excludedNewWindow",new Class<?>[]{String.class},"com.example.app"));
+        assertEquals(false,call("excludedNewWindow",new Class<?>[]{String.class},"org.other.app"));
     }
     @Test public void parkedMainKeepsOwnershipAndCanvasWhileChildIsSelected()throws Throwable{
         Object main=create(97,1),child=create(98,1);save(main);save(child);
@@ -135,8 +155,9 @@ public class LinkedWindowsTest {
         // control() now reads the native priority list under the same lock as the live WMS.
         set(engine,"lock",new Object());
         Class<?> unsafe=Class.forName("sun.misc.Unsafe");Field singleton=unsafe.getDeclaredField("theUnsafe");singleton.setAccessible(true);
-        set(engine,"a",unsafe.getMethod("allocateInstance",Class.class).invoke(singleton.get(null),FrameworkAccess.class));
-        Object normal=create(97,1);save(normal);set(engine,"active",normal);set(normal,"entering",true);
+        FrameworkAccess access=(FrameworkAccess)unsafe.getMethod("allocateInstance",Class.class).invoke(singleton.get(null),FrameworkAccess.class);
+        set(access,"methods",new java.util.HashMap<>());set(access,"fields",new java.util.HashMap<>());set(engine,"a",access);
+        Object normal=create(97,1);set(normal,"task",new NativeSurfaceTask());save(normal);set(engine,"active",normal);set(normal,"entering",true);
         android.content.Intent sample=new android.content.Intent().putExtra("op","RESIZE").putExtra("taskId",97).putExtra("token",token).putExtra("scale",.5f);
         call("control",new Class<?>[]{android.content.Intent.class},sample);
         sample.putExtra("op","END_RESIZE").putExtra("scale",.28f);
@@ -172,8 +193,13 @@ public class LinkedWindowsTest {
         public NativeSurfaceTransaction show(android.view.SurfaceControl surface){shown=true;return this;}
         public NativeSurfaceTransaction setAlpha(android.view.SurfaceControl surface,float value){alpha=value;return this;}
     }
+    @org.robolectric.annotation.Implements(android.view.SurfaceControl.class)
+    public static class LiveSurfaceShadow {
+        @org.robolectric.annotation.Implementation protected boolean isValid(){return true;}
+    }
     public static final class NativeSurfaceTask {
-        public android.view.SurfaceControl mSurfaceControl;
+        public android.view.SurfaceControl mSurfaceControl=org.robolectric.shadow.api.Shadow.newInstanceOf(android.view.SurfaceControl.class);
+        public Object getDisplayContent(){return null;}
         public final NativeSurfaceTransaction pending=new NativeSurfaceTransaction();
         public final Object mSurfaceAnimator=new Object(){public boolean hasLeash(){return true;}};
         public boolean isAttached(){return true;}

@@ -35,13 +35,19 @@
 
 [WindowServerTargets](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowServerTargets.java>)精确选择 `isResizeable(boolean)`／无参、`handleStartResult`七／八参及 `startActivityUnchecked`十四／十六参（TaskDisplayArea／CallerInfo 差异），校验返回值与实例方法。它只解析布局，共用启动和恢复规则，不按 ROM 选择业务。
 
+用户可在防误触设置中维护“不以小窗打开的应用”（`windowExcludedPackages`），默认空、不预置包名，与来源应用手势禁用表独立。新打开目标命中时保留真实启动并交给原生展示；已管理任务及其内部页面继续运行；存在同包受管任务时先保留原生任务选择，实际解析成未管理的新任务才应用排除。包名偏好不授予跨用户启动权限。
+
+受管来源打开系统设置／权限、设备认证、文档选择及安装确认时，沿已有独立原生容器路由复制并清理小窗 options，不修改原 Intent／grants／result 或系统启动判断；权限控制器依据系统解析角色识别，不依赖包名前缀。原生页面不套用小窗退出动画，不夺取其他宿主管理的 freeform。
+
+连续跳转交接前确认旧 session 仍存活；结束的中转任务不参与退出遮罩和视觉交接。接管或呈现失败与用户关闭分开：前者使用原目标任务做可见的前台原生恢复，后者维持既有退后台恢复；不可打印原生回退后仍排队将该目标退后台。无效 Surface 不写透明度，恢复记录只有实际还原成功后移除。
+
 ## 任务、视口与呈现
 
 接管要求原生 multi-window／freeform 能力、主用户 0／显示器 0、普通应用、attached root+leaf Task 且直接属于 TaskDisplayArea，以及合法 bounds／mode、可调整性与转场。用户在设置页选择继续开启不会绕过这些条件。不全局解锁 Freeform、不强抢 OEM TaskOrganizer／Shell 管理的未知任务。
 
 [ServerViewport](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/ServerViewport.java>)仅处理 owned 客户端出站 Configuration／Insets：Activity transaction、初次 add、relayout／resize、直接 Insets 通知保持一致。复制共享配置／源，不修改 WMS 全局缓存或普通 app；系统 Task 仍为 mode 5，客户端映射遵守现有应用规则。它不是普通应用 Activity／ViewRoot Hook。
 
-[TaskCover](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskCover.java>)跟随 SF 帧节奏，只在完全不透明时复用真实呈现，揭开前刷新；转场 Surface 和同步完成事务有明确转交责任。[TaskDecoration](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskDecoration.java>)的白色 backing 是 Task 下自有最低层 ColorLayer，继承 crop／圆角／缩放／显隐；透明到外部的像素深色模式仍白，不猜固定顶部高度。原生 Task Surface 不可释放，自有子层在替换／恢复／dispose 清理。
+[TaskCover](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskCover.java>)跟随 SF 帧节奏，只在完全不透明时复用真实呈现，揭开前刷新；转场 Surface 和同步完成事务有明确转交责任。[TaskDecoration](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskDecoration.java>)的白色 backing 是 Task 下自有最低层 ColorLayer，继承 crop／圆角／缩放／显隐；透明到外部的像素深色模式仍白，不猜固定顶部高度。原生 Task Surface 不可释放，自有子层在替换／恢复／dispose 清理。普通拖柄和独立贴边条共用随系统深浅模式切换的对比色，不改变应用透明背景规则。完全贴边且动画结束后，隐藏受管 Task 子树、backing 与装饰，保留独立恢复条；向内拖出／还原时沿既有事务重新显示，不能只依赖屏外坐标，也不改逻辑任务生命周期或截图安全权限。旋转取消进行中的拖动但保留贴边侧，复用已有位置重映射。不可聚焦迷你窗若仍占用输入系统 focusedApp，只对当前受管身份将其让给原生选出的同用户／显示器、可见可聚焦背景，续跑退出后重验；不强启桌面、不移动任务或覆盖其他应用／安全窗口焦点。
 
 原生安全窗口集合决定暂停：外部安全 Task 隐藏自有展示与输入；同 Task 权限确认保留真实内容和必要焦点，只撤自有遮罩／装饰。alpha=0不能代替 sink／keys／touch 门控，不提高自有层压过安全窗口。边侧续跑仅合格 owned mini、活租约和显式开关，不全局保活；清理宽限仅重放已延期的内部清理请求，外部强停和显式结束即时原生执行。
 

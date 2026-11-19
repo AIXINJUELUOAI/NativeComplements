@@ -2,6 +2,10 @@ package dev.local.sunwindowdemo;
 
 /** Presentation decisions only: no native objects, clocks, hooks or transactions. */
 final class WindowPresentation {
+    static int handleColor(boolean dark){return dark?0xfff0f2f2:0xff34363b;}
+    static boolean edgeContentHidden(boolean edgeHidden,boolean transitioning,boolean dragging,boolean barDragging){
+        return edgeHidden&&!transitioning&&(!dragging||barDragging);
+    }
     enum Route { UNMANAGED, RESTORING, NO_PLACEMENT, PRIORITY_HIDDEN, PRIORITY_SAME_TASK,
         SUSPENDED, START_MASK, ROTATION_MASK, PROBE_NATIVE, NATIVE_LEASH, COVER_REUSE, LIVE }
     record Facts(boolean managed,boolean attached,boolean restoring,boolean placement,

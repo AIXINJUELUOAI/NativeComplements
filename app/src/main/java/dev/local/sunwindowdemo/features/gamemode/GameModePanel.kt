@@ -10,6 +10,14 @@ import android.view.ViewOutlineProvider
 import android.widget.*
 import dev.local.sunwindowdemo.core.ui.MenuBackground
 import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
+
+internal fun gamePanelContainerColor(colors: ColorScheme) =
+    if (colors.surface.luminance() > .5f) colors.surfaceContainerHighest else colors.surfaceContainerLow
 
 /** Two separate native menu surfaces: pinned apps on the left, switchable content on the right. */
 internal fun gameModePanel(
@@ -24,9 +32,8 @@ internal fun gameModePanel(
     quick: (String) -> Unit,
 ): View {
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
-    val text = AppList.themeColor(context, android.R.attr.textColorPrimary, 0xff1d1b20.toInt())
-    val surface = AppList.themeColor(context, android.R.attr.colorBackground, 0xfff8f7fc.toInt())
-    val container = androidx.core.graphics.ColorUtils.blendARGB(surface, text, .045f)
+    var colors = if (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
+        android.content.res.Configuration.UI_MODE_NIGHT_YES) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
     val height = maxHeight
     val railWidth = minOf(dp(64), (width - dp(10)).coerceAtLeast(1) / 3)
     val gap = dp(10)
@@ -37,7 +44,7 @@ internal fun gameModePanel(
     }
     fun material(view: View) {
         view.clipToOutline = true
-        MenuBackground.bind(view, blur, container, dp(28).toFloat())
+        MenuBackground.bind(view, blur, gamePanelContainerColor(colors).toArgb(), dp(28).toFloat())
     }
     val rail = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -84,12 +91,14 @@ internal fun gameModePanel(
     }
     val arrow = ImageButton(context).apply {
         setImageDrawable(gameSliderIcon(context, "gm_chevron"))
-        imageTintList = android.content.res.ColorStateList.valueOf(text)
-        setPadding(dp(8), dp(8), dp(8), dp(8))
+        imageTintList = android.content.res.ColorStateList.valueOf(colors.onPrimary.toArgb())
+        minimumWidth = 0
+        minimumHeight = 0
+        setPadding(dp(7), dp(7), dp(7), dp(7))
         scaleType = ImageView.ScaleType.FIT_CENTER
         isFocusable = true
         background = android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x26000000),
-            GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(androidx.core.graphics.ColorUtils.blendARGB(surface, text, .13f)) },
+            GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(colors.primary.toArgb()) },
             GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(Color.WHITE) })
         contentDescription = "显示更多小窗应用"
     }
@@ -102,9 +111,17 @@ internal fun gameModePanel(
     // All entries, including the arrow, share the same slot; overflow keeps 48dp targets and scrolls.
     val content = FrameLayout(context).apply { material(this) }
     root.addView(content, LinearLayout.LayoutParams(0, -1, 1f).apply { leftMargin = gap })
-    val quickPage = GameQuickView(context, actions, quick).apply { tag = "game-quick-page" }
-    content.addView(quickPage, FrameLayout.LayoutParams(-1, -1))
     var library: View? = null
+    val quickPage = GameQuickView(context, actions, quick) { next ->
+        colors = next
+        material(rail)
+        material(content)
+        library?.let(::material)
+        arrow.imageTintList = android.content.res.ColorStateList.valueOf(colors.onPrimary.toArgb())
+        val disc = (arrow.background as android.graphics.drawable.RippleDrawable).getDrawable(0) as GradientDrawable
+        disc.setColor(colors.primary.toArgb())
+    }.apply { tag = "game-quick-page" }
+    content.addView(quickPage, FrameLayout.LayoutParams(-1, -1))
     var showingApps = false
     arrow.setOnClickListener {
         showingApps = !showingApps

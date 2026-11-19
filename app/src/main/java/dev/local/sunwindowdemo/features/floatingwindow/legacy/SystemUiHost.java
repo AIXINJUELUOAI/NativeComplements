@@ -187,7 +187,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             ComponentName root=task.baseIntent==null?null:task.baseIntent.getComponent();
             if(root==null)root=task.baseActivity;
             String pkg=root==null?null:root.getPackageName();
-            if(pkg==null||c.blocked().contains(pkg)||!WindowHostPolicy.currentTarget(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task),Wire.PKG.equals(pkg),
+            if(pkg==null||c.windowExcludedPackages().contains(pkg)||c.blocked().contains(pkg)||!WindowHostPolicy.currentTarget(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task),Wire.PKG.equals(pkg),
                 "com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg),dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(pkg),Wire.allowedPackage(pkg)))return false;
             String token=Wire.token();
             if(!Wire.prepareSwipe(taskId,pkg,token,card,radius))return false;
@@ -651,6 +651,9 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
             if(!WindowHostPolicy.currentTarget(android.app.ActivityManager.RunningTaskInfo.class.getField("displayId").getInt(task),Wire.PKG.equals(pkg),
                 "com.android.systemui".equals(pkg)||BackBridge.PACKAGE.equals(pkg),dev.local.sunwindowdemo.core.LauncherTargets.isLauncher(pkg),Wire.allowedPackage(pkg))){
                 if(!quiet)Toast.makeText(this,"请先打开要转换的小窗应用",Toast.LENGTH_SHORT).show();return;
+            }
+            if(config.windowExcludedPackages().contains(pkg)){
+                if(!quiet)Toast.makeText(this,"此应用已设为不以小窗打开",Toast.LENGTH_SHORT).show();return;
             }
             if(activeTask>0&&task.taskId==activeTask){if(!quiet)Toast.makeText(this,"当前应用已经是小窗",Toast.LENGTH_SHORT).show();return;}
             cancelOpenWait();Wire.send(this,"GESTURE",pkg,task.taskId,Wire.token(),false);

@@ -139,7 +139,8 @@ final class WindowControls {
                 @Override protected void onDraw(Canvas cv){
                     super.onDraw(cv);
                     if(edgeHidden&&edgeGesture!=1){
-                        edgePaint.setColor(0xfff0f2f2);
+                        edgePaint.setColor(WindowPresentation.handleColor((getResources().getConfiguration().uiMode
+                            &android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES));
                         float left=edgeBarDragging?(getWidth()-dp(4))/2f:edgeSide<0?dp(12):getWidth()-dp(16),top=(getHeight()-dp(48))/2f;
                         cv.drawRoundRect(left,top,left+dp(4),top+dp(48),dp(2),dp(2),edgePaint);
                     }
