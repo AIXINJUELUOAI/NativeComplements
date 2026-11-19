@@ -2,9 +2,9 @@ package dev.local.sunwindowdemo.features.gamemode;
 
 /** The same bottom-left/right quarter circles are used by the input filter and scaled preview. */
 public final class GameCornerGeometry {
-    public static final int MIN_PERCENT=4,MAX_PERCENT=24,DEFAULT_PERCENT=10;
+    public static final int MIN_DP=50,MAX_DP=200,DEFAULT_PERCENT=10;
     private GameCornerGeometry(){}
-    public static float clamp(float percent){return Float.isFinite(percent)?Math.max(MIN_PERCENT,Math.min(MAX_PERCENT,percent)):DEFAULT_PERCENT;}
+    public static float clamp(float percent){return Float.isFinite(percent)?Math.max(0,Math.min(100,percent)):DEFAULT_PERCENT;}
     public static float radius(int width,int height,float percent){
         return width>0&&height>0?Math.min(width,height)*clamp(percent)/100f:0;
     }

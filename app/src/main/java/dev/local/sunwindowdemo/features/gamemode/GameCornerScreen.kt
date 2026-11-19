@@ -68,9 +68,9 @@ fun GameCornerScreen(bottomInset: Dp = 0.dp) {
                     Text("$sizeLabel dp", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
                 Slider(value = radiusDp, onValueChange = {
-                    val next = (it / shortSideDp * 100f).coerceIn(4f, 24f)
+                    val next = it.coerceIn(GameCornerGeometry.MIN_DP.toFloat(), GameCornerGeometry.MAX_DP.toFloat()) / shortSideDp * 100f
                     if (next != percent) { percent = next; GameModeStore.cornerRadius(context, next) }
-                }, valueRange = shortSideDp * .04f..shortSideDp * .24f,
+                }, valueRange = GameCornerGeometry.MIN_DP.toFloat()..GameCornerGeometry.MAX_DP.toFloat(),
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "大小" })
             }
         }

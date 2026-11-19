@@ -24,7 +24,7 @@ public final class GameModeStore {
         out.putBoolean("corner_rejection",p.getBoolean("corner_rejection",false));
         out.putBoolean("corner_show_regions",p.getBoolean("corner_show_regions",false));
         Object radius=p.getAll().get("corner_radius_percent"); // Preserve the first test build's integer value.
-        out.putFloat("corner_radius_percent",GameCornerGeometry.clamp(radius instanceof Number?((Number)radius).floatValue():GameCornerGeometry.DEFAULT_PERCENT));
+        out.putFloat("corner_radius_percent",clampCornerRadius(c,radius instanceof Number?((Number)radius).floatValue():GameCornerGeometry.DEFAULT_PERCENT));
         out.putStringArrayList("apps",new ArrayList<>(games(p)));
         out.putStringArrayList("quick_apps",new ArrayList<>(quickApps(p)));
         out.putStringArrayList("quick",new ArrayList<>(quick(p)));
@@ -35,7 +35,13 @@ public final class GameModeStore {
     public static void side(Context c,String side){prefs(c).edit().putString("side",side(side)).apply();changed(c);}
     public static void cornerRejection(Context c,boolean enabled){prefs(c).edit().putBoolean("corner_rejection",enabled).apply();changed(c);}
     public static void showCornerRegions(Context c,boolean enabled){prefs(c).edit().putBoolean("corner_show_regions",enabled).apply();changed(c);}
-    public static void cornerRadius(Context c,float percent){prefs(c).edit().putFloat("corner_radius_percent",GameCornerGeometry.clamp(percent)).apply();changed(c);}
+    private static float clampCornerRadius(Context c,float percent){
+        android.graphics.Rect bounds=c.getSystemService(android.view.WindowManager.class).getMaximumWindowMetrics().getBounds();
+        float shortDp=Math.max(1,Math.min(bounds.width(),bounds.height()))/c.getResources().getDisplayMetrics().density;
+        float dp=shortDp*GameCornerGeometry.clamp(percent)/100f;
+        return GameCornerGeometry.clamp(Math.max(GameCornerGeometry.MIN_DP,Math.min(GameCornerGeometry.MAX_DP,dp))/shortDp*100f);
+    }
+    public static void cornerRadius(Context c,float percent){prefs(c).edit().putFloat("corner_radius_percent",clampCornerRadius(c,percent)).apply();changed(c);}
     public static void brightness(Context c,boolean brightness){prefs(c).edit().putBoolean("brightness",brightness).apply();changed(c);}
     public static void select(Context c,String pkg,boolean selected){
         if(!Rules.validPackage(pkg))throw new IllegalArgumentException("game package");

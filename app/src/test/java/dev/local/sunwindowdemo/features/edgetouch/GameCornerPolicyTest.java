@@ -7,8 +7,11 @@ import static org.junit.Assert.*;
 public class GameCornerPolicyTest {
     @Test public void onlyBottomCornersAreCirclesAndRadiusIsContinuous(){
         assertEquals(100,GameCornerGeometry.radius(2000,1000,10),0);
-        assertEquals(40,GameCornerGeometry.radius(2000,1000,-1),0);
-        assertEquals(240,GameCornerGeometry.radius(2000,1000,99),0);
+        assertEquals(0,GameCornerGeometry.radius(2000,1000,-1),0);
+        assertEquals(500,GameCornerGeometry.radius(2000,1000,50),0);
+        EdgeInputPolicy expanded=new EdgeInputPolicy();expanded.corners(2000,1000,50,new int[0]);
+        assertEquals(0,expanded.accepted(8,EdgeInputPolicy.Action.DOWN,1,1,true,400,999));
+        assertEquals(1,expanded.accepted(9,EdgeInputPolicy.Action.DOWN,1,1,true,501,999));
         assertEquals(103.75f,GameCornerGeometry.radius(2000,1000,10.375f),0.0001f);
         assertEquals(100,GameCornerGeometry.radius(2000,1000,Float.NaN),0);
         for(float[] p:new float[][]{{10,990},{1990,990},{60,920}})

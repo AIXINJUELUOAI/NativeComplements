@@ -171,7 +171,7 @@ public final class EdgeInputFilter {
                         if(width<0||height<0||width>32768||height>32768||protectedRects==null
                             ||protectedRects.length%4!=0||protectedRects.length>256)return;
                         for(int value:protectedRects)if(value<0||value>32768)return;
-                        if(!Float.isFinite(percent)||width>0&&(height==0||percent<4||percent>24))return;
+                        if(!Float.isFinite(percent)||width>0&&(height==0||percent<=0||percent>100))return;
                         cornerWidth=width;cornerHeight=height;cornerPackage=intent.getStringExtra("package");
                         cornersActive=width>0&&height>0&&dev.local.sunwindowdemo.Rules.validPackage(cornerPackage);
                         policy.corners(cornersActive?width:0,cornersActive?height:0,percent,protectedRects);

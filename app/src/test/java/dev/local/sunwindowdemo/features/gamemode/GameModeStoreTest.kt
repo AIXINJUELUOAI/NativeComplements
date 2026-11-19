@@ -21,19 +21,24 @@ class GameModeStoreTest {
         GameModeStore.showCornerRegions(context, true)
         assertTrue(GameModeStore.read(context).getBoolean("corner_show_regions"))
         assertFalse(GameModeStore.read(context).getBoolean("enabled"))
-        assertEquals(10f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        val bounds = context.getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.bounds
+        val shortDp = minOf(bounds.width(), bounds.height()) / context.resources.displayMetrics.density
+        fun currentDp() = GameModeStore.read(context).getFloat("corner_radius_percent") * shortDp / 100f
+        assertEquals((shortDp * .1f).coerceIn(50f, 200f), currentDp(), .0001f)
         GameModeStore.prefs(context).edit().putInt("corner_radius_percent", 13).commit()
-        assertEquals(13f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
-        GameModeStore.cornerRadius(context, 13.375f)
-        assertEquals(13.375f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        assertEquals((shortDp * .13f).coerceIn(50f, 200f), currentDp(), .0001f)
+        GameModeStore.cornerRadius(context, 123.375f / shortDp * 100f)
+        assertEquals(123.375f, currentDp(), .0001f)
         GameModeStore.cornerRejection(context, true)
         GameModeStore.panel(context, false)
         assertTrue(GameModeStore.read(context).getBoolean("corner_rejection"))
         assertFalse(GameModeStore.read(context).getBoolean("enabled"))
         GameModeStore.cornerRadius(context, 100f)
-        assertEquals(24f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        assertEquals(200f, currentDp(), .0001f)
         GameModeStore.cornerRadius(context, -1f)
-        assertEquals(4f, GameModeStore.read(context).getFloat("corner_radius_percent"), 0f)
+        assertEquals(50f, currentDp(), .0001f)
+        GameModeStore.cornerRadius(context, Float.NaN)
+        assertEquals((shortDp * .1f).coerceIn(50f, 200f), currentDp(), .0001f)
     }
 
     @Test fun legacyGamesStayGamesAndQuickAppsRemainIndependent() {

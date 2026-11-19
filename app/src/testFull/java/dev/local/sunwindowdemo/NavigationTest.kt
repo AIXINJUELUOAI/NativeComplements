@@ -276,22 +276,28 @@ class NavigationTest {
         compose.onNodeWithText("红色：", substring = true).assertDoesNotExist()
         compose.onNodeWithText("在预览中", substring = true).assertDoesNotExist()
         val slider = compose.onNodeWithContentDescription("大小").fetchSemanticsNode()
-        assertEquals(0, slider.config[androidx.compose.ui.semantics.SemanticsProperties.ProgressBarRangeInfo].steps)
-        compose.onNodeWithContentDescription("大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(64.375f) }
+        val range = slider.config[androidx.compose.ui.semantics.SemanticsProperties.ProgressBarRangeInfo]
+        assertEquals(0, range.steps)
+        assertEquals(50f..200f, range.range)
+        compose.onNodeWithContentDescription("大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(50f) }
+        compose.onNodeWithText("50 dp").assertIsDisplayed()
+        compose.onNodeWithContentDescription("大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(200f) }
+        compose.onNodeWithText("200 dp").assertIsDisplayed()
+        compose.onNodeWithContentDescription("大小").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.SetProgress) { it(164.375f) }
         val bounds = context.getSystemService(android.view.WindowManager::class.java).maximumWindowMetrics.bounds
         val shortSideDp = minOf(bounds.width(), bounds.height()) / context.resources.displayMetrics.density
-        compose.runOnIdle { assertEquals(64.375f / shortSideDp * 100f,
+        compose.runOnIdle { assertEquals(164.375f / shortSideDp * 100f,
             dev.local.sunwindowdemo.features.gamemode.GameModeStore.read(context).getFloat("corner_radius_percent"), .0001f) }
         detailScenario.recreate()
         lateinit var recreated: MainActivity
         detailScenario.onActivity { recreated = it }
-        compose.onNodeWithText("64.4 dp").assertIsDisplayed()
+        compose.onNodeWithText("164.4 dp").assertIsDisplayed()
         compose.runOnIdle {
             val view = recreated.window.decorView
             val screenshot = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
             view.draw(android.graphics.Canvas(screenshot))
             val screenshotDir = java.io.File(requireNotNull(System.getProperty("nativecomplements.screenshots"))).apply { mkdirs() }
-            java.io.File(screenshotDir, "game-corner-test4.png").outputStream().use {
+            java.io.File(screenshotDir, "game-corner.png").outputStream().use {
                 screenshot.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
             }
         }
