@@ -291,7 +291,8 @@ class NavigationTest {
         detailScenario.recreate()
         lateinit var recreated: MainActivity
         detailScenario.onActivity { recreated = it }
-        compose.onNodeWithText("164.4 dp").assertIsDisplayed()
+        compose.onNodeWithText("164 dp").assertIsDisplayed()
+        compose.onNodeWithText("164.4 dp").assertDoesNotExist()
         compose.runOnIdle {
             val view = recreated.window.decorView
             val screenshot = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)

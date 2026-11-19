@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.local.sunwindowdemo.core.ui.GroupTitle
 import dev.local.sunwindowdemo.core.ui.SettingsGroup
-import java.util.Locale
+import kotlin.math.roundToInt
 
 /** The edge-touch phone preview, laid horizontally; this page never changes orientation. */
 @Composable
@@ -53,7 +53,7 @@ fun GameCornerScreen(bottomInset: Dp = 0.dp) {
     // Convert the existing stored ratio to actual display dp, without changing saved configurations.
     val shortSideDp = modelHeight / context.resources.displayMetrics.density
     val radiusDp = shortSideDp * percent / 100f
-    val sizeLabel = String.format(Locale.ROOT, "%.1f", radiusDp).trimEnd('0').trimEnd('.')
+    val sizeLabel = radiusDp.roundToInt()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
         GroupTitle("范围预览")
