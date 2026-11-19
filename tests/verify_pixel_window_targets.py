@@ -129,7 +129,6 @@ method(QS + "util/TaskViewSimulator;", "getCurrentRect", "()Landroid/graphics/Re
 method(QS + "util/TaskViewSimulator;", "getCurrentCornerRadius", "()F")
 method(QS + "RemoteTargetGluer$RemoteTargetHandle;", "getTransformParams", "()" + QS + "util/TransformParams;")
 method(QS + "util/TransformParams;", "setTargetAlpha", "(F)" + QS + "util/TransformParams;")
-method(QS + "util/MotionPauseDetector;", "updatePaused", "(Z" + QS + "util/ActiveGestureLog$CompoundString;)V")
 method(WM + "Task;", "isVisibleRequested", "()Z")
 field(SYS + "screenshot/ScreenshotController;", "window", SYS + "screenshot/ScreenshotWindow;")
 method(SYS + "screenshot/ScreenshotWindow;", "removeWindow", "()V")

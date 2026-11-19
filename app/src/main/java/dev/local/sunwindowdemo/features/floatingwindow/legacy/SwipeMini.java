@@ -34,6 +34,7 @@ final class SwipeMini {
     private static volatile boolean showHint=true;
     private static Consumer<String> log=ignored->{};
     private static WeakReference<Object> owner=new WeakReference<>(null);
+    private static WeakReference<Object> observed=new WeakReference<>(null);
     private static float progress;
     private static boolean armed;
     private static WeakReference<TextView> hint=new WeakReference<>(null);
@@ -42,14 +43,18 @@ final class SwipeMini {
 
     /** SystemUI publishes the channel only while the feature is enabled; null disables. */
     static void configure(IBinder channel,boolean hintEnabled){
+        boolean previouslyConnected=sink!=null,previousHint=showHint;
         showHint=hintEnabled;
         sink=channel!=null&&channel.isBinderAlive()?channel:null;
-        if(sink==null||!hintEnabled)reset(null);
+        if(previouslyConnected!=(sink!=null)||previousHint!=hintEnabled)
+            log.accept("SWIPE_MINI_CHANNEL connected="+(sink!=null)+" hint="+hintEnabled);
+        if(sink==null)reset(null);
+        else if(!hintEnabled){TextView view=hint.get();if(view!=null)view.post(()->hide(view));}
     }
 
     record Targets(Method displacement,Method endTarget,Method haptic,Field recents,Field gesture,Field context,
                    Method runningIds,Method nativeEnd,Field handles,Method simulator,Method currentRect,Method currentRadius,
-                   Method transformParams,Method targetAlpha,Method pause,Object home,Object recentsTarget){}
+                   Method transformParams,Method targetAlpha,Object home,Object recentsTarget){}
     /** Live-tile params of an accepted handoff: the system mask owns the visuals, so the native
      *  home fly-out (which shrinks toward the centre when no icon exists) stays invisible. */
     private static final java.util.Set<Object> hiddenTiles=java.util.Collections.synchronizedSet(
@@ -86,10 +91,6 @@ final class SwipeMini {
         Class<?> paramsType=Class.forName("com.android.quickstep.util.TransformParams",false,loader);
         Method transformParams=exact(handle.getDeclaredMethod("getTransformParams"),paramsType);
         Method targetAlpha=exact(paramsType.getDeclaredMethod("setTargetAlpha",float.class),paramsType);
-        // A finger pause attaches recents and snaps the live tile to its centred overview slot.
-        Class<?> detector=Class.forName("com.android.quickstep.util.MotionPauseDetector",false,loader);
-        Class<?> compound=Class.forName("com.android.quickstep.util.ActiveGestureLog$CompoundString",false,loader);
-        Method pause=exact(detector.getDeclaredMethod("updatePaused",boolean.class,compound),void.class);
         Object home=null,recentsTarget=null;
         for(Object value:target.getEnumConstants()){
             String name=((Enum<?>)value).name();
@@ -97,17 +98,21 @@ final class SwipeMini {
         }
         if(home==null||recentsTarget==null)throw new NoSuchFieldException("GestureEndTarget");
         return new Targets(displacement,endTarget,haptic,recents,gesture,context,runningIds,nativeEnd,handles,simulator,currentRect,currentRadius,
-            transformParams,targetAlpha,pause,home,recentsTarget);
+            transformParams,targetAlpha,home,recentsTarget);
     }
 
     static void install(XposedModule module,ClassLoader loader,Consumer<String> logger){
-        log=logger;
+        log=message->{logger.accept(message);android.util.Log.i("SwipeMini",message);};
         List<XposedInterface.HookHandle> hooks=new ArrayList<>();
         try{
             Targets t=resolve(loader);
             hooks.add(module.hook(t.displacement()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();
                 Object handler=chain.getThisObject();
+                if(observed.get()!=handler){
+                    observed=new WeakReference<>(handler);
+                    log.accept("SWIPE_MINI_TRACK connected="+(sink!=null)+" handler="+handler.getClass().getName());
+                }
                 if(sink!=null&&t.recents().getDeclaringClass().isInstance(handler))
                     track(t,handler,(Float)chain.getArg(0));
                 return result;
@@ -115,8 +120,10 @@ final class SwipeMini {
             hooks.add(module.hook(t.endTarget()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object result=chain.proceed();
                 Object handler=chain.getThisObject();
-                boolean selected;
-                synchronized(SwipeMini.class){selected=armed&&owner.get()==handler;}
+                boolean selected,tracked;float releaseProgress;
+                synchronized(SwipeMini.class){tracked=owner.get()==handler;selected=armed&&tracked;releaseProgress=progress;}
+                log.accept("SWIPE_MINI_RELEASE tracked="+tracked+" armed="+selected
+                    +" progress="+releaseProgress+" target="+result+" connected="+(sink!=null));
                 reset(handler);
                 if(!selected||(result!=t.home()&&result!=t.recentsTarget()))return result;
                 if(!handoff(t,handler))return result;
@@ -125,9 +132,7 @@ final class SwipeMini {
             }));
             hooks.add(module.hook(t.targetAlpha()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->
                 hiddenTiles.contains(chain.getThisObject())?chain.proceed(new Object[]{0f}):chain.proceed()));
-            hooks.add(module.hook(t.pause()).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->
-                Boolean.TRUE.equals(chain.getArg(0))&&armedNow()?chain.proceed(new Object[]{false,chain.getArg(1)}):chain.proceed()));
-            log.accept("SWIPE_MINI_READY hooks=4 endTarget="+t.endTarget().getParameterCount());
+            log.accept("SWIPE_MINI_READY hooks=3 endTarget="+t.endTarget().getParameterCount());
         }catch(Throwable failure){
             for(XposedInterface.HookHandle h:hooks)try{h.unhook();}catch(Throwable ignored){}
             log.accept("SWIPE_MINI_DISABLED "+failure.getClass().getSimpleName()+": "+failure.getMessage());
@@ -146,6 +151,7 @@ final class SwipeMini {
             was=armed;now=progress>=THRESHOLD;armed=now;
         }
         if(was==now&&!(fresh&&!now))return;
+        log.accept("SWIPE_MINI_THRESHOLD armed="+now+" displacement="+displacement+" height="+height);
         if(now)t.haptic().invoke(handler);
         View anchor=(View)t.recents().get(handler);
         showHint(anchor,now);
@@ -156,15 +162,15 @@ final class SwipeMini {
         if(channel==null)return false;
         try{
             int[] ids=(int[])t.runningIds().invoke(t.gesture().get(handler),false);
-            if(ids==null||ids.length!=1||ids[0]<=0)return false; // Split pairs keep native behavior.
+            if(ids==null||ids.length!=1||ids[0]<=0)return reject("task-ids"); // Split pairs keep native behavior.
             Object[] remote=(Object[])t.handles().get(handler);
-            if(remote==null||remote.length!=1||remote[0]==null)return false;
+            if(remote==null||remote.length!=1||remote[0]==null)return reject("remote-handles");
             Object simulator=t.simulator().invoke(remote[0]);
-            if(simulator==null)return false;
+            if(simulator==null)return reject("simulator");
             // Display-space pose of the live tile the user is holding at release.
             RectF screen=new RectF((RectF)t.currentRect().invoke(simulator));
             float radius=(Float)t.currentRadius().invoke(simulator);
-            if(screen.isEmpty()||!Float.isFinite(radius))return false;
+            if(screen.isEmpty()||!Float.isFinite(radius))return reject("pose");
             Parcel data=Parcel.obtain(),reply=Parcel.obtain();
             try{
                 data.writeInterfaceToken(CHANNEL);data.writeInt(ids[0]);data.writeTypedObject(screen,0);data.writeFloat(radius);
@@ -180,6 +186,8 @@ final class SwipeMini {
         }
     }
 
+    private static boolean reject(String reason){log.accept("SWIPE_MINI_REJECT reason="+reason);return false;}
+
     private static void hideLiveTile(Targets t,Object handler){
         try{
             for(Object remote:(Object[])t.handles().get(handler)){
@@ -192,11 +200,6 @@ final class SwipeMini {
             // The system mask still hides the task surface; this only removes the duplicate launcher pose.
             log.accept("SWIPE_MINI_TILE_UNHIDDEN "+failure.getClass().getSimpleName());
         }
-    }
-
-    /** Past the threshold the release lands as mini, so a native pause must not centre the tile. */
-    private static boolean armedNow(){
-        synchronized(SwipeMini.class){return sink!=null&&armed&&owner.get()!=null;}
     }
 
     private static void reset(Object handler){

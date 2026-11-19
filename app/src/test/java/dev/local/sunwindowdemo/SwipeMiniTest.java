@@ -23,11 +23,32 @@ public class SwipeMiniTest {
         assertEquals("getCurrentRect",t.currentRect().getName());
         assertEquals("getCurrentCornerRadius",t.currentRadius().getName());
         assertEquals("setTargetAlpha",t.targetAlpha().getName());
-        assertEquals("updatePaused",t.pause().getName());
     }
 
     @Test public void thresholdIsTwoFifthsOfDisplayHeight(){
         assertEquals(0.4f,SwipeMini.THRESHOLD,0f);
+    }
+
+    @Test public void pauseDetectorIsNotRequiredToResolve()throws Exception{
+        ClassLoader withoutPause=new ClassLoader(getClass().getClassLoader()){
+            @Override protected Class<?> loadClass(String name,boolean resolve)throws ClassNotFoundException{
+                if(name.contains("MotionPauseDetector")||name.contains("ActiveGestureLog"))throw new ClassNotFoundException(name);
+                return super.loadClass(name,resolve);
+            }
+        };
+        assertNotNull(SwipeMini.resolve(withoutPause));
+    }
+
+    @Test public void disablingHintDoesNotDisarmTheGesture()throws Exception{
+        var armed=SwipeMini.class.getDeclaredField("armed");armed.setAccessible(true);
+        try{
+            SwipeMini.configure(new android.os.Binder(),true);
+            armed.setBoolean(null,true);
+            SwipeMini.configure(new android.os.Binder(),false);
+            assertTrue(armed.getBoolean(null));
+            SwipeMini.configure(null,false);
+            assertFalse(armed.getBoolean(null));
+        }finally{SwipeMini.configure(null,true);}
     }
 
     @Test public void missingQuickstepStaysNative(){
