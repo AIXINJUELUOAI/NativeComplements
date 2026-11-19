@@ -30,7 +30,7 @@ def field(owner, name, signature):
 
 SOURCE = ROOT / "app/src/main/java/dev/local/sunwindowdemo/features"
 source_names = set()
-for folder in ("floatingwindow/legacy", "suggestions", "barrage", "motion", "edgetouch"):
+for folder in ("floatingwindow/legacy", "suggestions", "barrage", "motion", "edgetouch", "desktop"):
     for source in (SOURCE / folder).rglob("*"):
         if source.suffix in (".java", ".kt"):
             source_names.update(re.findall(r'"([A-Za-z_$][A-Za-z0-9_$]*)"', source.read_text(encoding="utf-8")))
@@ -76,6 +76,12 @@ for name, signature in (
     ("relaunchActivityLocked", "(ZI)V"),
 ):
     method(WM + "ActivityRecord;", name, signature)
+method("Landroid/view/Choreographer;", "postVsyncCallback", "(Landroid/view/Choreographer$VsyncCallback;)V")
+method("Landroid/view/Choreographer$FrameData;", "getFrameTimeNanos", "()J")
+method("Landroid/view/Choreographer$FrameData;", "getPreferredFrameTimeline", "()Landroid/view/Choreographer$FrameTimeline;")
+method("Landroid/view/Choreographer$FrameTimeline;", "getVsyncId", "()J")
+method(WM + "WindowContainer;", "getLastLayer", "()I")
+method(WM + "WindowContainer;", "getLastRelativeLayer", "()Landroid/view/SurfaceControl;")
 method(WM + "WindowContainer;", "forAllTasks", "(Ljava/util/function/Consumer;)V")
 method(WM + "WindowContainer;", "forAllWindows", "(Ljava/util/function/Consumer;Z)V")
 method(WM + "RootWindowContainer;", "anyTaskForId", "(II)" + WM + "Task;")
@@ -111,6 +117,57 @@ method("Lcom/android/quickstep/util/GroupTask;", "containsTask", "(I)Z")
 method("Lcom/android/quickstep/util/GroupTask;", "getTasks", "()Ljava/util/List;")
 method("Lcom/android/quickstep/LauncherBackAnimationController;", "applyTransform", "(Landroid/graphics/RectF;F)V")
 method("Lcom/android/quickstep/LauncherBackAnimationController;", "onCancelFinished", "()V")
+# Desktop blank-cell double tap: both actual Launcher archives, without long-press field ABI assumptions.
+LAUNCHER = "Lcom/android/launcher3/"
+method(LAUNCHER + "touch/WorkspaceTouchListener;", "onTouch", "(Landroid/view/View;Landroid/view/MotionEvent;)Z")
+field(LAUNCHER + "touch/WorkspaceTouchListener;", "mLauncher", LAUNCHER + "Launcher;")
+field(LAUNCHER + "touch/WorkspaceTouchListener;", "mWorkspace", LAUNCHER + "Workspace;")
+field(LAUNCHER + "LauncherState;", "NORMAL", LAUNCHER + "LauncherState$3;")
+method(LAUNCHER + "statemanager/StatefulContainer;", "isInState", "(" + LAUNCHER + "statemanager/BaseState;)Z")
+method(LAUNCHER + "AbstractFloatingView;", "getTopOpenView", "(" + LAUNCHER + "views/ActivityContext;)" + LAUNCHER + "AbstractFloatingView;")
+for name in ("mIsSwitchingState", "mOverlayShown"):
+    field(LAUNCHER + "Workspace;", name, "Z")
+for name in ("isPageInTransition", "isHandlingTouch"):
+    method(LAUNCHER + "PagedView;", name, "()Z")
+method(LAUNCHER + "PagedView;", "getCurrentPage", "()I")
+method(LAUNCHER + "PagedView;", "getPageAt", "(I)Landroid/view/View;")
+method(LAUNCHER + "Launcher;", "getDragController", "()" + LAUNCHER + "dragndrop/DragController;")
+method(LAUNCHER + "dragndrop/DragController;", "isDragging", "()Z")
+method(LAUNCHER + "CellLayout;", "pointToCellExact", "(II[I)V")
+method(LAUNCHER + "CellLayout;", "isOccupied", "(II)Z")
+method(LAUNCHER + "CellLayout;", "cellToRect", "(IIIILandroid/graphics/Rect;)V")
+for name in ("mCountX", "mCountY"):
+    field(LAUNCHER + "CellLayout;", name, "I")
+method("Landroid/app/ActivityManager;", "getRunningTasks", "(I)Ljava/util/List;")
+field("Landroid/app/TaskInfo;", "displayId", "I")
+field("Landroid/app/TaskInfo;", "userId", "I")
+field("Landroid/app/TaskInfo;", "topActivity", "Landroid/content/ComponentName;")
+method("Landroid/app/KeyguardManager;", "isKeyguardLocked", "()Z")
+# PowerManager is absent from the newer framework archive: runtime preflight is required;
+# its goToSleep(JII)V use is evidenced separately by the newer SystemUI's actual call sites.
+
+# Swipe-up mini handoff (SwipeMini.resolve): declared-member lookups on both launchers.
+QS = "Lcom/android/quickstep/"
+END_TARGET = QS + "GestureState$GestureEndTarget;"
+method(QS + "SwipeUpAnimationLogic;", "updateDisplacement", "(F)V")
+field(QS + "SwipeUpAnimationLogic;", "mGestureState", QS + "GestureState;")
+field(QS + "SwipeUpAnimationLogic;", "mContext", "Landroid/content/Context;")
+method(QS + "AbsSwipeUpHandler;", "performHapticFeedback", "()V")
+method(QS + "AbsSwipeUpHandler;", "invalidateHandler", "()V")
+method(QS + "AbsSwipeUpHandler;", "invalidateHandlerWithLauncher", "()V")
+method(QS + "LauncherSwipeHandlerV2;", "findWorkspaceView", "(Ljava/util/List;" + QS + "views/TaskView;)Landroid/view/View;")
+field(QS + "AbsSwipeUpHandler;", "mRecentsView", QS + "views/RecentsView;")
+method(QS + "GestureState;", "getRunningTaskIds", "(Z)[I")
+method(QS + "GestureState;", "getEndTarget", "()" + END_TARGET)
+for name in ("HOME", "RECENTS"):
+    field(END_TARGET, name, END_TARGET)
+field(QS + "SwipeUpAnimationLogic;", "mRemoteTargetHandles", "[" + QS + "RemoteTargetGluer$RemoteTargetHandle;")
+method(QS + "RemoteTargetGluer$RemoteTargetHandle;", "getTaskViewSimulator", "()" + QS + "util/TaskViewSimulator;")
+method(QS + "util/TaskViewSimulator;", "getCurrentRect", "()Landroid/graphics/RectF;")
+method(QS + "util/TaskViewSimulator;", "getCurrentCornerRadius", "()F")
+method(QS + "RemoteTargetGluer$RemoteTargetHandle;", "getTransformParams", "()" + QS + "util/TransformParams;")
+method(QS + "util/TransformParams;", "setTargetAlpha", "(F)" + QS + "util/TransformParams;")
+method(WM + "Task;", "isVisibleRequested", "()Z")
 field(SYS + "screenshot/ScreenshotController;", "window", SYS + "screenshot/ScreenshotWindow;")
 method(SYS + "screenshot/ScreenshotWindow;", "removeWindow", "()V")
 field(SYS + "shared/system/InputMonitorCompat;", "mInputMonitor", "Landroid/view/InputMonitor;")
@@ -205,6 +262,7 @@ INHERITED = {
     (WM + "Task;", "methods", "setFocusable", "(Z)Z"),
     (WM + "Task;", "methods", "shouldSleepActivities", "()Z"),
     (WM + "Task;", "methods", "sleepIfPossible", "(Z)Z"),
+    (WM + "Task;", "methods", "isVisibleRequested", "()Z"),
 }
 
 
@@ -336,6 +394,10 @@ def main():
                 for name, signature in (("getCurrentView", "()Landroid/view/View;"), ("hide", "()Z")):
                     assert any(m["name"] == name and m["descriptor"] == signature for m in current[button]["methods"]), (label, button, name)
                 assert any(m["name"] == "onDestroy" and m["descriptor"] == "()V" for m in current[ROTATION]["methods"])
+                # SwipeMini accepts exactly one calculateEndTarget; its parameters differ per host.
+                ends = [m for m in current[QS + "AbsSwipeUpHandler;"]["methods"]
+                        if m["name"] == "calculateEndTarget" and m["descriptor"].endswith(")" + END_TARGET)]
+                assert len(ends) == 1, (label, "calculateEndTarget", ends)
             for owner, kind, member, signature in CHECKS:
                 if owner == ROTATION:
                     key = "descriptor" if kind == "methods" else "type"

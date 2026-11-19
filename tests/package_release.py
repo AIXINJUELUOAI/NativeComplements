@@ -72,7 +72,8 @@ def main():
             "Ldev/local/sunwindowdemo/features/alive/" + name + ";" for name in (
                 "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveAmbientAccess", "AliveSystemUi", "AliveSleepHandoff", "AliveTransitionTrace", "AliveVisualContent", "AliveHandoffTransport")}
         required_types |= {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
-            "CornerGesture", "FanView", "AndroidWindowAdmission", "WindowAdmission")}
+            "CornerGesture", "FanView", "AndroidWindowAdmission", "WindowAdmission",
+            "SwipeMini", "DesktopDoubleTap", "DesktopSleepHost")}
         required_types |= {"Ldev/local/sunwindowdemo/features/smsblocking/" + name + ";" for name in (
             "SmsBlockingModule", "SmsBlockingProvider", "SmsBlockingStore", "SmsBlockingRules")}
         found = set()

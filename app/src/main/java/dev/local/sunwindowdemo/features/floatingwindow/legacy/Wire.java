@@ -13,7 +13,7 @@ final class Wire {
     static final Binder LEASE = new Binder();
     static final String CHANNEL = PKG + ".frames.v16";
     static final int MESSAGE = IBinder.FIRST_CALL_TRANSACTION;
-    static final int PREPARE_BACK=MESSAGE+1,CANCEL_BACK=MESSAGE+2,FINISH_BACK=MESSAGE+3;
+    static final int PREPARE_BACK=MESSAGE+1,CANCEL_BACK=MESSAGE+2,FINISH_BACK=MESSAGE+3,PREPARE_SWIPE=MESSAGE+4;
     private static volatile IBinder endpoint;
     private static java.util.function.Consumer<Intent> listener;
     private static Intent pendingFrame;
@@ -120,6 +120,21 @@ final class Wire {
             if(!sink.transact(PREPARE_BACK,data,reply,0))return false;
             reply.readException();return reply.readBoolean();
         }catch(Exception e){return false;}finally{data.recycle();reply.recycle();}
+    }
+    /** Swipe-up handoff: masks the still-animating task at its Launcher card bounds. */
+    static boolean prepareSwipe(int task,String pkg,String token,android.graphics.RectF card,float radius){
+        IBinder sink=endpoint;if(sink==null)return false;
+        Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+        try{data.writeInterfaceToken(CHANNEL);data.writeInt(task);data.writeString(pkg);data.writeString(token);
+            data.writeTypedObject(card,0);data.writeFloat(radius);
+            if(!sink.transact(PREPARE_SWIPE,data,reply,0))return false;
+            reply.readException();return reply.readBoolean();
+        }catch(Exception e){return false;}finally{data.recycle();reply.recycle();}
+    }
+    static void swipeMini(Context c,String pkg,int task,String token){
+        sendRequest(c,new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL).putExtra("op","GESTURE")
+            .putExtra("package",pkg).putExtra("taskId",task).putExtra("token",token).putExtra("predictiveEntry",true)
+            .putExtra("landing","mini").putExtra("hideRecents",new Config(c).hideRecents()));
     }
     static void cancelBack(String token){
         IBinder sink=endpoint;if(sink==null)return;Parcel data=Parcel.obtain();

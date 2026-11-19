@@ -15,6 +15,7 @@ data class WindowPreferences(
     val autoMinimizeOnOpen: Boolean = true,
     val endOnClose: Boolean = false, val keepEdgeAwake: Boolean = false,
     val hideRecents: Boolean = false, val doubleClose: Boolean = false, val notificationWindow: Boolean = true, val landscapeShareWindow: Boolean = true,
+    val swipeMini: Boolean = false, val swipeMiniHint: Boolean = true,
 )
 
 class WindowPreferenceStore(private val context: Context) {
@@ -28,6 +29,7 @@ class WindowPreferenceStore(private val context: Context) {
         showHeat = config.showHeat(), menuBlur = config.menuBlur(), windowDim = config.windowDim(), landscapeOff = config.landscapeOff(), keyboardOff = config.keyboardOff(),
         autoMinimizeOnOpen = config.autoMinimizeOnOpen(), endOnClose = config.endOnClose(), keepEdgeAwake = config.keepEdgeAwake(),
         hideRecents = config.hideRecents(), doubleClose = config.doubleClose(), notificationWindow = config.notificationWindow(), landscapeShareWindow = config.landscapeShareWindow(),
+        swipeMini = config.swipeMini(), swipeMiniHint = config.swipeMiniHint(),
     )
     /** A user choice, not a claim that runtime compatibility has been verified. */
     internal fun enable() {
@@ -36,7 +38,7 @@ class WindowPreferenceStore(private val context: Context) {
     }
     fun boolean(key: String, value: Boolean) {
         require(key != "enabled" || !value) { "Use the checked enable path" }
-        require(key in setOf("enabled", "longBackWindow", "hideTopHint", "showHeat", "menuBlur", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "autoMinimizeOnOpen", "endOnClose", "keepEdgeAwake"))
+        require(key in setOf("enabled", "longBackWindow", "hideTopHint", "showHeat", "menuBlur", "landscape", "keyboard", "hideRecents", "doubleClose", "notificationWindow", "landscapeShareWindow", "autoMinimizeOnOpen", "endOnClose", "keepEdgeAwake", "swipeMini", "swipeMiniHint"))
         if (key == "enabled") dev.local.sunwindowdemo.core.WindowBackendEligibility.saveEnabled(context, value)
         else preferences.edit().putBoolean(key, value).apply()
         ConfigProvider.changed(context)

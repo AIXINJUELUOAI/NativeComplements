@@ -21,6 +21,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
+    var desktopDoubleTapSleep by remember { mutableStateOf(ShadeStore.desktopDoubleTapSleep(context)) }
     var systemThemed by remember { mutableStateOf(IconLayerStore.systemThemed(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
@@ -32,6 +33,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             enabled = ShadeStore.read(context).getBoolean("enabled")
             drawerMonet = ShadeStore.drawerMonet(context)
+            desktopDoubleTapSleep = ShadeStore.desktopDoubleTapSleep(context)
             offset = ShadeStore.offset(context)
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
@@ -56,6 +58,12 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
+        GroupTitle("桌面")
+        SettingsGroup {
+            ToggleRow("双击桌面锁屏", "双击桌面空白处息屏，效果等同按下电源键", value = desktopDoubleTapSleep) {
+                ShadeStore.setDesktopDoubleTapSleep(context, it)
+            }
+        }
         GroupTitle("莫奈图标")
         SettingsGroup {
             val hint = if (systemThemed) null else "需先在“壁纸与样式”中打开主题图标"
