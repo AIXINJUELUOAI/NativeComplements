@@ -21,6 +21,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
+    var coverMonet by remember { mutableStateOf(ShadeStore.coverMonet(context)) }
     var desktopDoubleTapSleep by remember { mutableStateOf(ShadeStore.desktopDoubleTapSleep(context)) }
     var systemThemed by remember { mutableStateOf(IconLayerStore.systemThemed(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
@@ -33,6 +34,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             enabled = ShadeStore.read(context).getBoolean("enabled")
             drawerMonet = ShadeStore.drawerMonet(context)
+            coverMonet = ShadeStore.coverMonet(context)
             desktopDoubleTapSleep = ShadeStore.desktopDoubleTapSleep(context)
             offset = ShadeStore.offset(context)
             notificationIconScale = ShadeStore.iconScale(context, true)
@@ -60,27 +62,26 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         .padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
         GroupTitle("桌面")
         SettingsGroup {
-            ToggleRow("双击桌面锁屏", "双击桌面空白处息屏，效果等同按下电源键", value = desktopDoubleTapSleep) {
+            ToggleRow("双击桌面锁屏", value = desktopDoubleTapSleep) {
                 ShadeStore.setDesktopDoubleTapSleep(context, it)
             }
-            val hint = if (systemThemed) null else "需先在“壁纸与样式”中打开主题图标"
-            ToggleRow("抽屉莫奈图标", hint ?: "应用抽屉与推荐行使用和桌面相同的主题图标",
-                value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
-            ToggleRow("小白条沉浸", "保留原生手势条，取消底部占位", value = navbarImmersive) {
+            ToggleRow("抽屉莫奈图标", value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
+            ToggleRow("遮罩莫奈图标", value = coverMonet && systemThemed, enabled = systemThemed) { ShadeStore.setCoverMonet(context, it) }
+            ToggleRow("小白条沉浸", value = navbarImmersive) {
                 NavbarStore.setEnabled(context, it)
             }
         }
         GroupTitle("状态栏与控制中心")
         SettingsGroup {
             ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
-            ToggleRow("信号显示调整", "调整 5G 信号格分档，仅影响显示，不增强信号", value = signalDisplay) {
+            ToggleRow("信号显示调整", value = signalDisplay) {
                 ShadeStore.setSignalDisplay(context, it)
             }
-            SliderRow("通知图标大小", "左侧通知图标，100% 为原生大小",
+            SliderRow("通知图标大小",
                 value = notificationIconScale, range = 80..120, unit = "%") {
                 ShadeStore.setIconScale(context, true, it)
             }
-            SliderRow("系统状态图标大小", "右侧系统状态图标，不含 5G、信号、电池和时间；100% 为原生大小",
+            SliderRow("系统状态图标大小",
                 value = systemIconScale, range = 80..120, unit = "%") {
                 ShadeStore.setIconScale(context, false, it)
             }

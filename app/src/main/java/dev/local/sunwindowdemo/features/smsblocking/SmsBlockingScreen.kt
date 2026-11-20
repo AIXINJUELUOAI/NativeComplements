@@ -138,7 +138,7 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
                 })
             }
             if (!contactsPermission) SettingsGroup {
-                SettingRow("允许读取系统通讯录", "未授权或查询失败时，陌生发送方规则自动放行", onClick = {
+                SettingRow("允许读取系统通讯录", onClick = {
                     requestContacts.launch(Manifest.permission.READ_CONTACTS)
                 })
                 SettingRow("打开应用权限设置", onClick = {
@@ -162,15 +162,14 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
                     }
                     if (!follows) {
                         val rejectAll = config.getBoolean(ownPrefix + "reject_all")
-                        ToggleRow("拦截该卡全部短信", "包括验证码与银行通知；开启后其余规则不再生效", value = rejectAll) {
+                        ToggleRow("拦截该卡全部短信", value = rejectAll) {
                             if (it) confirmAll = slot else SmsBlockingStore.setRejectAll(context, slot, false)
                         }
                         if (!rejectAll) {
-                            ToggleRow("拦截陌生发送方", "发送方不在系统通讯录；字母服务号一律视为陌生。未授权、查询失败、缓存过期或号码超过 4000 个时此规则放行",
-                                value = config.getBoolean(ownPrefix + "reject_strangers")) {
+                            ToggleRow("拦截陌生发送方", value = config.getBoolean(ownPrefix + "reject_strangers")) {
                                 SmsBlockingStore.setRejectStrangers(context, slot, it)
                             }
-                            ToggleRow("验证码短信放行", "仅豁免陌生发送方规则，不豁免手动规则与关键词；多段或正文未知时，陌生发送方规则保守放行", value = config.getBoolean(ownPrefix + "allow_verification")) {
+                            ToggleRow("验证码短信放行", value = config.getBoolean(ownPrefix + "allow_verification")) {
                                 SmsBlockingStore.setAllowVerification(context, slot, it)
                             }
                             config.getStringArray(effectivePrefix + "patterns").orEmpty().forEachIndexed { index, rule ->
@@ -181,7 +180,7 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
                                         }
                                     })
                             }
-                            SettingRow("添加号码或发送方规则", "支持 * 通配符，例如 952* 或 BANK*", onClick = { ruleEdit = RuleEdit(slot, null, "", false) },
+                            SettingRow("添加号码或发送方规则", onClick = { ruleEdit = RuleEdit(slot, null, "", false) },
                                 leading = { Icon(Icons.Default.Add, null) })
                             config.getStringArray(effectivePrefix + "keywords").orEmpty().forEachIndexed { index, rule ->
                                 SettingRow("关键词：$rule", onClick = { ruleEdit = RuleEdit(slot, index, rule, true) },
@@ -191,7 +190,7 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
                                         }
                                     })
                             }
-                            SettingRow("添加关键词", "完整单段正文包含该词时拦截，不区分大小写；多段或正文未知时放行。最多 100 条", onClick = { ruleEdit = RuleEdit(slot, null, "", true) },
+                            SettingRow("添加关键词", onClick = { ruleEdit = RuleEdit(slot, null, "", true) },
                                 leading = { Icon(Icons.Default.Add, null) })
                         }
                     } else {

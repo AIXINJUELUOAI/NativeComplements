@@ -109,7 +109,7 @@ fun SuggestionScreen(controller: WindowController, onSupportedApps: () -> Unit) 
             { sheet = SuggestionSheet.Bluetooth }, leading = { SuggestionIcon(R.drawable.ic_suggestion_bluetooth, bluetoothTone) })
         SplitSwitchRow("验证码填充", value = config.getBoolean("otp"), onToggle = { toggle("otp", it) },
             onDetails = { sheet = SuggestionSheet.Otp }, leading = { SuggestionIcon(R.drawable.ic_suggestion_otp, otpTone) })
-        SplitSwitchRow("链接与分享口令", "查看已适配应用与支持范围", value = config.getBoolean("links"), onToggle = { toggle("links", it) },
+        SplitSwitchRow("链接与分享口令", value = config.getBoolean("links"), onToggle = { toggle("links", it) },
             onDetails = onSupportedApps, leading = { SuggestionIcon(R.drawable.ic_suggestion_link, linkTone) })
         IconToggleRow("地址与地点", value = config.getBoolean("maps"), onChange = { toggle("maps", it) },
             leading = { SuggestionIcon(R.drawable.ic_suggestion_location, locationTone) })

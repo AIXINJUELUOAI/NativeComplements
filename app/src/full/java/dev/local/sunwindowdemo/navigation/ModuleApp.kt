@@ -296,7 +296,7 @@ private fun AodWallpaperToggle() {
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf<AodWallpaperControl.State?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf("状态未知，点击下方按钮授权 root 并读取；进入页面不会自动申请权限") }
+    var message by remember { mutableStateOf("状态未知") }
     fun operate(target: Boolean? = null) {
         if (busy) return
         busy = true
@@ -307,9 +307,9 @@ private fun AodWallpaperToggle() {
                 }
                 message = if (target == null) {
                     if (state?.wallpaper == true && state?.capability == false)
-                        "壁纸设置已开，但系统能力未启用；可关闭清理，或重试开启以修复"
+                        "壁纸设置已开，系统能力未启用"
                     else "已读取系统实际状态"
-                } else "已${if (target) "开启" else "关闭"}并读回确认；若画面未更新，可手动重启 SystemUI。整机重启后需重新读取并开启"
+                } else "已${if (target) "开启" else "关闭"}并读回确认"
             } catch (cancelled: kotlinx.coroutines.CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -323,7 +323,7 @@ private fun AodWallpaperToggle() {
     GroupTitle("实验")
     SettingsGroup {
         ToggleRow("息屏显示壁纸（全景 AOD）",
-            "$message\n临时系统覆盖，整机重启后需重新开启；需要系统息屏显示已开启及支持的壁纸。操作期间请留在本页，退出或超时不会回滚已执行的命令。此项不修复 LTPO；Alive 照片防烧屏位移尚未实现，限短时测试。",
+            message,
             state?.wallpaper == true, enabled = state != null && !busy) { operate(it) }
         if (state?.wallpaper == true && state?.capability == false) {
             SettingRow("重试开启系统壁纸能力", onClick = if (busy) null else ({ operate(true) }))
@@ -338,13 +338,11 @@ private fun AodWallpaperToggle() {
 private fun DarkAodControls() {
     val context = LocalContext.current
     var config by remember { mutableStateOf(DarkAodStore.systemSnapshot(context)) }
-    ToggleRow("暗处暂停 AOD",
-        "LSPosed 实验，默认关闭。持续暗 10 秒暂停息屏显示，持续亮 2 秒恢复；不更改系统 AOD 开关，需系统息屏显示已开启。",
-        config.getBoolean("enabled")) {
+    ToggleRow("暗处暂停 AOD", value = config.getBoolean("enabled")) {
         DarkAodStore.setEnabled(context, it)
         config = DarkAodStore.systemSnapshot(context)
     }
-    SliderRow("暗处光照阈值", "默认 1 lux；亮处恢复阈值为 ${config.getFloat("bright_lux").toInt()} lux，可按传感器调整。",
+    SliderRow("暗处光照阈值", "亮处恢复阈值：${config.getFloat("bright_lux").toInt()} lux",
         value = config.getFloat("dark_lux").toInt(), range = 0..5, unit = " lux", steps = 4,
         onCommit = {
             DarkAodStore.setDarkLux(context, it.toFloat())

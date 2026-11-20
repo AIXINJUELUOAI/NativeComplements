@@ -47,10 +47,10 @@ fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit, onLogs: () -> Unit 
         }
         SettingRow("项目主页", onClick = { uri.openUri(CommunityAdaptation.PROJECT_URL) })
         SettingRow("反馈问题", adaptation?.let {
-            if (it.maintainerFeedbackUrl() == null) "主项目（暂无已确认的适配者反馈入口）"
-            else "优先向 ${it.maintainer()} 反馈该系统的兼容性问题"
+            if (it.maintainerFeedbackUrl() == null) "主项目"
+            else it.maintainer()
         }, onClick = { uri.openUri(adaptation?.feedbackUrl() ?: CommunityAdaptation.PROJECT_ISSUES) })
-        SettingRow("诊断日志", "开始记录、复现问题后停止并导出；不会自动上传", onClick = onLogs)
+        SettingRow("诊断日志", onClick = onLogs)
         SettingRow("开源许可", onClick = onLicenses)
     }
     if (toolsVisible) {

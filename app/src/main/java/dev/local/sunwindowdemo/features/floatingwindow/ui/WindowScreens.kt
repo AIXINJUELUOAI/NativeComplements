@@ -16,7 +16,7 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
                  enablePrompt: String? = null, enableChecking: Boolean = false, dismissEnablePrompt: () -> Unit = {},
                  confirmEnablePrompt: () -> Unit = {}) {
     SettingsGroup {
-        ToggleRow("启用小窗", if (enableChecking) "正在核验系统 Freeform 能力…再次点击可取消" else "检查结果仅作提醒，可继续开启；不自动修改系统设置", value = p.enabled) { toggleControl() }
+        ToggleRow("启用小窗", if (enableChecking) "正在核验系统 Freeform 能力…" else null, value = p.enabled) { toggleControl() }
     }
     if (enablePrompt != null) AlertDialog(
         onDismissRequest = dismissEnablePrompt,
@@ -35,9 +35,6 @@ fun WindowScreen(p: WindowPreferences, navigate: (Page) -> Unit, toggleControl: 
 
 @Composable
 fun GestureScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, number: (String, Int) -> Unit) {
-    SettingsGroup {
-        SettingRow("角落滑动呼出", "从左下角或右下角向屏幕内斜向滑动，滑入扇区选择应用，松手打开；继续滑到菜单项可展开应用列表。不接管长侧滑返回。")
-    }
     GroupTitle("触发与选中")
     SettingsGroup {
         SliderRow("角落热区边长", value = p.heat, range = 36..72, unit = " dp") { number("heat", it) }
@@ -60,10 +57,10 @@ fun BehaviorScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, num
     }
     GroupTitle("窗口行为")
     SettingsGroup {
-        ToggleRow("应用间跳转小窗打开", "前台全屏应用跳转到其他应用时，符合安全条件则用小窗打开", value = p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
-        ToggleRow("通知小窗打开", "点击后台应用通知时，用小窗打开；不符合条件时保留系统原行为", value = p.notificationWindow) { boolean("notificationWindow", it) }
-        ToggleRow("上滑挂起为迷你窗", "全屏应用中从底部上滑超过屏幕 1/3 后松手，应用挂起为迷你窗", value = p.swipeMini) { boolean("swipeMini", it) }
-        ToggleRow("显示上滑提示", "超过阈值时在顶部显示“松手挂起小窗”", value = p.swipeMiniHint, enabled = p.swipeMini) { boolean("swipeMiniHint", it) }
+        ToggleRow("应用间跳转小窗打开", value = p.landscapeShareWindow) { boolean("landscapeShareWindow", it) }
+        ToggleRow("通知小窗打开", value = p.notificationWindow) { boolean("notificationWindow", it) }
+        ToggleRow("上滑挂起小窗", value = p.swipeMini) { boolean("swipeMini", it) }
+        ToggleRow("显示上滑提示", value = p.swipeMiniHint, enabled = p.swipeMini) { boolean("swipeMiniHint", it) }
         ToggleRow("新开小窗时自动最小化", value = p.autoMinimizeOnOpen) { boolean("autoMinimizeOnOpen", it) }
         ToggleRow("双击空白处关闭", value = p.doubleClose) { boolean("doubleClose", it) }
         ToggleRow("贴边锁屏继续运行", value = p.keepEdgeAwake) { boolean("keepEdgeAwake", it) }
@@ -80,7 +77,7 @@ fun PreventionScreen(p: WindowPreferences, boolean: (String, Boolean) -> Unit, b
         ToggleRow("键盘弹出时禁用", value = p.keyboardOff) { boolean("keyboard", it) }
         SettingRow("指定应用内禁用", "已选择 ${p.blocked.size} 个应用", blocked)
         if (windowExclusions != null) SettingRow("不以小窗打开的应用",
-            "已选择 ${p.windowExcludedPackages.size} 个应用；仅限制新开小窗，不改变已有窗口", windowExclusions)
+            "已选择 ${p.windowExcludedPackages.size} 个应用", windowExclusions)
     }
 }
 
@@ -97,7 +94,7 @@ fun DiagnosticsScreen(controller: WindowController) {
             !runtime.compatible -> "版本不一致，需要重启"
             else -> "已连接 · 协议 16"
         })
-        SettingRow("SystemUI 宿主", if (runtime.hostConnected) "已连接" else "未连接，请检查作用域并重启")
+        SettingRow("SystemUI 宿主", if (runtime.hostConnected) "已连接" else "未连接")
         SettingRow("重新检查", onClick = controller::check)
     }
     GroupTitle("测试与恢复")
