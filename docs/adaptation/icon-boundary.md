@@ -6,7 +6,7 @@
 
 [IconAssets](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconAssets.java>)在原 PackageManager 查询后解析计划，UI 预览与宿主 worker共用入口。手动双层、匹配库、已生成双层互斥；缺文件／层保原图，不静默换算法。mask跟随真实解析结果，不把平面图伪造成独立 themed 槽。
 
-“外观与控制”中的莫奈开关仅保留抽屉，受原生系统主题状态门控；图标适配页逐应用“莫奈图标”及“状态栏通知小图标”模式不受退役影响。窗口／遮罩莫奈已退役，[ShadeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeStore.java>)恒关并忽略旧值，不能因共用素材方法或旧字段仍存在而宣传为当前功能。批量设置从图标页菜单选择应用，再独立选择各路模式，未选路保持原值，一次发布。
+“外观与控制”提供抽屉与遮罩莫奈独立开关，均受原生系统主题状态门控；遮罩覆盖系统启动图标与受管小窗转场图标，素材不足保留彩色／原图，缓存只在 worker 构建。图标适配页逐应用“莫奈图标”及“状态栏通知小图标”模式不受影响。小窗菜单／扇区莫奈仍退役，[ShadeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeStore.java>)恒关并忽略旧值，不能因共用素材方法或旧字段仍存在而宣传为当前功能。批量设置从图标页菜单选择应用，再独立选择各路模式，未选路保持原值，一次发布。
 
 ## 宿主与 ABI
 

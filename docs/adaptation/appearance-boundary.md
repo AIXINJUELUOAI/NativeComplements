@@ -4,7 +4,7 @@
 
 [ShadePolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadePolicy.java>)接收开关、横屏／宽度、资源 ID、偏移、槽位与已采样尺寸，输出双栏、资源覆盖及视口内倍率；不持原生对象。[SignalDisplayPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/SignalDisplayPolicy.java>)只处理 NR 展示阈值和原生编码，不改变网络质量、订阅或 modem。
 
-[ShadeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeStore.java>)使用独立设备保护配置。双栏默认关闭；状态栏偏移 -32～+32dp，图标比例 80～120%、默认 100%。抽屉莫奈是独立设置，窗口／遮罩莫奈恒关并忽略旧值。
+[ShadeStore](<../../app/src/main/java/dev/local/sunwindowdemo/features/shade/ShadeStore.java>)使用独立设备保护配置。双栏默认关闭；状态栏偏移 -32～+32dp，图标比例 80～120%、默认 100%。抽屉与遮罩莫奈分别设置；遮罩沿用 cover_monet 旧配置键并触发素材刷新，小窗菜单莫奈仍恒关并忽略旧值。
 
 ## 原生执行与恢复
 

@@ -130,7 +130,7 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                 })
             }
             if (!contactsPermission) SettingsGroup {
-                SettingRow("允许读取系统通讯录", "未授权或查询失败时，陌生号码规则自动放行", onClick = {
+                SettingRow("允许读取系统通讯录", onClick = {
                     requestContacts.launch(Manifest.permission.READ_CONTACTS)
                 })
                 SettingRow("打开应用权限设置", onClick = {
@@ -159,10 +159,10 @@ fun CallBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onR
                             CallBlockingStore.setRejectAll(context, slot, it)
                         }
                         if (!rejectAll) {
-                            ToggleRow("拦截陌生号码", "不在系统通讯录；未授权、查询失败、缓存过期或有效号码超过 4000 个时此规则放行",  value = config.getBoolean(ownPrefix + "reject_strangers")) {
+                            ToggleRow("拦截陌生号码", value = config.getBoolean(ownPrefix + "reject_strangers")) {
                                 CallBlockingStore.setRejectStrangers(context, slot, it)
                             }
-                            ToggleRow("三分钟重复来电放行", "同卡同号码的第二通仅豁免陌生规则，不豁免手动号码规则", value = config.getBoolean(ownPrefix + "allow_repeat")) {
+                            ToggleRow("三分钟重复来电放行", value = config.getBoolean(ownPrefix + "allow_repeat")) {
                                 CallBlockingStore.setAllowRepeat(context, slot, it)
                             }
                             patterns.forEachIndexed { index, rule ->

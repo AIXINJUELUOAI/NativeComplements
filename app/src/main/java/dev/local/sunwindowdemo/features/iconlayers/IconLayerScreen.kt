@@ -89,7 +89,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (S
             header = { if (selection == null) SettingsGroup {
                 ToggleRow("启用图标适配", value = state.getBoolean("enabled")) { IconLayerStore.enabled(context, it); refreshState() }
                 ToggleRow("通知图标替换", value = state.getBoolean("notifications")) { IconLayerStore.notifications(context, it); refreshState() }
-                SettingRow("导入图标库", if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else "ZIP 或文件夹",
+                SettingRow("导入图标库", if (state.getInt("count") > 0) "${state.getInt("count")} 个图标 · 已安装匹配 ${installed.count { it.packageName in library }} 个" else null,
                     onClick = if (busy || pending != null) null else { { showImport = true } }, leading = { Icon(Icons.Default.Add, null) })
             } },
             footer = {

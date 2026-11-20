@@ -55,6 +55,16 @@ public class MonetSurfaceTest {
         Bitmap bitmap=Bitmap.createBitmap(192,192,Bitmap.Config.ARGB_8888);
         drawable.setBounds(0,0,192,192);drawable.draw(new Canvas(bitmap));return bitmap.getPixel(96,96);
     }
+    @Test public void coverPreferenceRetainsLegacyKeyAndMenuStaysDisabled(){
+        var store=dev.local.sunwindowdemo.features.shade.ShadeStore.preferences(context);
+        store.edit().clear().putBoolean("cover_monet",true).putBoolean("window_monet",true).commit();
+        assertTrue(dev.local.sunwindowdemo.features.shade.ShadeStore.coverMonet(context));
+        assertFalse(dev.local.sunwindowdemo.features.shade.ShadeStore.windowMonet(context));
+        dev.local.sunwindowdemo.features.shade.ShadeStore.setCoverMonet(context,false);
+        assertFalse(dev.local.sunwindowdemo.features.shade.ShadeStore.coverMonet(context));
+        dev.local.sunwindowdemo.features.shade.ShadeStore.setCoverMonet(context,true);
+        assertTrue(IconLayerStore.read(context).getBoolean("coverMonet"));
+    }
     @Test public void activityMonoWorksForApplicationAndSplashWithoutMasterAdaptation(){
         assertTrue(IconAssets.snapshot().entries().isEmpty());
         assertTrue(IconAssets.snapshot().activityMonos().containsKey(PKG));
@@ -64,10 +74,11 @@ public class MonetSurfaceTest {
         assertEquals(IconAssets.themedColors(context)[1],pixel(SystemIconModule.splashIcon(context,PKG,applicationIcon)));
         assertNull(IconAssets.window(context,PKG,applicationIcon));
     }
-    @Test public void systemThemeAndIndependentSwitchesGateBothSurfaces(){
+    @Test public void coverRequiresBothSwitchesAndRetiredMenuPreferenceIsIgnored(){
         config.putBoolean("coverMonet",false);config.putBoolean("windowMonet",true);load();
-        assertNull(IconAssets.cover(context,PKG,null));assertNotNull(IconAssets.window(context,PKG,null));
-        config.putBoolean("systemThemed",false);load();
+        assertNull(IconAssets.cover(context,PKG,null));assertNull(IconAssets.window(context,PKG,null));
+        assertTrue(IconAssets.snapshot().activityMonos().isEmpty());
+        config.putBoolean("coverMonet",true);config.putBoolean("systemThemed",false);load();
         assertTrue(IconAssets.snapshot().activityMonos().isEmpty());
         assertNull(IconAssets.cover(context,PKG,null));assertNull(IconAssets.window(context,PKG,null));
         assertNull(SystemIconModule.splashIcon(context,PKG,new ColorDrawable(Color.RED)));
@@ -115,7 +126,7 @@ public class MonetSurfaceTest {
             assertEquals(240,iconSize);
         }
     }
-    @Test public void opaqueLegacyArtworkKeepsTonalDetailAndBothSurfacesShareConvertedSource(){
+    @Test public void opaqueLegacyArtworkKeepsTonalDetailForCoverOnly(){
         Bitmap photo=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888);
         for(int y=0;y<32;y++)for(int x=0;x<32;x++)photo.setPixel(x,y,Color.rgb(x*8,y*8,(x+y)*4));
         ActivityShadow shadow=Shadow.extract(activity);shadow.icon=new BitmapDrawable(context.getResources(),photo);
@@ -126,7 +137,7 @@ public class MonetSurfaceTest {
             min=Math.min(min,Color.alpha(p));max=Math.max(max,Color.alpha(p));
         }
         assertTrue("a photograph must not become a solid/empty silhouette",max-min>100);assertTrue(max>128);
-        assertEquals(pixel(IconAssets.cover(context,PKG,null)),pixel(IconAssets.window(context,PKG,null)));
+        assertNotNull(IconAssets.cover(context,PKG,null));assertNull(IconAssets.window(context,PKG,null));
         config.putBoolean("windowMonet",false);config.putBoolean("coverMonet",false);load();
         assertTrue(IconAssets.snapshot().activityMonos().isEmpty());
         assertNull(IconAssets.window(context,PKG,shadow.icon));assertNull(IconAssets.cover(context,PKG,shadow.icon));

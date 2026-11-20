@@ -134,7 +134,8 @@ class ManagementUiTest {
                 }
             }
         }
-        compose.onNodeWithText("角落滑动呼出").assertExists()
+        compose.onNodeWithText("角落滑动呼出").assertDoesNotExist()
+        compose.onNodeWithText("角落热区边长").assertExists()
         compose.onNodeWithText("菜单背景模糊").assertExists()
         compose.onNodeWithText("长侧滑打开小窗").assertDoesNotExist()
         compose.onNodeWithText("关闭顶部提示").assertDoesNotExist()
@@ -211,9 +212,9 @@ class ManagementUiTest {
             compose.onNodeWithText("链接与分享口令").performClick()
             compose.onNodeWithContentDescription("返回").performClick()
             compose.onNodeWithContentDescription("链接与分享口令").performScrollTo().assertIsOn()
-            // Append-only: old saved ordinals must not move.
-            assertEquals(25, Page.Harassment.ordinal)
-            assertEquals(26, Page.SuggestionApps.ordinal)
+            // Current navigation order includes the three game settings pages.
+            assertEquals(28, Page.Harassment.ordinal)
+            assertEquals(29, Page.SuggestionApps.ordinal)
         } finally {
             SuggestionStore.preferences(context).edit().remove("links").commit()
             controller.close(); activity.destroy()

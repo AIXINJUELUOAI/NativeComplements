@@ -81,7 +81,8 @@ final class TaskCover {
         Drawable original;
         try{original=iconContext.getPackageManager().getApplicationIcon(pkg);}
         catch(android.content.pm.PackageManager.NameNotFoundException missing){original=iconContext.getPackageManager().getDefaultActivityIcon();}
-        Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(iconContext,pkg);
+        Drawable drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.cover(iconContext,pkg,original);
+        if(drawable==null)drawable=dev.local.sunwindowdemo.features.iconlayers.IconAssets.colored(iconContext,pkg);
         if(drawable==null)drawable=original;
         Surface canvasSurface=new Surface(icon);
         try{
