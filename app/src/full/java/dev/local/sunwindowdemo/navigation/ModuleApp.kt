@@ -31,6 +31,10 @@ import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 import dev.local.sunwindowdemo.features.barrage.BarrageHistoryScreen
 import dev.local.sunwindowdemo.features.barrage.BarrageScreen
+import dev.local.sunwindowdemo.features.background.BackgroundAppActions
+import dev.local.sunwindowdemo.features.background.BackgroundAppScreen
+import dev.local.sunwindowdemo.features.background.BackgroundWakeLockScreen
+import dev.local.sunwindowdemo.features.background.BackgroundList
 import dev.local.sunwindowdemo.features.gamemode.GameModeScreen
 import dev.local.sunwindowdemo.features.gamemode.GameQuickScreen
 import dev.local.sunwindowdemo.features.gamemode.GameCornerScreen
@@ -55,6 +59,7 @@ fun ModuleApp(
     back: () -> Unit,
     appPackage: String? = null,
     openIconApp: (String) -> Unit = {},
+    openBackgroundApp: (String) -> Unit = {},
 ) {
     if (page == Page.Alive) {
         dev.local.sunwindowdemo.features.alive.AliveScreen(onBack = back)
@@ -75,7 +80,8 @@ fun ModuleApp(
     var searching by rememberSaveable(page) { mutableStateOf(false) }
     var appsTab by rememberSaveable { mutableStateOf(true) }
     val searchable = windowExclusions || when (page) {
-        Page.GameMode, Page.Motion, Page.IconLayers, Page.Blocked -> true
+        Page.GameMode, Page.Motion, Page.IconLayers, Page.Blocked, Page.Background,
+        Page.BackgroundWakeLocks -> true
         Page.GameQuick -> appsTab
         else -> false
     }
@@ -87,6 +93,7 @@ fun ModuleApp(
         title = if (windowExclusions) "不以小窗打开的应用" else when (page) {
             Page.IconLayers -> if (selectingIcons) "已选择 ${selectedIcons.size} 个应用" else page.title
             Page.IconApp -> iconApp?.label ?: "图标设置"
+            Page.BackgroundApp -> controller.apps.firstOrNull { it.packageName == appPackage }?.label ?: page.title
             else -> page.title
         },
         onBack = if (searchOpen) ::closeSearch else if (windowExclusions) ({ windowExclusions = false }) else if (page == Page.Home) null else if (selectingIcons) ({ cancelIconBatch() }) else back,
@@ -97,6 +104,7 @@ fun ModuleApp(
                 Icon(Icons.Default.Search, contentDescription = "搜索应用")
             }
             if (!searchOpen) {
+            if (page == Page.BackgroundApp && appPackage != null) BackgroundAppActions(appPackage)
             if (page == Page.Motion) MotionActions()
             if (page == Page.Shade) IconButton(onClick = {
                 ShadeStore.setIconScale(context, true, 100)
@@ -137,6 +145,8 @@ fun ModuleApp(
                 })
             Page.IconApp -> IconAppScreen(iconApp, bottomInset)
             Page.Blocked -> AppPickerScreen(controller, bottomInset = bottomInset)
+            Page.Background -> BackgroundList(controller.apps, controller.catalogLoaded, bottomInset, openBackgroundApp)
+            Page.BackgroundWakeLocks -> BackgroundWakeLockScreen(controller.apps, controller.catalogLoaded, bottomInset)
             else -> Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
                 when (page) {
                     Page.Home -> HomeScreen(
@@ -146,7 +156,9 @@ fun ModuleApp(
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onGameMode = { navigate(Page.GameMode) },
                         onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
+                        onBackground = { navigate(Page.Background) },
                     )
+
                     Page.Harassment -> {
                         SettingsGroup {
                             SettingRow("来电拦截", onClick = { navigate(Page.Calls) }, leading = { Glyph("phone") })
@@ -158,6 +170,7 @@ fun ModuleApp(
                             SettingRow("短信记录", onClick = { navigate(Page.SmsRecords) })
                         }
                     }
+                    Page.BackgroundApp -> BackgroundAppScreen(appPackage)
                     Page.Window -> {
                         WindowScreen(controller.preferences, navigate, controller::toggleControl,
                             enablePrompt = controller.enablePrompt, enableChecking = controller.enableChecking,
@@ -185,7 +198,9 @@ fun ModuleApp(
                         dev.local.sunwindowdemo.features.diagnostics.DiagnosticsScreen(bottomInset)
                     }
                     Page.Licenses -> LicensesScreen()
-                    Page.Tools -> DeveloperTools(onWindow = { navigate(Page.Diagnostics) }, onIcons = { navigate(Page.IconDiagnostics) })
+                    Page.Tools -> DeveloperTools(onWindow = { navigate(Page.Diagnostics) },
+                        onIcons = { navigate(Page.IconDiagnostics) },
+                        onWakeLocks = { navigate(Page.BackgroundWakeLocks) })
                     Page.Diagnostics -> DiagnosticsScreen(controller)
                     Page.IconDiagnostics -> IconDiagnosticsScreen()
                     else -> Unit
@@ -249,7 +264,7 @@ private fun IconLayerActions(onBatch: () -> Unit) {
 }
 
 @Composable
-private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
+private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit, onWakeLocks: () -> Unit) {
     val context = LocalContext.current
     var calls by remember { mutableStateOf(CallBlockingStore.readConfig(context)) }
     var motion by remember { mutableStateOf(MotionStore.read(context)) }
@@ -272,6 +287,7 @@ private fun DeveloperTools(onWindow: () -> Unit, onIcons: () -> Unit) {
     SettingsGroup {
         SettingRow("小窗诊断与恢复", onClick = onWindow)
         SettingRow("图标实验与诊断", onClick = onIcons)
+        SettingRow("后台唤醒锁限制", onClick = onWakeLocks)
         ToggleRow("显示游戏防误触范围", value = gameRegions) {
             dev.local.sunwindowdemo.features.gamemode.GameModeStore.showCornerRegions(context, it)
         }

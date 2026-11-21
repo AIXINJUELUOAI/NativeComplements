@@ -54,6 +54,11 @@ final class WindowLifecycle {
     static boolean resumeMini(boolean installed,boolean visible,String form,boolean transitioning,boolean backRequested,boolean pendingStart){
         return installed&&visible&&"mini".equals(form)&&!transitioning&&!backRequested&&!pendingStart;
     }
+    static boolean protectsFromBackground(String form, boolean edgeHidden, boolean parked, boolean closing,
+                                          boolean restoring, boolean restoreForeground, boolean presentationSuspended) {
+        return !parked && !closing && (!restoring || restoreForeground)
+            && (!presentationSuspended || edgeHidden || "mini".equals(form));
+    }
     static boolean resumableState(String state){
         return "PAUSED".equals(state)||"STARTED".equals(state)||"STOPPED".equals(state)||"STOPPING".equals(state);
     }

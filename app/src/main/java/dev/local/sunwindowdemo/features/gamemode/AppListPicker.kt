@@ -24,6 +24,8 @@ import dev.local.sunwindowdemo.AppCatalog
 import dev.local.sunwindowdemo.core.ui.GroupTitle
 import dev.local.sunwindowdemo.core.ui.Hint
 import dev.local.sunwindowdemo.core.ui.LocalAppQuery
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -45,10 +47,12 @@ fun AppListPicker(
     val state = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var scrollJob by remember { mutableStateOf<Job?>(null) }
-    val sections = remember(apps) { apps.map { AppCatalog.sectionForLabel(it.label) } }
+    val sections by produceState<Map<String, String>?>(null, apps) {
+        value = withContext(Dispatchers.Default) { apps.associate { it.packageName to AppCatalog.sectionForLabel(it.label) } }
+    }
     val indexed = remember(apps, query, sections) {
-        apps.indices.filter { query.isBlank() || apps[it].label.contains(query, true) || apps[it].packageName.contains(query, true) }
-            .groupBy { sections[it] }.toSortedMap(compareBy { if (it == "#") "{" else it })
+        if (sections == null) emptyMap() else apps.indices.filter { query.isBlank() || apps[it].label.contains(query, true) || apps[it].packageName.contains(query, true) }
+            .groupBy { sections!![apps[it].packageName] ?: "#" }.toSortedMap(compareBy { if (it == "#") "{" else it })
     }
     val targets = remember(indexed) {
         var offset = 1

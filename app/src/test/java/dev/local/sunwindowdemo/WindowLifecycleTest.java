@@ -4,6 +4,16 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class WindowLifecycleTest {
+    @Test public void liveMiniWindowsKeepBackgroundProtectionUntilClosedOrReleased() {
+        assertTrue(WindowLifecycle.protectsFromBackground("mini", false, false, false, false, false, false));
+        assertTrue(WindowLifecycle.protectsFromBackground("mini", true, false, false, false, false, true));
+        assertTrue(WindowLifecycle.protectsFromBackground("mini", false, false, false, false, false, true));
+        assertFalse(WindowLifecycle.protectsFromBackground("mini", true, false, true, false, false, true));
+        assertFalse(WindowLifecycle.protectsFromBackground("mini", true, true, false, false, false, true));
+        assertFalse(WindowLifecycle.protectsFromBackground("mini", true, false, false, true, false, true));
+        assertTrue(WindowLifecycle.protectsFromBackground("normal", false, false, false, true, true, false));
+        assertFalse(WindowLifecycle.protectsFromBackground("normal", false, false, false, false, false, true));
+    }
     @Test public void tickAndPauseTableKeepHiddenSeparateAndPriorityAheadOfScreen(){
         for(int bits=0;bits<16;bits++){
             boolean managed=(bits&1)!=0,restoring=(bits&2)!=0,recovering=(bits&4)!=0,visible=(bits&8)!=0;

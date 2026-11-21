@@ -14,7 +14,7 @@ import dev.local.sunwindowdemo.features.floatingwindow.ui.*
 /** Product navigation only; all window settings and behavior use the same implementation. */
 @Composable
 fun ModuleApp(controller: WindowController, page: Page, navigate: (Page) -> Unit, back: () -> Unit,
-              appPackage: String? = null, openIconApp: (String) -> Unit = {}) {
+              appPackage: String? = null, openIconApp: (String) -> Unit = {}, openBackgroundApp: (String) -> Unit = {}) {
     val root = page == Page.Home || page == Page.Window
     SettingsPage(title = if (root) "类原生小窗" else page.title, onBack = if (root) null else back) { bottomInset ->
         if (page == Page.Blocked) AppPickerScreen(controller, bottomInset = bottomInset)

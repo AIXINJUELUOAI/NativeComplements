@@ -23,12 +23,14 @@ fun HomeScreen(
     onGameMode: () -> Unit = {},
     onShade: () -> Unit = {},
     onAlive: (() -> Unit)? = null,
+    onBackground: (() -> Unit)? = null,
 ) {
     AdaptationNotice(onAbout)
     Text("版本 ${BuildConfig.VERSION_NAME}", Modifier.padding(start = 16.dp, bottom = 20.dp),
         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.outline)
     SettingsGroup {
         FeatureRow("小窗", "window", onWindow)
+        onBackground?.let { FeatureRow("后台管理", "apps", it) }
         FeatureRow("游戏模式", "game", onGameMode)
         FeatureRow("快捷建议", "spark", onSuggestions)
         FeatureRow("图标适配", "apps", onIcons)

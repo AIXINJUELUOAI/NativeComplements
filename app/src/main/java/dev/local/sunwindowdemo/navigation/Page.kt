@@ -7,4 +7,6 @@ enum class Page(val title: String) {
     About("关于"), Logs("诊断日志"), Licenses("开源许可"), Tools("开发者工具"), Diagnostics("小窗诊断与恢复"), IconDiagnostics("图标实验与诊断"),
     Harassment("骚扰拦截"),
     SuggestionApps("链接与分享口令"),
+    BackgroundWakeLocks("后台唤醒锁限制"),
+    Background("墓碑"), BackgroundApp("进程设置"),
 }

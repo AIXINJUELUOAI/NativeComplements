@@ -21,9 +21,21 @@ import java.util.concurrent.Executors
 internal fun gameModeHandle(context: Context, right: Boolean, open: () -> Unit): View {
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
     val frame = FrameLayout(context)
-    val bar = View(context).apply {
-        background = GradientDrawable().apply { setColor(0xb8ffffff.toInt()); cornerRadius = dp(3).toFloat() }
-        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    val bar = object : View(context) {
+        private val shape = GradientDrawable().apply { cornerRadius = dp(3).toFloat() }
+        init {
+            background = shape
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            updateColor(resources.configuration)
+        }
+        private fun updateColor(config: android.content.res.Configuration) {
+            val dark = config.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK == android.content.res.Configuration.UI_MODE_NIGHT_YES
+            shape.setColor((WindowPresentation.handleColor(dark) and 0x00ffffff) or 0xb8000000.toInt())
+        }
+        override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+            super.onConfigurationChanged(newConfig)
+            updateColor(newConfig)
+        }
     }
     frame.addView(bar, FrameLayout.LayoutParams(dp(5), dp(44), Gravity.CENTER_VERTICAL or if (right) Gravity.RIGHT else Gravity.LEFT))
     frame.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->

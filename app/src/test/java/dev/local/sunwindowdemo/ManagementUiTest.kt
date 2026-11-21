@@ -2,6 +2,8 @@ package dev.local.sunwindowdemo
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
@@ -13,10 +15,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import dev.local.sunwindowdemo.core.ui.ComplementsTheme
+import dev.local.sunwindowdemo.core.ui.SettingsPage
+import dev.local.sunwindowdemo.features.background.BackgroundAppActions
+import dev.local.sunwindowdemo.features.background.BackgroundList
+import dev.local.sunwindowdemo.features.background.BackgroundAppScreen
+import dev.local.sunwindowdemo.features.background.BackgroundPolicy
+import dev.local.sunwindowdemo.features.background.BackgroundStore
 import dev.local.sunwindowdemo.features.floatingwindow.ui.GestureScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.WindowScreen
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
@@ -31,6 +40,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
@@ -41,6 +51,97 @@ import java.io.File
 class ManagementUiTest {
     @get:Rule val compose = createRobolectricComposeRule()
     private lateinit var captureView: View
+
+    @Test fun backgroundListKeepsQuickModeAndAppDetailsSeparate() {
+        val context = compose.activity
+        val packages = Shadows.shadowOf(context.packageManager)
+        val pkg = "test.background.example"
+        val apps = listOf(LaunchableApp("com.tencent.mobileqq", "QQ"), LaunchableApp(pkg, "后台测试应用"))
+        apps.forEachIndexed { index, app ->
+            packages.installPackage(PackageInfo().apply {
+                packageName = app.packageName
+                applicationInfo = ApplicationInfo().apply { packageName = app.packageName; uid = 12000 + index }
+            })
+        }
+        BackgroundStore.mode(context, pkg, BackgroundPolicy.Mode.SYSTEM)
+        BackgroundStore.mode(context, apps.first().packageName, BackgroundPolicy.Mode.DEFAULT)
+        var details by mutableStateOf<String?>(null)
+        compose.setContent {
+            ComplementsTheme(dynamic = false) {
+                val selected = details
+                if (selected == null) BackgroundList(apps, true, 0.dp) { details = it }
+                else SettingsPage("后台测试应用", actions = { BackgroundAppActions(selected) }) {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+                        BackgroundAppScreen(selected)
+                    }
+                }
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("后台测试应用").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("后台测试应用的后台模式").performClick()
+        compose.onNodeWithText("严格").performClick()
+        compose.runOnIdle {
+            assertNull(details)
+            assertEquals(BackgroundPolicy.Mode.STRICT, BackgroundStore.settings(context).rule(pkg).mode())
+        }
+        compose.onNodeWithText("后台测试应用").performClick()
+        compose.runOnIdle { assertEquals(pkg, details) }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("进程操作").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("保活优先级").assertDoesNotExist()
+        compose.onNodeWithText("恢复默认").assertIsDisplayed()
+        compose.onNodeWithText("全部放行").assertDoesNotExist()
+        compose.onNodeWithContentDescription("批量设置进程").performClick()
+        compose.onNodeWithText("全部冻结").assertIsDisplayed()
+        compose.onNodeWithText("全部放行").performClick()
+        compose.runOnIdle {
+            assertEquals(BackgroundPolicy.Action.ALLOW, BackgroundStore.settings(context).rule(pkg).batch())
+        }
+        compose.onNodeWithText(pkg).performClick()
+        compose.onNodeWithText("低内存时裁切").assertDoesNotExist()
+        compose.onNode(hasText("冻结") and hasClickAction()).performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle {
+            val rule = BackgroundStore.settings(context).rule(pkg)
+            assertEquals("${rule.actions()}", BackgroundPolicy.Action.FREEZE, BackgroundPolicy.action(rule, pkg, pkg, pkg))
+            assertEquals(BackgroundPolicy.Action.ALLOW, rule.batch())
+        }
+        compose.onNodeWithText("恢复默认").performClick()
+        compose.runOnIdle {
+            val rule = BackgroundStore.settings(context).rule(pkg)
+            assertEquals(BackgroundPolicy.Mode.STRICT, rule.mode())
+            assertNull(rule.batch())
+            assertTrue(rule.actions().isEmpty())
+        }
+        compose.onNodeWithText("不进缓存").assertIsOff().performClick().assertIsOn()
+        compose.runOnIdle {
+            val rule = BackgroundStore.settings(context).rule(pkg)
+            assertEquals(BackgroundPolicy.Action.ALLOW, BackgroundPolicy.action(rule, pkg, pkg, pkg))
+        }
+        val child = "$pkg:worker"
+        compose.runOnIdle { BackgroundStore.process(context, pkg, child, BackgroundPolicy.Action.FREEZE) }
+        compose.onNodeWithText(child).performScrollTo().performClick()
+        compose.onNodeWithText("低内存时裁切").assertIsDisplayed()
+            .performSemanticsAction(SemanticsActions.OnClick)
+        compose.runOnIdle {
+            assertEquals(BackgroundPolicy.Action.RECLAIM, BackgroundStore.settings(context).rule(pkg).actions()[child])
+        }
+    }
+
+    @Test fun backgroundDouyinPlaybackToggleCanRestoreProtection() {
+        val context = compose.activity
+        val pkg = "com.ss.android.ugc.aweme"
+        Shadows.shadowOf(context.packageManager).installPackage(PackageInfo().apply {
+            packageName = pkg
+            applicationInfo = ApplicationInfo().apply { packageName = pkg; uid = 12005 }
+        })
+        compose.setContent {
+            ComplementsTheme(dynamic = false) {
+                Column { BackgroundAppScreen(pkg) }
+            }
+        }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("后台播放保护").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("后台播放保护").assertIsOff().performClick().assertIsOn()
+        compose.runOnIdle { assertTrue(BackgroundStore.settings(context).rule(pkg).playbackProtected()) }
+    }
 
     private fun screenshot(name: String) {
         compose.waitForIdle()
