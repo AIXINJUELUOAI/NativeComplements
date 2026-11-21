@@ -27,7 +27,8 @@ def text(relative: str) -> str:
     if path.is_file():
         return path.read_text(encoding="utf-8", errors="replace")
     for prefix in ("frameworks_base", "frameworks_libs_systemui", "Launcher3",
-                   "packages_services/Telecomm", "packages_apps_ThemePicker"):
+                   "packages_services/Telecomm", "packages_apps_ThemePicker",
+                   "frameworks_opt_telephony", "packages_services_Telephony"):
         if relative.startswith(prefix + "/"):
             repo = SOURCE / prefix
             inner = relative[len(prefix) + 1:]
@@ -71,6 +72,8 @@ def repo_head(key: str) -> str:
         "frameworks_libs_systemui": "frameworks_libs_systemui",
         "launcher3": "Launcher3",
         "telecomm": "packages_services/Telecomm",
+        "telephony": "frameworks_opt_telephony",
+        "telephony_app": "packages_services_Telephony",
         "themepicker": "packages_apps_ThemePicker",
     }.get(key, key))
 
@@ -177,6 +180,9 @@ def main() -> None:
         r"val legacyUseSplitShade: Flow<Boolean>", "LOS shade flow")
     has(f"{ui}/statusbar/policy/SplitShadeStateControllerImpl.kt",
         r"override fun shouldUseSplitNotificationShade\(", "LOS split-shade controller")
+    has(f"{ui}/shade/NotificationPanelViewController.java",
+        r"private final SplitShadeStateController mSplitShadeStateController",
+        "LOS panel split-shade interface field")
     has(f"{ui}/navigationbar/views/NavigationBar.java",
         r"private WindowManager.LayoutParams getBarLayoutParamsForRotation\(", "LOS navbar layout")
     has(f"{ui}/navigationbar/views/NavigationBar.java", r"private int mNavBarMode", "LOS navbar mode")
@@ -213,6 +219,10 @@ def main() -> None:
         "LOS rotation suggestion state")
     has("frameworks_base/packages/SystemUI/shared/src/com/android/systemui/shared/rotation/RotationButtonController.java",
         r"mCancelPendingRotationProposal", "LOS rotation cancellation")
+    has("frameworks_base/packages/SystemUI/shared/src/com/android/systemui/shared/rotation/RotationButtonController.java",
+        r"private RotationButton mRotationButton", "LOS rotation button interface")
+    has("frameworks_base/packages/SystemUI/shared/src/com/android/systemui/shared/rotation/RotationButton.java",
+        r"default View getCurrentView\(\)", "LOS rotation current view")
     has(f"{ui}/qs/tileimpl/QSFactoryImpl.java",
         r"public final QSTile createTile\(String tileSpec\)", "LOS QS createTile")
     has(f"{ui}/qs/tileimpl/QSTileImpl.java",
@@ -234,6 +244,284 @@ def main() -> None:
     has("frameworks_base/services/core/java/com/android/server/am/ActivityManagerService.java",
         r"void forceStopPackage\(final String packageName,", "LOS force stop")
     has(f"{wm}/ActivityRecord.java", r"boolean isFocusedActivityOnDisplay\(\)", "LOS focused activity")
+
+    # Additional post-integration ABI shapes: Lifecycle/Doze/Compose shade/desktop sleep.
+    has("Launcher3/src/com/android/launcher3/Launcher.java",
+        r"public LauncherDragController getDragController\(\)", "LOS covariant Launcher drag controller")
+    has("Launcher3/src/com/android/launcher3/dragndrop/LauncherDragController.java",
+        r"class LauncherDragController extends DragController", "LOS LauncherDragController base")
+    has(f"{ui}/doze/DozeMachine.java", r"private final DozeHost mDozeHost;", "LOS DozeMachine host interface")
+    has(f"{ui}/doze/DozeMachine.java", r"private void transitionTo\(State requestedState, int pulseReason\)",
+        "LOS DozeMachine transition")
+    has(f"{ui}/doze/DozeMachine.java", r"public void requestState\(State requestedState\)",
+        "LOS DozeMachine request")
+    for state in ("DOZE_AOD", "DOZE_AOD_PAUSING", "DOZE_AOD_PAUSED"):
+        has(f"{ui}/doze/DozeMachine.java", rf"\b{state}\b", f"LOS doze state {state}")
+    has(f"{ui}/doze/DozeService.java", r"private DozeMachine mDozeMachine;", "LOS DozeService machine")
+    has(f"{ui}/doze/DozeService.java", r"public void onCreate\(\)", "LOS DozeService create")
+    has(f"{ui}/doze/DozeService.java", r"public void onDestroy\(\)", "LOS DozeService destroy")
+    has(f"{ui}/doze/DozeTriggers.java", r"private final DozeSensors mDozeSensors;", "LOS DozeTriggers sensors")
+    has(f"{ui}/statusbar/phone/DozeServiceHost.java", r"private boolean mAlwaysOnSuppressed;",
+        "LOS DozeServiceHost suppressed field")
+    has(f"{ui}/statusbar/phone/DozeServiceHost.java", r"private final BatteryController mBatteryController;",
+        "LOS DozeServiceHost battery field")
+    has(f"{ui}/doze/DozeSensors.java", r"private final ProximitySensor mProximitySensor;",
+        "LOS DozeSensors proximity")
+    has(f"{ui}/util/sensors/ProximitySensorImpl.java", r"protected boolean mPaused;", "LOS proximity paused")
+    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java", r"private ViewGroup mWindowRootView;",
+        "LOS shade root ViewGroup")
+    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java",
+        r"private Consumer<Integer> mScrimsVisibilityListener;", "LOS scrims Consumer")
+    has(f"{ui}/shade/NotificationShadeWindowState.kt", r"@JvmField var keyguardShowing", "LOS shade state fields")
+    has(f"{ui}/keyguard/shared/model/TransitionStep.kt", r"data class TransitionStep", "LOS transition step")
+    has(f"{ui}/statusbar/LightRevealScrim.kt", r"var revealAmount: Float", "LOS reveal amount")
+    has(f"{ui}/statusbar/phone/ScreenOffAnimationController.kt", r"private val animations: List<ScreenOffAnimation>",
+        "LOS screen-off animations")
+    has(f"{ui}/statusbar/phone/UnlockedScreenOffAnimationController.kt",
+        r"private var lightRevealAnimationPlaying = false", "LOS unlocked animation flag")
+    has(f"{ui}/statusbar/phone/UnlockedScreenOffAnimationController.kt",
+        r"private var decidedToAnimateGoingToSleep: Boolean\? = null", "LOS unlocked decision")
+    has(f"{ui}/biometrics/AuthRippleView.kt", r"override fun onDraw\(canvas: Canvas\)", "LOS auth ripple draw")
+    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
+        r"@ShadeDisplayAware configurationInteractor: ConfigurationInteractor", "LOS wallpaper repo interface")
+    has(f"{ui}/wallpapers/domain/interactor/WallpaperInteractor.kt",
+        r"val wallpaperRepository: WallpaperRepository", "LOS wallpaper interactor interface")
+    has("frameworks_base/packages/SystemUI/pods/util/settings/src/api/UserSettingsProxy.kt",
+        r"public fun getIntForUser\(name: String, default: Int, userHandle: Int\): Int",
+        "LOS settings name-first")
+    has(f"{ui}/shade/data/repository/ShadeConfigRepository.kt",
+        r"val legacyUseSplitShade: Flow<Boolean>", "LOS shade getter flow")
+    has(f"{ui}/common/ui/data/repository/ConfigurationRepository.kt",
+        r"override val onConfigurationChange: Flow<Unit>", "LOS config change flow")
+
+    # Desktop double-tap sleep and the exact launcher child geometry.
+    has("Launcher3/src/com/android/launcher3/touch/WorkspaceTouchListener.java",
+        r"private final Launcher mLauncher;", "LOS desktop launcher field")
+    has("Launcher3/src/com/android/launcher3/touch/WorkspaceTouchListener.java",
+        r"private final Workspace<\?> mWorkspace;", "LOS desktop workspace field")
+    has("Launcher3/src/com/android/launcher3/touch/WorkspaceTouchListener.java",
+        r"public boolean onTouch\(View view, MotionEvent ev\)", "LOS desktop touch entry")
+    has("Launcher3/src/com/android/launcher3/PagedView.java", r"public boolean isPageInTransition\(\)",
+        "LOS paged transition")
+    has("Launcher3/src/com/android/launcher3/PagedView.java", r"public boolean isHandlingTouch\(\)",
+        "LOS paged handling")
+    has("Launcher3/src/com/android/launcher3/PagedView.java", r"public View getPageAt\(int index\)",
+        "LOS paged page access")
+    has("Launcher3/src/com/android/launcher3/CellLayout.java", r"public void pointToCellExact\(int x, int y, int\[\] result\)",
+        "LOS cell mapping")
+    has("Launcher3/src/com/android/launcher3/CellLayout.java", r"public boolean isOccupied\(int x, int y\)",
+        "LOS cell occupancy")
+    has("Launcher3/src/com/android/launcher3/CellLayout.java",
+        r"public void cellToRect\(int cellX, int cellY, int cellHSpan, int cellVSpan, Rect resultRect\)",
+        "LOS cell geometry")
+    has("Launcher3/src/com/android/launcher3/Workspace.java", r"private boolean mIsSwitchingState = false;",
+        "LOS workspace switch flag")
+    has("Launcher3/src/com/android/launcher3/Workspace.java", r"private boolean mOverlayShown = false;",
+        "LOS workspace overlay flag")
+    has("Launcher3/src/com/android/launcher3/AbstractFloatingView.java",
+        r"public static AbstractFloatingView getTopOpenView\(ActivityContext activity\)",
+        "LOS floating view probe")
+    has("Launcher3/src/com/android/launcher3/Launcher.java",
+        r"public LauncherDragController getDragController\(\)", "LOS desktop drag owner")
+    has("Launcher3/src/com/android/launcher3/dragndrop/DragController.java",
+        r"public boolean isDragging\(\)", "LOS drag state")
+
+    # Icon animation probe and package refresh.
+    has("Launcher3/src/com/android/launcher3/views/FloatingIconView.java",
+        r"private IconLoadResult mIconLoadResult;", "LOS floating icon result")
+    has("Launcher3/src/com/android/launcher3/views/FloatingIconView.java",
+        r"private ClipIconView mClipIconView;", "LOS floating clip view")
+    has("Launcher3/src/com/android/launcher3/views/FloatingIconView.java",
+        r"private void setIcon\(@Nullable Drawable drawable, @Nullable Drawable badge,", "LOS floating setIcon")
+    has("Launcher3/src/com/android/launcher3/views/ClipIconView.java",
+        r"private @Nullable Drawable mForeground;", "LOS clip foreground")
+    has("Launcher3/src/com/android/launcher3/views/ClipIconView.java",
+        r"private @Nullable Drawable mBackground;", "LOS clip background")
+    has("Launcher3/src/com/android/launcher3/views/FloatingIconView.java",
+        r"final ItemInfo itemInfo;", "LOS icon load item info")
+    has("Launcher3/src/com/android/launcher3/views/FloatingIconView.java",
+        r"final boolean isThemed;", "LOS icon load theme flag")
+    has("Launcher3/src/com/android/launcher3/LauncherModel.kt", r"fun newModelCallbacks\(\)",
+        "LOS model callbacks")
+    has("Launcher3/src/com/android/launcher3/model/ModelLauncherCallbacks.kt",
+        r"override fun onPackageChanged\(packageName: String, user: UserHandle\)",
+        "LOS package changed callback")
+
+    # Rotation suggestion uses the RotationButton interface, not a narrowed key view.
+    has("frameworks_base/packages/SystemUI/shared/src/com/android/systemui/shared/rotation/RotationButton.java",
+        r"default boolean hide\(\)", "LOS rotation hide")
+    has("frameworks_base/packages/SystemUI/shared/src/com/android/systemui/shared/rotation/RotationButtonController.java",
+        r"private final Handler mUiHandler;", "LOS rotation handler")
+    has("frameworks_base/packages/SystemUI/shared/src/com/android/systemui/shared/rotation/RotationButtonController.java",
+        r"private boolean mPendingRotationSuggestion;", "LOS rotation pending")
+
+    # Undim suggestion and notification listener.
+    power = "frameworks_base/services/core/java/com/android/server/power"
+    has(f"{power}/PowerManagerService.java",
+        r"private boolean userActivityNoUpdateLocked\(final PowerGroup powerGroup, long eventTime,",
+        "LOS power activity entry")
+    has(f"{power}/PowerManagerService.java", r"private final Context mContext;", "LOS power context")
+    has(f"{power}/PowerGroup.java", r"int getWakefulnessLocked\(\)", "LOS power group wakefulness")
+    has(f"{power}/PowerGroup.java", r"int getGroupId\(\)", "LOS power group id")
+    has(f"{power}/PowerGroup.java", r"public boolean isPolicyDimLocked\(\)", "LOS power group dim")
+    has(f"{ui}/statusbar/NotificationListener.java",
+        r"public void onNotificationPosted\(final StatusBarNotification sbn,", "LOS notification posted")
+    has(f"{ui}/statusbar/NotificationListener.java",
+        r"public void onNotificationRemoved\(StatusBarNotification sbn, RankingMap rankingMap,",
+        "LOS notification removed")
+
+    # Root back and linked-window server entry points.
+    has(f"{wm}/ActivityClientController.java",
+        r"public void onBackPressed\(IBinder token, IRequestFinishCallback callback\)",
+        "LOS back press entry")
+    has(f"{wm}/ActivityClientController.java",
+        r"public boolean finishActivity\(IBinder token, int resultCode, Intent resultData,",
+        "LOS finish activity entry")
+    has(f"{wm}/WindowState.java", r"OnBackInvokedCallbackInfo getOnBackInvokedCallbackInfo\(\)",
+        "LOS back callback info")
+    has("frameworks_base/core/java/android/window/OnBackInvokedCallbackInfo.java",
+        r"public final class OnBackInvokedCallbackInfo", "LOS back callback class")
+    has(f"{wm}/ActivityTaskManagerService.java", r"private RecentTasks mRecentTasks;", "LOS recent tasks field")
+    has(f"{wm}/RecentTasks.java", r"private boolean isRecentTasksLoaded\(int userId\)", "LOS recent loaded flag")
+    has(f"{wm}/ActivityRecord.java", r"final ComponentName mActivityComponent;", "LOS activity component")
+    has("frameworks_base/core/java/android/view/Choreographer.java",
+        r"public static Choreographer getSfInstance\(\)", "LOS SF choreographer")
+    has("frameworks_base/core/java/android/view/Choreographer.java",
+        r"public void postVsyncCallback\(@NonNull VsyncCallback callback\)", "LOS vsync callback")
+    has("frameworks_base/core/java/android/view/Choreographer.java",
+        r"public long getFrameTimeNanos\(\)", "LOS frame time")
+    has("frameworks_base/core/java/android/view/Choreographer.java",
+        r"public FrameTimeline getPreferredFrameTimeline\(\)", "LOS frame timeline")
+    has(f"{wm}/Task.java", r"mLastSurfaceSize", "LOS task surface size")
+    has(f"{wm}/Task.java", r"mLastTimeMoved", "LOS task move time")
+    has(f"{wm}/WindowState.java", r"mLastReportedConfiguration", "LOS window reported config")
+    has(f"{wm}/WindowState.java", r"getMergedConfiguration\(", "LOS merged configuration")
+    has(f"{wm}/DisplayPolicy.java", r"mTopFullscreenOpaqueWindowState", "LOS top fullscreen")
+    has(f"{wm}/WindowManagerService.java", r"mHidingNonSystemOverlayWindows", "LOS overlay hide list")
+    has(f"{wm}/WindowManagerService.java",
+        r"public int addWindow\(Session session, IWindow client, LayoutParams attrs,", "LOS addWindow int")
+    has("frameworks_base/apex/jobscheduler/framework/java/android/os/PowerExemptionManager.java",
+        r"public void addToTemporaryAllowList\(", "LOS temporary allow list")
+    has("frameworks_base/apex/jobscheduler/framework/java/android/os/PowerExemptionManager.java",
+        r"REASON_OTHER", "LOS allow-list reason")
+    has("frameworks_base/core/java/android/view/ViewRootImpl.java",
+        r"public BackgroundBlurDrawable createBackgroundBlurDrawable\(\)", "LOS blur drawable")
+    has("frameworks_base/core/java/com/android/internal/graphics/drawable/BackgroundBlurDrawable.java",
+        r"public void setBlurRadius\(int blurRadius\)", "LOS blur radius")
+    has("frameworks_base/core/java/com/android/internal/graphics/drawable/BackgroundBlurDrawable.java",
+        r"public void setCornerRadius\(float cornerRadius\)", "LOS blur corner")
+    has("frameworks_base/core/java/com/android/internal/graphics/drawable/BackgroundBlurDrawable.java",
+        r"public void setColor\(@ColorInt int color\)", "LOS blur color")
+    has("frameworks_base/core/java/android/view/WindowManager.java",
+        r"public void setTrustedOverlay\(\)", "LOS trusted overlay")
+
+    # Alive's remaining sleep/content/ambient source contracts.
+    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java",
+        r"private void applyWindowLayoutParams\(\)", "LOS shade layout apply")
+    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java",
+        r"private void apply\(NotificationShadeWindowState state\)", "LOS shade state apply")
+    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
+        r"private boolean mShowing;", "LOS keyguard showing")
+    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
+        r"private boolean mOccluded;", "LOS keyguard occluded")
+    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
+        r"private boolean mKeyguardGoingAway;", "LOS keyguard going away")
+    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
+        r"private boolean mKeyguardFadingAway;", "LOS keyguard fading")
+    has(f"{ui}/keyguard/KeyguardService.java",
+        r"public void onStartedGoingToSleep\(@PowerManager\.GoToSleepReason int pmSleepReason\)",
+        "LOS keyguard sleep")
+    has(f"{ui}/keyguard/KeyguardService.java",
+        r"public void onStartedWakingUp\(", "LOS keyguard wake")
+    has(f"{ui}/statusbar/phone/ScreenOffAnimationController.kt",
+        r"override fun onStartedGoingToSleep\(\)", "LOS screen off entry")
+    has(f"{ui}/statusbar/LightRevealScrim.kt", r"var revealEffect: LightRevealEffect = LiftReveal",
+        "LOS reveal effect")
+    has(f"{ui}/statusbar/LightRevealScrim.kt", r"override fun onDraw\(canvas: Canvas\)", "LOS scrim draw")
+    has("frameworks_base/packages/SystemUI/src/com/android/keyguard/ClockEventController.kt",
+        r"private var smallClockFrame: ViewGroup\? = null", "LOS clock frame")
+    has("frameworks_base/packages/SystemUI/src/com/android/keyguard/ClockEventController.kt",
+        r"private fun handleDoze\(doze: Float\)", "LOS clock doze")
+    has(f"{ui}/statusbar/notification/stack/NotificationStackScrollLayoutController.java",
+        r"private NotificationStackScrollLayout mView;", "LOS notification stack view")
+    has(f"{ui}/statusbar/notification/stack/NotificationStackScrollLayoutController.java",
+        r"private void updateAlpha\(\)", "LOS notification alpha")
+    has(f"{ui}/statusbar/notification/stack/NotificationStackScrollLayoutController.java",
+        r"private float mMaxAlphaForKeyguard = 1.0f;", "LOS notification keyguard alpha")
+    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
+        r"override val lockscreenWallpaperInfo: StateFlow<WallpaperInfo\?>", "LOS lock wallpaper")
+    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
+        r"override val wallpaperInfo: StateFlow<WallpaperInfo\?>", "LOS home wallpaper")
+    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
+        r"override val wallpaperSupportsAmbientMode: Flow<Boolean>", "LOS ambient wallpaper")
+    has(f"{ui}/user/data/repository/UserRepositoryImpl.kt",
+        r"override val selectedUser: StateFlow<SelectedUserModel>", "LOS selected user")
+    has("frameworks_base/packages/SystemUI/pods/user/data/src/api/model/SelectedUserModel.kt",
+        r"public data class SelectedUserModel", "LOS selected user model")
+    has("frameworks_base/packages/SystemUI/pods/user/data/src/api/model/SelectedUserModel.kt",
+        r"SELECTION_COMPLETE", "LOS selection complete")
+    has("frameworks_base/services/core/java/com/android/server/wallpaper/WallpaperData.java",
+        r"final int userId;", "LOS wallpaper user")
+    has("frameworks_base/services/core/java/com/android/server/wallpaper/WallpaperManagerService.java",
+        r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description, boolean force,\s*boolean fromUser, WallpaperData wallpaper, IRemoteCallback reply\)",
+        "LOS ambient bind exact")
+
+    # Signal stack and telephony callback classes.
+    has(f"{ui}/statusbar/pipeline/shared/ui/composable/StackedMobileIcon.kt",
+        r"fun StackedMobileIcon\(viewModel: StackedMobileIconViewModel, modifier: Modifier = Modifier\)",
+        "LOS stacked icon root")
+    has(f"{ui}/statusbar/pipeline/shared/ui/composable/StackedMobileIcon.kt",
+        r"private fun StackedMobileIcon\(\s*viewModel: DualSim,\s*color: Color,\s*contentDescription: String\?,",
+        "LOS stacked icon render")
+    has(f"{ui}/statusbar/pipeline/mobile/ui/model/DualSim.kt",
+        r"val primary: SignalIconModel\.CellularTypeIconModel\.Cellular", "LOS dual primary")
+    has(f"{ui}/statusbar/pipeline/mobile/ui/model/DualSim.kt",
+        r"val secondary: SignalIconModel\.CellularTypeIconModel\.Cellular", "LOS dual secondary")
+    has(f"{ui}/statusbar/pipeline/mobile/ui/model/DualSim.kt", r"fun tryParseDualSim\(",
+        "LOS dual parser")
+    has(f"{ui}/statusbar/pipeline/mobile/domain/model/SignalIconModel.kt",
+        r"data class Cellular\(", "LOS cellular model")
+    has(f"{ui}/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl.kt",
+        r"override fun onSignalStrengthsChanged\(signalStrength: SignalStrength\)",
+        "LOS signal callback")
+    has(f"{ui}/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl.kt",
+        r"override fun onServiceStateChanged\(serviceState: ServiceState\)",
+        "LOS service callback")
+    has(f"{ui}/statusbar/pipeline/mobile/data/repository/prod/MobileConnectionRepositoryImpl.kt",
+        r"override fun onCarrierRoamingNtnModeChanged\(active: Boolean\)",
+        "LOS NTN callback")
+
+    # SMS tracker/handler members and telecom builder coverage.
+    sms = "frameworks_opt_telephony/src/java/com/android/internal/telephony"
+    telecom = "packages_services/Telecomm/src/com/android/server/telecom"
+    has(f"{sms}/InboundSmsHandler.java", r"public final class SmsBroadcastReceiver extends BroadcastReceiver",
+        "LOS SMS receiver")
+    has(f"{sms}/InboundSmsHandler.java", r"private class DeliveringState extends State", "LOS SMS state")
+    has(f"{sms}/InboundSmsTracker.java", r"public byte\[\] getPdu\(\)", "LOS tracker PDU")
+    has(f"{sms}/InboundSmsTracker.java", r"public int getSubId\(\)", "LOS tracker sub id")
+    has(f"{sms}/InboundSmsTracker.java", r"public int getMessageCount\(\)", "LOS tracker count")
+    has(f"{sms}/InboundSmsTracker.java", r"public String\[\] getDeleteWhereArgs\(\)", "LOS tracker delete args")
+    has(f"{sms}/BlockChecker.java",
+        r"public static boolean isBlocked\(Context context, String phoneNumber, Bundle extras\)",
+        "LOS block checker")
+    has(f"{telecom}/Call.java", r"public boolean isIncoming\(\)", "LOS call incoming")
+    has(f"{telecom}/Call.java", r"public boolean isSelfManaged\(\)", "LOS call self managed")
+    has(f"{telecom}/Call.java", r"public boolean isEmergencyCall\(\)", "LOS call emergency")
+    has(f"{telecom}/Call.java", r"public boolean isInECBM\(\)", "LOS call ecbm")
+    has(f"{telecom}/Call.java", r"public Uri getHandle\(\)", "LOS call handle")
+    has(f"{telecom}/Call.java", r"public int getState\(\)", "LOS call state")
+    has(f"{telecom}/Call.java", r"public UserHandle getAssociatedUser\(\)", "LOS call user")
+    has(f"{telecom}/Call.java", r"public int getHandlePresentation\(\)", "LOS call presentation")
+    has(f"{telecom}/callfiltering/CallFilteringResult.java",
+        r"public Builder setCallScreeningResponse\(\s*ParcelableCallResponse response, boolean isFromSystemDialer\)",
+        "LOS screening response")
+    has(f"{telecom}/callfiltering/CallFilteringResult.java",
+        r"public Builder setShouldAllowCall\(boolean shouldAllowCall\)", "LOS allow setter")
+    has(f"{telecom}/callfiltering/CallFilteringResult.java",
+        r"public Builder setShouldReject\(boolean shouldReject\)", "LOS reject setter")
+    has(f"{telecom}/PhoneAccountRegistrar.java",
+        r"public int getSubscriptionIdForPhoneAccount\(PhoneAccountHandle accountHandle\)",
+        "LOS account subscription")
 
     # Launcher3/iconloader property migrations.
     launcher = "Launcher3"
@@ -312,6 +600,28 @@ def main() -> None:
         r"@JvmField var INSTANCE", "LOS LauncherAppState.INSTANCE")
     has(f"{lib}/cache/BaseIconCache.kt", r"@JvmField val workerHandler", "LOS BaseIconCache.workerHandler")
 
+    # SMS blocking stays inside the source-verified phone-stack ingress path.
+    sms = "frameworks_opt_telephony/src/java/com/android/internal/telephony"
+    has("packages_services_Telephony/AndroidManifest.xml", r'package="com.android\.phone"',
+        "LOS phone package identity")
+    has(f"{sms}/InboundSmsHandler.java", r"protected final Context mContext;", "LOS inbound context")
+    has(f"{sms}/InboundSmsHandler.java", r"private final ContentResolver mResolver;", "LOS inbound resolver")
+    has(f"{sms}/InboundSmsHandler.java", r"protected static final Uri sRawUriPermanentDelete",
+        "LOS permanent delete URI")
+    has(f"{sms}/InboundSmsHandler.java", r"private boolean processMessagePart\(InboundSmsTracker tracker\)",
+        "LOS SMS part entry")
+    has(f"{sms}/InboundSmsHandler.java",
+        r"private boolean filterSms\(byte\[\]\[\] pdus, int destPort,\s*InboundSmsTracker tracker,"
+        r"\s*SmsBroadcastReceiver resultReceiver, boolean userUnlocked,\s*boolean block\)",
+        "LOS SMS filter shape")
+    has(f"{sms}/InboundSmsHandler.java",
+        r"private void deleteFromRawTable\(String deleteWhere, String\[\] deleteWhereArgs,\s*int deleteType\)",
+        "LOS SMS delete shape")
+    has(f"{sms}/InboundSmsTracker.java", r"public String getDisplayAddress\(\)", "LOS tracker display address")
+    has(f"{sms}/InboundSmsTracker.java", r"public String getDeleteWhere\(\)", "LOS tracker delete where")
+    has(f"{sms}/BlockChecker.java", r"public static int getBlockStatus\(Context context, String phoneNumber, Bundle extras\)",
+        "LOS block status")
+
     # Telecom bridge.
     telecom = "packages_services/Telecomm/src/com/android/server/telecom"
     has(f"{telecom}/CallsManager.java",
@@ -326,7 +636,7 @@ def main() -> None:
         r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description", "LOS ambient bind")
 
     print("PASS: LineageOS 24.0 source contract "
-          "(framework/window, SystemUI, Launcher3/iconloader, Telecom, wallpaper); "
+          "(framework/window, SystemUI, Launcher3/iconloader, Telecom, SMS/telephony, wallpaper); "
           "static source only, no device behavior implied")
 
 

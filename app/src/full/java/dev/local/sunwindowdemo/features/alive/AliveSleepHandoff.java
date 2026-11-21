@@ -155,8 +155,11 @@ public final class AliveSleepHandoff {
     private static final class Host {
         final Handler main=new Handler(Looper.getMainLooper());
         final Selection selection;final Consumer<String> log;
-        final Field root,params,state,keyguard,showing,occluded,going,fading,bouncer,depth,depthOwner,wallpapers,repository;
+        final Field root,params,state,keyguard,showing,occluded,going,fading,bouncer,depth,wallpapers,repository;
         final Field stateShowing,stateOccluded,stateBouncer,stateGoing;
+        volatile Field depthOwner,dynamicDepthOwner;
+        volatile Class<?> dynamicDepthType;
+        Class<?> blur;
         final Method layout,apply,draw,sleep,wake,sleepAnimations,startAnimation,shouldPlay,lazyGet;
         final Field nativeWindow,nativeScrim,nativePlaying,nativeAnimator,nativeDecision,animations,revealAmount;
         final ThreadLocal<Object> sleepScope=new ThreadLocal<>(),admissionScope=new ThreadLocal<>();
@@ -230,7 +233,8 @@ public final class AliveSleepHandoff {
             this.selection=selection;this.log=log;
             Class<?> owner=type(loader,"com.android.systemui.shade.NotificationShadeWindowControllerImpl");
             Class<?> windowState=type(loader,"com.android.systemui.shade.NotificationShadeWindowState");
-            root=field(owner,"mWindowRootView",type(loader,"com.android.systemui.scene.ui.view.WindowRootView"));
+            // LineageOS 24.0 declares ViewGroup; PixelOS narrows the field to WindowRootView.
+            root=assignable(owner,"mWindowRootView",View.class);
             params=field(owner,"mLpChanged",WindowManager.LayoutParams.class);
             state=field(owner,"mCurrentState",windowState);
             keyguard=field(owner,"mKeyguardStateController",type(loader,"com.android.systemui.statusbar.policy.KeyguardStateController"));
@@ -241,15 +245,29 @@ public final class AliveSleepHandoff {
             bouncer=optionalField(keyguardImpl,"mPrimaryBouncerShowing",boolean.class);
             stateShowing=field(windowState,"keyguardShowing",boolean.class);stateOccluded=field(windowState,"keyguardOccluded",boolean.class);
             stateBouncer=field(windowState,"bouncerShowing",boolean.class);stateGoing=field(windowState,"keyguardGoingAway",boolean.class);
-            Class<?> blur=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
-            depth=field(owner,"mScrimsVisibilityListener",type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$1"));
+            blur=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
+            // AOSP/LineageOS declares Consumer; some PixelOS builds narrow it to a lambda class.
+            depth=assignable(owner,"mScrimsVisibilityListener",java.util.function.Consumer.class);
             Class<?> interactor=type(loader,"com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor");
             wallpapers=field(blur,"wallpaperInteractor",interactor);
-            repository=field(interactor,"wallpaperRepository",type(loader,"com.android.systemui.wallpapers.data.repository.WallpaperRepositoryImpl"));
+            // LineageOS 24.0 declares the interface type; PixelOS narrows it to the implementation.
+            repository=assignable(interactor,"wallpaperRepository",
+                type(loader,"com.android.systemui.wallpapers.data.repository.WallpaperRepository"));
             layout=owner.getDeclaredMethod("applyWindowLayoutParams");apply=owner.getDeclaredMethod("apply",windowState);
             draw=type(loader,"com.android.systemui.statusbar.LightRevealScrim").getDeclaredMethod("onDraw",Canvas.class);
             revealAmount=field(draw.getDeclaringClass(),"revealAmount",float.class);
-            Class<?> service=type(loader,"com.android.systemui.keyguard.KeyguardService$2");
+            // Anonymous-class numbering differs between PixelOS and LineageOS/R8 builds.
+            // Discover the IKeyguardService.Stub implementation by its two verified methods.
+            Class<?> service=null;
+            for(int index=1;index<=32&&service==null;index++){
+                try{
+                    Class<?> candidate=type(loader,"com.android.systemui.keyguard.KeyguardService$"+index);
+                    Method going=candidate.getDeclaredMethod("onStartedGoingToSleep",int.class);
+                    Method waking=candidate.getDeclaredMethod("onStartedWakingUp",int.class,boolean.class);
+                    if(going.getReturnType()==void.class&&waking.getReturnType()==void.class)service=candidate;
+                }catch(ClassNotFoundException|NoSuchMethodException absent){}
+            }
+            if(service==null)throw new NoSuchMethodException("KeyguardService binder methods");
             sleep=service.getDeclaredMethod("onStartedGoingToSleep",int.class);wake=service.getDeclaredMethod("onStartedWakingUp",int.class,boolean.class);
             Class<?> controller=type(loader,"com.android.systemui.statusbar.phone.ScreenOffAnimationController");
             Class<?> unlocked=type(loader,"com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController");
@@ -266,12 +284,26 @@ public final class AliveSleepHandoff {
             for(Method method:new Method[]{layout,apply,draw,sleep,wake,sleepAnimations}){method.setAccessible(true);if(method.getReturnType()!=void.class)throw new NoSuchMethodException("handoff ABI");}
             for(Method method:new Method[]{startAnimation,shouldPlay}){method.setAccessible(true);if(method.getReturnType()!=boolean.class)throw new NoSuchMethodException("admission ABI");}
             // DepthAnimation listener is exact to this native window; no global singleton guessed from a different display.
-            depthOwner=field(depth.getType(),"this$0",blur);
+            // The field may be Consumer (LineageOS) or a narrowed lambda class (PixelOS). Resolve the
+            // captured controller from the actual instance class at capture time.
+            try{depthOwner=field(depth.getType(),"this$0",blur);}
+            catch(ReflectiveOperationException interfaceShape){depthOwner=null;}
         }
         Object repo(Object owner)throws ReflectiveOperationException {
             Object listener=depth.get(owner);if(listener==null)return null;
-            Object blur=depthOwner.get(listener);
-            return repository.get(wallpapers.get(blur));
+            Field ownerField=depthOwner;
+            if(ownerField==null){
+                Class<?> type=listener.getClass();
+                if(type!=dynamicDepthType){
+                    dynamicDepthType=type;
+                    try{dynamicDepthOwner=field(type,"this$0",blur);}
+                    catch(ReflectiveOperationException unknown){dynamicDepthOwner=null;}
+                }
+                ownerField=dynamicDepthOwner;
+            }
+            if(ownerField==null)return null;
+            Object ownerBlur=ownerField.get(listener);
+            return ownerBlur==null?null:repository.get(wallpapers.get(ownerBlur));
         }
         void captureWindow(Object owner)throws IllegalAccessException {
             View candidate=(View)root.get(owner);
@@ -478,6 +510,11 @@ public final class AliveSleepHandoff {
     private static Class<?> type(ClassLoader loader,String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}
     private static Field field(Class<?> owner,String name,Class<?> type)throws ReflectiveOperationException {
         Field field=owner.getDeclaredField(name);field.setAccessible(true);if(field.getType()!=type)throw new NoSuchFieldException(name);return field;
+    }
+    /** Accepts a concrete field type that is assignable to the expected interface/superclass. */
+    private static Field assignable(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {
+        Field field=owner.getDeclaredField(name);field.setAccessible(true);
+        if(!expected.isAssignableFrom(field.getType()))throw new NoSuchFieldException(name);return field;
     }
     /** Absent on newer SystemUI (null); a present member must still have the exact type. */
     static Field optionalField(Class<?> owner,String name,Class<?> type)throws ReflectiveOperationException {

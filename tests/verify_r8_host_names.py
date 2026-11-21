@@ -24,7 +24,9 @@ REQUIRED = {
         "draw", "dispatchDraw", "callApplicationOnCreate"},
     (PREFIX + "features/navbar/NavbarTaskbarHost;", "providerSetter"): {"setProviderInsets"},
     (PREFIX + "BackBridge;", "installEdgeTouchAdmission"): {"kotlin.Unit", "com.android.systemui.shared.system.InputMonitorCompat", "inputMonitorCompat", "mInputMonitor", "pilferPointers"},
-    (PREFIX + "features/shade/ComposeShadeLayout;", "resolve"): {"kotlin.coroutines.Continuation", "com.android.systemui.shade.data.repository.ShadeConfigRepository"},
+    (PREFIX + "features/shade/ComposeShadeLayout;", "resolve"): {"com.android.systemui.shade.data.repository.ShadeConfigRepository",
+        "getLegacyUseSplitShade"},
+    (PREFIX + "features/shade/ComposeShadeLayout;", "emitter"): {"kotlin.coroutines.Continuation", "emit"},
     (PREFIX + "features/shade/MobileSignalBinder;", "install"): {"com.android.systemui.statusbar.pipeline.mobile.ui.binder.MobileIconBinder"},
     (PREFIX + "features/shade/SignalDisplay;", "install"): {"kotlin.Pair"},
     (PREFIX + "features/shade/SignalDisplay;", "installStacked"): {

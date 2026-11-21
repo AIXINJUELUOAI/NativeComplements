@@ -29,8 +29,13 @@ final class DarkAodAccess {
         tracker = field(machineClass, "mUserTracker");
         config = field(machineClass, "mAmbientDisplayConfig");
         host = field(machineClass, "mDozeHost");
-        suppressed = field(host.getType(), "mAlwaysOnSuppressed");
-        battery = field(host.getType(), "mBatteryController");
+        // LineageOS 24.0 declares mDozeHost as the DozeHost interface; PixelOS narrows it to the
+        // implementation. Resolve the verified implementation class without assuming a field shape.
+        Class<?> dozeHost = Class.forName("com.android.systemui.statusbar.phone.DozeServiceHost", false, loader);
+        if (!host.getType().isAssignableFrom(dozeHost))
+            throw new NoSuchFieldException("DozeServiceHost is not the native mDozeHost");
+        suppressed = field(dozeHost, "mAlwaysOnSuppressed");
+        battery = field(dozeHost, "mBatteryController");
         powerSave = field(Class.forName("com.android.systemui.statusbar.policy.BatteryControllerImpl", false, loader), "mAodPowerSave");
         userId = method(Class.forName("com.android.systemui.settings.UserTrackerImpl", false, loader), "getUserId");
         alwaysOn = method(config.getType(), "alwaysOnEnabled", int.class);

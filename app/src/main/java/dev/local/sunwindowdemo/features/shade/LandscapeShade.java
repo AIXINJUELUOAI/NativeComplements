@@ -115,9 +115,14 @@ public final class LandscapeShade {
             updateResources = panel.getDeclaredMethod("updateResources");
             Field owner = panel.getDeclaredField("mSplitShadeStateController");
             Field resources = panel.getDeclaredField("mResources");
+            // LineageOS declares the panel field as SplitShadeStateController (interface); PixelOS
+            // may narrow it to the implementation. Both point at the same verified method owner.
+            boolean controllerType = owner.getType() == controller
+                    || owner.getType().isAssignableFrom(controller)
+                    || controller.isAssignableFrom(owner.getType());
             if (shouldUse.getReturnType() != boolean.class || Modifier.isStatic(shouldUse.getModifiers())
                     || updateResources.getReturnType() != void.class || Modifier.isStatic(updateResources.getModifiers())
-                    || owner.getType() != controller || resources.getType() != Resources.class)
+                    || !controllerType || resources.getType() != Resources.class)
                 throw new NoSuchMethodException("legacy shade signatures");
             updateResources.setAccessible(true);
             hooks.add(module.hook(updateResources).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
