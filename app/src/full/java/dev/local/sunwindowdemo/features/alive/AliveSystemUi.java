@@ -66,7 +66,10 @@ public final class AliveSystemUi {
             Field callbackOwner=field(callback,"this$0",depth),collectorOwner=field(collector,"this$0",depth);
             Field collectorId=field(collector,"$r8$classId",int.class);
             Field wallpapers=field(depth,"wallpaperInteractor",interactor);
-            Field repository=field(interactor,"wallpaperRepository",access.constructor.getDeclaringClass());
+            // LineageOS 24.0 declares WallpaperInteractor.wallpaperRepository as the interface;
+            // PixelOS narrows it to the implementation.
+            Field repository=assignable(interactor,"wallpaperRepository",
+                type(loader,"com.android.systemui.wallpapers.data.repository.WallpaperRepository"));
             Field ambient=field(depth,"wallpaperSupportsAmbientMode",boolean.class),amount=field(depth,"prevDozeAmount",float.class);
             Method doze=callback.getDeclaredMethod("onDozeAmountChanged",float.class,float.class);
             Method emit=collector.getDeclaredMethod("emit",Object.class,type(loader,"kotlin.coroutines.Continuation"));
@@ -126,9 +129,14 @@ public final class AliveSystemUi {
         final Field ambient,lockInfo,homeInfo,settings,manager,background,selected,userInfo,userId,status;
         final Object complete;
         final Method combine,flowOn,current,getSetting,getInfo,getId,supports;
-        final boolean lockIsState,settingNameFirst;
+        final boolean lockIsState;
+        final int settingMode; // 0: (default,user,name), 1: (default,name,user), 2: (name,default,user)
         int setting(Object secure,int user,String name)throws ReflectiveOperationException {
-            return (Integer)(settingNameFirst?getSetting.invoke(secure,0,name,user):getSetting.invoke(secure,0,user,name));
+            return switch (settingMode) {
+                case 2 -> (Integer)getSetting.invoke(secure,name,0,user);
+                case 1 -> (Integer)getSetting.invoke(secure,0,name,user);
+                default -> (Integer)getSetting.invoke(secure,0,user,name);
+            };
         }
         private final Map<Object,Selection> selections=new WeakHashMap<>();
         private static final class Selection {
@@ -155,9 +163,26 @@ public final class AliveSystemUi {
             Class<?> scope=type(loader,"kotlinx.coroutines.CoroutineScope"),dispatcher=type(loader,"kotlinx.coroutines.CoroutineDispatcher");
             Class<?> users=type(loader,"com.android.systemui.user.data.repository.UserRepository");
             Class<?> secure=type(loader,"com.android.systemui.util.settings.SecureSettings");
-            constructor=repository.getDeclaredConstructor(scope,dispatcher,
-                type(loader,"com.android.systemui.broadcast.BroadcastDispatcher"),users,WallpaperManager.class,
-                android.content.Context.class,secure,type(loader,"com.android.systemui.common.ui.domain.interactor.ConfigurationInteractorImpl"));
+            Class<?> dispatcherType=type(loader,"com.android.systemui.broadcast.BroadcastDispatcher");
+            Class<?> config=type(loader,"com.android.systemui.common.ui.domain.interactor.ConfigurationInteractor");
+            Class<?> configImpl=null;
+            try{configImpl=type(loader,"com.android.systemui.common.ui.domain.interactor.ConfigurationInteractorImpl");}
+            catch(ClassNotFoundException ignored){}
+            // LineageOS 24.0 declares the constructor argument as the ConfigurationInteractor
+            // interface; PixelOS narrows it to ConfigurationInteractorImpl. Both are source-verified.
+            Constructor<?> found=null;
+            if(configImpl!=null)try{
+                found=repository.getDeclaredConstructor(scope,dispatcher,dispatcherType,users,
+                    WallpaperManager.class,android.content.Context.class,secure,configImpl);
+            }catch(NoSuchMethodException narrower){}
+            if(found==null)try{
+                found=repository.getDeclaredConstructor(scope,dispatcher,dispatcherType,users,
+                    WallpaperManager.class,android.content.Context.class,secure,config);
+            }catch(NoSuchMethodException interfaceShape){
+                if(configImpl==null)throw interfaceShape;
+                throw new NoSuchMethodException("WallpaperRepositoryImpl constructor");
+            }
+            constructor=found;
             constructor.setAccessible(true);
             ambient=field(repository,"wallpaperSupportsAmbientMode",flow);
             Class<?> state=type(loader,"kotlinx.coroutines.flow.StateFlow");
@@ -187,10 +212,13 @@ public final class AliveSystemUi {
             catch(ClassNotFoundException|NoSuchMethodException facade){context2=type(loader,"kotlinx.coroutines.flow.FlowKt__ContextKt").getDeclaredMethod("flowOn",flow,context);}
             flowOn=context2;
             Class<?> proxy=type(loader,"com.android.systemui.util.settings.UserSettingsProxy");
-            Method setting;boolean nameFirst;
-            try{setting=proxy.getMethod("getIntForUser",int.class,int.class,String.class);nameFirst=false;}
-            catch(NoSuchMethodException older){setting=proxy.getMethod("getIntForUser",int.class,String.class,int.class);nameFirst=true;}
-            getSetting=setting;settingNameFirst=nameFirst;
+            Method setting;int mode;
+            try{setting=proxy.getMethod("getIntForUser",int.class,int.class,String.class);mode=0;}
+            catch(NoSuchMethodException older){
+                try{setting=proxy.getMethod("getIntForUser",int.class,String.class,int.class);mode=1;}
+                catch(NoSuchMethodException lineage){setting=proxy.getMethod("getIntForUser",String.class,int.class,int.class);mode=2;}
+            }
+            getSetting=setting;settingMode=mode;
             getInfo=WallpaperManager.class.getDeclaredMethod("getWallpaperInfo",int.class,int.class);
             getId=WallpaperManager.class.getDeclaredMethod("getWallpaperIdForUser",int.class,int.class);
             supports=WallpaperInfo.class.getDeclaredMethod("supportsAmbientMode");
