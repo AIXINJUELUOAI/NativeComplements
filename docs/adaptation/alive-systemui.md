@@ -17,6 +17,12 @@ Kotlin/coroutines/代理均来自宿主 ClassLoader，不混入模块 Flow，不
 
 opt-in 是实际选用 ambient 组件，不额外以 `doze_always_on_wallpaper_enabled` 作模块开关；本路径不写这两个设置。用户/AOD/组件变化由原生 Flow 撤销额外分支，非跨进程事务级零延迟。constructor/deopt失败撤本组Hook；单实例投影失败保原 field，不能热修已创建实例。
 
+## 手动应用后的壁纸取色
+
+手动应用的快照在当前进程保留五秒的一次性请求。前台桌面 Engine 成功提交该快照首帧后，向 SystemUI 发出短时请求，再走 Android `notifyColorsChanged()`。SystemUI 核对发送者真实 UID 和包名、当前用户、亮屏未锁定、桌面 Alive 壁纸 ID 和同一份颜色，才在单次原生主题回调内放行。系统仍决定颜色来源、固定主题和资源覆盖。
+
+接入失败、超时、预览、锁屏及普通壁纸沿用原生流程。这里只处理手动应用的换色时机，锁屏动画交接仍由下述路径处理。
+
 ## doze 模糊贡献
 
 只标记 `NotificationShadeDepthController` 两个已预检 producer 的同步 ThreadLocal 范围：`statusBarStateCallback.onDozeAmountChanged`及 classId1能力 collector的 `emit`。仅同 owner、ambient能力 true、doze量>0、当前自有 MatchToken仍有效时，把其 `setWakeAndUnlockBlurRadius` 本次贡献投影为0。

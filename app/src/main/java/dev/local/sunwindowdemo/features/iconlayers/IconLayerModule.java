@@ -13,6 +13,8 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.*;
 import dev.local.sunwindowdemo.BuildConfig;
+import dev.local.sunwindowdemo.core.LauncherTargets;
+import dev.local.sunwindowdemo.core.ui.SystemPalette;
 import io.github.libxposed.api.*;
 import java.lang.reflect.*;
 import java.util.*;
@@ -25,6 +27,7 @@ import java.util.function.Supplier;
 public final class IconLayerModule extends XposedModule {
     private boolean eligible, installed;
     private DrawerMonet drawerMonet;
+    private volatile boolean systemThemed;
     private String acknowledgedGeneration = null;
     private final AtomicInteger epoch = new AtomicInteger();
     private final AtomicBoolean fullRefresh = new AtomicBoolean();
@@ -50,6 +53,7 @@ public final class IconLayerModule extends XposedModule {
         loader = p.getDefaultClassLoader();
         // Theme observation survives optional desktop/drawer ABI failure and installs no replacements.
         LauncherThemeReporter themeReporter=new LauncherThemeReporter(themed->{
+            systemThemed=themed;
             if(drawerMonet!=null)drawerMonet.systemThemed(themed);
         });
         try{themeReporter.install(this,loader);note("LAUNCHER_THEME_REPORTER_READY");}
@@ -188,7 +192,30 @@ public final class IconLayerModule extends XposedModule {
                 queueReload();
             }
         }, availability, Context.RECEIVER_NOT_EXPORTED);
+        connectPalette(app);
         queueReload();
+    }
+
+    private void connectPalette(Context app) {
+        try {
+            Class<?> model = Class.forName("com.android.launcher3.LauncherModel", false, loader);
+            Method rebind = model.getMethod("rebindCallbacks", String.class);
+            if (rebind.getReturnType() != void.class) throw new NoSuchMethodException("LauncherModel.rebindCallbacks");
+            // The launcher process owns this observer for the lifetime of its application.
+            new SystemPalette(app, () -> {
+                if (!systemThemed || !LauncherTargets.isLauncherUid(app, android.os.Process.myUid())) return;
+                try {
+                    resetAnimationIcon();
+                    rebind.invoke(LauncherIconAccess.model(launcherState()), "NativeComplements palette changed");
+                    if (drawerMonet != null) drawerMonet.artworkChanged();
+                    note("PALETTE_REBIND_QUEUED");
+                } catch (Exception failure) {
+                    note("PALETTE_REBIND_UNAVAILABLE " + failure.getClass().getSimpleName());
+                }
+            });
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            note("PALETTE_REBIND_UNAVAILABLE " + failure.getClass().getSimpleName());
+        }
     }
 
     private void queueReload() { int request = epoch.incrementAndGet(); worker.post(() -> reload(request)); }
@@ -235,9 +262,7 @@ public final class IconLayerModule extends XposedModule {
     private boolean refreshTargets(Set<String> packages, String generation) {
         if (packages.isEmpty()) { acknowledgedGeneration = generation; return true; }
         try {
-            Class<?> stateClass = Class.forName("com.android.launcher3.LauncherAppState", false, loader);
-            Object singleton = stateClass.getField("INSTANCE").get(null);
-            Object state = singleton.getClass().getMethod("get", Context.class).invoke(singleton, context);
+            Object state = launcherState();
             Object model = LauncherIconAccess.model(state);
             Object cache = LauncherIconAccess.iconCache(state);
             Class<?> base = Class.forName("com.android.launcher3.icons.cache.BaseIconCache", false, loader);
@@ -258,12 +283,7 @@ public final class IconLayerModule extends XposedModule {
                     else { lastError = "部分图标刷新失败"; report(lastError); }
                 });
             });
-            new Handler(Looper.getMainLooper()).post(() -> {
-                try {
-                    Class<?> floating = Class.forName("com.android.launcher3.views.FloatingIconView", false, loader);
-                    Field cached = floating.getDeclaredField("sIconLoadResult"); cached.setAccessible(true); cached.set(null, null);
-                } catch (Exception failure) { note("PREFETCH_RESET_UNAVAILABLE " + failure.getClass().getSimpleName()); }
-            });
+            new Handler(Looper.getMainLooper()).post(this::resetAnimationIcon);
             note("REFRESH_QUEUED count=" + packages.size());
             return true;
         } catch (Exception failure) {
@@ -271,6 +291,23 @@ public final class IconLayerModule extends XposedModule {
             note("REFRESH_FAILED " + failure.getClass().getSimpleName());
             report("刷新失败，请重启桌面后查看");
             return false;
+        }
+    }
+
+    private Object launcherState() throws ReflectiveOperationException {
+        Class<?> state = Class.forName("com.android.launcher3.LauncherAppState", false, loader);
+        Object singleton = state.getField("INSTANCE").get(null);
+        return singleton.getClass().getMethod("get", Context.class).invoke(singleton, context);
+    }
+
+    private void resetAnimationIcon() {
+        try {
+            Class<?> floating = Class.forName("com.android.launcher3.views.FloatingIconView", false, loader);
+            Field cached = floating.getDeclaredField("sIconLoadResult");
+            cached.setAccessible(true);
+            cached.set(null, null);
+        } catch (ReflectiveOperationException | RuntimeException failure) {
+            note("PREFETCH_RESET_UNAVAILABLE " + failure.getClass().getSimpleName());
         }
     }
 

@@ -27,6 +27,7 @@ final class ProductFeatures {
     }
     static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){installSuggestionNotifications(module,loader,note);}
     static void connectSystemUi(android.app.Application app,Consumer<String> note){
+        dev.local.sunwindowdemo.features.alive.AliveColorDelivery.connect(app,note);
         try{dev.local.sunwindowdemo.features.shade.LandscapeShade.connect(app);}
         catch(RuntimeException unavailable){note.accept("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}

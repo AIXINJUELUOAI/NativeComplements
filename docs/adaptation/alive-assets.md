@@ -26,6 +26,6 @@
 | `ready(Context)` | 首次校验清单、全部长度/SHA、普通文件/当前 UID/只读权限及 arm64 64位进程；缓存命中仍验长度/权限 |
 | `library(Context)` | 返回 canonical 私有只读库给 `System.load`；ready 不是 JNI/ELF 链接或 GPU 成功保证 |
 | `open(Context, path)` | 只开放核心白名单或固定示意图；首次可能完整校验，必须 worker |
-| `importPhoto(Context, Uri)` | 输入最多 32MiB，限制尺寸/总像素，采样最长边至 2048并重编码 JPEG；失败保留旧照片 |
+| `importPhoto(Context, Uri)` | 输入最多 32MiB，按比例解码到最长边 4096、800 万像素以内并重编码 JPEG；失败保留旧照片 |
 
-新编辑照片采用 UUID 文件名，不覆盖正在使用的照片；不持久化外部 URI、原路径或图片元数据。保留宽高比，fill/crop 由渲染器决定。缺照片不生成渐变或占位图冒充成功。已应用照片先不可变复制至 DE，再原子发布快照；锁前隐私、历史照片保留及故障处理见[平台合同](<alive-platform.md>)。
+新编辑照片采用 UUID 文件名，不覆盖正在使用的照片；不持久化外部 URI、原路径或图片元数据。保留宽高比，取景以归一化中心与缩放保存在配置。已应用照片先不可变复制至 DE，再原子发布快照；锁前隐私、历史照片保留及故障处理见[平台合同](<alive-platform.md>)。

@@ -14,6 +14,8 @@
 
 [DrawerMonet](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/DrawerMonet.java>)限定 AllApps 网格／预测，区分 search／workspace。查询补 CacheLookupFlag 的 bit 8，缺 themed 位的已绑定 AppInfo在后台升级一次；仅绑定 ThreadLocal 范围请求原生主题绘制，finally 恢复。不全局开主题、不写共享 BitmapInfo；关闭重绑原生。系统主题由[LauncherThemeReporter](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/LauncherThemeReporter.java>)观察 ThemeManager上报，不自动切换 Minimal 或修改用户桌面偏好。
 
+系统配色资源确认变化后，实际 HOME 在桌面主题图标开启时调用 Launcher 原生模型重绑，并刷新已绑定的抽屉图标。单色素材和持久化图标缓存继续沿用。管理界面也在配色资源更新或返回前台时重新读取系统配色。
+
 [SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>)只在 SystemUI处理同用户非会话通知标识图标及合格 splash。splash 临时属性必须 finally恢复；素材缺失保原生，不在 build／draw热路径查包、解码或 Binder。模型缓存更新在原 worker、可见 View刷新在 main；热恢复失败不保证无需重启桌面。
 
 ## 授权、缓存与失败

@@ -16,6 +16,7 @@ import android.database.ContentObserver
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -73,6 +75,7 @@ fun AliveScreen(onBack: () -> Unit) {
     var resources by rememberSaveable { mutableStateOf(false) }
     var pendingComponent by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by rememberSaveable { mutableStateOf(false) }
+    var cropping by rememberSaveable { mutableStateOf(false) }
     var ready by remember { mutableStateOf(false) }
     var hasPhoto by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
@@ -83,6 +86,11 @@ fun AliveScreen(onBack: () -> Unit) {
     var resourcesRevision by remember { mutableLongStateOf(prefs.getLong("resources_revision", 0L)) }
     var refresh by remember { mutableIntStateOf(0) }
     val stages = listOf("息屏", "锁屏", "桌面")
+    val configuration = LocalConfiguration.current
+    val screenAspect = remember(context, configuration) {
+        val bounds = context.getSystemService(WindowManager::class.java).maximumWindowMetrics.bounds
+        bounds.width().coerceAtLeast(1).toFloat() / bounds.height().coerceAtLeast(1)
+    }
 
     LaunchedEffect(context) {
         try {
@@ -166,6 +174,7 @@ fun AliveScreen(onBack: () -> Unit) {
                 previewErrors.clear()
                 resourcesRevision = prefs.getLong("resources_revision", 0L)
                 message = if (photo) "草稿照片已更新，尚未设置壁纸" else "资源已校验并导入，尚未设置壁纸"
+                if (photo) cropping = true
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { message = failure.message ?: "导入失败，当前壁纸未更改" }
             finally { busy = false; refresh++ }
@@ -243,7 +252,7 @@ fun AliveScreen(onBack: () -> Unit) {
                 visible.forEach { phase -> key(phase) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Box(Modifier.fillMaxWidth().aspectRatio(9f / 20f).clip(RoundedCornerShape(22.dp))
+                        Box(Modifier.fillMaxWidth().aspectRatio(screenAspect).clip(RoundedCornerShape(22.dp))
                             .background(Color.Black).semantics { contentDescription = "${stages[phase]}样式" }
                             .clickable(enabled = editable, role = Role.Button) { scene = phase; editing = true },
                             contentAlignment = Alignment.Center) {
@@ -258,7 +267,8 @@ fun AliveScreen(onBack: () -> Unit) {
                 } }
             }
             SettingsGroup {
-                SettingRow("照片", onClick = if (editable) ({ photoPicker.launch("image/*") }) else null)
+                SettingRow(if (hasPhoto) "更换照片" else "选择照片", onClick = if (editable) ({ photoPicker.launch("image/*") }) else null)
+                if (hasPhoto) SettingRow("调整取景", onClick = if (editable) ({ cropping = true }) else null)
             }
             if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             val status = when {
@@ -276,6 +286,12 @@ fun AliveScreen(onBack: () -> Unit) {
             Button(onClick = { applyWallpaper() }, enabled = available, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) { Text("设置壁纸") }
         }
     }
+    if (cropping) draft?.let { input ->
+        AliveCropScreen(input, screenAspect, cancel = { cropping = false }) { crop ->
+            cropping = false
+            if (crop != input.crop) updateDraft(input.withCrop(crop))
+        }
+    }
     if (editing) ModalBottomSheet(onDismissRequest = { editing = false }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
             val input = draft
@@ -284,9 +300,9 @@ fun AliveScreen(onBack: () -> Unit) {
             StyleGallery(scene, names, selected, editable, resourcesRevision) { value ->
                 input?.let {
                     updateDraft(when (scene) {
-                        0 -> AliveSettings.Snapshot(value, it.lock, it.home, it.photo)
-                        1 -> AliveSettings.Snapshot(it.aod, value, it.home, it.photo)
-                        else -> AliveSettings.Snapshot(it.aod, it.lock, value + 6, it.photo)
+                        0 -> AliveSettings.Snapshot(value, it.lock, it.home, it.photo, it.crop)
+                        1 -> AliveSettings.Snapshot(it.aod, value, it.home, it.photo, it.crop)
+                        else -> AliveSettings.Snapshot(it.aod, it.lock, value + 6, it.photo, it.crop)
                     })
                 }
             }
