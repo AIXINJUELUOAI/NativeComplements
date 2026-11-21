@@ -29,9 +29,28 @@
 | 来电／传感器／边缘 | 相同接口及共用规则保留，桌面排除范围加入 Launcher3 |
 | Alive | 当前 code165 自有壁纸、Direct Boot、安全门及视觉实现保留；不伪造新系统投影、不做 ROM 名称禁用或逐功能警告 |
 
+## 合并后复核与补充适配（2026-11）
+
+上游合并 PR 后继续按官方 `lineage-24.0` 源码复核新增 Hook；以下均为**实现适配**，不是 ROM 名称分支：
+
+| 范围 | 复核结果与处理 |
+|---|---|
+| 桌面双击锁屏 | LineageOS `Launcher.getDragController()` 返回 `LauncherDragController`（`DragController` 子类），不再要求精确返回基类；只放宽返回值协变，仍校验 `isDragging` 和空白 Cell |
+| 深色 AOD | LineageOS `DozeMachine.mDozeHost` 声明为 `DozeHost` 接口，`mAlwaysOnSuppressed`／`mBatteryController` 实际在 `DozeServiceHost`；改为校验接口后读取实现字段 |
+| Alive 壁纸投影 | `WallpaperInteractor.wallpaperRepository` 和 `WallpaperRepositoryImpl` 构造参数在 LineageOS 使用接口类型；先试实现类，再按源码回退到 `WallpaperRepository`／`ConfigurationInteractor` 接口 |
+| Alive 睡眠交接 | `NotificationShadeWindowControllerImpl.mWindowRootView` 是 `ViewGroup`，`mScrimsVisibilityListener` 是 `Consumer`；改为按可赋值的实际字段读取，并从实际监听器实例解析捕获的 `NotificationShadeDepthController`，不再依赖 `$1`/`WindowRootView` 精确字段类型。`KeyguardService` 的 binder 实现按两个已核实方法扫描，不依赖匿名类编号 |
+| 横屏双栏（Legacy/Scene） | LineageOS `NotificationPanelViewController.mSplitShadeStateController` 声明为接口；接收接口或其实现。`ShadeConfigRepository.legacyUseSplitShade` 是 Kotlin getter `Flow`，没有 PR 使用的字段/R8 lambda 时改用实际 Flow 实例的 `collect` 作用域，保留原字段式 Pixel 路径；回调刷新为可选 |
+| 旋转建议 | LineageOS `RotationButtonController.mRotationButton` 声明为 `RotationButton` 接口，不再假定具体 `mKeyButtonView` 字段；使用接口的 `getCurrentView()`，保留原生建议、超时和点击策略 |
+| 信号叠层 | `StackedMobileIcon` 的 R8 重启 lambda 编号不保证固定；缺失该合成类时跳过它，保留实际 Compose render 与父 composable 的叠层适配，不再因此关闭整条路径 |
+| 短信拦截 | 固定检查 `com.android.phone`、`InboundSmsHandler.processMessagePart/filterSms/deleteFromRawTable`、`InboundSmsTracker` 与 `BlockChecker.getBlockStatus`；实现只在电话进程安装，规则和原生永久删除路径不变 |
+| 来电拦截 | 保留既有 Telecom `CallsManager.onCallFilteringComplete`、`CallFilteringResult.Builder` 和 `PhoneAccountRegistrar` 接口；不新增绕过原生过滤的路径 |
+| 抽屉主题提示 | 实际 HOME 为 Launcher3 时提示用户把应用图标样式设为 **Minimal**；仍由用户自行选择，不自动改写 `ThemePreference` |
+
+未发现必须整项禁用的 LineageOS 24.0 功能：上述目标在固定源码中存在；当前限制是设备行为、R8 实际形状和视觉/功耗仍需真机回归，不能用本页静态合同替代。
+
 ## 上游资料与检查边界
 
-PR 附有[固定源码来源](<../../tests/lineageos24-provenance.json>)及[源码合同检查脚本](<../../tests/verify_lineageos24.py>)，固定官方 `lineage-24.0` 的 framework、SystemUI 库、Launcher3、Telecomm、ThemePicker 提交。脚本需要贡献者机器上仓库外源码树；没有该树时输出 **SKIP**，不记为通过，也不把贡献者文档中的旧主机或设备结论当作当前验收结果。
+PR 附有[固定源码来源](<../../tests/lineageos24-provenance.json>)及[源码合同检查脚本](<../../tests/verify_lineageos24.py>)，固定官方 `lineage-24.0` 的 framework、SystemUI 库、Launcher3、Telecomm、Telephony 与 ThemePicker 提交。脚本需要贡献者机器上仓库外源码树；没有该树时输出 **SKIP**，不记为通过，也不把贡献者文档中的旧主机或设备结论当作当前验收结果。
 
 PR 原文提到 OnePlus Ace 3 / LOS24 的加载、Taskbar、旋转、边缘同步及主题切换记录，但原始设备材料未随仓库提供，不依赖这些声明作为验收；其中自动主题切换已明确不纳入。无需补交材料才允许使用，也不以缺材料为由给每个功能弹警告。
 

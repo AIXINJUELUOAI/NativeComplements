@@ -31,6 +31,16 @@
     "commit": "d75099ec2298dff41dd7607c667344990c52e044",
     "branch": "lineage-24.0"
   },
+  "telephony": {
+    "repository": "https://github.com/LineageOS/android_frameworks_opt_telephony.git",
+    "commit": "3e3411c08a55b32f42dd5d7cbcd10bc33c12f705",
+    "branch": "lineage-24.0"
+  },
+  "telephony_app": {
+    "repository": "https://github.com/LineageOS/android_packages_services_Telephony.git",
+    "commit": "2d0e6fb0059b8c1cab748f6f04453c9955a14fe3",
+    "branch": "lineage-24.0"
+  },
   "themepicker": {
     "repository": "https://github.com/LineageOS/android_packages_apps_ThemePicker.git",
     "commit": "d5a70ebd9cd04dd9e5a98a74efab4bea319248d9",
