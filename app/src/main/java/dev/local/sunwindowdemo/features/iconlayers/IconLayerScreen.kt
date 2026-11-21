@@ -1,11 +1,8 @@
 package dev.local.sunwindowdemo.features.iconlayers
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
@@ -18,7 +15,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -108,7 +104,7 @@ fun IconLayerScreen(apps: List<LaunchableApp>, bottomInset: Dp = 0.dp, onApp: (S
                     IconPolicy.ALGORITHM -> "算法补全"
                     IconPolicy.ORIGINAL -> "彩色图标不处理"
                     else -> if (app.packageName in library) "自动 · 素材库" else "自动 · 应用原图"
-                }, onClick = { if (selection == null) onApp(app.packageName) else onSelect(app.packageName) }, leading = { IconRowAppIcon(app) }, trailing = {
+                }, onClick = { if (selection == null) onApp(app.packageName) else onSelect(app.packageName) }, leading = { AppListIcon(app) }, trailing = {
                     if (selection == null) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     else Checkbox(app.packageName in selection, onCheckedChange = null)
                 })
@@ -206,19 +202,4 @@ fun IconDiagnosticsScreen() {
         }
     }
     if (!state.getString("error").isNullOrBlank()) Hint(state.getString("error")!!)
-}
-
-@Composable
-private fun IconRowAppIcon(app: LaunchableApp) {
-    val bitmap = remember(app.packageName, app.icon) {
-        app.icon?.let { drawable ->
-            Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888).also {
-                val old = android.graphics.Rect(drawable.bounds)
-                drawable.setBounds(0, 0, 96, 96)
-                drawable.draw(Canvas(it))
-                drawable.bounds = old
-            }.asImageBitmap()
-        }
-    }
-    if (bitmap == null) Glyph("apps") else Image(bitmap, null, Modifier.size(42.dp))
 }

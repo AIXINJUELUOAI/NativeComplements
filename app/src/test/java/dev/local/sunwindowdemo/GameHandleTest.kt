@@ -24,6 +24,23 @@ class GameHandleTest {
         try { view.dispatchTouchEvent(event) } finally { event.recycle() }
     }
 
+    @Test fun handleFollowsDayNightChangesWithoutReplacingViewOrTouchTarget() {
+        for (right in listOf(false, true)) {
+            val handle = gameModeHandle(context, right) {} as FrameLayout
+            val bar = handle.getChildAt(0)
+            val shape = bar.background as android.graphics.drawable.GradientDrawable
+            for (mode in listOf(android.content.res.Configuration.UI_MODE_NIGHT_NO,
+                android.content.res.Configuration.UI_MODE_NIGHT_YES, android.content.res.Configuration.UI_MODE_NIGHT_NO)) {
+                handle.dispatchConfigurationChanged(android.content.res.Configuration(context.resources.configuration).apply { uiMode = mode })
+                val dark = mode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+                assertEquals((WindowPresentation.handleColor(dark) and 0x00ffffff) or 0xb8000000.toInt(), shape.color!!.defaultColor)
+                assertSame(bar, handle.getChildAt(0))
+                assertEquals(dp(5), bar.layoutParams.width)
+                assertEquals(dp(44), bar.layoutParams.height)
+            }
+        }
+    }
+
     @Test fun largerTransparentTargetKeepsSmallVisualAndOnlyLocalBackExclusion() {
         val handle = gameModeHandle(context, false) {} as FrameLayout
         handle.layout(0, 0, dp(28), dp(88))

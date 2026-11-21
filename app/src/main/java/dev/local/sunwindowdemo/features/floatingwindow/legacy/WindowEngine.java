@@ -3567,7 +3567,12 @@ final class WindowEngine {
         if(s.safeBounds!=null)result.putExtra("safeLeft",s.safeBounds.left).putExtra("safeTop",s.safeBounds.top)
             .putExtra("safeRight",s.safeBounds.right).putExtra("safeBottom",s.safeBounds.bottom).putExtra("placementMargin",s.placementMargin);
     }
+    private static int backgroundProtectedUid(Session session){
+        return session!=null&&WindowLifecycle.protectsFromBackground(session.frame,session.edgeHidden,session.parked,session.closing,
+            session.restoring,session.restoreForeground,session.screenSuspended||session.prioritySuspended)?session.uid:-1;
+    }
     private void fillVisibleFrames(Intent result){
+        dev.local.sunwindowdemo.features.background.BackgroundHost.visibleWindows(backgroundProtectedUid(active),backgroundProtectedUid(pinned));
         result.putExtra("normalOccupied",normalOccupied());
         Session mini=pinned;
         if(mini!=null&&!mini.restoring){

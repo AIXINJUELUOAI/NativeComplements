@@ -1,5 +1,6 @@
 package dev.local.sunwindowdemo.features.alive;
 
+import android.app.WallpaperManager;
 import android.content.ComponentName;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -94,7 +95,8 @@ public class AliveAmbientAccessTest {
         applied.edit().clear().putInt("style",4).commit();draft.edit().clear().commit();
         AliveSettings.Snapshot old=AliveSettings.beginEdit(context);
         assertEquals(4,old.aod);assertEquals(0,old.lock);assertEquals(6,old.home);
-        AliveSettings.Snapshot next=new AliveSettings.Snapshot(0,3,7,"alive-image-1234.jpg");
+        assertEquals(AliveCrop.CENTER,old.crop);
+        AliveSettings.Snapshot next=new AliveSettings.Snapshot(0,3,7,"alive-image-1234.jpg",new AliveCrop(.6f,.4f,1.5f));
         AliveSettings.saveDraft(context,next);
         assertEquals(next,AliveSettings.readDraft(context));assertEquals(old,AliveSettings.readApplied(context));
         java.io.File photo=next.photoFile(context);
@@ -108,6 +110,16 @@ public class AliveAmbientAccessTest {
             // Publication is checked independently of the imported, SHA-pinned 29 MiB native generation.
             publish.invoke(null,context,next);
             assertEquals(next,AliveSettings.readApplied(device));
+            AliveSettings.Snapshot recropped=next.withCrop(new AliveCrop(.4f,.5f,2f));
+            publish.invoke(null,context,recropped);
+            assertEquals(recropped,AliveSettings.readApplied(device));
+            assertFalse(AliveSettings.consumeManualColor(recropped));
+            var manual=AliveSettings.class.getDeclaredMethod("publish",android.content.Context.class,AliveSettings.Snapshot.class,boolean.class);
+            manual.setAccessible(true);
+            manual.invoke(null,context,next,true);
+            assertFalse(AliveSettings.consumeManualColor(recropped));
+            assertTrue(AliveSettings.consumeManualColor(next));
+            assertFalse(AliveSettings.consumeManualColor(next));
             assertTrue(runtimePhoto.isFile());assertNotEquals(photo.getCanonicalPath(),runtimePhoto.getCanonicalPath());
             assertFalse(device.getSharedPreferences(AliveSettings.DRAFT,0).contains("photo"));
             assertFalse(applied.contains("applied_revision"));
@@ -132,6 +144,16 @@ public class AliveAmbientAccessTest {
             photo.delete();runtimePhoto.delete();new android.util.AtomicFile(snapshot).delete();
             applied.edit().clear().commit();draft.edit().clear().commit();AliveSettings.runtimePreferences(context).edit().clear().commit();
         }
+    }
+    @Test public void awakeThemeDeliveryRequiresMatchingDesktopColorsAndUser(){
+        var colors=new android.app.WallpaperColors(android.graphics.Color.valueOf(android.graphics.Color.RED),null,null);
+        var other=new android.app.WallpaperColors(android.graphics.Color.valueOf(android.graphics.Color.BLUE),null,null);
+        var pending=new AliveColorDelivery.Pending(0,17,colors,1500);
+        assertTrue(pending.matches(0,WallpaperManager.FLAG_SYSTEM,colors,1499));
+        assertFalse(pending.matches(1,WallpaperManager.FLAG_SYSTEM,colors,1499));
+        assertFalse(pending.matches(0,WallpaperManager.FLAG_LOCK,colors,1499));
+        assertFalse(pending.matches(0,WallpaperManager.FLAG_SYSTEM,other,1499));
+        assertFalse(pending.matches(0,WallpaperManager.FLAG_SYSTEM,colors,1500));
     }
     @Test public void onlyExactAmbientComponentAndKnownUserCanConsumeOneBindException()throws Exception{
         Class<?> type=Class.forName(AliveAmbientAccess.class.getName()+"$BindScope");

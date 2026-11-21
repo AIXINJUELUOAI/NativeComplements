@@ -2,6 +2,7 @@
  * Photo-only adaptation of OpenAlive RenderLoop, commit 2d54c72a573b2f66e20b558283bef58cdb0ada60. */
 package org.aliveclean;
 
+import android.app.WallpaperColors;
 import android.content.Context;
 import android.graphics.*;
 import android.opengl.*;
@@ -9,9 +10,12 @@ import android.os.*;
 import android.view.Choreographer;
 import android.view.Surface;
 import dev.local.sunwindowdemo.features.alive.AliveAssets;
+import dev.local.sunwindowdemo.features.alive.AliveCrop;
+import dev.local.sunwindowdemo.features.alive.AlivePhoto;
 import dev.local.sunwindowdemo.features.alive.AliveSettings;
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.function.BiConsumer;
 
 /** All EGL, animation, native handles and textures belong to one bounded worker. */
 public final class AliveRenderer implements AutoCloseable {
@@ -34,6 +38,10 @@ public final class AliveRenderer implements AutoCloseable {
     private Runnable sleepPresented,framePresented,wakePresented,wakeFinished,sleepFinished;
     private boolean deferredWake,wakeStarted;
     private volatile Runnable unavailable;
+    private volatile BiConsumer<AliveSettings.Snapshot,WallpaperColors> colorListener;
+    private record PaletteFrame(String photo, AliveCrop crop, int width, int height) {}
+    private PaletteFrame paletteFrame,lastReportedPalette;
+    private WallpaperColors palette;
     private float aspect;
     private boolean visible,holding,framePosted,failed,firstFrame,endpointPending;
     private volatile boolean closed;
@@ -63,6 +71,8 @@ public final class AliveRenderer implements AutoCloseable {
     public String error(){return error;}
     /** Worker callback; the owner must marshal lifecycle changes to its own thread. */
     public void onUnavailable(Runnable callback){unavailable=callback;}
+    /** Called on the worker after the first successful swap for a new photo viewport. */
+    public void onColors(BiConsumer<AliveSettings.Snapshot,WallpaperColors> callback){colorListener=callback;}
     /** Bounded editor-only idle demonstration; never re-arms a real suspended Engine. */
     public void previewLens(){post(()->{
         if(reportAppliedStatus||mode!=0)return;
@@ -207,8 +217,7 @@ public final class AliveRenderer implements AutoCloseable {
         post(()->reloadSettings(snapshot));
     }
     private void reloadSettings(AliveSettings.Snapshot next){
-        if(settings!=null&&settings.aod==next.aod&&settings.lock==next.lock&&settings.home==next.home
-                &&java.util.Objects.equals(settings.photo,next.photo)&&!failed)return;
+        if(next.equals(settings)&&!failed)return;
         settings=next;release();failed=false;if(visible)start();
     }
     public void detach(){post(()->{release();surface=null;});}
@@ -251,11 +260,18 @@ public final class AliveRenderer implements AutoCloseable {
         window=EGL14.eglCreateWindowSurface(display,configs[0],surface,new int[]{EGL14.EGL_NONE},0);
         if(!EGL14.eglMakeCurrent(display,window,window,egl))throw new IOException("eglMakeCurrent");
         EGL14.eglSwapInterval(display,1);
-        Bitmap bitmap=ImageDecoder.decodeBitmap(ImageDecoder.createSource(file),(decoder,info,source)->{
-            int w=info.getSize().getWidth(),h=info.getSize().getHeight();float ratio=Math.min(1f,2048f/Math.max(w,h));
-            decoder.setTargetSize(Math.max(1,(int)(w*ratio)),Math.max(1,(int)(h*ratio)));decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
-        });
-        try{aspect=(float)bitmap.getWidth()/bitmap.getHeight();photo=upload(bitmap);}finally{bitmap.recycle();}
+        int[] textureLimit=new int[1];GLES30.glGetIntegerv(GLES30.GL_MAX_TEXTURE_SIZE,textureLimit,0);
+        Bitmap bitmap=AlivePhoto.decodeCrop(ImageDecoder.createSource(file),settings.crop,width,height,
+                textureLimit[0]>0?textureLimit[0]:2048);
+        int photoWidth=bitmap.getWidth(),photoHeight=bitmap.getHeight();
+        try{
+            aspect=(float)photoWidth/photoHeight;photo=upload(bitmap);
+            if(colorListener!=null){
+                paletteFrame=new PaletteFrame(settings.photo,settings.crop,width,height);
+                if(!paletteFrame.equals(lastReportedPalette))try{palette=WallpaperColors.fromBitmap(bitmap);}
+                catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","ALIVE_COLORS_UNAVAILABLE",unavailable);}
+            }
+        }finally{bitmap.recycle();}
         // The fixed native render ABI requires a positive decorator texture for every photo style.
         try(InputStream in=AliveAssets.open(context,"shader/photo/aod/lensPhoto/lens_decorator.png")){
             Bitmap decor=BitmapFactory.decodeStream(in);
@@ -285,7 +301,7 @@ public final class AliveRenderer implements AutoCloseable {
         if(style==0&&mode==0&&animateMode&&lensUntil==0)lensUntil=System.nanoTime()+3_000_000_000L;
         NativeScene.tint(scene,0xff264552);
         choreographer=Choreographer.getInstance();firstFrame=true;endpointPending=true;
-        android.util.Log.i("NativeComplements","ALIVE_RENDER init initial="+initial+" target="+mode+" animate="+animate+" size="+width+"x"+height);
+        android.util.Log.i("NativeComplements","ALIVE_RENDER init initial="+initial+" target="+mode+" animate="+animate+" size="+width+"x"+height+" texture="+photoWidth+"x"+photoHeight);
     }
     private void loadGround(int index,String path,boolean repeat)throws IOException{
         try(InputStream input=AliveAssets.open(context,path)){
@@ -337,6 +353,8 @@ public final class AliveRenderer implements AutoCloseable {
                 ||!NativeScene.render(scene,photo,decorator,aspect,frameMotion==null?motion.packet():sample.base))
                 throw new IOException("Invalid native photo packet");
             if(!EGL14.eglSwapBuffers(display,window))throw new IOException("EGL swap failed");
+            BiConsumer<AliveSettings.Snapshot,WallpaperColors> listener=colorListener;
+            if(palette!=null&&listener!=null){listener.accept(settings,palette);lastReportedPalette=paletteFrame;palette=null;}
             Runnable submitted=framePresented;framePresented=null;if(submitted!=null)submitted.run();
             reportError("");sample.clear();
             if(deferredSleep){
@@ -366,6 +384,7 @@ public final class AliveRenderer implements AutoCloseable {
     }
     private void release(){
         framePresented=sleepFinished=wakePresented=wakeFinished=null;wakeStarted=false;deferredWake=false;
+        palette=null;paletteFrame=null;
         if(scene!=0||display!=EGL14.EGL_NO_DISPLAY)android.util.Log.i("NativeComplements","ALIVE_RENDER release mode="+mode+" visible="+visible);
         stopFrames();
         sample.clear();if(textures!=null){textures.close();textures=null;}

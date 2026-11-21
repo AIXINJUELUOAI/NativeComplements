@@ -2,7 +2,7 @@ package dev.local.sunwindowdemo.features.alive;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Process;
@@ -264,31 +264,20 @@ public final class AliveAssets {
     static synchronized void importPhoto(Context context,Uri source,File destination)throws IOException{
         if(!destination.getParentFile().getCanonicalFile().equals(context.getNoBackupFilesDir().getCanonicalFile()))throw new IOException("Invalid photo destination");
         File input=File.createTempFile("alive-photo-",".img",context.getCacheDir());
-        Bitmap bitmap=null,scaled=null;
+        Bitmap bitmap=null;
         try{
             try(InputStream from=selected(context,source);FileOutputStream to=new FileOutputStream(input)){
                 copy(from,to,MAX_PHOTO,null);
             }
-            BitmapFactory.Options options=new BitmapFactory.Options();options.inJustDecodeBounds=true;
-            BitmapFactory.decodeFile(input.getPath(),options);
-            if(options.outWidth<=0||options.outHeight<=0||options.outWidth>32768||options.outHeight>32768
-                    ||(long)options.outWidth*options.outHeight>100_000_000L)throw new IOException("照片尺寸不受支持");
-            options.inSampleSize=1;
-            while(Math.max(options.outWidth,options.outHeight)/options.inSampleSize>2048)options.inSampleSize*=2;
-            options.inJustDecodeBounds=false;options.inPreferredConfig=Bitmap.Config.ARGB_8888;
-            bitmap=BitmapFactory.decodeFile(input.getPath(),options);
-            if(bitmap==null)throw new IOException("无法解码照片");
-            scaled=bitmap;
-            int longest=Math.max(bitmap.getWidth(),bitmap.getHeight());
-            if(longest>2048)scaled=Bitmap.createScaledBitmap(bitmap,Math.max(1,bitmap.getWidth()*2048/longest),Math.max(1,bitmap.getHeight()*2048/longest),true);
+            bitmap=AlivePhoto.decodeImport(ImageDecoder.createSource(input));
             AtomicFile atomic=new AtomicFile(destination);FileOutputStream output=null;
             try{
                 output=atomic.startWrite();
-                if(!scaled.compress(Bitmap.CompressFormat.JPEG,95,output))throw new IOException("无法保存照片");
+                if(!bitmap.compress(Bitmap.CompressFormat.JPEG,95,output))throw new IOException("无法保存照片");
                 atomic.finishWrite(output);output=null;
             }finally{if(output!=null)atomic.failWrite(output);}
         }catch(RuntimeException failure){throw new IOException("照片导入失败",failure);}
-        finally{if(scaled!=null&&scaled!=bitmap)scaled.recycle();if(bitmap!=null)bitmap.recycle();input.delete();}
+        finally{if(bitmap!=null)bitmap.recycle();input.delete();}
     }
 
     private static boolean allowed(String path){return path!=null&&REQUIRED.containsKey(path);}

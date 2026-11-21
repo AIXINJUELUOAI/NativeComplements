@@ -1,6 +1,7 @@
 package dev.local.sunwindowdemo.features.alive;
 
 import android.app.KeyguardManager;
+import android.app.WallpaperColors;
 import android.content.*;
 import android.hardware.display.DisplayManager;
 import android.os.*;
@@ -24,6 +25,7 @@ public class AliveWallpaperService extends WallpaperService {
 
     private final class PhotoEngine extends Engine {
         private AliveRenderer renderer;
+        private WallpaperColors colors,pendingColors;
         private boolean ambient,visible,registered,destroyed,displayRegistered,displayRemoved,sleepHidden;
         private DisplayManager displays;
         private BroadcastReceiver handoffReceiver;
@@ -87,12 +89,31 @@ public class AliveWallpaperService extends WallpaperService {
         };
         private final SharedPreferences.OnSharedPreferenceChangeListener changed=(preferences,key)->{
             if(renderer!=null&&("applied_revision".equals(key)||"resources_revision".equals(key)
-                    ||isPreview()&&("aod".equals(key)||"lock".equals(key)||"home".equals(key)||"photo".equals(key)))){invalidateScene();renderer.reload();}
+                    ||isPreview()&&("aod".equals(key)||"lock".equals(key)||"home".equals(key)||"photo".equals(key)
+                        ||key!=null&&key.startsWith("crop_")))){invalidateScene();renderer.reload();}
         };
+        @Override public WallpaperColors onComputeColors(){return colors;}
+        private void publishColors(AliveSettings.Snapshot rendered,WallpaperColors value){
+            if(destroyed||value.equals(pendingColors!=null?pendingColors:colors))return;
+            pendingColors=value;
+            Runnable notify=()->{
+                if(destroyed||pendingColors!=value)return;
+                pendingColors=null;
+                if(!value.equals(colors)){colors=value;notifyColorsChanged();}
+            };
+            if(!isPreview()&&visible&&displayId==Display.DEFAULT_DISPLAY&&displayState()==AlivePhase.DisplayState.ON
+                    &&(getWallpaperFlags()&android.app.WallpaperManager.FLAG_SYSTEM)!=0
+                    &&getSystemService(PowerManager.class).isInteractive()
+                    &&!getSystemService(KeyguardManager.class).isKeyguardLocked()
+                    &&AliveSettings.consumeManualColor(rendered)){
+                AliveColorDelivery.beforeNotify(AliveWallpaperService.this,main,value,notify);
+            }else notify.run();
+        }
         @Override public void onCreate(SurfaceHolder holder){
             super.onCreate(holder);
             setTouchEventsEnabled(false);
             renderer=new AliveRenderer(AliveWallpaperService.this,isPreview());
+            renderer.onColors((rendered,value)->main.post(()->publishColors(rendered,value)));
             systemAod=AliveSystemState.aod(AliveWallpaperService.this);
             try{getContentResolver().registerContentObserver(android.provider.Settings.Secure.getUriFor(AliveSystemState.AOD_SETTING),false,aodObserver);aodRegistered=true;}
             catch(RuntimeException unavailable){systemAod=-1;}

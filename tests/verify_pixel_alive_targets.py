@@ -40,6 +40,13 @@ checks(A+"os/SystemProperties;", [("get", "(Ljava/lang/String;)Ljava/lang/String
 checks(A+"view/ViewGroup;", [("drawChild", "(Landroid/graphics/Canvas;Landroid/view/View;J)Z")])
 checks(A+"app/BroadcastOptions;", [("makeBasic", "()Landroid/app/BroadcastOptions;"), ("setShareIdentityEnabled", "(Z)Landroid/app/BroadcastOptions;")])
 checks(A+"content/BroadcastReceiver;", [("getSentFromUid", "()I"), ("getSentFromPackage", "()Ljava/lang/String;")])
+THEME = S+"theme/ThemeOverlayController;"
+COLORS_LISTENER = S+"theme/ThemeOverlayController$2;"
+COLORS_CALLBACK = "(Landroid/app/WallpaperColors;II)V"
+checks(THEME, fields=[("mOnColorsChangedListener", COLORS_LISTENER), ("mAcceptColorEvents", "Z"),
+                      ("mUserTracker", S+"settings/UserTracker;")])
+checks(COLORS_LISTENER, [("onColorsChanged", COLORS_CALLBACK)], [("this$0", THEME)])
+checks(S+"settings/UserTrackerImpl;", [("getUserId", "()I")])
 REPO = S+"wallpapers/data/repository/WallpaperRepositoryImpl;"
 FLOW = K+"flow/Flow;"
 READONLY = K+"flow/ReadonlyStateFlow;"
@@ -246,6 +253,9 @@ def code_checks(dexes, qpr2):
         (S+"doze/DozeService;", "onCreate", "()V", "field", S+"doze/DozeService;", "mDozeMachine", MACHINE),
         (S+"doze/DozeService;", "onDestroy", "()V", "field", S+"doze/DozeService;", "mDozeMachine", MACHINE),
         (NOTIFICATIONS, "updateAlpha", "()V", "field", NOTIFICATIONS, "mMaxAlphaForKeyguard", "F"),
+        (COLORS_LISTENER, "onColorsChanged", COLORS_CALLBACK, "field", THEME, "mAcceptColorEvents", "Z"),
+        (COLORS_LISTENER, "onColorsChanged", COLORS_CALLBACK, "field", THEME, "mDeferredWallpaperColors", "Landroid/util/SparseArray;"),
+        (COLORS_LISTENER, "onColorsChanged", COLORS_CALLBACK, "method", THEME, "handleWallpaperColors", COLORS_CALLBACK),
     ]
     for owner, name, sig in ((CALLBACK, "onDozeAmountChanged", "(FF)V"), (COLLECTOR, "emit", EMIT)):
         required.append((owner, name, sig, "field" if qpr2 else "method", DEPTH,

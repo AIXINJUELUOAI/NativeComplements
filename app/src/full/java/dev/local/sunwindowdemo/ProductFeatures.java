@@ -16,6 +16,7 @@ final class ProductFeatures {
         installUndimSuggestion(module,loader,note);
         dev.local.sunwindowdemo.features.edgetouch.EdgeInputFilter.install(module,loader,note);
         dev.local.sunwindowdemo.features.motion.MotionAccess.install(module,loader,note);
+        dev.local.sunwindowdemo.features.background.BackgroundHost.install(module,loader,note);
     }
     static void installSystemUi(XposedModule module,ClassLoader loader,Consumer<String> note){
         dev.local.sunwindowdemo.features.alive.AliveSystemUi.install(module,loader,note);
@@ -26,6 +27,7 @@ final class ProductFeatures {
     }
     static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){installSuggestionNotifications(module,loader,note);}
     static void connectSystemUi(android.app.Application app,Consumer<String> note){
+        dev.local.sunwindowdemo.features.alive.AliveColorDelivery.connect(app,note);
         try{dev.local.sunwindowdemo.features.shade.LandscapeShade.connect(app);}
         catch(RuntimeException unavailable){note.accept("SHADE_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}

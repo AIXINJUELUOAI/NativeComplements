@@ -21,6 +21,7 @@ public final class AliveSystemUi {
 
     public static synchronized void install(XposedModule module,ClassLoader loader,Consumer<String> log){
         if(attempted)return;attempted=true;
+        AliveColorDelivery.install(module,loader,log);
         XposedInterface.HookHandle hook=null;
         try{
             Access access=new Access(loader);
@@ -257,8 +258,8 @@ public final class AliveSystemUi {
             return "1".equals(get.invoke(null,"debug.nc.alive_native"));
         }catch(ReflectiveOperationException|RuntimeException unknown){return false;}
     }
-    private static Class<?> type(ClassLoader loader,String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}
-    private static Field field(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {
+    static Class<?> type(ClassLoader loader,String name)throws ClassNotFoundException{return Class.forName(name,false,loader);}
+    static Field field(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {
         Field value=owner.getDeclaredField(name);value.setAccessible(true);
         if(value.getType()!=expected)throw new NoSuchFieldException(owner.getName()+"."+name);
         return value;

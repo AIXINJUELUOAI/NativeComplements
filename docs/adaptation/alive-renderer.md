@@ -4,7 +4,7 @@
 
 ## 场景与线程
 
-[AliveRenderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)由 `AliveGL` HandlerThread 独占 GLES3/EGL、动画与 native handle；照片在 worker 解码，最长边2048。遮罩 `AliveMask` 使用复用 RGB buffer（720px 最多4个、1080px 最多2个）。
+[AliveRenderer](<../../app/src/full/java/org/aliveclean/AliveRenderer.java>)由 `AliveGL` HandlerThread 独占 GLES3/EGL、动画与 native handle。照片按取景和实际 Surface 比例解码，受照片原始可用像素、Surface 尺寸和 GPU 纹理上限约束。系统壁纸服务在新取景首帧成功提交后报告照片颜色，系统根据用户主题设置决定是否采用。遮罩 `AliveMask` 使用复用 RGB buffer（720px 最多4个、1080px 最多2个）。
 
 | 阶段 | 选择 |
 | --- | --- |
