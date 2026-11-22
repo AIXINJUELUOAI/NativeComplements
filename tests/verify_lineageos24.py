@@ -303,6 +303,77 @@ def main() -> None:
     has(f"{ui}/common/ui/data/repository/ConfigurationRepository.kt",
         r"override val onConfigurationChange: Flow<Unit>", "LOS config change flow")
 
+    # Launcher taskbar and quickstep shapes used by the optional immersive/cover paths.
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarInsetsController.kt",
+        r"class TaskbarInsetsController\(val context: TaskbarActivityContext\)", "LOS taskbar controller")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarInsetsController.kt",
+        r"private fun setProviderInsets\(provider: InsetsFrameProvider, gravity: Int, endRotation: Int\)",
+        "LOS taskbar provider")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarInsetsController.kt",
+        r"fun onTaskbarOrBubblebarWindowHeightOrInsetsChanged\(\)", "LOS taskbar refresh")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+        r"private final TaskbarDragLayer mDragLayer;", "LOS taskbar drag layer")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+        r"private final TaskbarControllers mControllers;", "LOS taskbar controllers")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+        r"private final WindowManager mWindowManager;", "LOS taskbar window manager")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+        r"private WindowManager.LayoutParams mWindowLayoutParams;", "LOS taskbar layout params")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+        r"private boolean mIsDestroyed = false;", "LOS taskbar destroyed")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarActivityContext.java",
+        r"public boolean isGestureNav\(\)", "LOS taskbar gesture mode")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarControllers.java",
+        r"public final NavbarButtonsViewController navbarButtonsViewController;", "LOS taskbar nav buttons")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/NavbarButtonsViewController.java",
+        r"private TaskbarTransitions mTaskbarTransitions;", "LOS taskbar transitions owner")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarDragLayer.java",
+        r"private final TaskbarBackgroundRenderer mBackgroundRenderer;", "LOS taskbar renderer")
+    has("Launcher3/quickstep/src/com/android/launcher3/taskbar/TaskbarTransitions.java",
+        r"class TaskbarTransitions extends BarTransitions", "LOS taskbar transitions base")
+    has("Launcher3/quickstep/src/com/android/quickstep/LauncherBackAnimationController.java",
+        r"private RemoteAnimationTarget mBackTarget;", "LOS back target")
+    has("Launcher3/quickstep/src/com/android/quickstep/LauncherBackAnimationController.java",
+        r"private final QuickstepLauncher mLauncher;", "LOS back launcher")
+    has("Launcher3/quickstep/src/com/android/quickstep/LauncherBackAnimationController.java",
+        r"private final Rect mStartRect = new Rect\(\);", "LOS back start rect")
+    has("Launcher3/quickstep/src/com/android/quickstep/LauncherBackAnimationController.java",
+        r"private void applyTransform\(RectF targetRect, float cornerRadius\)", "LOS back transform")
+    has("Launcher3/quickstep/src/com/android/quickstep/LauncherBackAnimationController.java",
+        r"private void onCancelFinished\(\)", "LOS back cancel finish")
+    has("frameworks_base/core/java/android/view/RemoteAnimationTarget.java",
+        r"public final int taskId;", "LOS back task id")
+    has("frameworks_base/core/java/android/view/RemoteAnimationTarget.java",
+        r"public final SurfaceControl leash;", "LOS back leash")
+    has("Launcher3/quickstep/src/com/android/quickstep/SwipeUpAnimationLogic.java",
+        r"public void updateDisplacement\(float displacement\)", "LOS swipe displacement")
+    has("Launcher3/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java",
+        r"private GestureEndTarget calculateEndTarget\(", "LOS swipe target")
+    has("Launcher3/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java",
+        r"protected void performHapticFeedback\(\)", "LOS swipe haptic")
+    has("Launcher3/quickstep/src/com/android/quickstep/RemoteTargetGluer.java",
+        r"public TaskViewSimulator getTaskViewSimulator\(\)", "LOS swipe simulator")
+    has("Launcher3/quickstep/src/com/android/quickstep/RemoteTargetGluer.java",
+        r"public TransformParams getTransformParams\(\)", "LOS swipe params")
+    has("Launcher3/quickstep/src/com/android/quickstep/util/TaskViewSimulator.java",
+        r"public RectF getCurrentRect\(\)", "LOS swipe rect")
+    has("Launcher3/quickstep/src/com/android/quickstep/util/TaskViewSimulator.java",
+        r"public float getCurrentCornerRadius\(\)", "LOS swipe radius")
+    has("Launcher3/quickstep/src/com/android/quickstep/LauncherSwipeHandlerV2.java",
+        r"private View findWorkspaceView\(List<IBinder> launchCookies, TaskView sourceTaskView\)",
+        "LOS swipe workspace view")
+    has("Launcher3/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java",
+        r"private void invalidateHandler\(\)", "LOS swipe invalidate")
+    has("Launcher3/quickstep/src/com/android/quickstep/AbsSwipeUpHandler.java",
+        r"private void invalidateHandlerWithLauncher\(\)", "LOS swipe launcher invalidate")
+    has("Launcher3/quickstep/src/com/android/quickstep/views/RecentsView.java",
+        r"protected void applyLoadPlan\(List<GroupTask> taskGroups, int taskListChangeId\)",
+        "LOS recents load plan")
+    has("Launcher3/quickstep/src/com/android/quickstep/views/RecentsView.java",
+        r"public void reloadIfNeeded\(\)", "LOS recents reload")
+    has("Launcher3/quickstep/src/com/android/quickstep/views/RecentsView.java",
+        r"private int mAppliedTaskListChangeId = -1;", "LOS recents change id")
+
     # Desktop double-tap sleep and the exact launcher child geometry.
     has("Launcher3/src/com/android/launcher3/touch/WorkspaceTouchListener.java",
         r"private final Launcher mLauncher;", "LOS desktop launcher field")
@@ -531,6 +602,14 @@ def main() -> None:
             r"android\.service\.wallpaper\.CHANGE_LIVE_WALLPAPER", "LOS theme picker direct preview absence")
     has("packages_apps_WallpaperPicker2/AndroidManifest.xml",
         r"android\.intent\.action\.SET_WALLPAPER", "LOS picker customization entry")
+    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
+        r"public @Nullable WallpaperColors onComputeColors\(\)", "LOS wallpaper colors compute")
+    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
+        r"public void notifyColorsChanged\(\)", "LOS wallpaper colors notify")
+    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
+        r"public int getWallpaperFlags\(\)", "LOS wallpaper destination")
+    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
+        r"public Context getDisplayContext\(\)", "LOS wallpaper display context")
 
     # Background management hooks against AM/WM/Power shapes.
     has("frameworks_base/services/core/java/com/android/server/am/ActivityManagerService.java",
