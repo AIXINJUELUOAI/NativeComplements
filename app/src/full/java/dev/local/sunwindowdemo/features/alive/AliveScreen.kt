@@ -189,7 +189,7 @@ fun AliveScreen(onBack: () -> Unit) {
     val wallpaperPicker = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val target = pendingComponent?.let(ComponentName::unflattenFromString)
         pendingComponent = null
-        if (result.resultCode != Activity.RESULT_OK || target == null) {
+        if (target == null) {
             message = "已取消设置，当前配置未更改；可继续编辑草稿"
         } else {
             busy = true
@@ -199,7 +199,9 @@ fun AliveScreen(onBack: () -> Unit) {
                         if (selectedAliveComponent(context, target)) AliveSettings.applyDraft(context) else null
                     }
                     if (applied != null) { draft = applied; appliedSuccessfully() }
-                    else message = "未能核实系统已选用目标组件，未提交草稿；请重试"
+                    else message = if (result.resultCode == Activity.RESULT_OK)
+                        "未确认系统已选用 Alive 壁纸，未提交草稿；请重试"
+                    else "已取消设置，当前配置未更改；可继续编辑草稿"
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (failure: Exception) { message = failure.message ?: "确认失败，草稿未提交" }
                 finally { busy = false; refresh++ }
@@ -222,13 +224,31 @@ fun AliveScreen(onBack: () -> Unit) {
                 val applied = withContext(Dispatchers.IO) {
                     if (selectedAliveComponent(context, target, requireUnmixed = true)) AliveSettings.applyDraft(context) else null
                 }
-                if (applied != null) { draft = applied; appliedSuccessfully() }
-                else {
-                    pendingComponent = target.flattenToString()
-                    try {
-                        wallpaperPicker.launch(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
-                            .putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, target))
-                    } catch (failure: Exception) { pendingComponent = null; message = failure.message ?: "无法打开系统选择器，未提交草稿" }
+                if (applied != null) { draft = applied; appliedSuccessfully(); return@launch }
+                pendingComponent = target.flattenToString()
+                val change = AliveWallpaperPicker.change(target)
+                if (change.resolveActivity(context.packageManager) != null) {
+                    try { wallpaperPicker.launch(change) }
+                    catch (failure: Exception) { pendingComponent = null; message = failure.message ?: "无法打开系统选择器，未提交草稿" }
+                    return@launch
+                }
+                // LineageOS' WallpaperPicker2 has no exported CHANGE_LIVE_WALLPAPER activity.
+                // The hooked system service binds only this exact component; without the hook or
+                // hidden-API access, open the native customization picker instead.
+                if (withContext(Dispatchers.IO) { AliveWallpaperPicker.applyDirect(context, target) }) {
+                    val after = withContext(Dispatchers.IO) {
+                        if (selectedAliveComponent(context, target, requireUnmixed = true)) AliveSettings.applyDraft(context) else null
+                    }
+                    if (after != null) { draft = after; pendingComponent = null; appliedSuccessfully(); return@launch }
+                }
+                val chooser = AliveWallpaperPicker.chooser()
+                if (chooser.resolveActivity(context.packageManager) != null) {
+                    message = "当前系统不支持直接预览，请在壁纸选择器中选择 Alive 动态壁纸"
+                    try { wallpaperPicker.launch(chooser) }
+                    catch (failure: Exception) { pendingComponent = null; message = failure.message ?: "无法打开系统壁纸选择器，未提交草稿" }
+                } else {
+                    pendingComponent = null
+                    message = "系统没有可用的动态壁纸选择器，未提交草稿"
                 }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (failure: Exception) { message = failure.message ?: "应用失败，草稿仍保留" }

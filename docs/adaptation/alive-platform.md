@@ -10,7 +10,7 @@ Alive 仅在 full 主模块，使用原生 WallpaperService，不接管认证、
 
 [系统状态](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveSystemState.java>)只读本用户 `doze_always_on`，通过 ContentObserver/页面恢复刷新。1 显示三卡，0 显示两卡，其他/拒绝/缺键为未知，不能当关闭；隐藏卡不丢已存样式。设置已知时应用 ambient 组件，关闭后重新开启 AOD 无须重选；未知优先保已有 ambient 选择，否则普通组件回退。
 
-同一目标组件已选且无普通/ambient 混用时可直接发布；首次或切换须经原生选择器成功并核实组件才发布。取消/失败保草稿及旧应用配置；成功发 HOME，再只移除本模块任务。返回桌面失败不应将已应用误报未提交。
+同一目标组件已选且无普通/ambient 混用时可直接发布；首次或切换优先经原生选择器。LineageOS 的 WallpaperPicker2/ThemePicker 没有导出 `ACTION_CHANGE_LIVE_WALLPAPER` 预览 Activity，此时由模块自己的 system_server 广播桥只绑定精确 Alive 组件；桥不可用则退回系统 `ACTION_SET_WALLPAPER`。所有路径都再次读取系统实际组件后才发布草稿。取消/失败保草稿及旧应用配置；成功发 HOME，再只移除本模块任务。返回桌面失败不应将已应用误报未提交。
 
 ## 数据与隐私
 

@@ -7,6 +7,7 @@
 - [普通组件](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperService.java>)保持 `supportsAmbientMode=false`，提供普通壁纸回退。
 - [ambient 组件](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveAmbientWallpaperService.java>)完整名称为 `dev.nativecomplements.module/dev.local.sunwindowdemo.features.alive.AliveAmbientWallpaperService`，真实元数据 `supportsAmbientMode=true`，复用同一 Engine 与渲染内核。
 - 用户通过原生壁纸选择流程应用该组件；系统 AOD 设置仍决定 ambient 运行资格。撤回选择须切回普通 Alive 或其他壁纸。撤销 Hook 不会立即断开已连接 Engine，不能替代系统切换/重绑。
+- LineageOS 的 WallpaperPicker2/ThemePicker 没有导出 `ACTION_CHANGE_LIVE_WALLPAPER` 预览 Activity；[AliveWallpaperAccess](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperAccess.java>)在 system_server 注册仅本模块可发送的广播桥，[AliveWallpaperPicker](<../../app/src/full/java/dev/local/sunwindowdemo/features/alive/AliveWallpaperPicker.java>)只在桥精确接受后发布草稿。组件、用户、UID 或 destination 任一不符即拒绝；桥不可用退回系统 `ACTION_SET_WALLPAPER`。
 
 ## 精确接入
 
