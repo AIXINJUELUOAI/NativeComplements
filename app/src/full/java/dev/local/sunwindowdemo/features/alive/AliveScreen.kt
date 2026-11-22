@@ -239,7 +239,10 @@ fun AliveScreen(onBack: () -> Unit) {
                     val after = withContext(Dispatchers.IO) {
                         if (selectedAliveComponent(context, target, requireUnmixed = true)) AliveSettings.applyDraft(context) else null
                     }
-                    if (after != null) { draft = after; pendingComponent = null; appliedSuccessfully(); return@launch }
+                    pendingComponent = null
+                    if (after != null) { draft = after; appliedSuccessfully() }
+                    else message = "系统已接受 Alive 壁纸，但暂时无法核实组件；请稍后重新应用草稿"
+                    return@launch
                 }
                 val chooser = AliveWallpaperPicker.chooser()
                 if (chooser.resolveActivity(context.packageManager) != null) {

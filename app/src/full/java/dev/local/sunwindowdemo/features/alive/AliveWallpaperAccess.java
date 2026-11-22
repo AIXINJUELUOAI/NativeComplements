@@ -51,7 +51,6 @@ public final class AliveWallpaperAccess {
             Class<?> callback = Class.forName("android.os.IRemoteCallback", false, loader);
             Method checked = service.getDeclaredMethod("setWallpaperComponentChecked",
                 description, String.class, int.class, int.class);
-            Method component = description.getDeclaredMethod("getComponent");
             Field context = service.getDeclaredField("mContext");
             Method apply = descriptionApply(service, description, callback);
             Method supported = service.getMethod("isWallpaperSupported", String.class);
@@ -62,7 +61,7 @@ public final class AliveWallpaperAccess {
             Method build = builder.getDeclaredMethod("build");
             Method ready = service.getDeclaredMethod("systemReady");
             Method boot = service.getDeclaredMethod("onBootPhase", int.class);
-            if (checked.getReturnType() != void.class || component.getReturnType() != ComponentName.class
+            if (checked.getReturnType() != void.class
                     || !Context.class.isAssignableFrom(context.getType()) || apply == null
                     || apply.getReturnType() != boolean.class || supported.getReturnType() != boolean.class
                     || allowed.getReturnType() != boolean.class || build.getReturnType() != description
@@ -71,7 +70,6 @@ public final class AliveWallpaperAccess {
                 throw new NoSuchMethodException("live wallpaper apply ABI");
             }
             checked.setAccessible(true);
-            component.setAccessible(true);
             context.setAccessible(true);
             apply.setAccessible(true);
             supported.setAccessible(true);
