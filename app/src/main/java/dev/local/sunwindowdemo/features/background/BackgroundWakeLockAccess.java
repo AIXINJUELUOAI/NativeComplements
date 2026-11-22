@@ -61,7 +61,16 @@ final class BackgroundWakeLockAccess {
         Class<?> wakeLock = target(loader, "power.PowerManagerService$WakeLock");
         var access = new BackgroundWakeLockAccess(host, power, wakeLock);
         Method decide = method(power, "setWakeLockDisabledStateLocked", boolean.class, wakeLock);
-        Method setDisabled = method(wakeLock, "setDisabled", boolean.class, boolean.class);
+        // LineageOS 24.0 keeps AOSP's single-argument setter.
+        Method setDisabled;
+        boolean setDisabledContext = false;
+        try {
+            setDisabled = method(wakeLock, "setDisabled", boolean.class, boolean.class, boolean.class);
+            setDisabledContext = true;
+        } catch (NoSuchMethodException lineage) {
+            setDisabled = method(wakeLock, "setDisabled", boolean.class, boolean.class);
+        }
+        boolean contextual = setDisabledContext;
         Method update = method(power, "updatePowerStateLocked", void.class);
         Method attribution = method(wakeLock, "updateWorkSource", void.class, WorkSource.class);
         Method ready = method(power, "systemReady", void.class);
@@ -70,7 +79,7 @@ final class BackgroundWakeLockAccess {
         var handles = new ArrayList<XposedInterface.HookHandle>();
         try {
             handles.add(hook(module, setDisabled, chain -> access.restrict.get() == chain.getThisObject()
-                ? chain.proceed(new Object[]{true}) : chain.proceed()));
+                ? chain.proceed(contextual ? new Object[]{true, true} : new Object[]{true}) : chain.proceed()));
             handles.add(hook(module, decide, chain -> access.decide(chain)));
             handles.add(hook(module, update, chain -> {
                 Object result = chain.proceed();

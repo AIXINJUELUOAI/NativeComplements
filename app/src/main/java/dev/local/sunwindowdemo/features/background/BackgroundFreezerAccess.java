@@ -37,6 +37,7 @@ final class BackgroundFreezerAccess {
     private final Method thaw;
     private final Method getFreezer;
     private final Method binder;
+    private final boolean binderUid;
     private final ThreadLocal<Target> target = new ThreadLocal<>();
     private final ConcurrentHashMap<Integer, Owned> owned = new ConcurrentHashMap<>();
     private final Set<String> logged = ConcurrentHashMap.newKeySet();
@@ -57,7 +58,19 @@ final class BackgroundFreezerAccess {
         uidForPid = method(android.os.Process.class, "getUidForPid", int.class, int.class);
         thaw = method(optimizer, "unfreezeAppLSP", void.class, process, int.class);
         getFreezer = method(am, "getFreezer", freezer);
-        binder = method(freezer, "freezeBinder", int.class, int.class, boolean.class, int.class);
+        // LineageOS 24.0 keeps the AOSP three-argument Binder helper; some downstream
+        // builds add the owner UID before the freeze flag.
+        Method candidate;
+        boolean uidArgument;
+        try {
+            candidate = method(freezer, "freezeBinder", int.class, int.class, boolean.class, int.class);
+            uidArgument = true;
+        } catch (NoSuchMethodException lineage) {
+            candidate = method(freezer, "freezeBinder", int.class, boolean.class, int.class);
+            uidArgument = false;
+        }
+        binder = candidate;
+        binderUid = uidArgument;
     }
 
     static BackgroundFreezerAccess install(XposedModule module, ClassLoader loader, BackgroundHost host,
@@ -212,7 +225,9 @@ final class BackgroundFreezerAccess {
             try {
                 Identity current = identity(pid, uid);
                 if (current.start == Long.parseLong(data[3]) && current.stopped) {
-                    if ((Integer) binder.invoke(freezer, pid, false, 0) != 0) throw new IOException("Binder recovery failed");
+                    int frozen = binderUid ? (Integer) binder.invoke(freezer, pid, uid, false, 0)
+                        : (Integer) binder.invoke(freezer, pid, false, 0);
+                    if (frozen != 0) throw new IOException("Binder recovery failed");
                     Os.kill(pid, OsConstants.SIGCONT);
                     host.freezerEvent("KILL19_RECOVERED");
                 }
