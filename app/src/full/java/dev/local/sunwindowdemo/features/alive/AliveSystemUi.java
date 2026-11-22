@@ -54,17 +54,17 @@ public final class AliveSystemUi {
         try{
             Class<?> depth=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController");
             try{depth.getDeclaredMethod("setWakeAndUnlockBlurRadius",float.class);}
-            catch(NoSuchMethodException qpr2){
-                // QPR2 writes wakeAndUnlockBlurRadius directly and never applies it (blur moved to
-                // WindowRootViewBlurInteractor), so there is no native doze blur contribution to project.
-                log.accept("ALIVE_SYSTEMUI_DOZE_BLUR_SKIPPED no native wake blur setter");
+            catch(NoSuchMethodException lineage){
+                // LineageOS keeps wakeAndUnlockBlurRadius private and computes it through
+                // getNewWakeBlurRadius instead of a public setter.
+                installDozeBlurFallback(module,loader,depth,access,log,enabled);
                 return;
             }
-            Class<?> callback=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$statusBarStateCallback$1");
-            Class<?> collector=type(loader,"com.android.systemui.statusbar.NotificationShadeDepthController$2$1");
+            Class<?> callback=nestedDoze(loader,depth,"onDozeAmountChanged",float.class,float.class);
+            Class<?> collector=nestedEmit(loader,depth);
             Class<?> interactor=type(loader,"com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor");
             Field callbackOwner=field(callback,"this$0",depth),collectorOwner=field(collector,"this$0",depth);
-            Field collectorId=field(collector,"$r8$classId",int.class);
+            Field collectorId=optionalField(collector,"$r8$classId",int.class);
             Field wallpapers=field(depth,"wallpaperInteractor",interactor);
             // LineageOS 24.0 declares WallpaperInteractor.wallpaperRepository as the interface;
             // PixelOS narrows it to the implementation.
@@ -96,7 +96,7 @@ public final class AliveSystemUi {
             }));
             hooks.add(module.hook(emit).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                 Object owner=null;
-                try{if(collectorId.getInt(chain.getThisObject())==1)owner=collectorOwner.get(chain.getThisObject());}
+                try{if(collectorId==null||collectorId.getInt(chain.getThisObject())==1)owner=collectorOwner.get(chain.getThisObject());}
                 catch(IllegalAccessException ignored){}
                 if(owner!=null)access.depth=new java.lang.ref.WeakReference<>(owner);
                 Object previous=producing.get();
@@ -115,6 +115,70 @@ public final class AliveSystemUi {
         }
     }
 
+    /** LOS private-field path: project only the doze contribution of the selected own ambient wallpaper. */
+    private static void installDozeBlurFallback(XposedModule module,ClassLoader loader,Class<?> depth,
+            Access access,Consumer<String> log,java.util.concurrent.atomic.AtomicBoolean enabled){
+        List<XposedInterface.HookHandle> hooks=new ArrayList<>();
+        try{
+            Class<?> interactor=type(loader,"com.android.systemui.wallpapers.domain.interactor.WallpaperInteractor");
+            Field wallpapers=field(depth,"wallpaperInteractor",interactor);
+            Field repository=assignable(interactor,"wallpaperRepository",
+                type(loader,"com.android.systemui.wallpapers.data.repository.WallpaperRepository"));
+            Field ambient=field(depth,"wallpaperSupportsAmbientMode",boolean.class);
+            Field amount=field(depth,"prevDozeAmount",float.class);
+            Method radius=depth.getDeclaredMethod("getNewWakeBlurRadius",float.class);
+            radius.setAccessible(true);
+            if(radius.getReturnType()!=float.class)throw new NoSuchMethodException("doze blur fallback ABI");
+            hooks.add(module.hook(radius).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                if(!enabled.get())return chain.proceed();
+                try{
+                    Object owner=chain.getThisObject();
+                    if(ambient.getBoolean(owner)&&amount.getFloat(owner)>0
+                            &&access.selectedOwn(repository.get(wallpapers.get(owner))))return 0f;
+                }catch(ReflectiveOperationException|RuntimeException unknown){/* Native contribution on unknown state. */}
+                return chain.proceed();
+            }));
+            // Deoptimize the private getter and its known callers; no global BlurUtils/resource change.
+            if(!module.deoptimize(radius))throw new IllegalStateException("doze blur fallback deoptimize");
+            try{module.deoptimize(depth.getDeclaredMethod("updateWakeBlurRadius",float.class));}catch(NoSuchMethodException ignored){}
+            try{module.deoptimize(nestedDoze(loader,depth,"onDozeAmountChanged",float.class,float.class).getDeclaredMethod("onDozeAmountChanged",float.class,float.class));}catch(ReflectiveOperationException ignored){}
+            try{module.deoptimize(nestedEmit(loader,depth).getDeclaredMethod("emit",Object.class,type(loader,"kotlin.coroutines.Continuation")));}catch(ReflectiveOperationException ignored){}
+            enabled.set(true);
+            log.accept("ALIVE_SYSTEMUI_DOZE_BLUR_READY private-field fallback");
+        }catch(Throwable unknown){
+            enabled.set(false);
+            for(XposedInterface.HookHandle hook:hooks)try{hook.unhook();}catch(Throwable ignored){}
+            log.accept("ALIVE_SYSTEMUI_DOZE_BLUR_UNAVAILABLE "+unknown.getClass().getSimpleName());
+        }
+    }
+
+    /** R8 numbering of Kotlin anonymous callbacks is not stable; discover by verified methods. */
+    private static Class<?> nestedDoze(ClassLoader loader,Class<?> owner,String name,Class<?>...args)throws ClassNotFoundException{
+        for(int index=1;index<=64;index++)try{
+            Class<?> candidate=type(loader,owner.getName()+"$"+index);
+            try{candidate.getDeclaredMethod(name,args);return candidate;}catch(NoSuchMethodException absent){}
+        }catch(ClassNotFoundException absent){}
+        throw new ClassNotFoundException(owner.getName()+"$*."+name);
+    }
+    /** The capability collector is a nested R8 lambda with an emit(Object,Continuation) body. */
+    private static Class<?> nestedEmit(ClassLoader loader,Class<?> owner)throws ClassNotFoundException{
+        Class<?> continuation=type(loader,"kotlin.coroutines.Continuation");
+        for(int index=1;index<=64;index++){
+            Class<?> candidate;
+            try{candidate=type(loader,owner.getName()+"$"+index);}
+            catch(ClassNotFoundException absent){continue;}
+            try{
+                Method emit=candidate.getDeclaredMethod("emit",Object.class,continuation);
+                if(emit.getReturnType()==Object.class)return candidate;
+            }catch(NoSuchMethodException absent){}
+            for(int child=1;child<=16;child++)try{
+                Class<?> nested=type(loader,candidate.getName()+"$"+child);
+                Method emit=nested.getDeclaredMethod("emit",Object.class,continuation);
+                if(emit.getReturnType()==Object.class)return nested;
+            }catch(ClassNotFoundException|NoSuchMethodException absent){}
+        }
+        throw new ClassNotFoundException(owner.getName()+"$*#emit");
+    }
     static record MatchToken(Object user,Object lock,Object home,int uid,int wallpaperId,int lockId) {
         boolean same(MatchToken other){return other!=null&&user==other.user&&lock==other.lock&&home==other.home&&uid==other.uid&&wallpaperId==other.wallpaperId&&lockId==other.lockId;}
     }
@@ -291,6 +355,13 @@ public final class AliveSystemUi {
         Field value=owner.getDeclaredField(name);value.setAccessible(true);
         if(value.getType()!=expected)throw new NoSuchFieldException(owner.getName()+"."+name);
         return value;
+    }
+    private static Field optionalField(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException{
+        try{
+            Field value=owner.getDeclaredField(name);value.setAccessible(true);
+            if(value.getType()!=expected)throw new NoSuchFieldException(owner.getName()+"."+name);
+            return value;
+        }catch(NoSuchFieldException absent){return null;}
     }
     /** Declared as a concrete or interface Flow type that must implement the expected host interface. */
     private static Field assignable(Class<?> owner,String name,Class<?> expected)throws ReflectiveOperationException {
