@@ -83,7 +83,7 @@ public final class AliveWallpaperPicker {
                     .putExtra(AliveWallpaperProtocol.EXTRA_COMPONENT, target)
                     .putExtra(AliveWallpaperProtocol.EXTRA_RESULT, reply), null,
                 android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
-            return latch.await(2500, TimeUnit.MILLISECONDS)
+            return latch.await(1500, TimeUnit.MILLISECONDS)
                 && code.get() == Activity.RESULT_OK;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();

@@ -61,11 +61,13 @@ public final class AliveWallpaperAccess {
             Method setComponent = builder.getDeclaredMethod("setComponent", ComponentName.class);
             Method build = builder.getDeclaredMethod("build");
             Method ready = service.getDeclaredMethod("systemReady");
+            Method boot = service.getDeclaredMethod("onBootPhase", int.class);
             if (checked.getReturnType() != void.class || component.getReturnType() != ComponentName.class
                     || !Context.class.isAssignableFrom(context.getType()) || apply == null
                     || apply.getReturnType() != boolean.class || supported.getReturnType() != boolean.class
                     || allowed.getReturnType() != boolean.class || build.getReturnType() != description
-                    || setComponent.getReturnType() != builder || ready.getReturnType() != void.class) {
+                    || setComponent.getReturnType() != builder || ready.getReturnType() != void.class
+                    || boot.getReturnType() != void.class) {
                 throw new NoSuchMethodException("live wallpaper apply ABI");
             }
             checked.setAccessible(true);
@@ -78,10 +80,17 @@ public final class AliveWallpaperAccess {
             setComponent.setAccessible(true);
             build.setAccessible(true);
             ready.setAccessible(true);
+            boot.setAccessible(true);
             Access access = new Access(context, apply, supported, allowed, builderInit, setComponent, build, log);
             hooks.add(module.hook(checked).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                 .intercept(access::checked));
             hooks.add(module.hook(ready).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept(chain -> {
+                    Object result = chain.proceed();
+                    access.connect(chain.getThisObject());
+                    return result;
+                }));
+            hooks.add(module.hook(boot).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
                 .intercept(chain -> {
                     Object result = chain.proceed();
                     access.connect(chain.getThisObject());
