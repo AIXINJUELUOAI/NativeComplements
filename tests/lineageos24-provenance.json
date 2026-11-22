@@ -45,5 +45,10 @@
     "repository": "https://github.com/LineageOS/android_packages_apps_ThemePicker.git",
     "commit": "d5a70ebd9cd04dd9e5a98a74efab4bea319248d9",
     "branch": "lineage-24.0"
+  },
+  "wallpaperpicker2": {
+    "repository": "https://github.com/LineageOS/android_packages_apps_WallpaperPicker2.git",
+    "commit": "faf11f2e8e1e36b07e3163831d34190ab7187265",
+    "branch": "lineage-24.0"
   }
 }

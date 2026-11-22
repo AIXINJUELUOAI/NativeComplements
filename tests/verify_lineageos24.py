@@ -28,7 +28,8 @@ def text(relative: str) -> str:
         return path.read_text(encoding="utf-8", errors="replace")
     for prefix in ("frameworks_base", "frameworks_libs_systemui", "Launcher3",
                    "packages_services/Telecomm", "packages_apps_ThemePicker",
-                   "frameworks_opt_telephony", "packages_services_Telephony"):
+                   "packages_apps_WallpaperPicker2", "frameworks_opt_telephony",
+                   "packages_services_Telephony"):
         if relative.startswith(prefix + "/"):
             repo = SOURCE / prefix
             inner = relative[len(prefix) + 1:]
@@ -45,6 +46,11 @@ def text(relative: str) -> str:
 def has(relative: str, pattern: str, label: str) -> None:
     if re.search(pattern, text(relative), re.MULTILINE | re.DOTALL) is None:
         fail(f"{label}: {relative} does not match /{pattern}/")
+
+
+def has_not(relative: str, pattern: str, label: str) -> None:
+    if re.search(pattern, text(relative), re.MULTILINE | re.DOTALL) is not None:
+        fail(f"{label}: {relative} unexpectedly matches /{pattern}/")
 
 
 def commit(relative: str) -> str:
@@ -75,6 +81,7 @@ def repo_head(key: str) -> str:
         "telephony": "frameworks_opt_telephony",
         "telephony_app": "packages_services_Telephony",
         "themepicker": "packages_apps_ThemePicker",
+        "wallpaperpicker2": "packages_apps_WallpaperPicker2",
     }.get(key, key))
 
 
@@ -93,6 +100,8 @@ def main() -> None:
         fail("manifest does not contain Launcher3")
     if 'path="packages/services/Telecomm"' not in manifest:
         fail("manifest does not contain Telecomm")
+    if 'path="packages/apps/WallpaperPicker2"' not in manifest:
+        fail("manifest does not contain WallpaperPicker2")
     for key, expected in data.items():
         if key in {"distribution", "source_root"}:
             continue
@@ -454,6 +463,22 @@ def main() -> None:
         r"override val wallpaperInfo: StateFlow<WallpaperInfo\?>", "LOS home wallpaper")
     has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
         r"override val wallpaperSupportsAmbientMode: Flow<Boolean>", "LOS ambient wallpaper")
+    has(f"{ui}/theme/ThemeOverlayController.java",
+        r"private final OnColorsChangedListener mOnColorsChangedListener", "LOS theme color listener")
+    has(f"{ui}/theme/ThemeOverlayController.java",
+        r"public void onColorsChanged\(WallpaperColors wallpaperColors, int which, int userId\)",
+        "LOS theme color callback")
+    has(f"{ui}/theme/ThemeOverlayController.java", r"private boolean mAcceptColorEvents = true;",
+        "LOS theme color gate")
+    has(f"{ui}/theme/ThemeOverlayController.java", r"private final UserTracker mUserTracker;",
+        "LOS theme user tracker")
+    has(f"{ui}/settings/UserTracker.kt", r"val userId: Int", "LOS user tracker id")
+    has(f"{ui}/statusbar/NotificationShadeDepthController.kt",
+        r"@VisibleForTesting var wallpaperSupportsAmbientMode: Boolean = false", "LOS depth ambient field")
+    has(f"{ui}/statusbar/NotificationShadeDepthController.kt",
+        r"private var prevDozeAmount: Float = 0f", "LOS depth doze field")
+    has(f"{ui}/statusbar/NotificationShadeDepthController.kt",
+        r"private fun getNewWakeBlurRadius\(ratio: Float\): Float", "LOS wake blur calculation")
     has(f"{ui}/user/data/repository/UserRepositoryImpl.kt",
         r"override val selectedUser: StateFlow<SelectedUserModel>", "LOS selected user")
     has("frameworks_base/packages/SystemUI/pods/user/data/src/api/model/SelectedUserModel.kt",
@@ -465,6 +490,198 @@ def main() -> None:
     has("frameworks_base/services/core/java/com/android/server/wallpaper/WallpaperManagerService.java",
         r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description, boolean force,\s*boolean fromUser, WallpaperData wallpaper, IRemoteCallback reply\)",
         "LOS ambient bind exact")
+
+    # Live wallpaper application: LineageOS' picker has no framework preview activity, so the
+    # module's own component is applied through the verified service permission boundary.
+    wallpaper_service = "frameworks_base/services/core/java/com/android/server/wallpaper"
+    has(f"{wallpaper_service}/WallpaperManagerService.java",
+        r"public void setWallpaperComponentChecked\(WallpaperDescription description,\s*String callingPackage, @SetWallpaperFlags int which, int userId\)",
+        "LOS live wallpaper checked entry")
+    has(f"{wallpaper_service}/WallpaperManagerService.java",
+        r"private boolean setWallpaperDescriptionInternal\(@NonNull WallpaperDescription description,",
+        "LOS live wallpaper description apply")
+    has(f"{wallpaper_service}/WallpaperManagerService.java",
+        r"void systemReady\(\)", "LOS wallpaper ready")
+    has(f"{wallpaper_service}/WallpaperManagerService.java",
+        r"public boolean isWallpaperSupported\(String callingPackage\)", "LOS wallpaper support gate")
+    has(f"{wallpaper_service}/WallpaperManagerService.java",
+        r"public boolean isSetWallpaperAllowed\(String callingPackage\)", "LOS wallpaper policy gate")
+    has(f"{wallpaper_service}/WallpaperManagerService.java",
+        r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description, boolean force,\s*boolean fromUser, WallpaperData wallpaper, IRemoteCallback reply\)",
+        "LOS ambient live wallpaper bind")
+    has(f"{wallpaper_service}/WallpaperData.java", r"final int userId;", "LOS wallpaper user field")
+    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
+        r"public ComponentName getComponent\(\)", "LOS wallpaper description component")
+    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
+        r"public static final class Builder", "LOS wallpaper description builder")
+    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
+        r"public Builder setComponent\(@Nullable ComponentName component\)", "LOS wallpaper builder component")
+    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
+        r"public WallpaperDescription build\(\)", "LOS wallpaper builder build")
+    has("frameworks_base/core/java/android/app/WallpaperManager.java",
+        r"public boolean setWallpaperComponent\(ComponentName name\)", "LOS live wallpaper component setter")
+    has("frameworks_base/core/java/android/app/WallpaperManager.java",
+        r"public boolean setWallpaperComponentWithFlags\(@NonNull ComponentName name,\s*@SetWallpaperFlags int which, int userId\)",
+        "LOS live wallpaper flags setter")
+    # LineageOS WallpaperPicker2 and ThemePicker intentionally expose no CHANGE_LIVE_WALLPAPER
+    # activity; the app must use the verified service path or the native customization picker.
+    has_not("packages_apps_WallpaperPicker2/AndroidManifest.xml",
+            r"android\.service\.wallpaper\.CHANGE_LIVE_WALLPAPER", "LOS picker direct preview absence")
+    has_not("packages_apps_ThemePicker/AndroidManifest.xml",
+            r"android\.service\.wallpaper\.CHANGE_LIVE_WALLPAPER", "LOS theme picker direct preview absence")
+    has("packages_apps_WallpaperPicker2/AndroidManifest.xml",
+        r"android\.intent\.action\.SET_WALLPAPER", "LOS picker customization entry")
+
+    # Background management hooks against AM/WM/Power shapes.
+    has("frameworks_base/services/core/java/com/android/server/am/ActivityManagerService.java",
+        r"public void systemReady\(final Runnable goingCallback, @NonNull TimingsTraceAndSlog t\)",
+        "LOS AMS ready")
+    has("frameworks_base/services/core/java/com/android/server/am/ActivityManagerService.java",
+        r"final void updateOomAdjLocked\(@OomAdjReason int oomAdjReason\)", "LOS AMS oom entry")
+    has("frameworks_base/services/core/java/com/android/server/am/ActivityManagerService.java",
+        r"final Context mContext;", "LOS AMS context")
+    has("frameworks_base/services/core/java/com/android/server/wm/MirrorActiveUids.java",
+        r"void onUidActive\(int uid, int procState\)", "LOS mirror active")
+    has("frameworks_base/services/core/java/com/android/server/wm/MirrorActiveUids.java",
+        r"void onUidInactive\(int uid\)", "LOS mirror inactive")
+    has("frameworks_base/services/core/java/com/android/server/wm/MirrorActiveUids.java",
+        r"void onUidProcStateChanged\(int uid, int procState\)", "LOS mirror state")
+    has("frameworks_base/services/core/java/com/android/server/wm/VisibleActivityProcessTracker.java",
+        r"void onAnyActivityVisible\(WindowProcessController wpc\)", "LOS visible activity")
+    has("frameworks_base/services/core/java/com/android/server/wm/VisibleActivityProcessTracker.java",
+        r"void onAllActivitiesInvisible\(WindowProcessController wpc\)", "LOS invisible activity")
+    has("frameworks_base/services/core/java/com/android/server/wm/VisibleActivityProcessTracker.java",
+        r"CpuTimeRecord removeProcess\(WindowProcessController wpc\)", "LOS visible removal")
+    has("frameworks_base/services/core/java/com/android/server/wm/WindowProcessController.java",
+        r"final int mUid;", "LOS window process uid")
+    has("frameworks_base/services/core/java/com/android/server/am/ProcessRecord.java",
+        r"class ProcessRecord extends ProcessRecordInternal", "LOS process state controller")
+    has("frameworks_base/services/core/java/com/android/server/am/ProcessRecord.java",
+        r"volatile ApplicationInfo info;", "LOS process info")
+    has("frameworks_base/services/core/java/com/android/server/am/ProcessRecord.java",
+        r"final ProcessCachedOptimizerRecord mOptRecord;", "LOS process optimizer record")
+    has("frameworks_base/services/core/java/com/android/server/am/ProcessRecord.java",
+        r"public void killLocked\(\s*String reason,\s*String description,\s*@Reason int reasonCode,\s*@SubReason int subReason,\s*@Nullable ApplicationExitInfo\.AnrInfo anrInfo,\s*boolean noisy,\s*boolean asyncKPG\)",
+        "LOS process kill")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/ProcessRecordInternal.java",
+        r"public final String processName;", "LOS process name")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/ProcessRecordInternal.java",
+        r"public final int uid;", "LOS process uid")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/ProcessRecordInternal.java",
+        r"int getCurAdj\(\)", "LOS process adj getter")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/ProcessRecordInternal.java",
+        r"void setCurAdj\(@OomAdjust int curAdj\)", "LOS process adj setter")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/ProcessRecordInternal.java",
+        r"@ProcessState int getCurProcState\(\)", "LOS process state getter")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/ProcessRecordInternal.java",
+        r"void setCurProcState\(@ProcessState int curProcState\)", "LOS process state setter")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/OomAdjuster.java",
+        r"protected void applyOomAdjLSP\(ProcessRecordInternal state, boolean isBatchingOomAdj\)",
+        "LOS oom apply")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/OomAdjuster.java",
+        r"public static boolean getFreezePolicy\(ProcessRecordInternal proc\)", "LOS freeze policy")
+    has("frameworks_base/services/core/java/com/android/server/am/psc/OomAdjuster.java",
+        r"void onProcessFreezabilityChanged\(ProcessRecordInternal app, boolean freezePolicy,", "LOS freezability callback")
+    has("frameworks_base/services/core/java/com/android/server/am/CachedAppOptimizer.java",
+        r"public boolean useFreezer\(\)", "LOS freezer enabled")
+    has("frameworks_base/services/core/java/com/android/server/am/CachedAppOptimizer.java",
+        r"private void freezeAppAsyncLSP\(ProcessRecord app, @UptimeMillisLong long delayMillis\)",
+        "LOS freeze delay")
+    has("frameworks_base/services/core/java/com/android/server/am/CachedAppOptimizer.java",
+        r"private long updateEarliestFreezableTime\(ProcessRecord app, long delayMillis\)",
+        "LOS earliest freeze")
+    has("frameworks_base/services/core/java/com/android/server/am/CachedAppOptimizer.java",
+        r"void unfreezeAppLSP\(ProcessRecord app, @UnfreezeReason int reason\)", "LOS unfreeze")
+    has("frameworks_base/services/core/java/com/android/server/am/CachedAppOptimizer.java",
+        r"void onCleanupApplicationRecordLocked\(ProcessRecord app\)", "LOS freezer cleanup")
+    has("frameworks_base/services/core/java/com/android/server/am/Freezer.java",
+        r"public void setProcessFrozen\(int pid, int uid, boolean frozen\)", "LOS freezer process state")
+    has("frameworks_base/services/core/java/com/android/server/am/Freezer.java",
+        r"public int freezeBinder\(int pid, boolean freeze, int timeoutMs\)", "LOS binder freeze")
+    has("frameworks_base/services/core/java/com/android/server/am/ProcessCachedOptimizerRecord.java",
+        r"boolean isFrozen\(\)", "LOS optimizer frozen")
+    has("frameworks_base/services/core/java/com/android/server/am/ProcessCachedOptimizerRecord.java",
+        r"void setLastUsedTimeout\(long lastUsedTimeout\)", "LOS optimizer timeout")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"private final ArrayList<WakeLock> mWakeLocks = new ArrayList<>\(", "LOS wake list")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"private final Object mLock = LockGuard\.installNewLock", "LOS power lock")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"public boolean setDisabled\(boolean disabled\)", "LOS wake disabled setter")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"private boolean setWakeLockDisabledStateLocked\(WakeLock wakeLock\)", "LOS wake decision")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"public final int mOwnerUid;", "LOS wake owner")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"public final String mPackageName;", "LOS wake package")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"public WorkSource mWorkSource;", "LOS wake source")
+    has("frameworks_base/services/core/java/com/android/server/power/PowerManagerService.java",
+        r"public boolean mDisabled;", "LOS wake disabled field")
+    has("frameworks_base/services/core/java/com/android/server/location/provider/LocationProviderManager.java",
+        r"public final CallerIdentity getIdentity\(\)", "LOS location identity")
+    has("frameworks_base/services/core/java/com/android/server/location/provider/LocationProviderManager.java",
+        r"public final LocationRequest getRequest\(\)", "LOS location request")
+    has("frameworks_base/services/core/java/com/android/server/location/provider/LocationProviderManager.java",
+        r"protected void onActive\(\)", "LOS location active")
+    has("frameworks_base/services/core/java/com/android/server/location/provider/LocationProviderManager.java",
+        r"protected void onInactive\(\)", "LOS location inactive")
+    has("frameworks_base/location/java/android/location/util/identity/CallerIdentity.java",
+        r"public int getUid\(\)", "LOS caller uid")
+    has("frameworks_base/media/java/android/media/AudioPlaybackConfiguration.java",
+        r"public int getClientUid\(\)", "LOS playback uid")
+    has("frameworks_base/media/java/android/media/AudioPlaybackConfiguration.java",
+        r"public int getClientPid\(\)", "LOS playback pid")
+    has("frameworks_base/media/java/android/media/AudioPlaybackConfiguration.java",
+        r"public @IntRange\(from = 0\) int getSessionId\(\)", "LOS playback session")
+    has("frameworks_base/media/java/android/media/AudioPlaybackConfiguration.java",
+        r"public int getPlayerInterfaceId\(\)", "LOS playback interface")
+    has("frameworks_base/media/java/android/media/AudioPlaybackConfiguration.java",
+        r"public boolean isActive\(\)", "LOS playback active")
+    has("frameworks_base/core/java/android/os/ServiceManager.java",
+        r"public static IBinder checkService\(String name\)", "LOS service check")
+    has("frameworks_base/media/java/android/media/AudioManager.java",
+        r"public void addOnModeChangedListener\(", "LOS audio mode listener")
+    has("frameworks_base/media/java/android/media/AudioManager.java",
+        r"public void registerAudioPlaybackCallback\(@NonNull AudioPlaybackCallback cb,", "LOS playback callback")
+
+    # Kotlin-migrated launcher/iconloader shapes used by the current hooks.
+    has("Launcher3/src/com/android/launcher3/graphics/ThemeManager.kt",
+        r"@JvmField val INSTANCE = DaggerSingletonObject", "LOS theme manager instance")
+    has("Launcher3/src/com/android/launcher3/graphics/ThemeManager.kt",
+        r"private fun verifyIconState\(\)", "LOS theme verify")
+    has("Launcher3/src/com/android/launcher3/LauncherAppState.kt",
+        r"@JvmField var INSTANCE = DaggerSingletonObject", "LOS app state instance")
+    has("Launcher3/src/com/android/launcher3/icons/IconCache.kt",
+        r"fun updateIconInBackground\(", "LOS icon background update")
+    has("Launcher3/src/com/android/launcher3/icons/IconCache.kt",
+        r"fun getTitleAndIcon\(\s*infoInOut: ItemInfoWithIcon,\s*lookupFlag: CacheLookupFlag,\s*activityInfoProvider: Supplier<LauncherActivityInfo\?>,\s*\)",
+        "LOS icon supplier lookup")
+    has("frameworks_libs_systemui/iconloaderlib/src/com/android/launcher3/icons/BitmapInfo.kt",
+        r"fun newIcon\(\s*context: Context,\s*@DrawableCreationFlags creationFlags: Int = 0,\s*iconShape: IconShape\? = null,\s*\)",
+        "LOS bitmap new icon")
+    has("frameworks_libs_systemui/iconloaderlib/src/com/android/launcher3/icons/cache/CacheLookupFlag.kt",
+        r"private fun updateMask\(@LookupFlag mask: Int, addMask: Boolean\)", "LOS lookup mask")
+    has("Launcher3/src/com/android/launcher3/views/FloatingIconView.java",
+        r"private static @Nullable IconLoadResult sIconLoadResult;", "LOS static icon result")
+    has("Launcher3/src/com/android/launcher3/LauncherModel.kt", r"fun rebindCallbacks\(reason: String\)",
+        "LOS model rebind")
+    has("Launcher3/quickstep/src/com/android/quickstep/util/GroupTask.kt", r"fun containsTask\(taskId: Int\)",
+        "LOS group task contains")
+    has("Launcher3/quickstep/src/com/android/quickstep/util/GroupTask.kt", r"val tasks: List<Task>",
+        "LOS group task list")
+    has("Launcher3/quickstep/src/com/android/quickstep/TouchInteractionService.kt", r"override fun onCreate\(\)",
+        "LOS touch service Kotlin create")
+    has("Launcher3/quickstep/src/com/android/quickstep/TouchInteractionService.kt", r"override fun onDestroy\(\)",
+        "LOS touch service Kotlin destroy")
+
+    # Mobile icon binder is a Kotlin object on LineageOS and exposes a static @JvmStatic bind.
+    has(f"{ui}/statusbar/pipeline/mobile/ui/binder/MobileIconBinder.kt",
+        r"object MobileIconBinder", "LOS mobile binder object")
+    has(f"{ui}/statusbar/pipeline/mobile/ui/binder/MobileIconBinder.kt",
+        r"@JvmStatic\s+fun bind\(", "LOS mobile binder static")
+    has(f"{ui}/statusbar/pipeline/mobile/ui/binder/MobileIconBinder.kt",
+        r"\): ModernStatusBarViewBinding", "LOS mobile binder return")
 
     # Signal stack and telephony callback classes.
     has(f"{ui}/statusbar/pipeline/shared/ui/composable/StackedMobileIcon.kt",

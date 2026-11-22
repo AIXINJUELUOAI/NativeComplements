@@ -45,6 +45,10 @@
 | 短信拦截 | 固定检查 `com.android.phone`、`InboundSmsHandler.processMessagePart/filterSms/deleteFromRawTable`、`InboundSmsTracker` 与 `BlockChecker.getBlockStatus`；实现只在电话进程安装，规则和原生永久删除路径不变 |
 | 来电拦截 | 保留既有 Telecom `CallsManager.onCallFilteringComplete`、`CallFilteringResult.Builder` 和 `PhoneAccountRegistrar` 接口；不新增绕过原生过滤的路径 |
 | 抽屉主题提示 | 实际 HOME 为 Launcher3 时提示用户把应用图标样式设为 **Minimal**；仍由用户自行选择，不自动改写 `ThemePreference` |
+| 动态壁纸应用 | LineageOS `WallpaperPicker2`/`ThemePicker` 没有导出 `ACTION_CHANGE_LIVE_WALLPAPER` 预览 Activity。启用/切换 Alive 时先解析系统意图；没有处理者则通过模块自己的 system_server 广播桥，只允许模块 UID、两个精确 Alive 组件、当前用户和 `FLAG_SYSTEM\|FLAG_LOCK`，再调用已核实的 `WallpaperManagerService` 描述入口；桥不可用时退回系统 `ACTION_SET_WALLPAPER`，由用户在选择器中选用 Alive |
+| 后台管理 | LineageOS 的 `Freezer.freezeBinder` 是 AOSP 三参数形态，`WakeLock.setDisabled` 是单参数；`MobileIconBinder` 是 Kotlin `object`，`bind` 为静态 `@JvmStatic`。接入同时接受 PixelOS 的 UID/上下文参数形态，按宿主实际方法选择而不是按 ROM 名称 |
+| 壁纸模糊/颜色 | `NotificationShadeDepthController` 的 capability collector 匿名类编号不保证固定；按 `emit(Object,Continuation)` 和 `this$0` 发现，`$r8$classId` 缺失时只使用该 collector 自身 |
+| 通知点击 | `StatusBarNotificationActivityStarter` 的 R8 lambda 编号不固定；按已核实的 `f$*` 字段和发送方法扫描，不依赖固定数字 |
 
 未发现必须整项禁用的 LineageOS 24.0 功能：上述目标在固定源码中存在；当前限制是设备行为、R8 实际形状和视觉/功耗仍需真机回归，不能用本页静态合同替代。
 
