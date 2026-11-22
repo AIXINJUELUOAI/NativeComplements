@@ -36,7 +36,8 @@ final class SystemUiWindowTargets {
             field(sender,"f$5",entry),field(sender,"f$3",PendingIntent.class),field(sender,"f$4",Intent.class),field(sender,"f$2",int.class),field(entry,"mSbn",StatusBarNotification.class));
     }
     private static Class<?> clickAdapter(ClassLoader loader,String base,Class<?> entry,boolean runner)throws Exception{
-        for(int number:runner?new int[]{7,6}:new int[]{10,12})try{
+        // R8 lambda numbering is not a source contract; discover by the verified fields and method.
+        for(int number=0;number<=64;number++)try{
             Class<?> type=Class.forName(base+"$$ExternalSyntheticLambda"+number,false,loader);
             field(type,runner?"f$1":"f$5",entry);field(type,"f$3",PendingIntent.class);
             if(runner){field(type,"f$5",boolean.class);type.getDeclaredMethod("run");}
