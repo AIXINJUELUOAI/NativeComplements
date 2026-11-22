@@ -37,9 +37,9 @@ final class MobileSignalBinder {
         Method subscriptionId = ReflectiveAccess.method(model, "getSubscriptionId");
         if (subscriptionId.getReturnType() != int.class || java.lang.reflect.Modifier.isStatic(subscriptionId.getModifiers()))
             throw new NoSuchMethodException("mobile subscription id");
-        if (java.lang.reflect.Modifier.isStatic(bind.getModifiers())
-                || !bind.getReturnType().getSimpleName().equals("ModernStatusBarViewBinding"))
-            throw new NoSuchMethodException("MobileIconBinder.bind return/instance ABI");
+        // LineageOS keeps MobileIconBinder as a Kotlin object with a static @JvmStatic bind.
+        if (!bind.getReturnType().getSimpleName().equals("ModernStatusBarViewBinding"))
+            throw new NoSuchMethodException("MobileIconBinder.bind return ABI");
         bind.setAccessible(true);
         Method image = ImageView.class.getDeclaredMethod("setImageDrawable", Drawable.class);
         Method level = Drawable.class.getDeclaredMethod("setLevel", int.class);

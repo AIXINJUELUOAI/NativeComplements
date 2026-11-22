@@ -137,13 +137,15 @@ public final class SignalDisplay {
                     }));
                 }
             }
-            installStacked(module,loader);
             log.accept("SIGNAL_DISPLAY_READY standard mobile drawable");
         }catch(Throwable failure){
             enabled=false;for(var hook:HOOKS)try{hook.unhook();}catch(Throwable ignored){}HOOKS.clear();
             log.accept("SIGNAL_SYNTHETIC_EMITTER_UNAVAILABLE "+StackedSignalTargets.describe(failure));
             installBinder(module,loader);
         }
+        // Stacked dual-SIM rendering is independent from the standard mobile drawable path and
+        // from R8-numbered callback classes; keep it available on either emitter fallback.
+        installStacked(module,loader);
     }
     private static void installBinder(XposedModule module,ClassLoader loader){
         try {
