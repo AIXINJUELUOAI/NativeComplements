@@ -124,6 +124,7 @@ final class FrameworkAccess {
         method(sizeCompat,"getAppCompatDisplayInsets");method(sizeCompat,"clearSizeCompatMode");
         field(method(sizeCompat,"getAppCompatDisplayInsets").getReturnType(),"mIsFloating");
         Class<?> winConfig = Class.forName("android.app.WindowConfiguration", false, loader);
+        method(winConfig, "setActivityType", int.class);
         method(winConfig, "setAlwaysOnTop", int.class); method(winConfig, "getWindowingMode"); method(winConfig, "getBounds");
         field(winConfig, "mAlwaysOnTop"); field(Configuration.class, "windowConfiguration");
         method(SurfaceControl.Transaction.class, "setScale", SurfaceControl.class, float.class, float.class);

@@ -239,6 +239,55 @@ public class SurfaceFrameTest {
         assertFalse(cover.step(true,true));assertFalse(cover.canRetarget());
     }
 
+    private static TaskCover waitingCoverFixture()throws Exception{
+        TaskCover cover=coverFixture();FrameworkAccess access=access();Task task=new Task();
+        set(cover,"a",access);set(cover,"task",task);set(cover,"parent",new Task());set(cover,"iconDrawn",true);
+        set(cover,"background",ReflectionHelpers.callConstructor(SurfaceControl.class));
+        set(cover,"icon",ReflectionHelpers.callConstructor(SurfaceControl.class));
+        RectF bounds=new RectF(200,300,830,1420);
+        set(cover,"from",new RectF(bounds));set(cover,"to",new RectF(bounds));set(cover,"decorationBounds",new RectF(bounds));
+        set(cover,"color",new float[]{.94f,.94f,.94f});set(cover,"iconSize",100);set(cover,"splashPx",162f);
+        set(cover,"duration",320L);set(cover,"fadeDuration",150L);set(cover,"began",1000L);
+        set(cover,"entryAt",-1L);set(cover,"fadeAt",-1L);set(cover,"hiddenAt",-1L);set(cover,"ownerAlpha",1f);
+        set(cover,"mask",new TaskVisibilityGuard(access,task));
+        return cover;
+    }
+    @Test public void lateReadyCoverFinishesFadeAcrossTargetWaitDeadline()throws Exception{
+        TaskCover cover=waitingCoverFixture();SurfaceControl root=ReflectionHelpers.getField(cover,"root");
+        SurfaceControl background=ReflectionHelpers.getField(cover,"background"),icon=ReflectionHelpers.getField(cover,"icon");
+        int[] reveals={0};cover.beforeReveal(()->{assertTrue(cover.mask.holding());reveals[0]++;});
+        try{
+            assertTrue(cover.step(false,true,1000+4899));assertTrue(cover.mask.holding());assertEquals(0,reveals[0]);
+            assertTrue(cover.step(true,true,1000+4900));assertFalse(cover.mask.holding());assertEquals(1,reveals[0]);
+            assertTrue(cover.step(false,true,1000+5000));assertEquals(1f/3,lastApplied.alpha.get(root),.0001f);
+            assertFalse(cover.step(false,true,1000+5050));assertEquals(1,reveals[0]);
+            assertTrue(lastApplied.removed.contains(root));
+            assertTrue(((SurfaceShadow)Shadow.extract(root)).released);
+            assertTrue(((SurfaceShadow)Shadow.extract(background)).released);
+            assertTrue(((SurfaceShadow)Shadow.extract(icon)).released);
+            assertFalse(cover.step(true,true,1000+6000));
+        }finally{cover.close();}
+    }
+    @Test public void unrevealedCoverStillTimesOutAtTargetWaitDeadline()throws Exception{
+        TaskCover cover=waitingCoverFixture();int[] reveals={0};cover.beforeReveal(()->reveals[0]++);
+        try{
+            assertTrue(cover.step(false,true,1000+4999));assertTrue(cover.mask.holding());
+            IllegalStateException error=assertThrows(IllegalStateException.class,()->cover.step(false,true,1000+5000));
+            assertEquals("cover target frame timeout",error.getMessage());assertEquals(0,reveals[0]);
+            assertTrue(cover.mask.holding());
+        }finally{cover.close();}
+    }
+    @Test public void gestureHeldCoverKeepsItsOwnThirtySecondDeadline()throws Exception{
+        TaskCover cover=waitingCoverFixture();set(cover,"gestureHold",true);set(cover,"gestureAt",1000L);
+        int[] reveals={0};cover.beforeReveal(()->reveals[0]++);
+        try{
+            assertTrue(cover.step(true,true,1000+5000));assertTrue(cover.mask.holding());
+            assertTrue(cover.step(true,true,1000+29999));assertEquals(0,reveals[0]);
+            IllegalStateException error=assertThrows(IllegalStateException.class,()->cover.step(true,true,1000+30000));
+            assertEquals("cover gesture timeout",error.getMessage());assertTrue(cover.mask.holding());
+        }finally{cover.close();}
+    }
+
     @Test @LooperMode(LooperMode.Mode.PAUSED)
     public void linkedHandoffRetainsOpaqueSurfacesAndMovesTheMaskToTheNewTask()throws Exception{
         FrameworkAccess access=access();Task first=new Task(),second=new Task(),parent=new Task();

@@ -60,8 +60,9 @@ final class AndroidWindowAdmission {
         s.mode=a.integer(requested,"getWindowingMode");s.topState=(Integer)a.field(requested,"mAlwaysOnTop");
         s.bounds=new Rect((Rect)a.call(requested,"getBounds"));
         if(inherited){
-            // Save a local fullscreen endpoint for a direct launch that inherited its source's mode.
+            // Save a local fullscreen endpoint without clearing the ordinary task type validated above.
             s.originalConfig=new Configuration();Object original=a.field(s.originalConfig,"windowConfiguration");
+            a.call(original,"setActivityType",new Class<?>[]{int.class},1);
             a.call(original,"setWindowingMode",new Class<?>[]{int.class},1);a.call(original,"setAlwaysOnTop",new Class<?>[]{int.class},2);
             s.mode=1;s.topState=2;s.bounds.setEmpty();
         }

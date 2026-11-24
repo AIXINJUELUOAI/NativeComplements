@@ -299,7 +299,7 @@ final class TaskCover {
         }
         if(gestureHold){
             if(now-gestureAt>=30000)throw new IllegalStateException("cover gesture timeout");
-        }else if(now-began>=5000)throw new IllegalStateException("cover target frame timeout");
+        }else if(fadeAt<0&&now-began>=5000)throw new IllegalStateException("cover target frame timeout");
         if(fadeIn&&visible&&entryAt<0&&now>=notBefore)entryAt=now;
         long elapsed=fadeIn?(entryAt<0?0:now-entryAt):now-began;
         long motionElapsed=motionAt<0?elapsed:Math.max(0,now-motionAt);

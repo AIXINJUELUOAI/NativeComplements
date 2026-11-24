@@ -38,7 +38,7 @@ public class AndroidWindowAdmissionTest {
         public Point mLastSurfaceSize=new Point(1200,2133);
         final ThreadLocal<Object> candidate;final Area area=new Area();final Display display=new Display();
         final Configuration requested=new Configuration();
-        int mode=1,relativeRotation,displayReads,resizeReads;boolean opaque,root=true,freeform=true,areaValid=true,throwResize,top,focusable=true;
+        int mode=1,activityType=1,relativeRotation,displayReads,resizeReads;boolean opaque,root=true,freeform=true,areaValid=true,throwResize,top,focusable=true;
         Task(ThreadLocal<Object> candidate){this.candidate=candidate;}
         public boolean isForceOpaque(){assertTrue(Thread.holdsLock(LOCK));return opaque;}
         public boolean isRootTask(){return root;}
@@ -46,7 +46,7 @@ public class AndroidWindowAdmissionTest {
         public boolean isAttached(){return true;}
         public Area getParent(){return area;}
         public Display getDisplayContent(){displayReads++;return display;}
-        public int getActivityType(){return 1;}
+        public int getActivityType(){return activityType;}
         public int getRelativeDisplayRotation(){return relativeRotation;}
         public Area getDisplayArea(){return area;}
         public boolean supportsFreeformInDisplayArea(Area area){
@@ -132,8 +132,28 @@ public class AndroidWindowAdmissionTest {
         a.call(nativeConfig,"setBounds",new Class<?>[]{Rect.class},new Rect(20,30,620,1030));
         synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",true,null);}
         assertEquals(1,snapshot.mode);assertEquals(2,snapshot.topState);assertTrue(snapshot.bounds.isEmpty());
+        Object endpoint=a.field(snapshot.originalConfig,"windowConfiguration");
+        assertEquals("fullscreen restore must retain the admitted ordinary task type",1,a.integer(endpoint,"getActivityType"));
+        assertEquals(1,a.integer(endpoint,"getWindowingMode"));assertTrue(((Rect)a.call(endpoint,"getBounds")).isEmpty());
+        assertEquals(0,a.integer(nativeConfig,"getActivityType"));
         assertEquals(5,a.integer(nativeConfig,"getWindowingMode"));assertEquals(new Rect(20,30,620,1030),a.call(nativeConfig,"getBounds"));
         try{synchronized(LOCK){adapter.snapshot(task,"example.app","token",false,null);}fail("cannot acquire unlinked native freeform");}
         catch(IllegalStateException error){assertEquals(WindowAdmission.Rejection.OWNERSHIP.message,error.getMessage());}
+        // Restore uses a full Configuration replacement, not an undefined-field merge.
+        task.requested.setTo(snapshot.originalConfig);task.mode=a.integer(nativeConfig,"getWindowingMode");
+        task.activityType=a.integer(nativeConfig,"getActivityType");task.focusable=true;
+        synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",false,null);}
+        assertEquals(1,snapshot.mode);assertEquals(1,a.integer(a.field(snapshot.originalConfig,"windowConfiguration"),"getActivityType"));
+    }
+    @Test public void inheritedEndpointNeverAdmitsUndefinedOrNonApplicationTaskTypes()throws Exception{
+        ThreadLocal<Object> candidate=new ThreadLocal<>();Task task=new Task(candidate);task.mode=5;
+        FrameworkAccess a=access();AndroidWindowAdmission adapter=new AndroidWindowAdmission(a,new Atm(),candidate);
+        for(int type:new int[]{0,2,3,4,5}){
+            task.activityType=type;
+            try{synchronized(LOCK){adapter.snapshot(task,"example.app","token",true,null);}fail("type="+type);}
+            catch(IllegalStateException error){assertEquals(WindowAdmission.Rejection.ACTIVITY_TYPE.message,error.getMessage());}
+            assertEquals(0,a.integer(a.field(task.requested,"windowConfiguration"),"getActivityType"));
+            assertNull(candidate.get());
+        }
     }
 }

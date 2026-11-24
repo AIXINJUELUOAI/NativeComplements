@@ -1165,21 +1165,35 @@ final class WindowEngine {
         a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
     }
     private void shareResult(ShareStarted ticket,boolean success){
-        handler.post(()->{try{synchronized(lock){
+        handler.post(()->{boolean settling=false;try{synchronized(lock){
             Session s=ticket.target;
-            if(!sessions.contains(s)||s.restoring)return;
-            if(!success){
-                rollbackDefault(s,ticket.previous,ticket.previousPinned);retire(s);return;
-            }
+            if(active!=s||recovering||!sessions.contains(s)||s.restoring)return;
+            if(!success){rollbackDefault(s,ticket.previous,ticket.previousPinned);retire(s);return;}
             if(s.startMask!=null)s.startMask.transfer();
             a.call(s.task,"moveToFront",new Class<?>[]{String.class},"NativeComplements-share");
             a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");
             focusExpanded(s);renderFrame(s);
+            settling=true; // Settlement may retire/minimize the old slot; never resurrect it afterward.
             settleNewDefault(ticket.displaced,s);
             history.windowed(new WindowHistory.Entry(s.taskId,s.userId,s.pkg,s.component,s.baseId));saveHistory();notifyRecents();
             handler.postDelayed(()->tick(s),250);report("SHARE_WINDOW_ACTIVE");
-        }}catch(Throwable error){synchronized(lock){fallbackVisible(ticket.target);}
+        }}catch(Throwable error){synchronized(lock){failedAcquisition(ticket.target,ticket.previous,ticket.previousPinned,!settling);}
             log.accept("SHARE_WINDOW_PRESENT_FAILED "+FrameworkAccess.reason(error)+"\n"+android.util.Log.getStackTraceString(error));}});
+    }
+    /** An asynchronous destination failure must undo activate's parked source first. Caller holds WM lock. */
+    private void failedAcquisition(Session failed,Session previous,Session previousPinned,boolean rollback){
+        // rollbackDefault/activate may already have selected the source before a native call throws.
+        if((active!=failed&&active!=previous)||recovering||!sessions.contains(failed)||failed.restoring)return;
+        boolean recovery=!rollback&&previous!=null&&previous.parked&&!previous.restoring;
+        try{
+            if(rollback&&(previous==null||sessions.contains(previous)&&!previous.restoring))
+                rollbackDefault(failed,previous,previousPinned!=null&&sessions.contains(previousPinned)&&!previousPinned.restoring?previousPinned:null);
+        }catch(Throwable error){recovery=true;log.accept("ACQUISITION_ROLLBACK_FAILED "+FrameworkAccess.reason(error));}
+        finally{
+            try{fallbackVisible(failed);}
+            catch(Throwable error){recovery=true;log.accept("ACQUISITION_FALLBACK_FAILED "+FrameworkAccess.reason(error));}
+        }
+        if(recovery)recover("小窗呈现失败恢复");
     }
     /** Runs before handleStartResult requests Shell playback. Convert the related
      * task now; never restore the source to fullscreen to acquire its child. */
@@ -1273,17 +1287,16 @@ final class WindowEngine {
             pendingStart=ticket;
             maskAndActivate(next,target,s.placement);
             handler.postDelayed(()->{
-                if(pendingStart==ticket)synchronized(lock){cancelStart("start-timeout");fallbackVisible(ticket.target);}
+                if(pendingStart==ticket)synchronized(lock){cancelStart("start-timeout");failedAcquisition(ticket.target,ticket.from,pinned,true);}
             },10000);
             log.accept("LINKED_START from="+s.taskId+" to="+next.taskId+" retained="+sessions.size()+" created="+fresh);
             return ticket;
         }}catch(Exception e){
             SwitchStart failed=pendingStart;cancelStart("start-failed");
-            if(created!=null){
+            if(failed!=null){
+                handler.post(()->{synchronized(lock){failedAcquisition(failed.target,failed.from,pinned,true);}});
+            }else if(created!=null){
                 Session destination=created;
-                handler.post(()->{synchronized(lock){fallbackVisible(destination);}});
-            }else if(failed!=null){
-                Session destination=failed.target;
                 handler.post(()->{synchronized(lock){fallbackVisible(destination);}});
             }
             log.accept("LINKED_START_FAILED "+FrameworkAccess.reason(e));return null;
@@ -1308,7 +1321,7 @@ final class WindowEngine {
         if(!(value instanceof SwitchStart ticket))return;
         handler.post(()->{
             try{synchronized(lock){
-                if(pendingStart!=ticket)return;
+                if(pendingStart!=ticket||active!=ticket.target)return;
                 pendingStart=null;
                 Session next=ticket.target;
                 if(!success||ticket.generation!=openGeneration||!next.lease.isBinderAlive()){
@@ -1325,7 +1338,7 @@ final class WindowEngine {
                     saveHistory();notifyRecents();handler.postDelayed(()->tick(next),250);
                 }
                 report("LINKED_ACTIVE");
-            }}catch(Throwable e){synchronized(lock){fallbackVisible(ticket.target);}
+            }}catch(Throwable e){synchronized(lock){failedAcquisition(ticket.target,ticket.from,pinned,true);}
                 log.accept("LINKED_PRESENT_FAILED "+FrameworkAccess.reason(e));}
         });
     }
