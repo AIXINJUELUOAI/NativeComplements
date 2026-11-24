@@ -4,6 +4,7 @@ import android.app.BroadcastOptions;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 
 /** Own settings; deliberately independent of the floating-window enabled switch. */
@@ -13,6 +14,10 @@ public final class EdgeTouchStore {
     public static final String SYSTEM_UI = "com.android.systemui";
     public static final String REGIONS = "dev.nativecomplements.module.EDGE_INPUT_REGIONS";
     public static final String BACKEND = "dev.nativecomplements.module.EDGE_INPUT_BACKEND";
+    public static final String NATIVE_SYNC = "dev.nativecomplements.module.EDGE_NATIVE_SYNC";
+    static final String NATIVE_CHECKED = "native_checked";
+    static final String NATIVE_ENABLED = "native_enabled";
+    static final String NATIVE_OWNED = "native_owned";
     private EdgeTouchStore() {}
 
     public static SharedPreferences preferences(Context context) {
@@ -25,7 +30,10 @@ public final class EdgeTouchStore {
         SharedPreferences p = preferences(context);
         Bundle b = new Bundle();
         b.putBoolean("enabled", p.getBoolean("enabled", false));
-        b.putBoolean("show_regions", p.getBoolean("show_regions", false));
+        boolean nativeEnabled = p.getBoolean(NATIVE_ENABLED, false);
+        boolean nativeOwned = p.getBoolean(NATIVE_OWNED, false);
+        b.putBoolean("native_available", Build.FINGERPRINT.equals(p.getString(NATIVE_CHECKED, null)));
+        b.putBoolean("native_managed", nativeEnabled || nativeOwned);
         b.putBoolean("left_enabled", p.getBoolean("left_enabled", true));
         b.putBoolean("right_enabled", p.getBoolean("right_enabled", true));
         b.putInt("left_width_dp", clamp(p.getInt("left_width_dp", 8), 1, 48));
@@ -37,7 +45,7 @@ public final class EdgeTouchStore {
     }
 
     public static void setBoolean(Context context, String key, boolean value) {
-        if (!key.equals("enabled") && !key.equals("show_regions")
+        if (!key.equals("enabled")
                 && !key.equals("left_enabled") && !key.equals("right_enabled"))
             throw new IllegalArgumentException("edge touch preference");
         preferences(context).edit().putBoolean(key, value).apply();

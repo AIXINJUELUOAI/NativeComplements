@@ -7,7 +7,7 @@ import android.os.*;
 import java.util.Arrays;
 import java.io.*;
 
-/** Only the owner and the three existing system hosts may read immutable icon snapshots. */
+/** Only the owner and explicitly authenticated system hosts may read immutable icon snapshots. */
 public final class IconLayerProvider extends ContentProvider {
     private static final String GENERATION="6:";
     private final java.util.concurrent.ExecutorService generator=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -19,8 +19,17 @@ public final class IconLayerProvider extends ContentProvider {
         boolean sameUser = UserHandle.getUserHandleForUid(uid).equals(android.os.Process.myUserHandle());
         boolean launcher = dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(getContext(), uid);
         boolean systemUi = sameUser && packages != null && Arrays.asList(packages).contains(IconLayerStore.SYSTEM_UI);
-        if (!owner && !launcher && !systemUi && uid != android.os.Process.SYSTEM_UID) throw new SecurityException("icon layer bridge");
+        if (!owner && !launcher && !systemUi && !settings(uid) && uid != android.os.Process.SYSTEM_UID) throw new SecurityException("icon layer bridge");
         return launcher;
+    }
+    /** Resolve this user's actual system Settings UID; a matching installed package name alone grants nothing. */
+    private boolean settings(int uid){
+        if(!UserHandle.getUserHandleForUid(uid).equals(android.os.Process.myUserHandle()))return false;
+        try{
+            var app=getContext().getPackageManager().getApplicationInfo(IconLayerStore.SETTINGS,0);
+            return app.uid==uid&&(app.flags&(android.content.pm.ApplicationInfo.FLAG_SYSTEM
+                |android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP))!=0;
+        }catch(Exception unavailable){return false;}
     }
     @Override public Bundle call(String method, String arg, Bundle extras) {
         boolean launcher = checkCaller();

@@ -41,7 +41,7 @@ class NavbarUiTest {
         showAppearance()
         compose.onAllNodesWithText("小白条沉浸").assertCountEquals(1)
         compose.onNodeWithText("小白条沉浸").assertIsOff()
-        compose.onNodeWithText("保留原生手势条，取消底部占位").assertIsDisplayed()
+        compose.onNodeWithText("保留原生手势条，取消底部占位").assertDoesNotExist()
         compose.onNodeWithText("逐应用设置").assertDoesNotExist()
         compose.onNodeWithText("搜索应用、包名或 Activity").assertDoesNotExist()
         compose.onNodeWithText("启用导航栏适配").assertDoesNotExist()

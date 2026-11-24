@@ -118,8 +118,31 @@ public class IconAssetsTest {
         assertArrayEquals(original,IconAssets.imageBytes(context,first));
     }
 
+    @Test public void coloredConsumersDoNotEnableOrDependOnStatusBarNotificationChannel()throws Exception{
+        provider.config.putBoolean("notifications",false);
+        assertFalse(IconAssets.loadingOriginal());
+        reload();
+        assertTrue(IconAssets.colored(context,PKG) instanceof ImportedIcon);
+        assertTrue(provider.sawOriginalLoad);
+        assertNull(IconAssets.notification(context,PKG));
+        assertFalse(IconAssets.loadingOriginal());
+        provider.config.putBoolean("enabled",false);reload();
+        assertNull(IconAssets.colored(context,PKG));
+        assertNull(IconAssets.notification(context,PKG));
+    }
+    @Test public void originalReadScopeRestoresAfterFailureAndNestedResolution()throws Exception{
+        assertFalse(IconAssets.loadingOriginal());
+        assertThrows(android.content.pm.PackageManager.NameNotFoundException.class,
+            ()->IconAssets.resolve(context,"com.example.missing",new IconPolicy(),"",256,false));
+        assertFalse(IconAssets.loadingOriginal());
+        assertFalse(IconAssets.load(context,provider.config,()->true));
+        assertFalse(IconAssets.loadingOriginal());
+        IconAssets.activityMonos(context,List.of(PKG),()->true);
+        assertFalse(IconAssets.loadingOriginal());
+    }
+
     public static class TestProvider extends ContentProvider {
-        Bundle config;int reads,nullReads,emptyReads;File background,foreground;boolean unavailable;
+        Bundle config;int reads,nullReads,emptyReads;File background,foreground;boolean unavailable,sawOriginalLoad;
         @Override public boolean onCreate(){return true;}
         @Override public Bundle call(String method,String arg,Bundle extras){
             reads++;if(nullReads-->0)return null;
@@ -128,6 +151,7 @@ public class IconAssetsTest {
             return result;
         }
         @Override public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException{
+            sawOriginalLoad|=IconAssets.loadingOriginal();
             if(unavailable)throw new FileNotFoundException("provider stopped");
             return ParcelFileDescriptor.open("0.png".equals(uri.getLastPathSegment())?background:foreground,ParcelFileDescriptor.MODE_READ_ONLY);
         }

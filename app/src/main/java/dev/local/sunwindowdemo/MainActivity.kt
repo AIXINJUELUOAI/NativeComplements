@@ -5,6 +5,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
+import dev.local.sunwindowdemo.core.RootCommand
+import kotlinx.coroutines.launch
 import dev.local.sunwindowdemo.core.ui.ComplementsTheme
 import dev.local.sunwindowdemo.navigation.ModuleApp
 import dev.local.sunwindowdemo.navigation.Page
@@ -21,11 +24,18 @@ open class MainActivity : ComponentActivity() {
         setContent { ComplementsTheme { ModuleApp(controller, initialPage, ::openPage, ::finish, initialAppPackage,
             { openAppSettings(Page.IconApp, it) }, { openAppSettings(Page.BackgroundApp, it) }) } }
         if (intent.action == "recover") controller.restore()
+        requestStartupRoot()
+    }
+    private fun requestStartupRoot() {
+        if (javaClass == MainActivity::class.java) {
+            lifecycleScope.launch { RootCommand.requestStartupRoot(applicationContext) }
+        }
     }
     override fun onResume() { super.onResume(); if (::controller.isInitialized) controller.resume() }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent); setIntent(intent)
         if (intent.action == "recover") controller.restore()
+        if (intent.action == Intent.ACTION_MAIN && intent.hasCategory(Intent.CATEGORY_LAUNCHER)) requestStartupRoot()
     }
     override fun onDestroy() { if (::controller.isInitialized) controller.close(); super.onDestroy() }
     private fun openPage(page: Page) {

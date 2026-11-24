@@ -7,7 +7,7 @@ import java.util.Collection;
 /** The verified DozeMachine ABI only; an incomplete ABI leaves native doze untouched. */
 final class DarkAodAccess {
     final Class<?> service, triggers;
-    final Method create, destroy, transition, request, userId, alwaysOn, near;
+    final Method create, destroy, transition, request, userId, alwaysOn, near, proximityChanged, proximityEvent;
     final Field machine, state, parts, queue, tracker, config, host, suppressed, battery, powerSave;
     final Field sensors, proximity, registered, paused;
     final Object aod, pausing, pausedState;
@@ -37,6 +37,19 @@ final class DarkAodAccess {
         sensors = field(triggers, "mDozeSensors");
         proximity = field(sensors.getType(), "mProximitySensor");
         near = method(prox, "isNear");
+        Method alert = null, event = null;
+        try {
+            Method callback = method(prox, "alertListeners");
+            if (callback.getReturnType() == void.class) {
+                event = method(prox, "onSensorEvent",
+                        Class.forName("com.android.systemui.util.sensors.ThresholdSensorEvent", false, loader));
+                alert = callback;
+            }
+        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+            // Other builds can keep the original lux/transition-based behavior.
+        }
+        proximityChanged = alert;
+        proximityEvent = event;
         registered = field(prox, "mRegistered");
         paused = field(prox, "mPaused");
         if (near.getReturnType() != Boolean.class || transition.getReturnType() != void.class)

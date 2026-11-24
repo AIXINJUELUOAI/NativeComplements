@@ -23,7 +23,13 @@ final class WindowBackendConflict {
                 @Override public void onReceive(Context ignored,Intent request){
                     int uid=getSentFromUid();
                     if(uid!=manager&&uid!=systemUi)return;
-                    if(request.getIntExtra("protocol",0)!=Wire.PROTOCOL||!"STATUS".equals(request.getStringExtra("op")))return;
+                    if(request.getIntExtra("protocol",0)!=Wire.PROTOCOL)return;
+                    if("OPEN".equals(request.getStringExtra("op"))){
+                        android.os.ResultReceiver reply=request.getParcelableExtra("openReply",android.os.ResultReceiver.class);
+                        if(reply!=null)reply.send(0,null);
+                        return;
+                    }
+                    if(!"STATUS".equals(request.getStringExtra("op")))return;
                     String currentOwner=dev.local.sunwindowdemo.core.WindowBackendOwnership.owner();
                     boolean companion=delegated&&dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE.equals(currentOwner);
                     Intent status=new Intent(Wire.RESULT).addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY)

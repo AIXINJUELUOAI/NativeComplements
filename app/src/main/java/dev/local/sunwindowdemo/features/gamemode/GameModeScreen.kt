@@ -40,7 +40,7 @@ import dev.local.sunwindowdemo.core.ui.*
 import dev.local.sunwindowdemo.features.barrage.BarrageStore
 
 @Composable
-private fun gameConfig(): Bundle {
+internal fun gameConfig(): Bundle {
     val context = LocalContext.current
     var config by remember { mutableStateOf(GameModeStore.read(context)) }
     DisposableEffect(context) {
@@ -54,10 +54,12 @@ private fun gameConfig(): Bundle {
 
 @Composable
 fun GameModeScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp = 0.dp,
-                   onQuick: () -> Unit = {}, onBarrage: () -> Unit = {}, onCorner: () -> Unit = {}) {
+                   onQuick: () -> Unit = {}, onBarrage: () -> Unit = {}, onCorner: () -> Unit = {},
+                   onHandle: () -> Unit = {}) {
     val context = LocalContext.current
     val config = gameConfig()
     val chosen = config.getStringArrayList("apps").orEmpty().toSet()
+    fun handleSide(landscape: Boolean) = if (GameModeStore.handleSide(config, landscape) == GameModeStore.SIDE_RIGHT) "右侧" else "左侧"
     var barrage by remember { mutableStateOf(BarrageStore.read(context)) }
     DisposableEffect(context) {
         val prefs = BarrageStore.prefs(context)
@@ -69,8 +71,7 @@ fun GameModeScreen(apps: List<LaunchableApp>, loaded: Boolean, bottomInset: Dp =
         SettingsGroup { ToggleRow("启用游戏模式", value = config.getBoolean("enabled")) { GameModeStore.enabled(context, it) } }
         GroupTitle("游戏设置")
         SettingsGroup {
-            SettingRow("小白条位置", if (config.getString("side") == GameModeStore.SIDE_RIGHT) "屏幕右侧" else "屏幕左侧",
-                onClick = { GameModeStore.side(context, if (config.getString("side") == GameModeStore.SIDE_RIGHT) GameModeStore.SIDE_LEFT else GameModeStore.SIDE_RIGHT) })
+            SettingRow("小白条位置", "竖屏 · ${handleSide(false)} / 横屏 · ${handleSide(true)}", onClick = onHandle)
             SplitSwitchRow("快捷应用与功能", value = config.getBoolean("panel"), onToggle = { GameModeStore.panel(context, it) }, onDetails = onQuick, leading = { Glyph("apps") })
             SplitSwitchRow("弹幕通知", value = barrage.getBoolean("enabled"), onToggle = { BarrageStore.enabled(context, it) }, onDetails = onBarrage, leading = { Glyph("barrage") })
             SplitSwitchRow("角落防误触", value = config.getBoolean("corner_rejection"), onToggle = { GameModeStore.cornerRejection(context, it) }, onDetails = onCorner, leading = { Glyph("edge") })

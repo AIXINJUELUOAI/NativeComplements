@@ -43,7 +43,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private View view;
     private SuggestionDrag drag;
     private final Set<String> litCameras=new HashSet<>();
-    private boolean registered,closed,systemOverlay,audioConnected,bluetoothUsed,chooser;
+    private boolean registered,closed,systemOverlay=true,audioConnected,bluetoothUsed,chooser;
     private boolean torchDismissed,rotationRestoring;
     private final SuggestionRules.Attempt opening=new SuggestionRules.Attempt(),inputAttempt=new SuggestionRules.Attempt();
     private final Binder rotationLease=new Binder();
@@ -426,7 +426,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             Intent launch=new Intent(intent).setPackage(pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             if(launch.resolveActivity(context.getPackageManager())==null)throw new IllegalStateException();
             if(settings.getBoolean("window")){
-                if(!new Config(context).enabled()){
+                SystemUiHost host=SystemUiHost.live;
+                if(host==null||!host.suggestionWindowReady()){
                     Toast.makeText(context,"请开启小窗控制，或关闭建议中的小窗打开",Toast.LENGTH_SHORT).show();return;
                 }
                 int generation=opening.begin();

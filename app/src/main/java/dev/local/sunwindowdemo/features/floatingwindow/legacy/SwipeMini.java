@@ -270,11 +270,11 @@ final class SwipeMini {
         }).start();
     }
 
-    private static Method exact(Method m,Class<?> returnType)throws NoSuchMethodException{
+    static Method exact(Method m,Class<?> returnType)throws NoSuchMethodException{
         if(m.getReturnType()!=returnType||Modifier.isStatic(m.getModifiers()))throw new NoSuchMethodException(m.getName()+" signature");
         m.setAccessible(true);return m;
     }
-    private static Field field(Class<?> owner,String name,Class<?> type)throws Exception{
+    static Field field(Class<?> owner,String name,Class<?> type)throws Exception{
         Field f=owner.getDeclaredField(name);
         if(f.getType()!=type||Modifier.isStatic(f.getModifiers()))throw new NoSuchFieldException(name+" type");
         f.setAccessible(true);return f;

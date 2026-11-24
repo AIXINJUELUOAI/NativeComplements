@@ -217,14 +217,11 @@ fun BackgroundAppScreen(pkg: String?) {
         return
     }
     SettingsGroup {
-        val description = if (rule.keepActive() && BackgroundPolicy.action(rule, pkg, main, main) == Action.FREEZE)
-            "主进程当前设为冻结。放行后才能保持后台活跃。"
-        else "主进程默认放行，放行的进程尽量保持后台活跃。"
-        ToggleRow("不进缓存", description, value = rule.keepActive()) {
+        ToggleRow("不进缓存", value = rule.keepActive()) {
             BackgroundStore.keepActive(context, pkg, it)
         }
         if (rule.mode() == Mode.STRICT && BackgroundPolicy.supportsPlaybackOverride(pkg)) {
-            ToggleRow("后台播放保护", "开启后，抖音在后台播放时可暂缓冻结。", value = rule.playbackProtected()) {
+            ToggleRow("后台播放保护", value = rule.playbackProtected()) {
                 BackgroundStore.protectPlayback(context, pkg, it)
             }
         }
@@ -239,17 +236,6 @@ fun BackgroundAppScreen(pkg: String?) {
                 BackgroundStore.process(context, pkg, name, it)
             }
         }
-    }
-    Hint(when (rule.mode()) {
-        Mode.STRICT -> if (rule.playbackProtected())
-            "退到后台约 5 秒后尝试冻结。放行进程、小窗、媒体播放和 GPS 受保护。"
-        else
-            "离开前台或关闭小窗约 5 秒后尝试冻结。放行进程和 GPS 受保护。"
-        Mode.DEFAULT -> "进程符合系统的后台冻结条件后，再等待约 5 秒。"
-        Mode.SYSTEM -> "冻结和裁切在进程符合系统后台条件时执行。"
-    })
-    if (rule.actions().containsValue(Action.RECLAIM)) {
-        Hint("低内存时裁切：平时先冻结，手机内存持续紧张时才尝试结束该进程。")
     }
 }
 

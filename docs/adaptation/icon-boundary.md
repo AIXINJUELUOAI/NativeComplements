@@ -16,11 +16,13 @@
 
 系统配色资源确认变化后，实际 HOME 在桌面主题图标开启时调用 Launcher 原生模型重绑，并刷新已绑定的抽屉图标。单色素材和持久化图标缓存继续沿用。管理界面也在配色资源更新或返回前台时重新读取系统配色。
 
-[SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>)只在 SystemUI处理同用户非会话通知标识图标及合格 splash。splash 临时属性必须 finally恢复；素材缺失保原生，不在 build／draw热路径查包、解码或 Binder。模型缓存更新在原 worker、可见 View刷新在 main；热恢复失败不保证无需重启桌面。
+[SystemIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SystemIconModule.java>)只在 SystemUI处理同用户非会话通知标识图标及合格 splash。标准通知卡片的应用标识复用已适配的彩色图标；状态栏／shelf／AOD 小图标保持原有独立通知策略，不随导入自动启用。不处理会话头像、通知附图或裸自定义 RemoteViews。卡片绘制仅针对已确认身份的 header 图标，精确接受 CachingIconView 及新版 NotificationRowIconView；字段声明为父类不代表实例必为父类。预检已知继承关系及两层无 onDraw 覆盖，未知子类保原生。临时素材必须 finally 恢复，不改原 Notification、原生 app icon/provider 缓存。splash 临时属性也须 finally 恢复；素材缺失保原生，不在 build／draw 热路径查包、解码或 Binder。模型缓存更新在原 worker、可见 View 刷新在 main；热恢复失败不保证无需重启桌面。
+
+[SettingsIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SettingsIconModule.java>)仅接入 `com.android.settings` 主进程，在 ApplicationPackageManager 原始应用取图层复用同一彩色快照，后续阴影与用户徽标仍由原生生成。只处理本用户、PM Context 与显式 factory user 一致的 ApplicationInfo，用户头像与其他用户保原生。素材 worker 的原图读取有 ThreadLocal 旁路，避免上次替换反馈入解析。新增作用域旧安装须自行补勾。原生缓存按本用户失效，不强制重启／重绑页面，导入或关闭后离开并重新进入详情查看；无桌面入口的包不在当前素材目标集合内。详情取图链参考 AOSP Android 16 的 [EntityHeaderController](https://android.googlesource.com/platform/packages/apps/Settings/+/android-16.0.0_r1/src/com/android/settings/widget/EntityHeaderController.java) 与 [SettingsLib.Utils](https://android.googlesource.com/platform/frameworks/base/+/android-16.0.0_r1/packages/SettingsLib/src/com/android/settingslib/Utils.java)，不能代替目标 Settings APK 的页面及可选缓存 ABI 验证。
 
 ## 授权、缓存与失败
 
-- [IconLayerProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerProvider.java>)按自身、实际 SystemUI、system、已知系统实际 HOME／本用户 UID分权；素材读取只给已授权消费者，`report`限 Launcher、`started`限 system。它的授权不能和 ShadeProvider的“只给 Launcher一个抽屉布尔”混为一谈。
+- [IconLayerProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/IconLayerProvider.java>)按自身、实际 SystemUI、system、已知系统实际 HOME／本用户 UID，以及同用户真实系统 Settings UID 分权；Settings 仅增加读取，不扩大 `report`／`started` 权限；素材读取只给已授权消费者，`report`限 Launcher、`started`限 system。它的授权不能和 ShadeProvider的“只给 Launcher一个抽屉布尔”混为一谈。
 - 配置刷新失败保已发布 bitmap快照，新 epoch取消旧 worker发布。素材 generation／ack、AtomicFile及剪枝留平台侧，不把未完成导入当 ready。
 - 系统主题读取失败返回 false；报告只有 IPC成功才去重，上报失败重试但不主动抹去 Provider旧快照，不承诺全故障实时 fail-close。
 - 绘制只读宿主快照；桌面素材快照 96MiB、私有 URI字节缓存 64MiB。旧表面转换缓存保留 128px／32MiB边界，不表示退役入口重新可用。

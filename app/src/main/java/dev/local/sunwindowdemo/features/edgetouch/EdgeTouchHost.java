@@ -7,8 +7,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
-import android.graphics.Canvas;
-import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
@@ -32,12 +30,11 @@ import java.util.concurrent.Executors;
 
 /** Runs inside SystemUI. Small trusted split-touch windows consume edge contacts, not app input. */
 public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
+    private static final String USER_SWITCHED = "android.intent.action.USER_SWITCHED";
     private final Context context;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final ArrayList<View> windows = new ArrayList<>();
-    private final Paint regionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private boolean showRegions;
     private volatile int[] activeRects = new int[0];
     private volatile boolean closed;
     private volatile String state = "starting";
@@ -47,14 +44,15 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
     private Method trustOverlay;
     private Bundle settings;
     private boolean initialized, registered, environmentReady, systemOverlay, imeVisible;
-    private boolean inputBackend;
+    private boolean inputBackend, nativePrimaryUser = true;
+    private int nativeRotation = -1;
     private long backendSeen;
     private final Runnable heartbeat=new Runnable(){
         @Override public void run(){
             if(closed)return;
             if(inputBackend&&android.os.SystemClock.uptimeMillis()-backendSeen>3000){inputBackend=false;removeWindows();rebuild();}
             publishRegions();
-            if(settings!=null&&settings.getBoolean("enabled"))main.postDelayed(this,1000);
+            if(settings!=null&&settings.getBoolean("enabled")&&!settings.getBoolean("native_managed"))main.postDelayed(this,1000);
         }
     };
 
@@ -63,6 +61,16 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
     private final Runnable retrySettings = this::loadSettings;
+
+    private void syncNative() { syncNative(false); }
+
+    private void syncNative(boolean stop) {
+        if (settings == null || !settings.getBoolean("native_managed")) return;
+        Intent intent = new Intent(EdgeTouchStore.NATIVE_SYNC).setClassName("dev.nativecomplements.module",
+                "dev.local.sunwindowdemo.features.edgetouch.NativeEdgeTouch$LifecycleReceiver")
+                .putExtra("suspended", stop || !nativePrimaryUser || !environmentReady || systemOverlay || imeVisible);
+        context.sendBroadcast(intent, null, android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+    }
 
     public EdgeTouchHost(Context systemUiContext) {
         context = systemUiContext.getApplicationContext();
@@ -75,7 +83,7 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
             if (closed) return;
             boolean changed = !environmentReady || systemOverlay != hasSystemOverlay || imeVisible != keyboardVisible;
             environmentReady = true; systemOverlay = hasSystemOverlay; imeVisible = keyboardVisible;
-            if (changed) rebuild();
+            if (changed) { rebuild(); syncNative(); }
         });
     }
 
@@ -113,14 +121,24 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
                 } catch (Exception ignored) { }
             } else if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
                 removeWindows(); publishRegions();state = "screen_off";
-            } else rebuild();
+                syncNative(true);
+            } else if (USER_SWITCHED.equals(intent.getAction())) {
+                nativePrimaryUser = intent.getIntExtra("android.intent.extra.user_handle", -1) == 0;
+                syncNative();
+            } else { rebuild(); syncNative(); }
         }
     };
     private final DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
         @Override public void onDisplayAdded(int id) { }
         @Override public void onDisplayRemoved(int id) { if (id == Display.DEFAULT_DISPLAY) removeWindows(); }
         @Override public void onDisplayChanged(int id) {
-            if (id == Display.DEFAULT_DISPLAY) { removeWindows(); main.post(EdgeTouchHost.this::rebuild); }
+            if (id != Display.DEFAULT_DISPLAY) return;
+            removeWindows(); main.post(EdgeTouchHost.this::rebuild);
+            Display display = windowContext.getDisplay();
+            if (display != null && nativeRotation != display.getRotation()) {
+                nativeRotation = display.getRotation();
+                syncNative();
+            }
         }
     };
 
@@ -136,6 +154,7 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
             trustOverlay.invoke(new WindowManager.LayoutParams());
             IntentFilter filter = new IntentFilter(EdgeTouchStore.CHANGED);
             filter.addAction(EdgeTouchStore.BACKEND);
+            filter.addAction(USER_SWITCHED);
             filter.addAction(Intent.ACTION_SCREEN_OFF); filter.addAction(Intent.ACTION_SCREEN_ON); filter.addAction(Intent.ACTION_USER_PRESENT);
             context.registerReceiver(receiver, filter, null, main, Context.RECEIVER_EXPORTED);
             registered = true;
@@ -158,8 +177,10 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
             if (read.report()) android.util.Log.w("NativeComplements", "EDGE_TOUCH_SETTINGS " + read.summary());
             main.post(() -> {
                 if (closed) return;
+                boolean first = settings == null;
                 settings = read.config();
                 rebuild();main.removeCallbacks(heartbeat);heartbeat.run();
+                if (first) syncNative();
                 if (!read.live()) main.postDelayed(retrySettings, snapshot.retryDelay(3000));
             });
         });
@@ -169,6 +190,7 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
         if (closed || !initialized) return;
         String suspended = null;
         if (settings == null) suspended = "settings_unavailable";
+        else if (settings.getBoolean("native_managed")) suspended = "native_managed";
         else if (!settings.getBoolean("enabled", false)) suspended = "disabled";
         else if (!environmentReady) suspended = "waiting_environment";
         else if (!context.getSystemService(PowerManager.class).isInteractive()) suspended = "screen_off";
@@ -180,13 +202,6 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
             android.view.WindowMetrics metrics = wm.getCurrentWindowMetrics();
             Rect bounds = metrics.getBounds();
             android.graphics.Insets insets = metrics.getWindowInsets().getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            boolean nextShowRegions = settings.getBoolean("show_regions", false);
-            if (showRegions != nextShowRegions) {
-                showRegions = nextShowRegions;
-                if(inputBackend)removeWindows();
-                // Appearance changes do not remove windows or cancel an owned pointer stream.
-                for (View view : windows) view.invalidate();
-            }
             int[] rectangles = EdgeTouchGeometry.buildSuppression(bounds.width(), bounds.height(), insets.top, insets.bottom,
                     windowContext.getResources().getDisplayMetrics().density,
                     settings.getBoolean("left_enabled", true), settings.getBoolean("right_enabled", true),
@@ -195,30 +210,14 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
                     windowContext.getDisplay().getRotation(),settings.getInt("corner_dp",24));
             if (Arrays.equals(activeRects, rectangles)) { state = rectangles.length == 0 ? "no_regions" : inputBackend?"input_filter":"active"; return; }
             removeWindows();
-            for (int i = 0; i < rectangles.length; i += 4) {
-                if(inputBackend&&!showRegions)break;
+            for (int i = 0; !inputBackend && i < rectangles.length; i += 4) {
                 int left = rectangles[i], top = rectangles[i + 1], width = rectangles[i + 2] - left, height = rectangles[i + 3] - top;
                 View touch = new View(windowContext) {
                     @Override public boolean onTouchEvent(MotionEvent event) { return true; }
-                    @Override protected void onDraw(Canvas canvas) {
-                        super.onDraw(canvas);
-                        if (!showRegions) return;
-                        // Fixed Material tones: SystemUI must not resolve application theme resources.
-                        regionPaint.setStyle(Paint.Style.FILL);
-                        regionPaint.setColor(0x336750A4);
-                        canvas.drawRect(0, 0, getWidth(), getHeight(), regionPaint);
-                        float stroke = Math.min(getWidth(), Math.max(1f, getResources().getDisplayMetrics().density));
-                        float inset = stroke / 2f;
-                        regionPaint.setStyle(Paint.Style.STROKE);
-                        regionPaint.setStrokeWidth(stroke);
-                        regionPaint.setColor(0xB39A82DB);
-                        canvas.drawRect(inset, inset, getWidth() - inset, getHeight() - inset, regionPaint);
-                    }
                 };
-                touch.setWillNotDraw(false);
                 touch.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
                 touch.setFilterTouchesWhenObscured(false);
-                if(!inputBackend)touch.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
+                touch.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                         v.setSystemGestureExclusionRects(List.of(new Rect(0, 0, r - l, b - t))));
                 WindowManager.LayoutParams p = new WindowManager.LayoutParams(width, height,
                         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -226,7 +225,6 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
                                 | WindowManager.LayoutParams.FLAG_SPLIT_TOUCH | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                         PixelFormat.TRANSLUCENT);
                 p.gravity = Gravity.TOP | Gravity.LEFT; p.x = left; p.y = top;
-                if(inputBackend)p.flags|=WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
                 p.setFitInsetsTypes(0); p.windowAnimations = 0;
                 p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
                 p.setTitle("NativeComplements-edge-touch-" + i / 4);
@@ -254,6 +252,7 @@ public final class EdgeTouchHost implements ComponentCallbacks, AutoCloseable {
     @Override public void close() {
         closed = true;
         main.post(() -> {
+            syncNative(true);
             main.removeCallbacks(retrySettings);
             main.removeCallbacks(heartbeat);removeWindows();publishRegions();
             if (registered) { try { context.unregisterReceiver(receiver); } catch (RuntimeException ignored) { } registered = false; }

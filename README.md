@@ -4,7 +4,7 @@
 
 使用原生 Android 设置风格，支持系统动态颜色和深色模式。不依赖无障碍服务，不接管默认拨号或桌面，也不需要给普通应用逐个添加作用域。
 
-> 当前运行源码版本：**0.12.3-harassment-test1**（versionCode 169），仅维护主模块；保留 code165 Alive Beta，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前架构与边界见[接入索引](<docs/adaptation/README.md>)、[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)及[Alive 说明](<docs/adaptation/alive-systemui.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
+> 当前源码版本以[构建配置](<app/build.gradle.kts>)为准，仅维护主模块，并集成 [LFRon 的 LOS24 贡献](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)。相同 Hook 共用，不同宿主接入集中；维护者信息只在首次提示和“关于”中显示。当前架构与边界见[接入索引](<docs/adaptation/README.md>)及[LOS24 接入](<docs/adaptation/lineageos-24.0.md>)。这是个人维护的系统适配项目，不是 Flyme 或 SunOS 功能的完整移植，也不保证兼容所有类原生 ROM。
 
 ## 下载与交流
 
@@ -17,10 +17,10 @@
 需要已 root、安装兼容现代 libxposed API 101 的 LSPosed 环境。当前主要针对已核对的 **Android 17 / API 37** 系统接口适配；最低安装版本为 Android 14，但能安装不等于所有功能可用。
 
 1. 安装 APK，在 LSPosed 中启用“类原生补全计划”。
-2. 模块声明五个作用域：**系统框架、系统界面、Pixel 桌面、Launcher3、电话**；桌面只选择当前系统实际存在的一项，电话只在用短信拦截时勾选。
+2. 模块声明六个作用域：**系统框架、系统界面、Pixel 桌面、Launcher3、电话、系统设置**；桌面只选择当前系统实际存在的一项，电话仅短信拦截需要，系统设置仅设置内图标适配需要。旧安装须在 LSPosed 补勾新增项。
 3. 自行重启手机后，进入模块按需开启功能。
 
-作用域对应 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`、`com.android.launcher3`、`com.android.phone`（电话，仅短信拦截使用）。实际接入按宿主接口与 HOME／UID 核验，其他桌面不代表已适配。升级请使用相同签名的 APK，不要为了升级先卸载，以免丢失设置。
+作用域对应 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`、`com.android.launcher3`、`com.android.phone`（电话，仅短信拦截使用）、`com.android.settings`（系统设置，仅设置内图标）。实际接入按宿主接口与 HOME／UID 核验，其他桌面不代表已适配。升级请使用相同签名的 APK，不要为了升级先卸载，以免丢失设置。
 
 ## 功能全览
 
@@ -59,7 +59,8 @@
 
 支持导入本地图标包，或使用算法补全图标前后景。
 
-- 逐应用设置彩色图标、莫奈单色图标及通知小图标。
+- 逐应用设置彩色图标、莫奈单色图标及状态栏通知小图标。
+- 导入后的彩色图标共用于标准通知卡片的应用标识及本用户系统应用详情；不替换会话头像、通知附图或工作资料图标，状态栏小图标继续独立设置。
 - 支持约定目录结构的 ZIP、文件夹及部分 MTZ 内层图标包。
 - 可刷新适配的桌面图标缓存，无需清除桌面数据。
 
@@ -114,15 +115,13 @@
 
 通知、短信、剪贴板及通讯录相关能力仅用于用户开启的对应功能，在本机处理，不上传相关内容。弹幕历史与拦截记录会在本机保存，可在模块内清空；这不等于“完全不读取或存储通知内容”。
 
-“关于 → 诊断日志”支持主动开始记录、复现、停止并导出有限的模块事件，不是完整系统日志，也不会自动上传。反馈时请说明机型、ROM／Android 版本、模块版本和复现步骤，公开日志前注意检查个人信息。
+“关于 → 诊断日志”支持 **开始记录 → 复现问题 → 停止 → 导出 ZIP**。管理器打开时申请 Root，未获授权会在开始录制时再次申请，仍拒绝则不录制。用户确认后，从开始时间持续收集所有可访问的 logcat 缓冲区，不按应用、标签或等级过滤；切到其他应用后由带停止按钮的前台通知维持录制。最多 10 分钟／64 MiB，达到上限或失败会注明，私有记录停止 24 小时后过期，应用未运行时下次运行清理，不自动上传。日志可能包含通知片段、账号、网址或令牌，分享前请自行检查。这里的“完整”仅指可读取的该段 logcat，不代表已覆盖、重启前或所有独立文件日志。
 
-## 当前版本
+## 主要版本沿革
 
-**0.12.3-harassment-test1** 将来电与短信集中为“骚扰拦截”，保留独立规则、开关与原有来电配置。短信判定在系统电话主进程内复用原生屏蔽号码路径；多段及正文未知时保守处理，不缓存跨短信拒绝决定，不直接写短信数据库。新增 `com.android.phone` 作用域（入口 8 个、作用域 5 项），旧安装需自行在 LSPosed 补勾“电话”，未勾选时短信拦截不生效。保留暗处暂停 AOD 实验；系统接口核验与实机效果验收分开判断。
+**0.12.3-harassment-test1** 将来电与短信集中为“骚扰拦截”，保留独立规则、开关与原有来电配置。短信判定在系统电话主进程内复用原生屏蔽号码路径；多段及正文未知时保守处理，不缓存跨短信拒绝决定，不直接写短信数据库。新增 `com.android.phone` 作用域，旧安装需自行在 LSPosed 补勾“电话”，未勾选时短信拦截不生效。保留暗处暂停 AOD 实验；系统接口核验与实机效果验收分开判断。
 
-**0.12.0-community1** 集成社区 LOS24 差异接入，保留主模块现有小窗与 Alive Beta。系统归属只显示一次维护者提示和关于页署名，不用 ROM 名称代替实际 Hook 检查。
-
-Alive 使用自有动态壁纸提供锁屏／桌面照片效果及实验性 AOD 过渡；官方 native、shader 和 mask 不随模块分发，需要用户按[资源说明](<docs/adaptation/alive-assets.md>)本地导入。当前保留资源与睡眠预绘是效果／资源取舍，不代表零后台开销或所有设备兼容，详见 [Alive 边界](<docs/adaptation/alive-systemui.md>)。
+**0.12.0-community1** 集成社区 LOS24 差异接入，保留主模块现有小窗。系统归属只显示一次维护者提示和关于页署名，不用 ROM 名称代替实际 Hook 检查。
 
 历史变更可查看 [Git 提交记录](https://github.com/AIXINJUELUOAI/NativeComplements/commits/main) 和 [版本标签](https://github.com/AIXINJUELUOAI/NativeComplements/tags)。
 

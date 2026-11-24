@@ -51,6 +51,8 @@
 
 原生安全窗口集合决定暂停：外部安全 Task 隐藏自有展示与输入；同 Task 权限确认保留真实内容和必要焦点，只撤自有遮罩／装饰。alpha=0不能代替 sink／keys／touch 门控，不提高自有层压过安全窗口。边侧续跑仅合格 owned mini、活租约和显式开关，不全局保活；清理宽限仅重放已延期的内部清理请求，外部强停和显式结束即时原生执行。
 
+普通受管任务及其 Activity 的转场保持模块呈现控制：只有完整目标族均属本模块、使用原始 Surface 且无旋转／快照／安全暂停等原生责任时，才从发送 Shell 的 changes 中排除；不删除原生 targets 或完成事务，不修改无关任务的动画标志。开始与完成事务都写入当前小窗几何，避免 Shell 再次重设位置／矩阵或将 Activity 移出任务缩放树。原位轻缩淡出的关闭路径不增加向下位移。该控制边界的规则与事务回归不等于设备视觉验收。
+
 ## 线程、通信与恢复
 
 - server 原生 Hook 可能从 Binder、WM traversal 或动画线程进入。Task／Session／native 身份与事务在既有 WM global lock 下重验；display-priority worker 上的 SF Choreographer 共用 frame transaction，不能并发共享。

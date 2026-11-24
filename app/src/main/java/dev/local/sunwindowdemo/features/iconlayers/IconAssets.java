@@ -19,6 +19,10 @@ public final class IconAssets {
     private static final AtomicInteger epoch=new AtomicInteger();
     private static volatile Handler worker;
     private static volatile boolean ready;
+    private static final ThreadLocal<Boolean> originalLoad=ThreadLocal.withInitial(()->false);
+
+    /** Settings' process-local PM hook must not feed a previous replacement back into asset decoding. */
+    public static boolean loadingOriginal(){return originalLoad.get();}
     // Effective switch: the user's choice AND the launcher-reported system themed-icon state.
     private static volatile boolean coverMonet;
 
@@ -89,6 +93,10 @@ public final class IconAssets {
     }
 
     static boolean load(Context c,Bundle config,BooleanSupplier stale) {
+        boolean previous=originalLoad.get();originalLoad.set(true);
+        try{return loadNative(c,config,stale);}finally{originalLoad.set(previous);}
+    }
+    private static boolean loadNative(Context c,Bundle config,BooleanSupplier stale) {
         String generation=config.getString("generation","");int demo=config.getInt("mode");
         Map<String,Entry> entries=new HashMap<>();Set<String> algorithms=new HashSet<>();int failed=0;
         if(config.getBoolean("enabled")){
@@ -124,6 +132,10 @@ public final class IconAssets {
     }
     /** Native mono first; missing layers are converted once for opted-in launch/task covers. Worker only. */
     static Map<String,Bitmap> activityMonos(Context c,List<String> targets,BooleanSupplier stale){
+        boolean previous=originalLoad.get();originalLoad.set(true);
+        try{return activityMonosNative(c,targets,stale);}finally{originalLoad.set(previous);}
+    }
+    private static Map<String,Bitmap> activityMonosNative(Context c,List<String> targets,BooleanSupplier stale){
         Map<String,Bitmap> result=new HashMap<>();Set<String> packages=new HashSet<>(targets==null?List.of():targets);long bytes=0;
         List<android.content.pm.LauncherActivityInfo> activities=List.of();
         try{var launcher=c.getSystemService(android.content.pm.LauncherApps.class);
@@ -218,6 +230,10 @@ public final class IconAssets {
 
     /** Worker/UI preview entry, never call this in a draw callback or under a window lock. */
     static Entry resolve(Context c,String pkg,IconPolicy policy,String generation,int side,boolean local) throws Exception {
+        boolean previous=originalLoad.get();originalLoad.set(true);
+        try{return resolveNative(c,pkg,policy,generation,side,local);}finally{originalLoad.set(previous);}
+    }
+    private static Entry resolveNative(Context c,String pkg,IconPolicy policy,String generation,int side,boolean local) throws Exception {
         ApplicationInfo info=c.getPackageManager().getApplicationInfo(pkg,0);
         Drawable original=c.getPackageManager().getApplicationIcon(info);
         IconRenderPolicy.Plan plan=IconRenderPolicy.plan(policy.color,policy.monochrome,policy.notification,

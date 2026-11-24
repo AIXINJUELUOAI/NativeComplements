@@ -177,16 +177,16 @@ class WindowController(private val activity: Activity) {
             return
         }
         val reason = when (decision) {
-            FreeformEnablePolicy.Decision.SETTING_REQUIRED -> "未检测到系统 Freeform 开关已开启，但这不一定代表小窗不可用。可以继续开启并尝试；若无法使用，再按需手动执行："
-            FreeformEnablePolicy.Decision.SETTING_UNKNOWN -> "未能读取系统 Freeform 设置，这不代表小窗一定不可用。可以继续开启并尝试；若无法使用，再按需手动执行："
-            FreeformEnablePolicy.Decision.RUNTIME_UNAVAILABLE -> "本次未检测到运行时多窗口或 Freeform 能力。可以继续开启并尝试，但不保证当前系统可用，重启也不保证解决。"
-            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "其他小窗版本已取得本次启动的接管权。可以保存开启，但不会强抢；请关闭不使用版本的小窗总开关，再完整重启。两版同时开启时保留先取得者，当前启动不会热转移窗口。"
-            FreeformEnablePolicy.Decision.PREFLIGHT_FAILED -> "系统后端的接口预检尚未就绪。可以保存开启，但实际操作仍由后端安全检查决定，不会强行调用不兼容接口。"
-            else -> "尚未收到本次可信完整的系统能力回应，或检查已超时。可以继续开启并尝试；如无反应，再检查模块作用域、后端状态和是否需要重启。"
+            FreeformEnablePolicy.Decision.SETTING_REQUIRED -> "未检测到 Freeform 开关已开启。可继续尝试，无法使用时再手动执行："
+            FreeformEnablePolicy.Decision.SETTING_UNKNOWN -> "无法读取 Freeform 设置。可继续尝试，无法使用时再手动执行："
+            FreeformEnablePolicy.Decision.RUNTIME_UNAVAILABLE -> "未检测到多窗口能力，可继续开启尝试。"
+            FreeformEnablePolicy.Decision.OWNERSHIP_CONFLICT -> "其他小窗版本正在接管。请关闭不使用版本的小窗开关后完整重启。"
+            FreeformEnablePolicy.Decision.PREFLIGHT_FAILED -> "系统后端尚未就绪，请检查模块状态。"
+            else -> "未收到完整系统能力回应，请检查模块作用域和后端状态。"
         }
         enablePrompt = reason + if (decision == FreeformEnablePolicy.Decision.SETTING_REQUIRED ||
                 decision == FreeformEnablePolicy.Decision.SETTING_UNKNOWN)
-            "\n\nadb shell settings put global enable_freeform_support 1\n\n本模块不会自动修改设置。此检查仅作提醒，可选择继续开启；设置值也不等于实际兼容性保证。" else ""
+            "\n\nadb shell settings put global enable_freeform_support 1" else ""
     }
     fun diagnostic() = TaskTools.openDiagnostic(activity)
     fun restore() = Wire.send(activity, "RESTORE")

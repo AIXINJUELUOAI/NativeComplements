@@ -2,21 +2,15 @@ package dev.local.sunwindowdemo.features.gamemode
 
 import android.content.SharedPreferences
 import android.view.WindowManager
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -26,6 +20,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.local.sunwindowdemo.core.ui.PhonePreview
 import dev.local.sunwindowdemo.core.ui.GroupTitle
 import dev.local.sunwindowdemo.core.ui.SettingsGroup
 import kotlin.math.roundToInt
@@ -83,10 +78,8 @@ private data class TrialTouch(val position: Offset, val blocked: Boolean)
 private fun CornerPreview(width: Int, height: Int, percent: Float) {
     val touches = remember(width, height) { mutableStateMapOf<PointerId, TrialTouch>() }
     val currentPercent by rememberUpdatedState(percent)
-    val background = MaterialTheme.colorScheme.surfaceContainerHighest
     val sector = MaterialTheme.colorScheme.primary
-    val border = MaterialTheme.colorScheme.outline
-    Canvas(Modifier.fillMaxWidth().height(240.dp).testTag("game-corner-preview").padding(20.dp)
+    PhonePreview(width, height, Modifier.testTag("game-corner-preview")
         .semantics { contentDescription = "底部左右双扇区预览" }
         .pointerInput(width, height) {
             try {
@@ -110,28 +103,16 @@ private fun CornerPreview(width: Int, height: Int, percent: Float) {
                     }
                 }
             } finally { touches.clear() }
-        }) {
-        val scale = minOf(size.width / width, size.height / height)
-        val phoneWidth = width * scale
-        val phoneHeight = height * scale
-        val left = (size.width - phoneWidth) / 2
-        val top = (size.height - phoneHeight) / 2
-        val corner = CornerRadius(12.dp.toPx())
-        val phone = RoundRect(left, top, left + phoneWidth, top + phoneHeight, corner)
-        val outline = Path().apply { addRoundRect(phone) }
-        drawRoundRect(background, Offset(left, top), Size(phoneWidth, phoneHeight), corner)
-        clipPath(outline) {
-            val radius = GameCornerGeometry.radius(width, height, percent) * scale
-            for (center in listOf(Offset(left, top + phoneHeight), Offset(left + phoneWidth, top + phoneHeight))) {
-                drawCircle(sector.copy(alpha = .3f), radius, center)
-                drawCircle(sector, radius, center, style = Stroke(1.dp.toPx()))
-            }
-            touches.values.forEach { touch ->
-                val color = if (touch.blocked) Color(0xffd32f2f) else Color(0xff218739)
-                drawCircle(color.copy(alpha = .25f), 15.dp.toPx(), touch.position)
-                drawCircle(color, 7.dp.toPx(), touch.position)
-            }
+        }) { scale, origin ->
+        val radius = GameCornerGeometry.radius(width, height, percent) * scale
+        for (center in listOf(origin + Offset(0f, height * scale), origin + Offset(width * scale, height * scale))) {
+            drawCircle(sector.copy(alpha = .3f), radius, center)
+            drawCircle(sector, radius, center, style = Stroke(1.dp.toPx()))
         }
-        drawRoundRect(border, Offset(left, top), Size(phoneWidth, phoneHeight), corner, style = Stroke(1.dp.toPx()))
+        touches.values.forEach { touch ->
+            val color = if (touch.blocked) Color(0xffd32f2f) else Color(0xff218739)
+            drawCircle(color.copy(alpha = .25f), 15.dp.toPx(), touch.position)
+            drawCircle(color, 7.dp.toPx(), touch.position)
+        }
     }
 }

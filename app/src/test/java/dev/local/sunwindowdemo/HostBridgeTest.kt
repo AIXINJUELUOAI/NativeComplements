@@ -29,8 +29,12 @@ class HostBridgeTest {
         val host = constructor.newInstance(context)
         var foreground: String? = null
         var blocked = false
+        var edgeBlocked = false
+        var protectedRects = intArrayOf()
         val extras = java.lang.reflect.Proxy.newProxyInstance(HostExtras::class.java.classLoader, arrayOf(HostExtras::class.java)) { _, method, args ->
             if (method.name == "environment") { foreground = args[0] as String; blocked = args[2] as Boolean }
+            if (method.name == "edgeEnvironment") edgeBlocked = args[0] as Boolean
+            if (method.name == "protectedRects") protectedRects = (args[0] as IntArray).clone()
             if (method.returnType == Boolean::class.javaPrimitiveType) false else null
         }
         fun field(name: String, value: Any) { SystemUiHost::class.java.getDeclaredField(name).apply { isAccessible = true }.set(host, value) }
@@ -41,17 +45,33 @@ class HostBridgeTest {
         shadowOf(context.getSystemService(android.app.KeyguardManager::class.java)).setKeyguardLocked(false)
         val update = SystemUiHost::class.java.getDeclaredMethod("updateCompanionEnvironment").apply { isAccessible = true }
         val key = "dev.nativecomplements.window.companion.environment.v1"
+        val facts = android.content.Intent().putExtra("environmentAt", android.os.SystemClock.elapsedRealtime())
+            .putExtra("environmentUser", Process.myUid() / 100000).putExtra("environmentDisplay", 0)
+            .putExtra("foreground", "example.native").putExtra("fullscreenApp", "example.native")
+            .putExtra("systemOverlay", false).putExtra("systemOverlayTitle", "").putExtra("imeVisible", false)
+            .putExtra("imeTop", Int.MAX_VALUE)
+        field("companionFacts", facts)
         val snapshot = org.json.JSONObject().put("at", android.os.SystemClock.elapsedRealtime())
             .put("foreground", "example.owner").put("fullscreenApp", "example.owner").put("title", "").put("system", false).put("keyboard", false)
-            .put("screenshot", false).put("panel", false).put("waiting", false).put("imeTop", Int.MAX_VALUE).put("rects", org.json.JSONArray())
+            .put("screenshot", false).put("panel", false).put("waiting", false).put("imeTop", Int.MAX_VALUE)
+            .put("rects", org.json.JSONArray(listOf(0, 0, 1, 1)))
         try {
-            System.setProperty(key, snapshot.toString()); update.invoke(host)
-            assertEquals("example.owner", foreground); assertFalse(blocked)
+            val encoded = snapshot.toString()
+            System.setProperty(key, encoded); update.invoke(host)
+            assertEquals("example.native", foreground); assertFalse(blocked); assertFalse(edgeBlocked)
+            assertArrayEquals(intArrayOf(0, 0, 1, 1), protectedRects)
+            assertEquals(encoded, System.getProperty(key))
             snapshot.put("at", android.os.SystemClock.elapsedRealtime() - 2501)
             System.setProperty(key, snapshot.toString()); update.invoke(host)
-            assertEquals("", foreground); assertTrue(blocked)
+            assertEquals("example.native", foreground); assertFalse(blocked); assertTrue(edgeBlocked)
+            assertArrayEquals(intArrayOf(), protectedRects)
             System.setProperty(key, "x".repeat(8193)); update.invoke(host)
-            assertTrue(blocked)
+            assertFalse(blocked); assertTrue(edgeBlocked)
+            assertArrayEquals(intArrayOf(), protectedRects)
+            assertEquals("x".repeat(8193), System.getProperty(key))
+            facts.putExtra("environmentAt", android.os.SystemClock.elapsedRealtime() - 2501)
+            update.invoke(host)
+            assertEquals("", foreground); assertTrue(blocked)
             assertFalse(SystemUiHost::class.java.getDeclaredField("backendReady").apply { isAccessible = true }.getBoolean(host))
         } finally { System.clearProperty(key) }
     }

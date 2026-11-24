@@ -33,7 +33,8 @@ final class WindowControls {
     private int logicalW,logicalH;
     private boolean landscape,dragging;
     private long sequence=-1;
-    private boolean motionPosted,transitioning,fullTransition,nativeHandle,inputPending;
+    private long resizeGesture;
+    private boolean motionPosted,transitioning,fullTransition,nativeHandle,inputPending,nativeSwipe;
     private String motionOp;
     private float motionScale,motionX,motionY,barAlpha=1;
     private final Choreographer frames=Choreographer.getInstance();
@@ -108,6 +109,9 @@ final class WindowControls {
         if(rebuild){hide();token=key;}
         taskId=i.getIntExtra("taskId",-1);
         Rect display=wm.getCurrentWindowMetrics().getBounds();
+        nativeSwipe=i.getBooleanExtra("nativeSwipe",false);
+        if(resizeGesture!=0&&(nativeSwipe||!"normal".equals(next)||display.width()!=displayW||display.height()!=displayH))
+            endResize("CANCEL_RESIZE",0);
         if(miniDragBase!=null&&(!"mini".equals(next)||i.getBooleanExtra("edgeHidden",false)||transitioning||systemBlocked
                 ||display.width()!=displayW||display.height()!=displayH
                 ||i.getIntExtra("logicalW",1200)!=miniDragBase.width()||i.getIntExtra("logicalH",2133)!=miniDragBase.height()))cancelMiniDrag();
@@ -254,25 +258,35 @@ final class WindowControls {
             }};
             bar.setContentDescription("小窗缩放白条：向内推缩小，向外拉全屏");
             bar.setOnTouchListener(new View.OnTouchListener(){
-                float start,startScale;int axis;
+                float start,startScale;int axis,pointer;
                 public boolean onTouch(View v,MotionEvent e){
-                    if(fullTransition||transitioning&&!inputPending)return true;
-                    if(e.getActionMasked()==MotionEvent.ACTION_DOWN){dragging=true;start=landscape?e.getRawX():e.getRawY();startScale=scale;scaleZone=landscape?"normal":GestureMath.release(scale,normalScale,appLandscape,landscape);axis=landscape?logicalW:logicalH;return true;}
-                    if(e.getActionMasked()==MotionEvent.ACTION_MOVE){float delta=(landscape?e.getRawX():e.getRawY())-start;
+                    int action=e.getActionMasked();
+                    if(action==MotionEvent.ACTION_CANCEL||action==MotionEvent.ACTION_POINTER_UP&&e.getPointerId(e.getActionIndex())==pointer){
+                        if(resizeGesture==e.getDownTime()){v.setAlpha(1);endResize("CANCEL_RESIZE",0);}
+                        return true;
+                    }
+                    if(nativeSwipe||fullTransition||transitioning&&!inputPending)return true;
+                    if(action==MotionEvent.ACTION_DOWN){
+                        resizeGesture=e.getDownTime();pointer=e.getPointerId(0);
+                        dragging=true;start=landscape?e.getRawX():e.getRawY();startScale=scale;
+                        scaleZone=landscape?"normal":GestureMath.release(scale,normalScale,appLandscape,landscape);axis=landscape?logicalW:logicalH;
+                        return true;
+                    }
+                    int index=e.findPointerIndex(pointer);
+                    if(resizeGesture==0||resizeGesture!=e.getDownTime()||index<0)return true;
+                    float delta=(landscape?e.getRawX(index):e.getRawY(index))-start;
+                    if(action==MotionEvent.ACTION_MOVE){
                         if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));if(!next.equals(scaleZone)){scaleZone=next;if(!"normal".equals(next))v.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);}v.setAlpha("normal".equals(next)?1:.65f);
                             float maximum=Math.min((displayW-dp(8))/(float)logicalW,(displayH-dp(8))/(float)logicalH);
                             sendMoveScale(GestureMath.horizontalScale(startScale,delta,dp(48),maximum));return true;}
                         sendMoveScale(GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape));return true;}
-                    if(e.getActionMasked()==MotionEvent.ACTION_UP){
-                        float delta=(landscape?e.getRawX():e.getRawY())-start;
+                    if(action==MotionEvent.ACTION_UP){
                         float end=GestureMath.clampScale(GestureMath.dragScale(startScale,delta,axis),normalScale,appLandscape,landscape);
-                        frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;dragging=false;
                         // One final sample + commit, rather than stale MOVE, RESIZE and RELEASE messages.
                         v.setAlpha(1);
-                        if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));send("full".equals(next)?"FULL":"mini".equals(next)?"MINI":"NORMAL",0,0,0);}
-                        else if(token!=null)Wire.control(c,"END_RESIZE",token,taskId,end,0,0);return true;
+                        if(landscape){String next=GestureMath.horizontalRelease(delta,dp(48));endResize("full".equals(next)?"FULL":"mini".equals(next)?"MINI":"NORMAL",0);}
+                        else endResize("END_RESIZE",end);
                     }
-                    if(e.getActionMasked()==MotionEvent.ACTION_CANCEL){dragging=false;v.setAlpha(1);frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;send("NORMAL",0,0,0);return true;}
                     return true;
                 }
             });add(bar);
@@ -310,6 +324,11 @@ final class WindowControls {
         motionY=cy+(dismissBounds.exactCenterY()-cy)*progress;
     }
     private void clearMotion(){frames.removeFrameCallback(motionFrame);motionPosted=false;motionOp=null;}
+    private void endResize(String op,float value){
+        long id=resizeGesture;if(id==0)return;
+        resizeGesture=0;dragging=false;clearMotion();
+        if(token!=null)Wire.control(c,op,token,taskId,value,0,0,id);
+    }
     private void stopMiniDrag(){
         clearMotion();miniDragBase=null;miniMagnet.reset();miniFrameTime=0;hideHapticSide=0;dragging=false;hideDismiss();
     }
@@ -328,7 +347,7 @@ final class WindowControls {
     }
     private void flushMotion(){
         if(motionOp==null)return;String op=motionOp;motionOp=null;
-        if(token!=null)Wire.control(c,op,token,taskId,motionScale,motionX,motionY);
+        if(token!=null)Wire.control(c,op,token,taskId,motionScale,motionX,motionY,"RESIZE".equals(op)?resizeGesture:0);
     }
     private void sendMove(String op,float px,float py){scheduleMotion(op,0,px,py);}
     private void sendMoveScale(float s){
@@ -600,7 +619,7 @@ final class WindowControls {
             clearEdgeHold();clearMotion();
             if(edgeGesture!=0)cancelEdgeDrag();
             else if(miniDragBase!=null)cancelMiniDrag();
-            else if(dragging&&token!=null)Wire.control(c,"NORMAL",token,taskId,0,0,0);
+            else endResize("CANCEL_RESIZE",0);
             dragging=false;hideMenu();hideDismiss();for(View v:views)v.setVisibility(View.GONE);changed();
         }else if(!views.isEmpty()&&(!transitioning||inputPending))layout();
     }
@@ -669,7 +688,7 @@ final class WindowControls {
         else for(View v:views)try{wm.removeViewImmediate(v);}catch(RuntimeException ignored){}
         views.clear();params.clear();unclippedBounds.clear();miniTouchActive=false;hideDismiss();
     }
-    void hide(){cancelEdgeDrag();cancelMiniDrag();clearMotion();hideViews();frame="";token=null;dragging=false;changed();}
+    void hide(){cancelEdgeDrag();cancelMiniDrag();endResize("CANCEL_RESIZE",0);clearMotion();hideViews();frame="";token=null;dragging=false;changed();}
     void close(){send("CLOSE",0,0,0);hide();}
     void imeTop(int top){if(imeTop==top)return;imeTop=top;if(!views.isEmpty()&&!transitioning&&!dragging)layout();}
 }

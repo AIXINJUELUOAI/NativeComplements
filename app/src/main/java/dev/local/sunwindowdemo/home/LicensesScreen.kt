@@ -6,7 +6,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
-import dev.local.sunwindowdemo.BuildConfig
 import dev.local.sunwindowdemo.core.ui.*
 
 /** A referenced or bundled project, how it is used here and under which license. */
@@ -22,9 +21,6 @@ private val references = listOf(
     Notice("Opticon", "IamCanincan", "MIT",
         "图标自适应视口缩放与非方形图标等比绘制思路参考，未复制源码与素材",
         "https://github.com/IamCanincan/Opticon"),
-    Notice("OpenAlive", "Maga-King 与 OpenAlive contributors", "自实现代码 MIT；官方效果资源保留权利",
-        "主模块裁剪接入照片动画、矩阵与遮罩解码；官方运行库及效果资源仅由用户本地导入，不随模块分发",
-        "https://github.com/Maga-King/OpenAlive/tree/2d54c72a573b2f66e20b558283bef58cdb0ada60"),
     Notice("完美图标计划", "社区图标项目", "素材权属归原作者",
         "仅兼容其 icons/<包名>/0.png、1.png 目录格式；模块不内置、不下载任何素材",
         null),
@@ -42,15 +38,15 @@ private fun NoticeGroup(title: String, items: List<Notice>) {
     val uri = LocalUriHandler.current
     GroupTitle(title)
     SettingsGroup {
-        for (item in items) SettingRow(item.name, "${item.owner} · ${item.license}",
-            item.url?.let { url -> { runCatching { uri.openUri(url) } } })
+        for (item in items) SettingRow(item.name,
+            onClick = item.url?.let { url -> { runCatching { uri.openUri(url) } } })
     }
 }
 
 @Composable
 fun LicensesScreen() {
     SettingsGroup {
-        SettingRow("类原生补全计划", "版本 ${BuildConfig.VERSION_NAME} · 本模块以 Apache-2.0 发布")
+        SettingRow("类原生补全计划")
     }
     NoticeGroup("参考项目", references)
     NoticeGroup("依赖库", libraries)

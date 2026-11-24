@@ -9,9 +9,9 @@ import java.lang.reflect.Method;
 
 /** Explicit user-triggered digit input. No Activity or app-process hook, no global text injection. */
 final class SuggestionInput {
-    private final FrameworkAccess a;
+    private final SuggestionEnvironment.Access a;
     private final Context context;
-    private final Object root,lock;
+    private final Object lock;
     private final Handler handler;
     private final InputManager input;
     private final Method inject;
@@ -21,14 +21,16 @@ final class SuggestionInput {
     private int targetUid;
     private ResultReceiver reply;
 
-    SuggestionInput(FrameworkAccess access,Context c,Object root,Object lock,Handler handler)throws Exception{
-        a=access;context=c;this.root=root;this.lock=lock;
-        input=c.getSystemService(InputManager.class);
-        inject=InputManager.class.getDeclaredMethod("injectInputEvent",InputEvent.class,int.class,int.class);
-        if(inject.getReturnType()!=boolean.class)throw new NoSuchMethodException("targeted injection");inject.setAccessible(true);
-        Class<?> window=Class.forName("com.android.server.wm.WindowState",false,root.getClass().getClassLoader());
-        a.method(window,"getOwningUid");a.field(window,"mAttrs");a.method(window,"isVisible");
-        HandlerThread thread=new HandlerThread("NativeSuggestionInput");thread.start();this.handler=new Handler(thread.getLooper());
+    SuggestionInput(SuggestionEnvironment.Access access)throws Exception{
+        this(access,access.context.getSystemService(InputManager.class),
+            SuggestionEnvironment.method(InputManager.class,"injectInputEvent",InputEvent.class,int.class,int.class),inputHandler());
+    }
+    SuggestionInput(SuggestionEnvironment.Access access,InputManager input,Method inject,Handler handler)throws Exception{
+        if(inject.getReturnType()!=boolean.class)throw new NoSuchMethodException("targeted injection");
+        a=access;context=a.context;lock=a.lock;this.input=input;this.inject=inject;this.handler=handler;
+    }
+    private static Handler inputHandler(){
+        HandlerThread thread=new HandlerThread("NativeSuggestionInput");thread.start();return new Handler(thread.getLooper());
     }
     void start(android.content.Intent request){
         handler.post(()->begin(request));
@@ -40,13 +42,10 @@ final class SuggestionInput {
         if(!dev.local.sunwindowdemo.features.suggestions.SuggestionRules.validInput(running,digits,delay)
                 ||!Wire.validToken(request.getStringExtra("token"))){receiver.send(0,null);return;}
         try{synchronized(lock){
-            Object display=a.call(root,"getDefaultDisplay"),current=a.field(display,"mCurrentFocus");
-            Object ime=a.call(display,"getImeWindow");
-            if(current==null||ime==null||!a.bool(ime,"isVisible")||!a.bool(current,"isVisible"))throw new IllegalStateException("no editor window");
-            WindowManager.LayoutParams attrs=(WindowManager.LayoutParams)a.field(current,"mAttrs");
-            if(attrs.type<1||attrs.type>=WindowManager.LayoutParams.FIRST_SYSTEM_WINDOW)throw new IllegalStateException("not an application");
-            targetUid=a.integer(current,"getOwningUid");if(targetUid<10000)throw new IllegalStateException("system input");
-            focus=current;
+            Object display=a.display(),current=a.currentFocus.get(display);
+            int uid=current==null?-1:(Integer)a.owningUid.invoke(current);
+            if(!a.editor(display,current,uid))throw new IllegalStateException("no editor window");
+            targetUid=uid;focus=current;
         }
             reply=receiver;running=true;deadline=SystemClock.uptimeMillis()+6000L+delay*digits.length();sendDigit(++sequence,digits,delay,0);
         }catch(Exception e){receiver.send(0,null);}
@@ -56,11 +55,10 @@ final class SuggestionInput {
         if(SystemClock.uptimeMillis()>deadline){finish(false);return;}
         try{
             synchronized(lock){
-                Object display=a.call(root,"getDefaultDisplay"),ime=a.call(display,"getImeWindow");
+                Object display=a.display();
                 if(!context.getSystemService(PowerManager.class).isInteractive()
                         ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()
-                        ||a.field(display,"mCurrentFocus")!=focus||!a.bool(focus,"isVisible")
-                        ||a.integer(focus,"getOwningUid")!=targetUid||ime==null||!a.bool(ime,"isVisible")){
+                        ||!a.editor(display,focus,targetUid)){
                     finish(false);return;
                 }
             }

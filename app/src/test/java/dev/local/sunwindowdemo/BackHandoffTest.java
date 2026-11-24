@@ -8,7 +8,6 @@ import android.os.Process;
 import java.lang.reflect.*;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.*;
 import org.junit.runner.RunWith;
 import org.robolectric.*;
@@ -22,7 +21,7 @@ import static org.junit.Assert.*;
 @org.robolectric.annotation.Config(sdk=35, shadows=BackHandoffTest.HostStartShadow.class)
 @LooperMode(LooperMode.Mode.PAUSED)
 public class BackHandoffTest {
-    // Only isolate host bootstrap/publishing: connect and dropChannel run production bodies.
+    // Bootstrap recovery remains active; long-side-swipe handoff has been retired.
     @Implements(SystemUiHost.class)
     public static class HostStartShadow {
         static int starts, failures, publishes;
@@ -40,6 +39,7 @@ public class BackHandoffTest {
     private Context context;
     private final List<String> cancelled=new ArrayList<>();
     private final List<Handler> handlers=new ArrayList<>();
+    private final List<SystemUiHost> hosts=new ArrayList<>();
     private static Field field(Class<?> type,String name)throws Exception {
         Field f=type.getDeclaredField(name);f.setAccessible(true);return f;
     }
@@ -67,6 +67,11 @@ public class BackHandoffTest {
         });
     }
     @After public void cleanup()throws Exception {
+        if(SystemUiHost.live!=null&&!hosts.contains(SystemUiHost.live))hosts.add(SystemUiHost.live);
+        for(SystemUiHost host:hosts){
+            ((Handler)get(host,"main")).removeCallbacksAndMessages(null);
+            ((java.util.concurrent.ExecutorService)get(host,"settingsWorker")).shutdownNow();
+        }
         field(Wire.class,"endpoint").set(null,null);SystemUiHost.live=null;Config.hostPreferences=null;
         ShadowBinder.setCallingUid(Process.myUid());
         for(Handler handler:handlers)handler.removeCallbacksAndMessages(null);
@@ -127,232 +132,34 @@ public class BackHandoffTest {
         ((Handler)get(bridge,"main")).removeCallbacks((Runnable)get(bridge,"reconnect"));
     }
 
-    private SystemUiHost host()throws Exception {return host(context);}
-    private SystemUiHost host(Context base)throws Exception {
+    private SystemUiHost host()throws Exception {
         Constructor<SystemUiHost> constructor=SystemUiHost.class.getDeclaredConstructor(Context.class);constructor.setAccessible(true);
-        SystemUiHost host=constructor.newInstance(base);
-        handlers.add((Handler)get(host,"main"));
-        Config config=new Config(context);config.prefs.edit().clear().putBoolean("enabled",true).putBoolean("longBackWindow",true).putBoolean("landscapeOff",false).putBoolean("keyboardOff",false).commit();
-        set(host,"config",config);set(host,"settingsReady",true);set(host,"backendReady",true);set(host,"backendState","idle");
-        Shadows.shadowOf(context.getSystemService(PowerManager.class)).setIsInteractive(true);
-        Shadows.shadowOf(context.getSystemService(android.app.KeyguardManager.class)).setKeyguardLocked(false);
-        return host;
+        SystemUiHost host=constructor.newInstance(context);hosts.add(host);return host;
     }
-    private boolean commit(SystemUiHost host,String token)throws Exception {
-        Parcel data=Parcel.obtain(),reply=Parcel.obtain();
-        try{
-            data.writeInterfaceToken(BackBridge.CHANNEL);data.writeInt(42);data.writeString("example.app");data.writeString(token);
-            assertTrue(((Binder)get(host,"dropChannel")).transact(IBinder.FIRST_CALL_TRANSACTION,data,reply,0));
-            reply.readException();return reply.readBoolean();
-        }finally{data.recycle();reply.recycle();}
-    }
-    private void assertSecondaryRejection(String changed,Object value)throws Exception {
-        SystemUiHost host=host();String token=Wire.token();
-        assertTrue(commit(host,token));assertTrue(((AtomicBoolean)get(host,"backPending")).get());assertTrue(cancelled.isEmpty());
-        set(host,changed,value);idle(0);
-        assertEquals(List.of(token),cancelled);assertFalse(((AtomicBoolean)get(host,"backPending")).get());
-    }
-    @Test public void acceptedCommitDispatchFailureCancelsPreparedBackAndReleasesPendingGate()throws Exception {
-        Context throwing=new ContextWrapper(context){
-            @Override public void sendBroadcast(Intent intent,String permission,Bundle options){throw new IllegalStateException("dispatch unavailable");}
-        };
-        SystemUiHost host=host(throwing);String token=Wire.token();
-        assertTrue(commit(host,token));assertTrue(cancelled.isEmpty());idle(0);
-        assertEquals(List.of(token),cancelled);assertFalse(((AtomicBoolean)get(host,"backPending")).get());
-        assertTrue(commit(host,Wire.token())); // Failure must not wedge the next gesture.
-    }
-    @Test public void acceptedCommitDispatchesOnceWithoutCancellingAndReleasesPendingGate()throws Exception {
-        SystemUiHost host=host();String token=Wire.token();
-        int before=Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents().size();
-        assertTrue(commit(host,token));assertFalse(commit(host,Wire.token()));idle(0);
-        List<Intent> broadcasts=Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents();
-        assertEquals(before+1,broadcasts.size());Intent request=broadcasts.get(before);
-        assertEquals("GESTURE",request.getStringExtra("op"));assertEquals(token,request.getStringExtra("token"));
-        assertEquals(42,request.getIntExtra("taskId",-1));assertTrue(cancelled.isEmpty());
-        assertFalse(((AtomicBoolean)get(host,"backPending")).get());
-    }
-    @Test public void disabledLongBackRejectsCommitWithoutTakingPendingGate()throws Exception {
-        SystemUiHost host=host();Config config=(Config)get(host,"config");
-        config.prefs.edit().putBoolean("longBackWindow",false).commit();
-        assertFalse(commit(host,Wire.token()));
-        assertFalse(((AtomicBoolean)get(host,"backPending")).get());idle(0);
-        assertTrue(cancelled.isEmpty());
-        config.prefs.edit().putBoolean("longBackWindow",true).commit();
-        assertTrue(commit(host,Wire.token())); // Rejection must not wedge the next enabled gesture.
-        idle(0);assertFalse(((AtomicBoolean)get(host,"backPending")).get());
-    }
-    @Test public void acceptedCommitCancelsPreparedBackWhenLongBackIsDisabledBeforeDispatch()throws Exception {
-        SystemUiHost host=host();String token=Wire.token();
-        assertTrue(commit(host,token));assertTrue(((AtomicBoolean)get(host,"backPending")).get());
-        ((Config)get(host,"config")).prefs.edit().putBoolean("longBackWindow",false).commit();idle(0);
-        assertEquals(List.of(token),cancelled);assertFalse(((AtomicBoolean)get(host,"backPending")).get());
-    }
-    @Test public void disabledLongBackDoesNotCreateHintOrEnterStageTwo()throws Exception {
+    @Test public void retiredGestureOperationsStayRejectedEvenWithLegacySettingEnabled()throws Exception {
         SystemUiHost host=host();
-        ((Config)get(host,"config")).prefs.edit().putBoolean("longBackWindow",false).commit();
-        int[] haptics={0};
-        set(host,"left",new android.view.View(context){
-            @Override public boolean performHapticFeedback(int feedbackConstant){haptics[0]++;return true;}
-        });
-        Method show=SystemUiHost.class.getDeclaredMethod("showSwipeHint",int.class);show.setAccessible(true);
-        for(int stage:new int[]{1,2}){
-            show.invoke(host,stage);
-            assertNull(get(host,"swipeHint"));assertEquals(0,get(host,"hintStage"));assertEquals(0,haptics[0]);
-        }
-    }
-    @Test public void acceptedCommitCancelsPreparedBackWhenHostIsCleanedBeforeDispatch()throws Exception {assertSecondaryRejection("cleaned",true);}
-    @Test public void acceptedCommitCancelsPreparedBackWhenPolicyChangesBeforeDispatch()throws Exception {assertSecondaryRejection("systemFocus",true);}
-    @Test public void acceptedCommitCancelsPreparedBackWhenBackendDisconnectsBeforeDispatch()throws Exception {assertSecondaryRejection("backendReady",false);}
-    @Test public void acceptedCommitCancelsPreparedBackWhenDropSlotBecomesUnavailable()throws Exception {assertSecondaryRejection("backendState","opening");}
-
-    @Test public void nativeCancellationMatchesOnlyTheCommittedHandlersTerminalUp()throws Exception{
-        Object owner=new Object();
-        Method cancel=Class.forName("dev.local.sunwindowdemo.BackBridge").getDeclaredMethod("cancelNativeUp",Object.class,long.class,Object.class,android.view.MotionEvent.class);
-        cancel.setAccessible(true);
-        for(int action:new int[]{android.view.MotionEvent.ACTION_DOWN,android.view.MotionEvent.ACTION_MOVE,android.view.MotionEvent.ACTION_UP,android.view.MotionEvent.ACTION_CANCEL}){
-            var event=android.view.MotionEvent.obtain(10,20,action,0,0,0);
-            try{
-                assertEquals(action==android.view.MotionEvent.ACTION_UP,cancel.invoke(null,owner,10,owner,event));
-                assertEquals(false,cancel.invoke(null,owner,11,owner,event));
-                assertEquals(false,cancel.invoke(null,owner,10,new Object(),event));
-            }finally{event.recycle();}
-        }
-    }
-
-    private Object stroke(String token,Object controller)throws Exception {
-        Class<?> type=Class.forName("dev.local.sunwindowdemo.BackBridge$Stroke");
-        Constructor<?> constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
-        Object stroke=constructor.newInstance();set(stroke,"handoff",new BackHandoffState(0));set(stroke,"token",token);set(stroke,"controller",controller);
-        set(stroke,"task",42);set(stroke,"pkg","dev.example.target");return stroke;
-    }
-    private void callStroke(Object bridge,String method,Object stroke)throws Exception {
-        Method target=bridge.getClass().getDeclaredMethod(method,stroke.getClass());target.setAccessible(true);target.invoke(bridge,stroke);
-    }
-    private void waitNative(Object bridge,Object stroke)throws Exception {
-        Method target=bridge.getClass().getDeclaredMethod("waitForNativeBack",stroke.getClass(),int.class);
-        target.setAccessible(true);target.invoke(bridge,stroke,0);
-    }
-    private static final class NativeTransitions {
-        Runnable callback;
-        boolean immediate;
-        public void runOnIdle(Runnable callback){this.callback=callback;if(immediate)callback.run();}
-    }
-    private static final class NativeController {
-        Object mBackNavigationInfo;
-        boolean mPostCommitAnimationInProgress;
-        final NativeTransitions mTransitions=new NativeTransitions();
-        final List<Runnable> shell=new ArrayList<>();
-        final java.util.concurrent.Executor mShellExecutor=shell::add;
-        void runShell(){shell.remove(0).run();}
-    }
-    private Object liveBridge(List<String> committed,boolean accepted)throws Exception {
-        Object bridge=bridge();set(bridge,"enabled",true);set(bridge,"lease",new Binder());
-        set(bridge,"sink",new Binder(){
-            @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags){
-                assertEquals(IBinder.FIRST_CALL_TRANSACTION,code);assertEquals(0,flags);
-                data.enforceInterface(BackBridge.CHANNEL);assertEquals(42,data.readInt());
-                assertEquals("dev.example.target",data.readString());committed.add(data.readString());data.enforceNoDataAvail();
-                reply.writeNoException();reply.writeBoolean(accepted);return true;
+        int before=Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents().size();
+        for(boolean enabled:new boolean[]{false,true}){
+            Config config=new Config(context);config.prefs.edit().clear().putBoolean("enabled",true).putBoolean("longBackWindow",enabled).commit();
+            set(host,"config",config);set(host,"settingsReady",true);set(host,"backendReady",true);set(host,"backendState","idle");
+            for(int operation=0;operation<3;operation++){
+                Parcel data=Parcel.obtain(),reply=Parcel.obtain();
+                try{
+                    data.writeInterfaceToken(BackBridge.CHANNEL);data.writeInt(42);data.writeString("example.app");data.writeString(Wire.token());
+                    assertFalse(((Binder)get(host,"dropChannel")).transact(IBinder.FIRST_CALL_TRANSACTION+operation,data,reply,0));
+                }finally{data.recycle();reply.recycle();}
             }
-        });return bridge;
+        }
+        idle(0);assertTrue(cancelled.isEmpty());
+        assertEquals(before,Shadows.shadowOf(RuntimeEnvironment.getApplication()).getBroadcastIntents().size());
     }
-    @Test public void shellIdleHandoffCommitsOnMainOnceDespiteDuplicateCallbacks()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();String token=Wire.token();Object stroke=stroke(token,controller);
-        set(bridge,"settling",stroke);waitNative(bridge,stroke);
-        assertNull(controller.mTransitions.callback);assertTrue(committed.isEmpty());
-        controller.runShell();assertNotNull(controller.mTransitions.callback);assertTrue(committed.isEmpty());
-        controller.mTransitions.callback.run();controller.mTransitions.callback.run();
-        assertTrue(committed.isEmpty());idle(0);
-        assertEquals(List.of(token),committed);assertNull(get(bridge,"settling"));
-        controller.mTransitions.callback.run();idle(650);
-        assertEquals(List.of(token),committed);assertTrue(cancelled.isEmpty());
-    }
-    @Test public void synchronousShellAndIdleCallbacksStillPostCommitToMainWithoutDeadlock()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();controller.mTransitions.immediate=true;
-        String token=Wire.token();Object stroke=stroke(token,controller);set(bridge,"settling",stroke);
-        set(controller,"mShellExecutor",(java.util.concurrent.Executor)Runnable::run);
-        waitNative(bridge,stroke);assertTrue(committed.isEmpty());idle(0);
-        assertEquals(List.of(token),committed);idle(650);assertTrue(cancelled.isEmpty());
-    }
-    @Test public void idleTimeoutRejectsLateCallbackAndCancelsOnlyOnce()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();String token=Wire.token();Object stroke=stroke(token,controller);
-        set(bridge,"settling",stroke);set(bridge,"pending",stroke);waitNative(bridge,stroke);controller.runShell();
-        idle(649);assertTrue(cancelled.isEmpty());idle(1);
-        assertEquals(List.of(token),cancelled);assertNull(get(bridge,"settling"));assertNull(get(bridge,"pending"));
-        controller.mTransitions.callback.run();controller.mTransitions.callback.run();idle(0);
-        callStroke(bridge,"abort",stroke);assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
-    }
-    @Test public void newGenerationLeavesNewTicketIntactWhenOldIdleCallbackArrives()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();String token=Wire.token();Object old=stroke(token,controller);
-        set(bridge,"settling",old);waitNative(bridge,old);controller.runShell();
-        // Same native invalidation used at a new DOWN, before installing the next owner ticket.
-        callStroke(bridge,"abort",old);set(bridge,"generation",1);
-        Object next=stroke(Wire.token(),null);set(bridge,"settling",next);set(bridge,"pending",next);
-        controller.mTransitions.callback.run();idle(650);
-        assertSame(next,get(bridge,"settling"));assertSame(next,get(bridge,"pending"));
-        assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
-    }
-    @Test public void lateShellCheckCannotRegisterIdleAfterOldTicketIsAborted()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();String token=Wire.token();Object old=stroke(token,controller);
-        set(bridge,"settling",old);waitNative(bridge,old);callStroke(bridge,"abort",old);
-        controller.runShell();idle(0);
-        assertNull(controller.mTransitions.callback);assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
-    }
-    @Test public void noControllerPathAlsoRejectsDuplicateWaitAndCommitCalls()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        String token=Wire.token();Object stroke=stroke(token,null);set(bridge,"settling",stroke);
-        waitNative(bridge,stroke);waitNative(bridge,stroke);idle(0);callStroke(bridge,"commit",stroke);
-        callStroke(bridge,"abort",stroke);
-        assertEquals(List.of(token),committed);assertTrue(cancelled.isEmpty());
-    }
-    @Test public void rejectedCommitCancelsSendingTicketOnceDespiteDuplicateCallbacks()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,false);
-        String token=Wire.token();Object stroke=stroke(token,null);set(bridge,"settling",stroke);
-        waitNative(bridge,stroke);idle(0);callStroke(bridge,"commit",stroke);callStroke(bridge,"abort",stroke);
-        assertEquals(List.of(token),committed);assertEquals(List.of(token),cancelled);
-    }
-    @Test public void disabledLeaseBeforeIdleCancelsOldTokenWithoutCommitting()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();String token=Wire.token();Object stroke=stroke(token,controller);
-        set(bridge,"settling",stroke);waitNative(bridge,stroke);controller.runShell();set(bridge,"enabled",false);
-        controller.mTransitions.callback.run();idle(650);
-        assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
-    }
-
-    @Test public void changedGenerationAtIdleCannotClearNewSettlingTicket()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        NativeController controller=new NativeController();String token=Wire.token();Object old=stroke(token,controller);
-        set(bridge,"settling",old);waitNative(bridge,old);controller.runShell();
-        set(bridge,"generation",1);Object next=stroke(Wire.token(),null);set(bridge,"settling",next);set(bridge,"pending",next);
-        controller.mTransitions.callback.run();idle(650);
-        assertSame(next,get(bridge,"settling"));assertSame(next,get(bridge,"pending"));
-        assertTrue(committed.isEmpty());assertEquals(List.of(token),cancelled);
-    }
-    @Test public void commitExceptionCancelsExactSendingTicketAndDoesNotRetry()throws Exception {
-        List<String> committed=new ArrayList<>();Object bridge=liveBridge(committed,true);
-        set(bridge,"sink",new Binder(){
-            @Override protected boolean onTransact(int code,Parcel data,Parcel reply,int flags)throws RemoteException {
-                throw new RemoteException("disconnected");
-            }
-        });
-        String token=Wire.token();Object stroke=stroke(token,null);set(bridge,"settling",stroke);
-        waitNative(bridge,stroke);idle(0);callStroke(bridge,"commit",stroke);callStroke(bridge,"abort",stroke);
-        assertEquals(List.of(token),cancelled);assertNull(get(bridge,"settling"));
-    }
-
-    @Test public void nativeWaitTimeoutReleasesSettlingAndPreparedCover()throws Exception{
-        Object bridge=bridge();Class<?> type=Class.forName("dev.local.sunwindowdemo.BackBridge$Stroke");
-        Constructor<?> constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
-        Object stroke=constructor.newInstance();set(stroke,"handoff",new BackHandoffState(0));String token=Wire.token();set(stroke,"token",token);
-        set(bridge,"enabled",true);set(bridge,"lease",new Binder());set(bridge,"sink",new Binder());
-        set(bridge,"settling",stroke);set(bridge,"pending",stroke);
-        Method wait=bridge.getClass().getDeclaredMethod("waitForNativeBack",type,int.class);wait.setAccessible(true);
-        wait.invoke(bridge,stroke,40);
-        assertNull(get(bridge,"settling"));assertNull(get(bridge,"pending"));assertEquals(List.of(token),cancelled);
+    @Test public void remainingScreenshotOperationRejectsForeignUidBeforeChangingPriority()throws Exception {
+        SystemUiHost host=host();ShadowBinder.setCallingUid(Process.myUid()+1);
+        Parcel data=Parcel.obtain();
+        try{
+            data.writeInterfaceToken(BackBridge.CHANNEL);data.writeBoolean(true);
+            assertFalse(((Binder)get(host,"dropChannel")).transact(IBinder.FIRST_CALL_TRANSACTION+3,data,null,IBinder.FLAG_ONEWAY));
+        }finally{data.recycle();}
+        idle(0);assertEquals(false,get(host,"screenshotVisible"));assertTrue(cancelled.isEmpty());
     }
 }

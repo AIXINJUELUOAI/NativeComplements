@@ -38,6 +38,7 @@ import dev.local.sunwindowdemo.features.background.BackgroundList
 import dev.local.sunwindowdemo.features.gamemode.GameModeScreen
 import dev.local.sunwindowdemo.features.gamemode.GameQuickScreen
 import dev.local.sunwindowdemo.features.gamemode.GameCornerScreen
+import dev.local.sunwindowdemo.features.gamemode.GameHandlePositionScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconDiagnosticsScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconLayerScreen
 import dev.local.sunwindowdemo.features.iconlayers.IconBatchDialog
@@ -61,10 +62,6 @@ fun ModuleApp(
     openIconApp: (String) -> Unit = {},
     openBackgroundApp: (String) -> Unit = {},
 ) {
-    if (page == Page.Alive) {
-        dev.local.sunwindowdemo.features.alive.AliveScreen(onBack = back)
-        return
-    }
     val context = LocalContext.current
     var iconBatch by rememberSaveable { mutableStateOf(false) }
     var iconSelection by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -131,7 +128,9 @@ fun ModuleApp(
             Page.Shade -> ShadeScreen(bottomInset)
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.GameMode -> GameModeScreen(controller.apps, controller.catalogLoaded, bottomInset,
-                onQuick = { navigate(Page.GameQuick) }, onBarrage = { navigate(Page.Barrage) }, onCorner = { navigate(Page.GameCorner) })
+                onQuick = { navigate(Page.GameQuick) }, onBarrage = { navigate(Page.Barrage) }, onCorner = { navigate(Page.GameCorner) },
+                onHandle = { navigate(Page.GameHandle) })
+            Page.GameHandle -> GameHandlePositionScreen(bottomInset)
             Page.GameCorner -> GameCornerScreen(bottomInset)
             Page.GameQuick -> GameQuickScreen(controller.apps, controller.catalogLoaded, bottomInset, onAppTabChanged = {
                 appsTab = it
@@ -155,7 +154,7 @@ fun ModuleApp(
                         onEdgeTouch = { navigate(Page.EdgeTouch) },
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onGameMode = { navigate(Page.GameMode) },
-                        onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
+                        onShade = { navigate(Page.Shade) },
                         onBackground = { navigate(Page.Background) },
                     )
 
@@ -365,5 +364,4 @@ private fun DarkAodControls() {
             config = DarkAodStore.systemSnapshot(context)
         })
 }
-
 

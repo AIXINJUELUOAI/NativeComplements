@@ -2,7 +2,7 @@
 
 ## 来源与集成
 
-贡献者：[LFRon](https://github.com/LFRon)（提交作者 mozixun）。原始贡献为 [PR #4](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)，提交 `89b0c783518b833da5f39bfa5de0131a13de392b`。集成基于 code165，保留 PR 祖先及作者，不将其中较旧的 code147/148 Alive 内容覆盖当前实现。
+贡献者：[LFRon](https://github.com/LFRon)（提交作者 mozixun）。原始贡献为 [PR #4](https://github.com/AIXINJUELUOAI/NativeComplements/pull/4)，提交 `89b0c783518b833da5f39bfa5de0131a13de392b`。集成基于 code165，保留 PR 祖先及作者；当前维护范围以功能合同为准。
 
 维护者记录仅用于首次一次提示、关于页署名与反馈路由，不作为权限或兼容性认证。维护者仓库未开启 Issues 时使用[主项目反馈](https://github.com/AIXINJUELUOAI/NativeComplements/issues)，不要求贡献者补测试模板或样例，不在每个功能页添加“未适配／未验证”提醒。
 
@@ -27,7 +27,6 @@
 | 横屏双栏 | Legacy 与 Hydrated 的不同安装目标隔离，规则共用；不强开 Scene，不写只读 Flow |
 | 信号 | 原有回调和 stacked targets 保留；不同 binder／TelephonyCallback 接入独立，避免重复 Hook 和半安装 |
 | 来电／传感器／边缘 | 相同接口及共用规则保留，桌面排除范围加入 Launcher3 |
-| Alive | 当前 code165 自有壁纸、Direct Boot、安全门及视觉实现保留；不伪造新系统投影、不做 ROM 名称禁用或逐功能警告 |
 
 ## 上游资料与检查边界
 

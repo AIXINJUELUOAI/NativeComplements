@@ -83,7 +83,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }};
     private void resumePoll(){if(cleaned||polling)return;polling=true;main.post(poll);}
     private void reloadSettings(){
-        if(cleaned)return;hideFan();removeHot();if(!config.enabled()){cancelOpenWait();hidePanel();}
+        if(cleaned)return;hideFan();removeHot();if(!config.enabled()){navigationBlockUntil=0;cancelOpenWait();hidePanel();}
         if(panel instanceof FrameLayout outside&&outside.getChildCount()>0)AppList.blur(outside.getChildAt(0),config.menuBlur());
         if(!config.enabled()&&controls!=null){
             if("active".equals(backendState)||"recovery".equals(backendState))Wire.send(this,"RESTORE");
@@ -143,7 +143,10 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     void cancelCornerInput(){main.post(()->{hideFan();removeHot();});}
     private boolean publishedEnabled;
-    private boolean publishedDrop,publishedImmersive,publishedSwipe,publishedSwipeHint;
+    private boolean publishedDrop,publishedImmersive,publishedSwipe,publishedSwipeHint,publishedBlockUp;
+    private static final long NAV_STATE_MS=2500; // Backend STATUS renews interactive state every 750ms.
+    private volatile long navigationBlockUntil;
+    private long navigationSequence;
     private int activeTask=-1,pinnedTask=-1,publishedHidden=-2;
     private final android.os.Binder dropChannel=new android.os.Binder(){
         @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws android.os.RemoteException {
@@ -163,9 +166,15 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     /** Launcher swipe-up handoff. Only the verified HOME UID may call; any rejection keeps native Home/Recents. */
     private final android.os.Binder swipeChannel=new android.os.Binder(){
         @Override protected boolean onTransact(int code,android.os.Parcel data,android.os.Parcel reply,int flags) throws android.os.RemoteException {
-            if(code!=android.os.IBinder.FIRST_CALL_TRANSACTION)return super.onTransact(code,data,reply,flags);
+            if(code!=android.os.IBinder.FIRST_CALL_TRANSACTION&&code!=DefaultWindowNavigation.QUERY)return super.onTransact(code,data,reply,flags);
             if(reply==null||!dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(SystemUiHost.this,android.os.Binder.getCallingUid()))return false;
             data.enforceInterface(SwipeMini.CHANNEL);
+            if(code==DefaultWindowNavigation.QUERY){
+                data.enforceNoDataAvail();
+                boolean block=android.os.SystemClock.elapsedRealtime()<navigationBlockUntil
+                    &&getSystemService(android.os.PowerManager.class).isInteractive()&&!getSystemService(KeyguardManager.class).isKeyguardLocked();
+                reply.writeNoException();reply.writeBoolean(block);return true;
+            }
             int task=data.readInt();android.graphics.RectF card=data.readTypedObject(android.graphics.RectF.CREATOR);float radius=data.readFloat();
             data.enforceNoDataAvail();
             boolean accepted;
@@ -228,6 +237,22 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private static final String COMPANION_ENVIRONMENT="dev.nativecomplements.window.companion.environment.v1";
     private boolean delegatedToStandalone;
     private long ownerEnvironmentAt;
+    private Intent companionFacts;
+    private final Runnable expireCompanionFacts=this::updateCompanionEnvironment;
+    private final BroadcastReceiver companionReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
+        if(getSentFromUid()!=android.os.Process.SYSTEM_UID||i.getIntExtra("protocol",0)!=Wire.PROTOCOL)return;
+        receiveCompanionEnvironment(i);
+    }};
+    private void receiveCompanionEnvironment(Intent facts){
+        if(cleaned)return;
+        companionFacts=new Intent(facts);
+        main.removeCallbacks(expireCompanionFacts);
+        long at=facts.getLongExtra("environmentAt",-1);
+        if(SuggestionEnvironment.fresh(facts,android.os.SystemClock.elapsedRealtime(),SuggestionEnvironment.userId()))
+            main.postDelayed(expireCompanionFacts,Math.max(1,at+SuggestionEnvironment.MAX_AGE_MS+1-android.os.SystemClock.elapsedRealtime()));
+        updateCompanionEnvironment();
+    }
+    boolean suggestionWindowReady(){return ready()&&config!=null&&config.enabled()&&backendReady;}
     private final BroadcastReceiver backendReceiver=new BroadcastReceiver(){public void onReceive(Context c,Intent i){
         if(getSentFromUid()!=1000||i.getIntExtra("protocol",0)!=Wire.PROTOCOL)return;
         Wire.acceptBackend(i);receiveFrame(i);
@@ -237,6 +262,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         backendState=i.getStringExtra("state");
         backendReady=!"conflict".equals(backendState)&&!i.getBooleanExtra("ownershipConflict",false);
         normalOccupied=i.getBooleanExtra("normalOccupied",true);
+        // Binder frames can overtake STATUS broadcasts; a stale open frame must not re-arm a closed window.
+        long sequence=i.getLongExtra("sequence",0);
+        if(!backendReady)navigationBlockUntil=0;
+        if(sequence>navigationSequence){
+            navigationSequence=sequence;
+            navigationBlockUntil=backendReady&&ready()&&config!=null&&config.enabled()&&i.getBooleanExtra("blockUpNavigation",false)
+                ?android.os.SystemClock.elapsedRealtime()+NAV_STATE_MS:0;
+        }
         if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone())
             delegatedToStandalone=!backendReady&&i.getBooleanExtra("delegatedToStandalone",false)
                 &&dev.local.sunwindowdemo.core.ModuleIdentity.WINDOW_PACKAGE.equals(i.getStringExtra("backendOwner"));
@@ -282,7 +315,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private final BroadcastReceiver screenReceiver=new BroadcastReceiver(){
         public void onReceive(Context c,Intent i){
             if(Intent.ACTION_SCREEN_ON.equals(i.getAction())){resumePoll();return;}
-            cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");
+            navigationBlockUntil=0;cancelOpenWait();hideFan();hidePanel();removeHot();if(controls!=null)hideControls();refresh();Wire.send(SystemUiHost.this,"STATUS");
             if(Intent.ACTION_SCREEN_OFF.equals(i.getAction())){main.removeCallbacks(poll);polling=false;}else resumePoll();
         }
     };
@@ -296,8 +329,11 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         controls=new WindowControls(this);miniControls=new WindowControls(this);
         extras=ProductFeatures.hostExtras(this);
         extras.startCompanions();
+        updateCompanionEnvironment();
+        registerReceiver(companionReceiver,new IntentFilter(SuggestionEnvironment.RESULT),null,main,Context.RECEIVER_EXPORTED);
         quick=new WindowQuickHost(this,()->{hidePanel();hideFan();},()->{hidePanel();hideFan();floatCurrent(0,true);});
         extras.startBarrage();
+        updateCompanionEnvironment();
         Wire.listen(this::receiveFrame);
         registerReceiver(backendReceiver,new IntentFilter(Wire.RESULT),null,main,Context.RECEIVER_EXPORTED);
         Wire.send(this,"STATUS");
@@ -338,7 +374,21 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     private void updateCompanionEnvironment(){
         if(extras==null)return;
-        if(!delegatedToStandalone){
+        if(!dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.standalone()){
+            boolean awake=getSystemService(android.os.PowerManager.class).isInteractive();
+            KeyguardManager keyguard=getSystemService(KeyguardManager.class);
+            boolean fresh=awake&&keyguard!=null&&!keyguard.isKeyguardLocked()
+                &&SuggestionEnvironment.fresh(companionFacts,android.os.SystemClock.elapsedRealtime(),SuggestionEnvironment.userId());
+            Intent facts=fresh?companionFacts:new Intent();
+            String game=facts.getStringExtra("fullscreenApp");if(game==null)game="";
+            boolean blocked=!fresh||facts.getBooleanExtra("systemOverlay",true),ime=!fresh||facts.getBooleanExtra("imeVisible",true);
+            extras.environment(game,!game.isEmpty(),blocked,facts.getStringExtra("systemOverlayTitle"),ime,
+                screenshotVisible,panel!=null,openWait!=null,facts.getIntExtra("imeTop",Integer.MAX_VALUE),facts.getStringExtra("foreground"));
+            extras.edgeEnvironment(blocked||screenshotVisible||panel!=null||openWait!=null,ime);
+            if(!delegatedToStandalone)return;
+            // The retired owner's companion snapshot supplies only its protected UI regions/occlusion,
+            // never a substitute for fresh, independently read native environment facts.
+        }else{
             extras.environment(fullscreenApp,!fullscreenApp.isEmpty(),systemFocus,systemOverlayTitle,keyboard,screenshotVisible,panel!=null,openWait!=null,suggestionImeTop,foreground);
             extras.edgeEnvironment(screenshotVisible||systemFocus,keyboard);
             return;
@@ -361,14 +411,13 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
                 if(rect.isEmpty()||!bounds.contains(rect))throw new IllegalArgumentException("protected rectangle bounds");
                 rectangles[n]=rect.left;rectangles[n+1]=rect.top;rectangles[n+2]=rect.right;rectangles[n+3]=rect.bottom;
             }
-            boolean blocked=snapshot.getBoolean("system")||screenshotVisible;
-            String game=snapshot.optString("fullscreenApp","");
-            extras.environment(game,!game.isEmpty(),blocked,snapshot.getString("title"),snapshot.getBoolean("keyboard"),
-                screenshotVisible||snapshot.getBoolean("screenshot"),snapshot.getBoolean("panel"),snapshot.getBoolean("waiting"),snapshot.getInt("imeTop"),snapshot.optString("foreground",""));
-            extras.edgeEnvironment(blocked||snapshot.getBoolean("screenshot")||snapshot.getBoolean("panel")||snapshot.getBoolean("waiting"),snapshot.getBoolean("keyboard"));
+            if(snapshot.getBoolean("screenshot")||snapshot.getBoolean("panel")||snapshot.getBoolean("waiting")){
+                extras.environment("",false,true,"",true,true,false,false,Integer.MAX_VALUE,"");
+                extras.edgeEnvironment(true,true);
+            }
             extras.protectedRects(rectangles);
         }catch(Exception unavailable){
-            extras.environment("",false,true,"",true,true,false,false,Integer.MAX_VALUE,"");
+            // Unknown retired-owner controls cannot authorize edge input. Suggestions still use native facts above.
             extras.edgeEnvironment(true,true);extras.protectedRects(new int[0]);
         }
     }
@@ -476,12 +525,14 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         android.graphics.Rect bounds=wm==null?new android.graphics.Rect():wm.getCurrentWindowMetrics().getBounds();
         int hidden=config!=null&&config.hideRecents()?activeTask:-1;
         boolean swipe=config!=null&&config.enabled()&&config.swipeMini(),swipeHint=config==null||config.swipeMiniHint();
-        if(!force&&publishedSwipe==swipe&&publishedSwipeHint==swipeHint&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
-        publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;publishedSwipe=swipe;publishedSwipeHint=swipeHint;
+        boolean blockUp=android.os.SystemClock.elapsedRealtime()<navigationBlockUntil;
+        if(!force&&publishedBlockUp==blockUp&&publishedSwipe==swipe&&publishedSwipeHint==swipeHint&&publishedImmersive==immersive&&publishedHidden==hidden&&publishedDrop==dropEnabled&&publishedEnabled==enabled&&publishedWidth==bounds.width()&&publishedHeight==bounds.height()&&java.util.Arrays.equals(published,rects)&&java.util.Arrays.equals(publishedHandles,handles))return;
+        publishedBlockUp=blockUp;publishedDrop=dropEnabled;publishedHidden=hidden;publishedImmersive=immersive;publishedSwipe=swipe;publishedSwipeHint=swipeHint;
         publishedEnabled=enabled;publishedWidth=bounds.width();publishedHeight=bounds.height();published=rects.clone();publishedHandles=handles.clone();
         Intent state=new Intent(LauncherGuard.STATE).putExtra("enabled",enabled)
             .putExtra("width",bounds.width()).putExtra("height",bounds.height()).putExtra("rects",rects).putExtra("swipeMini",swipe).putExtra("swipeMiniHint",swipeHint);
-        state.putExtra("handleRects",handles).putExtra("immersive",immersive).putExtra("hiddenTask",hidden).putExtra("dropEnabled",dropEnabled).putExtra("density",getResources().getDisplayMetrics().density);
+        state.putExtra("handleRects",handles).putExtra("immersive",immersive).putExtra("hiddenTask",hidden).putExtra("dropEnabled",dropEnabled)
+            .putExtra("blockUpNavigation",blockUp).putExtra("density",getResources().getDisplayMetrics().density);
         android.os.Bundle extras=new android.os.Bundle();extras.putBinder("lease",lease);extras.putBinder("dropChannel",dropChannel);extras.putBinder("swipeChannel",swipeChannel);state.putExtras(extras);state.putExtras(extras);
         android.os.Bundle options=android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle();
         for(String launcher:dev.local.sunwindowdemo.core.LauncherTargets.targets(this))
@@ -673,5 +724,5 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     }
     @Override public void onConfigurationChanged(Configuration c){cancelOpenWait();hideFan();hidePanel();removeHot();refresh();Wire.send(this,"STATUS");}
     @Override public void onLowMemory(){}
-    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(extras!=null)extras.closeBarrage();if(quick!=null){quick.close();quick=null;}if(extras!=null)extras.close();settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
+    private void cleanup(){if(cleaned)return;dev.local.sunwindowdemo.features.iconlayers.IconAssets.removeOnReload(iconsReloaded);cancelOpenWait();if(extras!=null)extras.closeBarrage();if(quick!=null){quick.close();quick=null;}if(extras!=null)extras.close();settingsWorker.shutdownNow();try{getApplicationContext().unregisterComponentCallbacks(this);}catch(RuntimeException ignored){}for(BroadcastReceiver receiver:new BroadcastReceiver[]{settingsReceiver,queryReceiver,backendReceiver,companionReceiver,screenReceiver,packageReceiver})try{unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(controls!=null){controls.close();}if(miniControls!=null)miniControls.close();Wire.listen(null);navigationBlockUntil=0;cleaned=true;connected=false;if(live==this)live=null;main.removeCallbacksAndMessages(null);hideFan();hidePanel();removeHot();publish(true);if(config!=null)config.prefs.unregisterOnSharedPreferenceChangeListener(prefListener);}
 }

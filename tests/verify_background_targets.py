@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 
 import verify_test4_target as dex
-from verify_pixel_alive_targets import instructions, read_with_code
+from verify_pixel_darkaod_targets import instructions, read_with_code
 
 
 AM = 'Lcom/android/server/am/'

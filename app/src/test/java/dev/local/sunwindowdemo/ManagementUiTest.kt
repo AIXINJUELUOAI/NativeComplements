@@ -26,6 +26,8 @@ import dev.local.sunwindowdemo.features.background.BackgroundList
 import dev.local.sunwindowdemo.features.background.BackgroundAppScreen
 import dev.local.sunwindowdemo.features.background.BackgroundPolicy
 import dev.local.sunwindowdemo.features.background.BackgroundStore
+import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchScreen
+import dev.local.sunwindowdemo.features.edgetouch.EdgeTouchStore
 import dev.local.sunwindowdemo.features.floatingwindow.ui.GestureScreen
 import dev.local.sunwindowdemo.features.floatingwindow.ui.WindowScreen
 import dev.local.sunwindowdemo.features.suggestions.SuggestionScreen
@@ -51,6 +53,16 @@ import java.io.File
 class ManagementUiTest {
     @get:Rule val compose = createRobolectricComposeRule()
     private lateinit var captureView: View
+
+    @Test fun nativeEdgeSwitchAppearsOnlyAfterCheckAndScreenOverlayControlIsGone() {
+        val prefs = EdgeTouchStore.preferences(compose.activity)
+        compose.setContent { ComplementsTheme(dynamic = false) { EdgeTouchScreen() } }
+        compose.onNodeWithText("检验原厂防误触").assertIsDisplayed()
+        compose.onNodeWithText("启用原厂防误触").assertDoesNotExist()
+        compose.onNodeWithText("显示实际禁触区").assertDoesNotExist()
+        compose.runOnIdle { prefs.edit().putString("native_checked", android.os.Build.FINGERPRINT).commit() }
+        compose.onNodeWithText("启用原厂防误触").assertIsDisplayed()
+    }
 
     @Test fun backgroundListKeepsQuickModeAndAppDetailsSeparate() {
         val context = compose.activity
@@ -299,7 +311,8 @@ class ManagementUiTest {
                 assertTrue(controller.apps.none { installed -> SuggestionRules.catalog().any { it.packageName() == installed.packageName } })
             }
             compose.onNodeWithTag("page-title-链接与分享口令").assertExists()
-            compose.onNodeWithText("仅展示适配范围，未安装的应用仍会显示；本页不会自动启动应用、查询安装包或联网。").assertExists()
+            compose.onNodeWithText("仅展示适配范围", substring = true).assertDoesNotExist()
+            compose.onNodeWithText("使用本地启发式", substring = true).assertDoesNotExist()
             SuggestionRules.catalog().forEach { app ->
                 compose.onNodeWithText(app.displayName()).performScrollTo().assertIsDisplayed()
                 val support = if (app.supportsShareText()) "链接与分享口令/文本" else "链接"
@@ -313,9 +326,6 @@ class ManagementUiTest {
             compose.onNodeWithText("链接与分享口令").performClick()
             compose.onNodeWithContentDescription("返回").performClick()
             compose.onNodeWithContentDescription("链接与分享口令").performScrollTo().assertIsOn()
-            // Current navigation order includes the three game settings pages.
-            assertEquals(28, Page.Harassment.ordinal)
-            assertEquals(29, Page.SuggestionApps.ordinal)
         } finally {
             SuggestionStore.preferences(context).edit().remove("links").commit()
             controller.close(); activity.destroy()

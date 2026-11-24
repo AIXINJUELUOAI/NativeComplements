@@ -174,6 +174,32 @@ method(QS + "LauncherSwipeHandlerV2;", "findWorkspaceView", "(Ljava/util/List;" 
 field(QS + "AbsSwipeUpHandler;", "mRecentsView", QS + "views/RecentsView;")
 method(QS + "GestureState;", "getRunningTaskIds", "(Z)[I")
 method(QS + "GestureState;", "getEndTarget", "()" + END_TARGET)
+# Passive ownership/settlement callbacks for an already-open normal floating window.
+for name, signature in (
+    ("onGestureStarted", "(Z)V"),
+    ("onGestureCancelled", "()V"),
+    ("onRecentsAnimationCanceled", "(Ljava/util/HashMap;)V"),
+    ("onSettledOnEndTarget", "()V"),
+):
+    method(QS + "AbsSwipeUpHandler;", name, signature)
+# Default-window navigation guard: inspect the native app and desktop admissions separately.
+OTHER_ACTIVITY = QS + "inputconsumers/OtherActivityInputConsumer;"
+MOTION = "(Landroid/view/MotionEvent;)"
+for owner, name, signature in (
+    (OTHER_ACTIVITY, "onMotionEvent", MOTION + "V"),
+    (OTHER_ACTIVITY, "forceCancelGesture", MOTION + "V"),
+    (OTHER_ACTIVITY, "startTouchTrackingForWindowAnimation", "(J)V"),
+    (QS + "GestureState;", "isInExtendedSlopRegion", "()Z"),
+    (QS + "RecentsAnimationDeviceState;", "isFullyGesturalNavMode", "()Z"),
+    (QS + "inputconsumers/LauncherWithoutFocusInputConsumer;", "onMotionEvent", MOTION + "V"),
+    ("Lcom/android/launcher3/uioverrides/touchcontrollers/NoButtonNavbarToOverviewTouchController;", "canInterceptTouch", MOTION + "Z"),
+    ("Lcom/android/launcher3/uioverrides/touchcontrollers/NavBarToHomeTouchController;", "onControllerInterceptTouchEvent", MOTION + "Z"),
+):
+    method(owner, name, signature)
+for name, descriptor in (("mDeviceState", QS + "RecentsAnimationDeviceState;"), ("mGestureState", QS + "GestureState;"),
+                         ("mDownPos", "Landroid/graphics/PointF;"), ("mActivePointerId", "I"),
+                         ("mSquaredTouchSlop", "F"), ("mPassedPilferInputSlop", "Z")):
+    field(OTHER_ACTIVITY, name, descriptor)
 for name in ("HOME", "RECENTS"):
     field(END_TARGET, name, END_TARGET)
 field(QS + "SwipeUpAnimationLogic;", "mRemoteTargetHandles", "[" + QS + "RemoteTargetGluer$RemoteTargetHandle;")
@@ -255,6 +281,30 @@ method("Landroid/view/InsetsState;", "set", "(Landroid/view/InsetsState;Z)V")
 method("Lcom/android/server/SystemServer;", "startOtherServices", "(Lcom/android/server/utils/TimingsTraceAndSlog;)V")
 field(SYS + "statusbar/notification/collection/NotificationEntry;", "mSbn", "Landroid/service/notification/StatusBarNotification;")
 method("Landroid/app/PendingIntent;", "sendAndReturnResult", "(Landroid/content/Context;ILandroid/content/Intent;Landroid/app/PendingIntent$OnFinished;Landroid/os/Handler;Ljava/lang/String;Landroid/os/Bundle;)I")
+# Suggestions read native facts and inject explicit OTP without constructing the task engine.
+# Its local Access, like FrameworkAccess, resolves exact signatures through superclasses.
+SUGGESTION_ENVIRONMENT_CHECKS = [
+    (WM + "WindowManagerService;", "fields", "mContext", "Landroid/content/Context;"),
+    (WM + "WindowManagerService;", "fields", "mRoot", WM + "RootWindowContainer;"),
+    (WM + "WindowManagerService;", "fields", "mGlobalLock", WM + "WindowManagerGlobalLock;"),
+    (WM + "WindowManagerService;", "fields", "mCurrentUserId", "I"),
+    (WM + "WindowManagerService;", "fields", "mHidingNonSystemOverlayWindows", "Ljava/util/ArrayList;"),
+    (WM + "RootWindowContainer;", "methods", "getTopDisplayFocusedLeafTask", "()" + WM + "Task;"),
+    (WM + "DisplayContent;", "fields", "mDisplayId", "I"),
+    (WM + "DisplayContent;", "methods", "forAllTasks", "(Ljava/util/function/Consumer;)V"),
+    (WM + "WindowState;", "methods", "getOwningUid", "()I"),
+    (WM + "WindowState;", "methods", "isVisible", "()Z"),
+    (WM + "WindowState;", "methods", "getDisplayContent", "()" + WM + "DisplayContent;"),
+    (WM + "WindowState;", "fields", "mAttrs", "Landroid/view/WindowManager$LayoutParams;"),
+    (WM + "Task;", "fields", "mUserId", "I"),
+    (WM + "Task;", "methods", "topRunningActivity", "()" + WM + "ActivityRecord;"),
+    (WM + "Task;", "methods", "getDisplayContent", "()" + WM + "DisplayContent;"),
+    (WM + "Task;", "methods", "getWindowingMode", "()I"),
+    (WM + "Task;", "methods", "getActivityType", "()I"),
+    (WM + "Task;", "methods", "isLeafTask", "()Z"),
+    (WM + "Task;", "methods", "isVisibleRequested", "()Z"),
+]
+CHECKS.extend(SUGGESTION_ENVIRONMENT_CHECKS)
 # Both addWindow ABIs are deliberately asserted below, not as alternative guesses.
 ADD = "Landroid/view/AddWindowResult;"
 
@@ -269,7 +319,7 @@ def members(classes, owner, kind):
         owner = classes[owner]["superclass"]
 
 
-# Only these four source lookups use FrameworkAccess.method's superclass walk.
+# These source lookups use FrameworkAccess or suggestion-local Access superclass walks.
 # Everything else is required to be declared on the named owner, including all
 # direct getDeclaredMethod/getDeclaredField preflights (Motion/Launcher/SystemUI).
 INHERITED = {
@@ -279,6 +329,7 @@ INHERITED = {
     (WM + "Task;", "methods", "sleepIfPossible", "(Z)Z"),
     (WM + "Task;", "methods", "isVisibleRequested", "()Z"),
 }
+INHERITED.update(SUGGESTION_ENVIRONMENT_CHECKS)
 
 
 def verify(classes):
@@ -406,6 +457,8 @@ def main():
                 assert (any(f["name"] == "window" and f["type"] in ("Landroid/view/Window;", "Lcom/android/internal/policy/PhoneWindow;") for f in screenshot["fields"])
                         or any(m["name"] == "getWindow" and m["descriptor"] in ("()Landroid/view/Window;", "()Lcom/android/internal/policy/PhoneWindow;") for m in screenshot["methods"])), (label, screenshot)
             if host_name == "Launcher":
+                defer = "shouldDeferDown" if label == "PixelUI" else "needDeferDown"
+                assert any(m["name"] == defer and m["descriptor"] == "()Z" for m in current[OTHER_ACTIVITY]["methods"]), (label, defer)
                 for name, signature in (("getCurrentView", "()Landroid/view/View;"), ("hide", "()Z")):
                     assert any(m["name"] == name and m["descriptor"] == signature for m in current[button]["methods"]), (label, button, name)
                 assert any(m["name"] == "onDestroy" and m["descriptor"] == "()V" for m in current[ROTATION]["methods"])

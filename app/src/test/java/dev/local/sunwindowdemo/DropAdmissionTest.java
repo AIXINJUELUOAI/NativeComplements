@@ -69,6 +69,6 @@ public class DropAdmissionTest {
     }
     @Test public void currentEntryDoesNotSamplePowerAndRejectsBeforeRunningTaskQueryWhenLocked()throws Exception{
         Shadows.shadowOf(context.getSystemService(KeyguardManager.class)).setKeyguardLocked(true);
-        call("floatCurrent",new Class<?>[]{int.class},0);assertEquals(List.of(KeyguardManager.class),queries);
+        call("floatCurrent",new Class<?>[]{int.class,boolean.class},0,false);assertEquals(List.of(KeyguardManager.class),queries);
     }
 }

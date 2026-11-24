@@ -22,7 +22,6 @@ fun HomeScreen(
     onIcons: () -> Unit = {},
     onGameMode: () -> Unit = {},
     onShade: () -> Unit = {},
-    onAlive: (() -> Unit)? = null,
     onBackground: (() -> Unit)? = null,
 ) {
     AdaptationNotice(onAbout)
@@ -38,7 +37,6 @@ fun HomeScreen(
         FeatureRow("加速度传感器控制", "shake", onMotion)
         FeatureRow("边缘防误触", "edge", onEdgeTouch)
         FeatureRow("外观与控制", "window", onShade)
-        onAlive?.let { FeatureRow("Alive 壁纸", "alive", it, badge = "Beta") }
     }
     Spacer(Modifier.height(16.dp))
     SettingsGroup {
@@ -47,17 +45,8 @@ fun HomeScreen(
 }
 
 @Composable
-private fun FeatureRow(title: String, icon: String, onClick: () -> Unit, badge: String? = null) {
+private fun FeatureRow(title: String, icon: String, onClick: () -> Unit) {
     SettingRow(title, onClick = onClick, leading = { Glyph(icon) }, trailing = {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (badge != null) Surface(shape = MaterialTheme.shapes.small,
-                color = MaterialTheme.colorScheme.tertiaryContainer) {
-                Text(badge, Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer)
-            }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     })
 }

@@ -76,13 +76,28 @@ public class WindowBehaviorTest {
         assertFalse(WindowPolicy.autoMini(true,true,false,"normal",true));
         assertFalse(WindowPolicy.autoMini(true,true,false,"mini",false));
     }
+    public static class LiveTask {
+        public Object topRunningActivity(){return this;}
+        public boolean isAttached(){return false;}
+    }
+    public static class LiveRoot {
+        final LiveTask task=new LiveTask();
+        public Object anyTaskForId(int id,int match){return task;}
+    }
     @Test public void disabledAutoMiniUsesReplacementButSameTokenIsUntouched()throws Exception{
-        WindowEngine engine=new WindowEngine(null,message->{});
+        FrameworkAccess access=(FrameworkAccess)allocate(FrameworkAccess.class);
+        set(access,"methods",new HashMap<>());set(access,"fields",new HashMap<>());
+        set(access,"lookup",LiveRoot.class.getDeclaredMethod("anyTaskForId",int.class,int.class));
+        WindowEngine engine=new WindowEngine(access,message->{});
+        LiveRoot root=new LiveRoot();set(engine,"root",root);
+        // This test exercises slot settlement, not asynchronous native task restoration.
+        set(engine,"recovering",true);
         set(engine,"lock",new Object());set(engine,"handler",new android.os.Handler(android.os.Looper.getMainLooper()));
         set(engine,"autoMinimizeOnOpen",false);
         Class<?> type=Class.forName(WindowEngine.class.getName()+"$Session");
         var constructor=type.getDeclaredConstructor();constructor.setAccessible(true);
         Object previous=constructor.newInstance(),next=constructor.newInstance();
+        set(previous,"task",root.task);set(engine,"sessions",new java.util.ArrayList<>(java.util.List.of(previous)));
         set(previous,"token","same");set(next,"token","same");set(previous,"frame","normal");
         var settle=WindowEngine.class.getDeclaredMethod("settleNewDefault",type,type);settle.setAccessible(true);
         var restoring=type.getDeclaredField("restoring");restoring.setAccessible(true);

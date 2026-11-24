@@ -14,6 +14,7 @@ public final class IconLayerStore {
     public static final String LAUNCHER = dev.local.sunwindowdemo.core.LauncherTargets.PIXEL;
     public static final String LINEAGE_LAUNCHER = dev.local.sunwindowdemo.core.LauncherTargets.LINEAGE;
     public static final String SYSTEM_UI = "com.android.systemui";
+    public static final String SETTINGS = "com.android.settings";
     public static final String REFRESH = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.action("ICON_LAYERS_REFRESH");
     public static final String CONTROL = dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.controlPermission();
     public static final Uri URI = Uri.parse("content://"+dev.local.sunwindowdemo.core.ModuleIdentity.CURRENT.authority("iconlayers")+"/config");
@@ -63,7 +64,7 @@ public final class IconLayerStore {
     }
     private static void broadcast(Context c,boolean all) {
         var hosts = new java.util.ArrayList<>(dev.local.sunwindowdemo.core.LauncherTargets.targets(c));
-        hosts.addAll(java.util.List.of(SYSTEM_UI, "android", dev.local.sunwindowdemo.BuildConfig.APPLICATION_ID));
+        hosts.addAll(java.util.List.of(SYSTEM_UI, SETTINGS, "android", dev.local.sunwindowdemo.BuildConfig.APPLICATION_ID));
         for(String host:hosts)
             c.sendBroadcast(new Intent(REFRESH).setPackage(host).putExtra("all",all).addFlags(Intent.FLAG_RECEIVER_FOREGROUND));
     }

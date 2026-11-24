@@ -85,7 +85,7 @@ class DiagnosticsProviderTest {
         installPhone(54321, android.content.pm.ApplicationInfo.FLAG_SYSTEM)
         DiagnosticsStore.start()
         provider.call("events", "phone:sms_blocked:", null)
-        assertTrue(DiagnosticsStore.state().getInt("bytes") > 0)
+        assertTrue(DiagnosticsStore.state().getInt("eventBytes") > 0)
         installPhone(154321, android.content.pm.ApplicationInfo.FLAG_SYSTEM)
         ShadowBinder.setCallingUid(154321)
         assertThrows(SecurityException::class.java) { provider.call("state", null, null) }
@@ -98,18 +98,18 @@ class DiagnosticsProviderTest {
         rejected { provider.call("events", "app:enabled:\n".repeat(33), null) }
         rejected { provider.call("events", "app:enabled:\n", Bundle()) }
         rejected { provider.call("start", null, null) }
-        assertEquals(0, DiagnosticsStore.state().getInt("bytes"))
+        assertEquals(0, DiagnosticsStore.state().getInt("eventBytes"))
     }
     @Test fun batchValidationIsAtomicAndStoppedSessionsIgnoreEvents() {
         DiagnosticsStore.start()
         rejected { provider.call("events", "app:enabled:\napp:raw secret:\n", null) }
-        assertEquals(0, DiagnosticsStore.state().getInt("bytes"))
+        assertEquals(0, DiagnosticsStore.state().getInt("eventBytes"))
         provider.call("events", "app:enabled:\napp:hook_failed:SecurityException\n", null)
-        val bytes = DiagnosticsStore.state().getInt("bytes")
+        val bytes = DiagnosticsStore.state().getInt("eventBytes")
         assertTrue(bytes > 0)
         DiagnosticsStore.stop()
         provider.call("events", "app:disabled:\n", null)
-        assertEquals(bytes, DiagnosticsStore.state().getInt("bytes"))
+        assertEquals(bytes, DiagnosticsStore.state().getInt("eventBytes"))
     }
     @Test fun settingSnapshotRejectsArbitraryPreferenceKeys() {
         DiagnosticsStore.setting("barrage", true)

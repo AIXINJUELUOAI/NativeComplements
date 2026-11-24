@@ -11,6 +11,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import dev.local.sunwindowdemo.navigation.Page
+import dev.local.sunwindowdemo.features.gamemode.GameModeStore
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Rule
@@ -54,36 +55,10 @@ class NavigationTest {
         return next
     }
 
-    @Test fun aliveCardsEditOnlyTheirPhaseAndFollowSystemAod() {
-        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val resolver = context.contentResolver
-        shadowOf(context.getSystemService(android.os.UserManager::class.java)).setUserUnlocked(true)
-        android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 1)
-        val (_, alive) = launch(intent(Page.Alive))
-        try {
-            compose.waitUntil(10_000) { context.getSharedPreferences("alive_wallpaper_draft", 0).contains("aod") }
-        } catch (failure: AssertionError) { throw AssertionError(compose.onRoot().printToString(), failure) }
-        compose.onNodeWithText("照片").performClick()
-        compose.runOnIdle {
-            val picker = requireNotNull(shadowOf(alive).nextStartedActivityForResult).intent
-            assertEquals(Intent.ACTION_GET_CONTENT, picker.action)
-            assertEquals("image/*", picker.type)
-        }
-        compose.onNodeWithContentDescription("息屏样式").assertIsDisplayed().performClick()
-        compose.onNodeWithContentDescription("星月").performClick()
-        compose.waitUntil(10_000) { context.getSharedPreferences("alive_wallpaper_draft", 0).getInt("aod", -1) == 2 }
-        compose.onNodeWithContentDescription("星月").assertIsSelected()
-        compose.onNodeWithText("完成").assertDoesNotExist()
-        compose.onNodeWithText("确认设置").assertDoesNotExist()
-        compose.runOnIdle { android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 0) }
-        compose.waitForIdle()
-        compose.onNodeWithContentDescription("息屏样式").assertDoesNotExist()
-        compose.onNodeWithContentDescription("锁屏样式").assertIsDisplayed()
-        compose.onNodeWithContentDescription("桌面样式").assertIsDisplayed()
-        compose.runOnIdle { android.provider.Settings.Secure.putInt(resolver, "doze_always_on", 1) }
-        compose.onNodeWithContentDescription("息屏样式").assertIsDisplayed().performClick()
-        compose.onNodeWithContentDescription("星月").assertIsSelected()
-        compose.runOnIdle { android.provider.Settings.Secure.putString(resolver, "doze_always_on", null) }
+    @Test fun removedWallpaperPageIsNotExposedOnHome() {
+        launch(intent())
+        compose.onNodeWithText("Alive 壁纸").assertDoesNotExist()
+        assertFalse(Page.entries.any { it.name == "Alive" })
     }
 
     @Test fun targetExclusionsOpenInSharedPickerAndReturnToPrevention() {
@@ -194,10 +169,10 @@ class NavigationTest {
         aboutScenario.moveToState(Lifecycle.State.CREATED)
         launch(logsIntent)
         compose.onNodeWithTag("page-title-诊断日志").assertIsDisplayed()
-        compose.onNodeWithText("模块诊断 · 本地记录").assertIsDisplayed()
+        compose.onNodeWithText("开始记录 → 复现问题 → 停止 → 导出 ZIP").assertIsDisplayed()
         // Render through ModuleApp's scrolling SettingsPage: a nested verticalScroll throws here.
         compose.onNodeWithText("删除本地记录").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("选择位置并导出 ZIP").assertExists()
+        compose.onNodeWithText("导出 ZIP").assertExists()
     }
 
     @Test fun desktopDoubleTapSleepIsOptInAndPersistsIndependently() {
@@ -263,6 +238,39 @@ class NavigationTest {
         compose.onNodeWithText("功能", useUnmergedTree = true).performClick()
         compose.onNodeWithText("已选功能", substring = true).assertIsDisplayed()
         compose.runOnIdle { assertFalse(home.onBackPressedDispatcher.hasEnabledCallbacks()) }
+    }
+
+    @Test fun gameHandlePositionOpensIndependentDetailsAndNativeBackKeepsGameParent() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        GameModeStore.prefs(context).edit().putString("side", "left")
+            .remove(GameModeStore.handleSideKey(false)).remove(GameModeStore.handleSideKey(true)).commit()
+        val (gameScenario, game) = launch(intent(Page.GameMode))
+        compose.onNodeWithText("竖屏 · 左侧 / 横屏 · 左侧").assertIsDisplayed()
+        compose.onNodeWithTag("game-handle-position-preview").assertDoesNotExist()
+        compose.onNodeWithContentDescription("游戏条上下位置").assertDoesNotExist()
+        compose.onNodeWithText("小白条位置").performClick()
+        val details = nextPage(game, Page.GameHandle)
+        gameScenario.moveToState(Lifecycle.State.CREATED)
+        val (detailScenario, detail) = launch(details)
+        compose.onNodeWithTag("page-title-小白条位置").assertIsDisplayed()
+        compose.onNodeWithTag("game-handle-position-preview").assertExists()
+        compose.onNodeWithContentDescription("游戏条上下位置").assertExists()
+        compose.runOnIdle {
+            assertEquals(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED, detail.requestedOrientation)
+            assertFalse(detail.onBackPressedDispatcher.hasEnabledCallbacks())
+            detail.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 300f, 0f, BackEventCompat.EDGE_LEFT))
+            detail.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(100f, 450f, .6f, BackEventCompat.EDGE_LEFT))
+            detail.onBackPressedDispatcher.dispatchOnBackCancelled()
+            assertFalse(detail.isFinishing)
+            detail.onBackPressedDispatcher.onBackPressed()
+            assertTrue(detail.isFinishing)
+            assertFalse(game.isFinishing)
+        }
+        detailScenario.close()
+        gameScenario.moveToState(Lifecycle.State.RESUMED)
+        compose.onNodeWithTag("page-title-游戏模式").assertIsDisplayed()
+        compose.onNodeWithText("小白条位置").assertIsDisplayed()
+        compose.onNodeWithTag("game-handle-position-preview").assertDoesNotExist()
     }
 
     @Test @Config(qualifiers = "zh-rCN-w412dp-h915dp-port-420dpi")

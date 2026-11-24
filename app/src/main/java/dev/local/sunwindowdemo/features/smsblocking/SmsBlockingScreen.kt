@@ -106,7 +106,6 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
         if (showRecords) {
-            Hint("仅记录已同步确认关联短信被系统永久删除且影响行数大于零的拦截。异步过滤可能不记；没有记录不代表短信未被拦截。")
             if (records.isEmpty()) Hint("暂无拦截记录") else {
                 TextButton(onClick = { confirmClear = true }) { Text("清空记录") }
                 SettingsGroup {
@@ -128,7 +127,6 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
             SettingsGroup {
                 ToggleRow("启用短信拦截", value = config.getBoolean("enabled")) { SmsBlockingStore.setEnabled(context, it) }
             }
-            Hint("拦截在系统电话进程中判定，交由系统原生屏蔽流程执行。规则更新需等待电话进程读取；锁定状态与运营商过滤等仍由系统处理。")
             if (!permission) SettingsGroup {
                 SettingRow("识别 SIM 卡", onClick = {
                     requestPermission.launch(Manifest.permission.READ_PHONE_STATE)
@@ -231,7 +229,7 @@ fun SmsBlockingScreen(showRecords: Boolean = false, bottomInset: Dp = 0.dp, onRe
     }
     confirmAll?.let { slot ->
         AlertDialog(onDismissRequest = { confirmAll = null }, title = { Text("拦截 SIM ${slot + 1} 的全部短信？") },
-            text = { Text("该卡的短信将提交系统原生屏蔽流程，包括验证码、银行与运营商通知。记录只包含已同步确认原生永久删除影响行数的短信；异步过滤可能不记。") },
+            text = { Text("该卡所有短信将被拦截，包括验证码、银行和运营商通知。") },
             confirmButton = {
                 TextButton(onClick = {
                     SmsBlockingStore.setRejectAll(context, slot, true)

@@ -276,9 +276,11 @@ class QuickFunctionsTest {
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("快捷应用与功能"))
         compose.onNodeWithText("快捷应用与功能").performClick()
         compose.onNodeWithContentDescription("跳转到J").assertDoesNotExist()
-        compose.onNodeWithContentDescription("甲应用").performScrollTo().assertIsOff().performClick()
+        compose.onNodeWithText("甲应用").performScrollTo()
+        compose.onNodeWithContentDescription("甲应用", useUnmergedTree = true).assertIsOff().performClick()
         compose.onNodeWithContentDescription("甲应用，点击移除，长按拖动调整顺序").assertIsDisplayed()
-        compose.onNodeWithContentDescription("乙应用").performScrollTo().assertIsOff().performClick()
+        compose.onNodeWithText("乙应用").performScrollTo()
+        compose.onNodeWithContentDescription("乙应用", useUnmergedTree = true).assertIsOff().performClick()
         val alpha = compose.onNodeWithContentDescription("甲应用，点击移除，长按拖动调整顺序")
         val beta = compose.onNodeWithContentDescription("乙应用，点击移除，长按拖动调整顺序")
         val target = alpha.fetchSemanticsNode().boundsInRoot.center

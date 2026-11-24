@@ -35,8 +35,6 @@ private enum class SuggestionSheet { Bluetooth, Otp, Button }
 
 @Composable
 fun SuggestionAppsScreen() {
-    Hint("仅展示适配范围，未安装的应用仍会显示；本页不会自动启动应用、查询安装包或联网。")
-    Hint("使用本地启发式识别链接与分享口令/文本，不联网解析短链接或口令，也不保证所有分享内容均可识别。美团规则包含点评域名，不代表独立适配大众点评应用。")
     GroupTitle("已适配应用")
     SettingsGroup {
         SuggestionRules.catalog().forEach { app ->

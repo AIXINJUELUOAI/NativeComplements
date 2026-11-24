@@ -157,8 +157,12 @@ final class Wire {
     }
     static void control(Context c,String op,String token,float value,float x,float y) { control(c,op,token,-1,value,x,y); }
     static void control(Context c,String op,String token,int taskId,float value,float x,float y) {
+        control(c,op,token,taskId,value,x,y,0);
+    }
+    static void control(Context c,String op,String token,int taskId,float value,float x,float y,long resizeGesture) {
         Intent i=new Intent(COMMAND).setPackage("android").putExtra("protocol",PROTOCOL)
             .putExtra("op",op).putExtra("token",token).putExtra("taskId",taskId).putExtra("scale",value).putExtra("x",x).putExtra("y",y);
+        if(resizeGesture!=0)i.putExtra("resizeGesture",resizeGesture);
         if(transmit(endpoint,i))return;
         endpoint=null;
         c.sendBroadcast(i,null,BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());

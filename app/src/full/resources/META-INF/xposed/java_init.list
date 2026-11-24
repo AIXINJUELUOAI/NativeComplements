@@ -5,4 +5,5 @@ dev.local.sunwindowdemo.features.callblocking.CallBlockingModule
 dev.local.sunwindowdemo.features.smsblocking.SmsBlockingModule
 dev.local.sunwindowdemo.features.iconlayers.IconLayerModule
 dev.local.sunwindowdemo.features.iconlayers.SystemIconModule
+dev.local.sunwindowdemo.features.iconlayers.SettingsIconModule
 dev.local.sunwindowdemo.features.navbar.NavbarModule

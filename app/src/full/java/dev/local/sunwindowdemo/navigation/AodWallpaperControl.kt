@@ -2,8 +2,7 @@ package dev.local.sunwindowdemo.navigation
 
 import android.content.Context
 import android.os.Process
-import java.io.File
-import java.util.concurrent.TimeUnit
+import dev.local.sunwindowdemo.core.RootCommand
 
 /** Only called after an explicit root action, off the UI thread. Never changes the AOD master switch. */
 internal object AodWallpaperControl {
@@ -52,27 +51,13 @@ internal object AodWallpaperControl {
         try { return block() } finally { operation.unlock() }
     }
 
-    fun read(context: Context): State = exclusive { parse(runRoot(context, query(userId()))) }
+    fun read(context: Context): State = exclusive { parse(RootCommand.run(context, query(userId()))) }
 
     fun set(context: Context, enabled: Boolean): State = exclusive {
         val user = userId()
-        val state = parse(runRoot(context, "(\n${changeScript(user, enabled)}\n) && {\n${query(user)}\n}"))
+        val state = parse(RootCommand.run(context, "(\n${changeScript(user, enabled)}\n) && {\n${query(user)}\n}"))
         check(state.wallpaper == enabled && (!enabled || state.capability)) { "系统读回状态与请求不符" }
         state
     }
 
-    private fun runRoot(context: Context, script: String): String {
-        val output = File.createTempFile("aod-wallpaper-", ".tmp", context.cacheDir)
-        var process: java.lang.Process? = null
-        try {
-            process = ProcessBuilder("su", "-c", script).redirectErrorStream(true).redirectOutput(output).start()
-            check(process.waitFor(20, TimeUnit.SECONDS)) { "root 操作超时，请检查授权" }
-            check(process.exitValue() == 0) { "root 命令未完成；若已开始切换，可能仅部分生效，请重新读取状态" }
-            check(output.length() <= 65536) { "系统返回内容异常" }
-            return output.readText()
-        } finally {
-            process?.let { if (it.isAlive) it.destroyForcibly() }
-            output.delete()
-        }
-    }
 }

@@ -13,15 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
 CERTIFICATE = "28bbc4a8959e73a9282f94d33b6d51c6f730d4973c4a37c290d70f8274583104"
 SCOPE = ROOT / "app/src/main/resources/META-INF/xposed/scope.list"
 SYSTEM_SCOPES = {"system", "com.google.android.apps.nexuslauncher", "com.android.launcher3",
-                 "com.android.systemui", "com.android.phone"}
+                 "com.android.systemui", "com.android.settings", "com.android.phone"}
 ENTRIES = {"dev.local.sunwindowdemo." + name for name in (
     "SunWindowModule", "LauncherGuard", "BackBridge", "features.callblocking.CallBlockingModule", "features.smsblocking.SmsBlockingModule",
-    "features.iconlayers.IconLayerModule", "features.iconlayers.SystemIconModule", "features.navbar.NavbarModule")}
+    "features.iconlayers.IconLayerModule", "features.iconlayers.SystemIconModule", "features.iconlayers.SettingsIconModule", "features.navbar.NavbarModule")}
 
 
 def check_scopes(text):
     scopes = text.splitlines()
-    assert len(scopes) == len(SYSTEM_SCOPES) and set(scopes) == SYSTEM_SCOPES, "Expected exactly five system scopes"
+    assert len(scopes) == len(SYSTEM_SCOPES) and set(scopes) == SYSTEM_SCOPES, "Expected exactly six system scopes"
 
 
 def run(*args):
@@ -54,7 +54,10 @@ def main():
     package = "dev.nativecomplements.module"
     apk = ROOT / "app/build/outputs/apk/full/release/app-full-release.apk"
     mapping = ROOT / "app/build/outputs/mapping/fullRelease/mapping.txt"
-    assert mapping.exists() and "# compiler: R8" in mapping.read_text(encoding="utf-8"), "R8 mapping missing"
+    assert mapping.exists(), "R8 mapping missing"
+    mapping_text = mapping.read_text(encoding="utf-8")
+    assert "# compiler: R8" in mapping_text, "R8 mapping missing"
+    assert not re.search(r"(?m)^(?:dev\.local\.sunwindowdemo\.features\.alive\.|org\.aliveclean\.)", mapping_text), "Retired Alive runtime or UI retained under R8 names"
     check_r8(apk)
     with zipfile.ZipFile(apk) as archive:
         names = archive.namelist()
@@ -65,20 +68,19 @@ def main():
         entries = archive.read("META-INF/xposed/java_init.list").decode().splitlines()
         assert len(entries) == len(ENTRIES) and set(entries) == ENTRIES, entries
         assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx")) for name in names)
-        assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/")) for name in names), "Official Alive resources must remain user-imported, not bundled"
-        assert "assets/licenses/openalive/LICENSE" in names
-        assert "assets/licenses/openalive/NOTICE.txt" in names
-        required_types = {"Lorg/aliveclean/NativeScene;", "Lorg/aliveclean/AliveRenderer;"} | {
-            "Ldev/local/sunwindowdemo/features/alive/" + name + ";" for name in (
-                "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveAmbientAccess", "AliveSystemUi", "AliveSleepHandoff", "AliveTransitionTrace", "AliveVisualContent", "AliveHandoffTransport")}
-        required_types |= {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
+        assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/", "assets/licenses/openalive/")) for name in names), "Retired Alive resources or notices in APK"
+        required_types = {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
             "CornerGesture", "FanView", "AndroidWindowAdmission", "WindowAdmission",
             "SwipeMini", "DesktopDoubleTap", "DesktopSleepHost")}
-        required_types |= {"Ldev/local/sunwindowdemo/" + name + ";" for name in ("GameModeHost", "GameCornerOverlay")}
-        required_types |= {"Ldev/local/sunwindowdemo/features/gamemode/" + name + ";" for name in ("GameModeStore", "GameCornerGeometry")}
+        required_types |= {"Ldev/local/sunwindowdemo/" + name + ";" for name in ("GameModeHost", "GameCornerOverlay", "SuggestionEnvironment", "SuggestionInput")}
+        required_types |= {"Ldev/local/sunwindowdemo/features/gamemode/" + name + ";" for name in ("GameModeStore", "GameCornerGeometry", "GameHandleGeometry", "GameHandlePositionSettingsKt")}
         required_types |= {"Ldev/local/sunwindowdemo/features/edgetouch/" + name + ";" for name in ("EdgeInputFilter", "EdgeInputPolicy", "GameCornerAccess")}
         required_types |= {"Ldev/local/sunwindowdemo/features/smsblocking/" + name + ";" for name in (
             "SmsBlockingModule", "SmsBlockingProvider", "SmsBlockingStore", "SmsBlockingRules")}
+        required_types |= {"Ldev/local/sunwindowdemo/features/diagnostics/" + name + ";" for name in (
+            "DiagnosticsCapture", "DiagnosticsRecordingService")}
+        required_types |= {"Ldev/local/sunwindowdemo/features/iconlayers/" + name + ";" for name in (
+            "SettingsIconModule", "SettingsIconAccess", "NotificationCardIcons")}
         found = set()
         for name in names:
             if not name.endswith(".dex"):
@@ -86,8 +88,11 @@ def main():
             data = dex.Dex(archive.read(name))
             owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
             assert "Ldev/local/sunwindowdemo/WindowAccessibilityService;" not in owners, "Retired accessibility entry in DEX"
+            assert not any(t.startswith(("Ldev/local/sunwindowdemo/features/alive/", "Lorg/aliveclean/")) for t in owners), "Retired Alive runtime or UI in DEX"
+            assert not any(t.startswith("Ldev/local/sunwindowdemo/features/ltpo/") or
+                           t.startswith("Ldev/local/sunwindowdemo/RefreshRateBadge") for t in owners), "Retired LTPO code in DEX"
             found |= owners & required_types
-        assert found == required_types, "Integrated Alive/corner/admission runtime missing after R8: " + str(required_types - found)
+        assert found == required_types, "Integrated corner/admission runtime missing after R8: " + str(required_types - found)
         assert any(b'dev.local.sunwindowdemo.core.WindowBackendEligibility' in archive.read(name)
                    for name in names if name.endswith('.dex')), "Preserve own eligibility marker for old installations"
     signature = run(java, "-jar", tools / "lib/apksigner.jar", "verify", "--print-certs", apk)
@@ -97,6 +102,12 @@ def main():
         assert expected in badging, badging
     manifest = run(aapt2, "dump", "xmltree", apk, "--file", "AndroidManifest.xml")
     assert "WindowAccessibilityService" not in manifest and "android.accessibilityservice.AccessibilityService" not in manifest
+    assert package + ".ltpo" not in manifest, "Retired LTPO configuration provider in manifest"
+    recording_service = next((block for block in re.split(r'(?m)^\s*E:', manifest)
+                              if block.lstrip().startswith('service') and 'DiagnosticsRecordingService' in block), '')
+    assert recording_service and re.search(r'exported[^\n]*=false', recording_service), "Recording service must stay private"
+    assert "android.permission.FOREGROUND_SERVICE" in manifest and "android.permission.FOREGROUND_SERVICE_SPECIAL_USE" in manifest
+    assert "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" in manifest, "Explain manual log recording foreground use"
     for authority in ("CONTROL", "settings", "iconlayers", "diagnostics", "smsblocking"):
         assert package + "." + authority in manifest
     eligibility = next((block for block in re.split(r'(?m)^\s*E:', manifest)
@@ -106,22 +117,11 @@ def main():
     marker = next((block for block in re.split(r'(?m)^\s*E:', manifest)
                    if block.lstrip().startswith('receiver') and 'WindowBackendSelection' in block), '')
     assert re.search(r'enabled[^\n]*=false', marker) and re.search(r'exported[^\n]*=false', marker), "Preserve private legacy backend marker"
-    assert "AliveWallpaperService" in manifest and "AliveAmbientWallpaperService" in manifest and "android.permission.BIND_WALLPAPER" in manifest
-    for service in ("AliveWallpaperService", "AliveAmbientWallpaperService"):
-        block = next((part for part in re.split(r'(?m)^\s*E:', manifest)
-                      if part.lstrip().startswith('service') and service in part), '')
-        assert re.search(r'directBootAware[^\n]*=true', block), "Wallpaper must support Direct Boot: " + service
-    boot = next((part for part in re.split(r'(?m)^\s*E:', manifest)
-                 if part.lstrip().startswith('receiver') and 'AliveBootReceiver' in part), '')
-    assert re.search(r'exported[^\n]*=false', boot), "Migration receiver must stay private"
+    assert not any(value in manifest for value in ("features.alive", "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveBootReceiver", "android.permission.BIND_WALLPAPER")), "Retired Alive component in manifest"
     assert "android.permission.AMBIENT_WALLPAPER" not in manifest
     assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
     resources = run(aapt2, "dump", "resources", apk)
-    for xml, expected in (("alive_wallpaper", "false"), ("alive_ambient_wallpaper", "true")):
-        match = re.search(r"resource [^\n]+ xml/" + xml + r"\s+\(\) \(file\) (\S+)", resources)
-        assert match, "Missing wallpaper XML: " + xml
-        metadata = run(aapt2, "dump", "xmltree", apk, "--file", match[1])
-        assert re.search(r"supportsAmbientMode[^\n]*=" + expected + r"(?:\s|$)", metadata), metadata
+    assert not any(value in resources for value in ("xml/alive_wallpaper", "xml/alive_ambient_wallpaper")), "Retired Alive wallpaper metadata in resources"
     assert "xml/window_accessibility_service" not in resources
     assert "WindowShortcutActivity" not in manifest and "android.app.shortcuts" not in manifest, "Retired shortcut must remain absent"
     # Copy only after all identity, signature, runtime and product checks pass.
@@ -130,7 +130,7 @@ def main():
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
     assert hashlib.sha256(target.read_bytes()).hexdigest() == digest
     print(badging); print(f"APK={target}"); print(f"SHA256={digest}")
-    print("Original certificate, main identity, static scopes, entries and integrated window/Alive runtime verified; device effects unverified")
+    print("Original certificate, main identity, static scopes, entries, integrated window runtime and retirement boundaries verified; device effects unverified")
 
 
 if __name__ == "__main__":

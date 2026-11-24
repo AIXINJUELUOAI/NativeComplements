@@ -19,6 +19,7 @@ public final class SystemIconModule extends XposedModule {
     private volatile Context context;
     private final Handler main=new Handler(Looper.getMainLooper());
     private Method updateNotificationDrawable;
+    private NotificationCardIcons cards;
     private ClassLoader loader;
 
     @Override public void onModuleLoaded(ModuleLoadedParam p){
@@ -36,6 +37,7 @@ public final class SystemIconModule extends XposedModule {
             });
         }catch(Exception failure){note("CONNECT_UNAVAILABLE "+failure.getClass().getSimpleName());return;}
         try{notifications();}catch(Exception failure){note("NOTIFICATION_UNAVAILABLE "+failure.getClass().getSimpleName());}
+        try{notificationCards();}catch(Throwable failure){note("NOTIFICATION_CARD_UNAVAILABLE "+failure.getClass().getSimpleName());}
         try{splash();}catch(Exception failure){note("SPLASH_UNAVAILABLE "+failure.getClass().getSimpleName());}
     }
 
@@ -59,6 +61,21 @@ public final class SystemIconModule extends XposedModule {
         });
         note("NOTIFICATION_READY");
     }
+    private void notificationCards()throws Throwable{
+        NotificationCardIcons target=NotificationCardIcons.resolve(loader);
+        List<XposedInterface.HookHandle> handles=new ArrayList<>();
+        try{
+            handles.add(hook(target.draw).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->
+                target.draw((android.widget.ImageView)chain.getThisObject(),chain::proceed)));
+            handles.add(hook(target.contentUpdated).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object result=chain.proceed();target.updated(chain.getThisObject(),chain.getArg(0));return result;
+            }));
+            cards=target;note("NOTIFICATION_CARD_READY");
+        }catch(Throwable failure){
+            for(XposedInterface.HookHandle handle:handles)try{handle.unhook();}catch(Throwable ignored){}
+            throw failure;
+        }
+    }
     private void track(Object view){
         synchronized(notificationViews){
             for(Iterator<WeakReference<Object>> it=notificationViews.iterator();it.hasNext();){Object old=it.next().get();if(old==null)it.remove();else if(old==view)return;}
@@ -70,6 +87,7 @@ public final class SystemIconModule extends XposedModule {
             List<Object> targets=new ArrayList<>();
             synchronized(notificationViews){for(Iterator<WeakReference<Object>> it=notificationViews.iterator();it.hasNext();){Object view=it.next().get();if(view==null)it.remove();else targets.add(view);}}
             for(Object view:targets)try{updateNotificationDrawable.invoke(view,true);}catch(Exception ignored){}
+            if(cards!=null)cards.refresh();
         });
     }
     private void splash()throws Exception{

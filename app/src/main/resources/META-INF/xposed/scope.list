@@ -2,4 +2,5 @@ system
 com.google.android.apps.nexuslauncher
 com.android.launcher3
 com.android.systemui
+com.android.settings
 com.android.phone

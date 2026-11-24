@@ -59,6 +59,8 @@ public final class LauncherGuard extends XposedModule {
             note("GUARD_READY hooks=3");
             BackVisual.install(this,loader);
             SwipeMini.install(this,loader,this::note);
+            NativeSwipe.install(this,loader,this::note);
+            DefaultWindowNavigation.install(this,loader,displayId,this::note);
             try{recents=new RecentsFilter(loader,this::note);recents.install(this);}
             catch(Throwable failure){recents=null;note("RECENTS_DISABLED "+failure.getClass().getSimpleName());}
 
@@ -75,8 +77,10 @@ public final class LauncherGuard extends XposedModule {
             if(!STATE.equals(intent.getAction()))return;
             try{if(getSentFromUid()!=context.getPackageManager().getApplicationInfo(BackBridge.PACKAGE,0).uid)return;}catch(Exception e){return;}
             android.os.Bundle swipe=intent.getExtras();
-            SwipeMini.configure(intent.getBooleanExtra("swipeMini",false)&&swipe!=null?swipe.getBinder("swipeChannel"):null,
+            IBinder swipeChannel=swipe==null?null:swipe.getBinder("swipeChannel");
+            SwipeMini.configure(intent.getBooleanExtra("swipeMini",false)?swipeChannel:null,
                 intent.getBooleanExtra("swipeMiniHint",true));
+            DefaultWindowNavigation.configure(intent.getBooleanExtra("blockUpNavigation",false)?swipeChannel:null);
             if(!intent.getBooleanExtra("enabled",false)){gate.disable();note("GUARD_STATE disabled");return;}
             android.os.Bundle extras=intent.getExtras();
             IBinder lease=extras==null?null:extras.getBinder("lease");
@@ -94,6 +98,6 @@ public final class LauncherGuard extends XposedModule {
             android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
         context.sendBroadcast(new Intent(QUERY).setPackage(BackBridge.PACKAGE),null,android.app.BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
-    private void disconnect(){gate.disable();SwipeMini.configure(null,true);visualLease=null;if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
+    private void disconnect(){gate.disable();SwipeMini.configure(null,true);DefaultWindowNavigation.configure(null);visualLease=null;if(context!=null&&receiver!=null)try{context.unregisterReceiver(receiver);}catch(RuntimeException ignored){}if(context!=null&&historyReceiver!=null)try{context.unregisterReceiver(historyReceiver);}catch(RuntimeException ignored){}context=null;receiver=null;historyReceiver=null;}
     private void note(String s){try{log(4,"CornerGuard",s);}catch(Throwable ignored){}}
 }

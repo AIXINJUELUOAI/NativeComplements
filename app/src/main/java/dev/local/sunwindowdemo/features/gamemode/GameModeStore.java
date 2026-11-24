@@ -20,6 +20,13 @@ public final class GameModeStore {
         out.putBoolean("enabled",p.getBoolean("enabled",false));
         out.putBoolean("panel",p.getBoolean("panel",true));
         out.putString("side",side(p.getString("side",SIDE_LEFT)));
+        for(boolean landscape:new boolean[]{false,true}){
+            String sideKey=handleSideKey(landscape),positionKey=handlePositionKey(landscape);
+            if(p.contains(sideKey))out.putString(sideKey,side(p.getString(sideKey,SIDE_LEFT)));
+            Object position=p.getAll().get(positionKey);
+            if(position instanceof Number&&Float.isFinite(((Number)position).floatValue()))
+                out.putFloat(positionKey,Math.max(0,Math.min(1,((Number)position).floatValue())));
+        }
         out.putBoolean("brightness",p.getBoolean("brightness",false));
         out.putBoolean("corner_rejection",p.getBoolean("corner_rejection",false));
         out.putBoolean("corner_show_regions",p.getBoolean("corner_show_regions",false));
@@ -33,6 +40,21 @@ public final class GameModeStore {
     public static void enabled(Context c,boolean enabled){prefs(c).edit().putBoolean("enabled",enabled).apply();changed(c);}
     public static void panel(Context c,boolean panel){prefs(c).edit().putBoolean("panel",panel).apply();changed(c);}
     public static void side(Context c,String side){prefs(c).edit().putString("side",side(side)).apply();changed(c);}
+    public static String handleSideKey(boolean landscape){return landscape?"handle_side_landscape":"handle_side_portrait";}
+    public static String handlePositionKey(boolean landscape){return landscape?"handle_position_landscape":"handle_position_portrait";}
+    public static String handleSide(Bundle config,boolean landscape){return side(config.getString(handleSideKey(landscape),config.getString("side",SIDE_LEFT)));}
+    /** No position key means the original landscape-top / portrait-center placement, not a migration write. */
+    public static float handlePosition(Bundle config,boolean landscape){return config.getFloat(handlePositionKey(landscape),Float.NaN);}
+    public static void handleSide(Context c,boolean landscape,String value){
+        prefs(c).edit().putString(handleSideKey(landscape),side(value)).apply();changed(c);
+    }
+    public static void handlePosition(Context c,boolean landscape,float value){
+        if(!Float.isFinite(value))throw new IllegalArgumentException("handle position");
+        prefs(c).edit().putFloat(handlePositionKey(landscape),Math.max(0,Math.min(1,value))).apply();changed(c);
+    }
+    public static void resetHandlePosition(Context c,boolean landscape){
+        prefs(c).edit().remove(handleSideKey(landscape)).remove(handlePositionKey(landscape)).apply();changed(c);
+    }
     public static void cornerRejection(Context c,boolean enabled){prefs(c).edit().putBoolean("corner_rejection",enabled).apply();changed(c);}
     public static void showCornerRegions(Context c,boolean enabled){prefs(c).edit().putBoolean("corner_show_regions",enabled).apply();changed(c);}
     private static float clampCornerRadius(Context c,float percent){

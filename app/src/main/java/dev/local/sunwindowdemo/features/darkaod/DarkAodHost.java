@@ -80,6 +80,20 @@ public final class DarkAodHost {
                 }
                 return result;
             }));
+            if (access.proximityChanged != null) {
+                try {
+                    if (!module.deoptimize(access.proximityEvent))
+                        throw new IllegalStateException("Proximity caller deoptimization failed");
+                    hooks.add(module.hook(access.proximityChanged).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                        Object result = chain.proceed();
+                        Session s = host.session;
+                        if (s != null && s.prox == chain.getThisObject()) s.mainEvaluate();
+                        return result;
+                    }));
+                } catch (RuntimeException | LinkageError unavailable) {
+                    host.log("PROXIMITY_RECHECK_UNAVAILABLE");
+                }
+            }
             host.log("HOOK_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
             for (var hook : hooks) try { hook.unhook(); } catch (RuntimeException ignored) { }

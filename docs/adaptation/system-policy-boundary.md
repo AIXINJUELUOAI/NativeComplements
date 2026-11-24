@@ -29,12 +29,14 @@
 - [EdgeInputFilter](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeInputFilter.java>)保留原生事实采样及 source／display 短路：非默认显示器或非 touchscreen 直接返回全部指针，不触碰纯状态；仅 DOWN/POINTER_DOWN 读取 tool，只有 finger 才取坐标。设备与显示器组成原 stream 键，不模拟事件。
 - 精确 ABI 仍为 InputManagerService `start`／`setInputFilter(IInputFilter)`／`filterInputEvent(InputEvent,int)`，原 native `setInputFilterEnabled`／`injectInputEvent` 与 MotionEvent.split。全收保留原 proceed；全拒回收原事件；部分通过沿现有 accessibility filter 或按 FILTERED flags 原生重注入，原锁、回收及失败永久旁路顺序不改。安装失败卸载已装 Hook，不抹掉已有无障碍过滤器。
 - [EdgeTouchHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeTouchHost.java>)保留 SystemUI UID 认证区域广播、三秒租约／透明窗口回退、锁屏／IME／系统面板保护与 `close` 清理；[EdgeTouchGeometry](<../../app/src/main/java/dev/local/sunwindowdemo/features/edgetouch/EdgeTouchGeometry.java>)本来就是纯坐标规则，未重复提取。Provider 与边界数组验证仍在原信任边界。
+- 原厂模式由管理器先只读核实小米 15 的触控服务，再由用户启用。管理器使用自身已授予的 root 权限下发或清除竖屏下半段的条件抑制规则。SystemUI 仅发送经 UID 核验的同步请求，不携带 root 命令或触控参数。原厂模式接管期间暂停固定禁触区，清除失败时保留待清理状态。
 
 ## 实验性暗处暂停息屏显示
 
 - 开发者工具提供默认关闭的暗处暂停开关与 0–5 lux 暗阈值；[DarkAodPolicy](<../../app/src/main/java/dev/local/sunwindowdemo/features/darkaod/DarkAodPolicy.java>)仅处理暗 10 秒／亮 2 秒防抖和亮阈值滞回，不持有 Android 对象。
 - [配置桥接](<../../app/src/main/java/dev/local/sunwindowdemo/features/darkaod/DarkAodProvider.java>)仅允许本应用与同用户真实系统 SystemUI UID 读取设备保护快照；配置变更通过 ContentObserver 传递，不修改系统 AOD 开关。
 - SystemUI 宿主仅介入普通默认显示器 AOD，会话结束撤销传感器与延迟回调；依赖唤醒型环境光与有效原生 proximity。黑暗与遮挡各自保留原因，恢复仅释放本功能拥有的暂停；未知 proximity 不冒充远离。通知 pulse、认证、终态、DOCKED／MINMODE 不套用普通暂停规则。实际真熄屏、休眠唤醒与功耗仍需设备验收。
+- 原生距离传感器发布新状态后重新检查恢复条件。亮度已恢复且距离状态从未知或遮挡变为明确远离时，可以释放模块自己的暂停。
 
 ## 后台管理
 

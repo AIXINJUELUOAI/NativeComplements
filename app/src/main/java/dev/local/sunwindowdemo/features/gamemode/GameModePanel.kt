@@ -19,7 +19,7 @@ import androidx.compose.ui.graphics.toArgb
 internal fun gamePanelContainerColor(colors: ColorScheme) =
     if (colors.surface.luminance() > .5f) colors.surfaceContainerHighest else colors.surfaceContainerLow
 
-/** Two separate native menu surfaces: pinned apps on the left, switchable content on the right. */
+/** Two native menu surfaces; pinned apps stay beside the handle without mirroring either surface. */
 internal fun gameModePanel(
     context: Context,
     apps: List<AppCatalog.App>,
@@ -30,6 +30,7 @@ internal fun gameModePanel(
     blur: Boolean,
     launch: (String) -> Unit,
     quick: (String) -> Unit,
+    right: Boolean = false,
 ): View {
     fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
     var colors = if (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK ==
@@ -110,7 +111,9 @@ internal fun gameModePanel(
     appColumn.addView(arrowSlot, LinearLayout.LayoutParams(-1, dp(48)))
     // All entries, including the arrow, share the same slot; overflow keeps 48dp targets and scrolls.
     val content = FrameLayout(context).apply { material(this) }
-    root.addView(content, LinearLayout.LayoutParams(0, -1, 1f).apply { leftMargin = gap })
+    root.addView(content, if (right) 0 else 1, LinearLayout.LayoutParams(0, -1, 1f).apply {
+        if (right) rightMargin = gap else leftMargin = gap
+    })
     var library: View? = null
     val quickPage = GameQuickView(context, actions, quick) { next ->
         colors = next

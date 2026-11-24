@@ -15,6 +15,7 @@ import android.widget.FrameLayout
 import dev.local.sunwindowdemo.features.gamemode.GameModePolicy
 import dev.local.sunwindowdemo.features.gamemode.GameModeStore
 import dev.local.sunwindowdemo.features.gamemode.GameCornerGeometry
+import dev.local.sunwindowdemo.features.gamemode.GameHandleGeometry
 import java.util.concurrent.Executors
 
 /** Only this small edge target excludes Back; the rest of the display remains native. */
@@ -37,7 +38,7 @@ internal fun gameModeHandle(context: Context, right: Boolean, open: () -> Unit):
             updateColor(newConfig)
         }
     }
-    frame.addView(bar, FrameLayout.LayoutParams(dp(5), dp(44), Gravity.CENTER_VERTICAL or if (right) Gravity.RIGHT else Gravity.LEFT))
+    frame.addView(bar, FrameLayout.LayoutParams(dp(GameHandleGeometry.BAR_WIDTH_DP), dp(GameHandleGeometry.BAR_HEIGHT_DP), Gravity.CENTER_VERTICAL or if (right) Gravity.RIGHT else Gravity.LEFT))
     frame.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
         view.systemGestureExclusionRects = listOf(Rect(0, 0, view.width, view.height))
     }
@@ -210,9 +211,10 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
         restoreLegacyBrightness()
         publishCorners()
         if (!gaming() || !config.getBoolean("panel", true)) { hide(); return }
-        val metrics = wm.currentWindowMetrics
-        val key = "${metrics.bounds}:${metrics.windowInsets.displayCutout?.boundingRects}:${context.resources.configuration.orientation}"
+        val model = GameHandleGeometry.read(context)
+        val key = model.toString()
         if (geometry != key) { hide(); geometry = key }
+        if (!expanded && model.bounds(right(), GameModeStore.handlePosition(config, model.landscape)).isEmpty) { hide(); return }
         if (overlay == null) show()
     }
     /** Only release a previous test version's journal; never acquire a new brightness hold. */
@@ -222,7 +224,10 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
                 Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC) }.getOrDefault(false))
             prefs.edit().putBoolean("brightness_hold", false).commit()
     }
-    private fun right() = GameModeStore.side(config.getString("side")) == GameModeStore.SIDE_RIGHT
+    private fun right(): Boolean {
+        val bounds = wm.currentWindowMetrics.bounds
+        return GameModeStore.handleSide(config, bounds.width() > bounds.height()) == GameModeStore.SIDE_RIGHT
+    }
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density).toInt()
     private fun toggle() {
         if (closed || collapsing || !gaming()) return
@@ -253,7 +258,7 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
                 { id -> if (!closed && !collapsing && gaming() && actions.any { it.id() == id }) {
                     if (id !in GameQuickState.TOGGLE_IDS) hide()
                     quick(id)
-                } })
+                } }, right = right())
             root.setOnTouchListener { _, event -> if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) { toggle(); true } else false }
         } else {
             root = gameModeHandle(context, right()) { toggle() }
@@ -299,22 +304,19 @@ class GameModeHost(private val context: Context, private val launch: (String) ->
     internal fun params(): WindowManager.LayoutParams {
         val metrics = wm.currentWindowMetrics
         val bounds = metrics.bounds
-        val insets = metrics.windowInsets
-        val safe = insets.getInsetsIgnoringVisibility(WindowInsets.Type.displayCutout() or WindowInsets.Type.systemBars())
-        val height = dp(88)
-        val cuts = insets.displayCutout?.boundingRects.orEmpty()
+        val model = GameHandleGeometry.read(context)
+        val handle = model.bounds(right(), GameModeStore.handlePosition(config, model.landscape))
         @Suppress("WrongConstant")
         val card = expandedBounds()
-        val p = WindowManager.LayoutParams(if (expanded) card.width() else dp(28),
-            if (expanded) card.height() else height, SystemUiHost.OVERLAY_TYPE,
+        val p = WindowManager.LayoutParams(if (expanded) card.width() else handle.width(),
+            if (expanded) card.height() else handle.height(), SystemUiHost.OVERLAY_TYPE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED or
                 WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH, PixelFormat.TRANSLUCENT)
         p.gravity = Gravity.TOP or if (right()) Gravity.RIGHT else Gravity.LEFT
-        p.x = if (expanded) (if (right()) bounds.width() - card.right else card.left) else 0
-        p.y = if (expanded) card.top else GameModePolicy.handleTop(bounds.width(), bounds.height(), right(),
-            if (bounds.width() > bounds.height()) safe.top + dp(28) else (bounds.height() - height) / 2,
-            dp(28), height, cuts)
+        val target = if (expanded) card else handle
+        p.x = if (right()) bounds.width() - target.right else target.left
+        p.y = target.top
         p.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
         p.setFitInsetsTypes(0); p.title = "NativeComplements-game-mode"; p.windowAnimations = 0
         SystemUiHost.trust(p)

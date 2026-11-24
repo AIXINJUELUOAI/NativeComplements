@@ -4,31 +4,51 @@ import android.content.SharedPreferences
 import android.os.Bundle
 import android.view.WindowInsets
 import android.view.WindowManager
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.local.sunwindowdemo.core.ui.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun EdgeTouchScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var config by remember { mutableStateOf(EdgeTouchStore.read(context)) }
+    var nativeBusy by remember { mutableStateOf(false) }
+    var nativeMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val appContext = context.applicationContext
+    fun nativeAction(success: String, operation: () -> Unit) {
+        if (nativeBusy) return
+        nativeBusy = true
+        scope.launch {
+            try {
+                nativeMessage = withContext(Dispatchers.IO) {
+                    runCatching(operation).fold({ success }, { failure ->
+                        failure.message?.takeIf { failure is IllegalStateException } ?: "操作未完成，请检查模块 App 的 root 授权"
+                    })
+                }
+            } finally {
+                nativeBusy = false
+            }
+        }
+    }
     DisposableEffect(context, lifecycle) {
         val prefs = EdgeTouchStore.preferences(context)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> config = EdgeTouchStore.read(context) }
@@ -37,15 +57,33 @@ fun EdgeTouchScreen(bottomInset: Dp = 0.dp) {
         lifecycle.addObserver(observer)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener); lifecycle.removeObserver(observer) }
     }
+    val nativeManaged = config.getBoolean("native_managed")
+    val nativeAvailable = config.getBoolean("native_available")
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 24.dp + bottomInset)) {
+        GroupTitle("原厂防误触")
         SettingsGroup {
-            ToggleRow("开启边缘防误触", value = config.getBoolean("enabled")) {
-                EdgeTouchStore.setBoolean(context, "enabled", it)
-            }
-            ToggleRow("显示实际禁触区", value = config.getBoolean("show_regions")) {
-                EdgeTouchStore.setBoolean(context, "show_regions", it)
+            SettingRow("检验原厂防误触", subtitle = when {
+                nativeBusy -> "正在处理…"
+                nativeMessage != null -> nativeMessage
+                nativeAvailable -> "已检验通过"
+                else -> "未检验"
+            }, onClick = if (nativeBusy) null else ({ nativeAction("检验通过") { NativeEdgeTouch.check(appContext) } }))
+            if (nativeAvailable || nativeManaged) {
+                ToggleRow("启用原厂防误触", value = nativeManaged, enabled = !nativeBusy) { enabled ->
+                    nativeAction(if (enabled) "已下发原厂规则" else "已清除原厂规则") {
+                        NativeEdgeTouch.set(appContext, enabled)
+                    }
+                }
             }
         }
+        GroupTitle("固定禁触区")
+        SettingsGroup {
+            ToggleRow("开启边缘防误触", subtitle = if (nativeManaged) "已暂停" else null,
+                value = config.getBoolean("enabled"), enabled = !nativeManaged) {
+                EdgeTouchStore.setBoolean(context, "enabled", it)
+            }
+        }
+        if (nativeManaged) return@Column
         GroupTitle("范围预览")
         Surface(shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
             RegionPreview(config)
@@ -87,6 +125,7 @@ fun EdgeTouchScreen(bottomInset: Dp = 0.dp) {
 private fun RegionPreview(config: Bundle) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
+    val rotation = LocalView.current.display?.rotation ?: 0
     val metrics = remember(configuration.orientation, configuration.screenWidthDp, configuration.screenHeightDp) {
         context.getSystemService(WindowManager::class.java).currentWindowMetrics
     }
@@ -94,23 +133,15 @@ private fun RegionPreview(config: Bundle) {
     val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
     val rectangles = EdgeTouchGeometry.buildSuppression(bounds.width(), bounds.height(), insets.top, insets.bottom,
         context.resources.displayMetrics.density,config.getBoolean("left_enabled"),config.getBoolean("right_enabled"),config.getInt("left_width_dp"),config.getInt("right_width_dp"),
-        config.getInt("height_percent"),config.getInt("position_percent"),intArrayOf(),context.display?.rotation?:0,config.getInt("corner_dp"))
+        config.getInt("height_percent"),config.getInt("position_percent"),intArrayOf(),rotation,config.getInt("corner_dp"))
     val foreground = MaterialTheme.colorScheme.primary
     val neutral = MaterialTheme.colorScheme.outline
-    val surface = MaterialTheme.colorScheme.surfaceContainerHighest
-    Canvas(Modifier.fillMaxWidth().height(240.dp).padding(20.dp)) {
-        val scale = minOf(size.width / bounds.width(), size.height / bounds.height())
-        val width = bounds.width() * scale
-        val height = bounds.height() * scale
-        val left = (size.width - width) / 2
-        val top = (size.height - height) / 2
-        drawRoundRect(surface, Offset(left, top), Size(width, height), CornerRadius(12.dp.toPx()))
+    PhonePreview(bounds.width(), bounds.height()) { scale, origin ->
         for (i in rectangles.indices step 4) {
             val enabled = config.getBoolean("enabled")
             drawRect(if (enabled) foreground.copy(alpha = .7f) else neutral.copy(alpha = .35f),
-                Offset(left + rectangles[i] * scale, top + rectangles[i + 1] * scale),
+                origin + Offset(rectangles[i] * scale, rectangles[i + 1] * scale),
                 Size((rectangles[i + 2] - rectangles[i]) * scale, (rectangles[i + 3] - rectangles[i + 1]) * scale))
         }
-        drawRoundRect(neutral, Offset(left, top), Size(width, height), CornerRadius(12.dp.toPx()), style = Stroke(1.dp.toPx()))
     }
 }
