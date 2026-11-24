@@ -14,6 +14,7 @@ public final class SmsBlockingStore {
     public static final Uri CONFIG_URI = Uri.parse("content://dev.nativecomplements.module.smsblocking/config");
     public static final Uri RECORDS_URI = Uri.parse("content://dev.nativecomplements.module.smsblocking/records");
     private static final int MAX_RECORDS = 200;
+    static final int BODY_LIMIT = 700;
     private SmsBlockingStore() {}
 
     public static SharedPreferences preferences(Context context) {
@@ -112,6 +113,9 @@ public final class SmsBlockingStore {
                 value.putInt("subscription_id", item.optInt("subscription_id", -1));
                 for (String field : new String[]{"sender", "sim_label", "reason", "matched_pattern"})
                     value.putString(field, item.optString(field, ""));
+                String body = item.optString("body", "");
+                value.putString("body", excerpt(body));
+                value.putBoolean("body_truncated", item.optBoolean("body_truncated") || body.length() > BODY_LIMIT);
                 records.add(value);
             }
         } catch (Exception ignored) { }
@@ -123,7 +127,14 @@ public final class SmsBlockingStore {
         return text.substring(0, Math.min(text.length(), length));
     }
 
-    /** Only sender, slot and reason are stored; the message body never reaches disk or logs. */
+    private static String excerpt(String text) {
+        int end = Math.min(text.length(), BODY_LIMIT);
+        if (end > 0 && end < text.length() && Character.isHighSurrogate(text.charAt(end - 1))
+                && Character.isLowSurrogate(text.charAt(end))) end--;
+        return text.substring(0, end);
+    }
+
+    /** Bounded local record including the excerpt; no body is exposed by the config Provider or logs. */
     public static synchronized boolean recordBlocked(Context context, Bundle value) {
         if (value == null) return false;
         try {
@@ -135,6 +146,10 @@ public final class SmsBlockingStore {
             first.put("sim_label", bounded(value, "sim_label", 80));
             first.put("reason", bounded(value, "reason", 128));
             first.put("matched_pattern", bounded(value, "matched_pattern", 64));
+            String body = value.getString("body");
+            if (body == null) body = "";
+            first.put("body", excerpt(body));
+            first.put("body_truncated", body.length() > BODY_LIMIT);
             JSONArray old = new JSONArray(preferences(context).getString("records", "[]"));
             JSONArray result = new JSONArray().put(first);
             for (int i = 0; i < Math.min(old.length(), MAX_RECORDS - 1); i++) result.put(old.get(i));

@@ -15,6 +15,8 @@
 - [SmsBlockingRules](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingRules.java>)只接收卡槽、发送方、正文与规则值：号码沿用电话规则的 +86 归一化，字母服务号按大写通配，关键词大小写不敏感、去控制字符，验证码豁免需同时命中标记词与 4–8 位数字。规则不持有 `SmsMessage`／tracker 对象。
 - [SmsBlockingModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingModule.java>)仅在 `com.android.phone` 主进程装配：`processMessagePart` 取事实并写调用线程 `ThreadLocal`，`BlockChecker.getBlockStatus` 读回并返回原生屏蔽状态。执行与清理全部交给原生 `processMessagePart`（永久删 raw 行、不投递广播），模块不写 Telephony 数据库、不接管默认短信应用。拒绝决定只存在于本次调用线程，不按发送方／reference number 跨短信缓存。多段或解码未知时不使用片段正文命中关键词；启用验证码豁免时，正文未知的陌生规则保守放行。记录须关联确切 handler／tracker 的原生永久删除，且实际影响行数大于零；未确认的异步过滤不记为已拦截。
 - 判定路径只做内存规则与一次订阅→槽位查询；Provider、联系人和记录写入都在 worker。Provider 只接受自身、system 与本用户实际系统电话包 UID，电话包解析失败不回退常量 UID，联系人快照仍由持 `READ_CONTACTS` 的模块进程生成（≤4000），缺失／过期只放开陌生规则。`Binder.clearCallingIdentity` 均 `finally` 恢复，异常只记类型与位置，不含号码或正文。
+- 新记录默认保存可查看／复制的正文，无额外开关。[Store](<../../app/src/main/java/dev/local/sunwindowdemo/features/smsblocking/SmsBlockingStore.java>)沿用本用户 DE 私有偏好，最多 200 条，每条正文至多 700 个 UTF-16 代码单元且不截断代理对，带 `body_truncated` 标志；旧记录、解码失败或正文未知显示“未记录到正文”。清空记录同时删除正文；不上传、不进模块结构化日志，不新增 Provider 正文读取 API。
+- 正文只从本次 `filterSms` 的原生组装 `byte[][] pdus` 取得，要求精确 handler／tracker 及普通短信 `destPort=-1`。它只补充同条已确认记录，不改变多段拦截规则，也不绕过同步原生永久删除影响行数大于零的确认门；异步未确认过滤不伪记正文或拦截成功。
 - 作用域因此新增 `com.android.phone`：这是承载该功能所必需的宿主，不是给普通应用放权；未补勾时仅本功能不生效。
 
 ## 加速度传感器控制

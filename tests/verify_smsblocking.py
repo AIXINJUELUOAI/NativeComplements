@@ -1,5 +1,6 @@
 """Standalone JVM rules check; no Gradle, device, or shared build-cache access."""
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -72,11 +73,39 @@ assert 'ApplicationInfo.FLAG_SYSTEM' in provider and 'ApplicationInfo.FLAG_UPDAT
 assert 'catch(Exception unavailable){return false;}' in provider, "Phone lookup failure must deny"
 assert 'p.getBoolean(key(slot, "reject_strangers"), false)' in store
 assert 'p.getBoolean(key(slot, "allow_verification"), false)' in store
-# Message bodies must never be persisted or logged.
-assert 'first.put("sender"' in store and 'body' not in store.split('recordBlocked', 1)[1]
-assert 'matched_pattern' in store and 'bounded(value, "matched_pattern", 64)' in store
+# PR6 stores a bounded local excerpt without changing decisions or exposing a read API.
+filter_hook = module.split('hooks.add(hook(filter)', 1)[1].split('hooks.add(hook(delete)', 1)[0]
+assert 'current.consulted' in filter_hook and 'current.handler == chain.getThisObject()' in filter_hook
+assert 'current.tracker == chain.getArg(2)' in filter_hook
+assert 'Boolean.TRUE.equals(chain.getArg(4)) && Boolean.TRUE.equals(chain.getArg(5))' in filter_hook
+assert 'pdus.length == (Integer) trackerCount.invoke(current.tracker)' in filter_hook
+assert filter_hook.index('current.text =') < filter_hook.index('Object out = chain.proceed()')
+assembled = module.split('static String assembled(', 1)[1].split('private synchronized void connect(', 1)[0]
+assert 'destPort != -1' in assembled and '"3gpp".equals(format) || "3gpp2".equals(format)' in assembled
+assert 'pdu == null || pdu.length == 0' in assembled and 'if (part == null) return null' in assembled
+assert 'SmsBlockingStore.BODY_LIMIT + 1 - text.length()' in assembled
+assert 'text.append(part, 0, Math.min(part.length(), remaining))' in assembled
+confirmation = module.split('hooks.add(hook(resolverDelete)', 1)[1].split('note("SMS_BLOCKING_HOOK_READY', 1)[0]
+assert confirmation.index('(Integer) out > 0') < confirmation.index('entry.putString("body", current.text)') < confirmation.index('worker.post')
+assert 'MAX_RECORDS = 200' in store and 'BODY_LIMIT = 700' in store
+assert 'createDeviceProtectedStorageContext()' in store and 'Context.MODE_PRIVATE' in store
+assert 'first.put("body", excerpt(body))' in store and 'first.put("body_truncated", body.length() > BODY_LIMIT)' in store
+assert 'Character.isHighSurrogate(text.charAt(end - 1))' in store and 'Character.isLowSurrogate(text.charAt(end))) end--' in store
+assert 'String body = item.optString("body", "")' in store and 'value.putString("body", excerpt(body))' in store
+assert 'value.putBoolean("body_truncated", item.optBoolean("body_truncated") || body.length() > BODY_LIMIT)' in store
+assert 'preferences(context).edit().remove("records")' in store
+assert set(re.findall(r'case "([^"]+)":', provider)) == {'read', 'contacts', 'record', 'backend'}
+assert 'readRecords' not in provider and '"body"' not in provider
+assert '"body"' not in store.split('public static Bundle readConfig(', 1)[1].split('private static String[] list(', 1)[0]
+for line in module.splitlines():
+    if 'note(' in line or 'Diagnostics.event(' in line:
+        assert 'current.text' not in line and 'getString("body")' not in line, "No excerpt in structured logs"
+assert 'first.put("sender"' in store and 'bounded(value, "matched_pattern", 64)' in store
 assert 'looksLikeVerification' in rules and 'VERIFICATION_CODE' in rules
 assert 'SmsBlockingScreen' in screen and 'confirmAll' in screen
+assert 'SelectionContainer {' in screen and 'Text(item.getString("body")' in screen
+assert 'selectedRecord by remember {' in screen and 'rememberSaveable' not in screen
+assert '正文超过700字符，仅显示前700字符' in screen and '未记录到正文' in screen
 
 scopes = (root / "app/src/main/resources/META-INF/xposed/scope.list").read_text(encoding="utf-8").splitlines()
 assert "com.android.phone" in scopes, scopes

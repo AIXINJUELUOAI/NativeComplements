@@ -32,6 +32,7 @@ public final class SmsBlockingModule extends XposedModule {
     private static final class Pending {
         final Object handler, tracker;
         final Blocked decision;
+        String text;
         boolean consulted, nativeConsumed, recorded;
         Pending(Object handler, Object tracker, Blocked decision) {
             this.handler = handler; this.tracker = tracker; this.decision = decision;
@@ -148,6 +149,16 @@ public final class SmsBlockingModule extends XposedModule {
             }));
             hooks.add(hook(filter).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Pending current = pending.get();
+                // Keep the assembled excerpt on this call only, before the native blocked/deletion path resumes.
+                if (current != null && current.decision != null && current.consulted
+                        && current.handler == chain.getThisObject() && current.tracker == chain.getArg(2)
+                        && Boolean.TRUE.equals(chain.getArg(4)) && Boolean.TRUE.equals(chain.getArg(5))) {
+                    try {
+                        byte[][] pdus = (byte[][]) chain.getArg(0);
+                        current.text = pdus != null && pdus.length == (Integer) trackerCount.invoke(current.tracker)
+                            ? assembled(pdus, (Integer) chain.getArg(1), (String) trackerFormat.invoke(current.tracker)) : null;
+                    } catch (Throwable e) { current.text = null; failure(e); }
+                }
                 Object out = chain.proceed();
                 if (current != null && current.decision != null && current.consulted
                         && current.handler == chain.getThisObject() && current.tracker == chain.getArg(2)
@@ -182,6 +193,7 @@ public final class SmsBlockingModule extends XposedModule {
                             && Arrays.equals((String[]) trackerDeleteArgs.invoke(current.tracker), (String[]) chain.getArg(2))) {
                         current.recorded = true;
                         Bundle entry = current.decision.entry;
+                        if (current.text != null) entry.putString("body", current.text);
                         worker.post(() -> record(entry));
                         Diagnostics.event(context, Diagnostics.PHONE, "sms_blocked");
                         note("SMS_BLOCKED sim=" + (entry.getInt("slot_index") + 1) + " reason=" + entry.getString("reason"));
@@ -268,6 +280,25 @@ public final class SmsBlockingModule extends XposedModule {
             SmsMessage message = SmsMessage.createFromPdu(pdu, format);
             return message == null ? null : message.getMessageBody();
         } catch (Throwable e) { return null; }
+    }
+
+    /** Native assembled ordinary SMS only; one extra code unit tells storage whether it was truncated. */
+    static String assembled(byte[][] pdus, int destPort, String format) {
+        if (pdus == null || pdus.length == 0 || destPort != -1
+                || !("3gpp".equals(format) || "3gpp2".equals(format))) return null;
+        StringBuilder text = new StringBuilder();
+        try {
+            for (byte[] pdu : pdus) {
+                if (pdu == null || pdu.length == 0) return null;
+                SmsMessage message = SmsMessage.createFromPdu(pdu, format);
+                String part = message == null ? null : message.getMessageBody();
+                if (part == null) return null; // Never silently join around a missing/invalid segment.
+                int remaining = SmsBlockingStore.BODY_LIMIT + 1 - text.length();
+                text.append(part, 0, Math.min(part.length(), remaining));
+                if (text.length() > SmsBlockingStore.BODY_LIMIT) break;
+            }
+            return text.toString();
+        } catch (RuntimeException unknown) { return null; }
     }
 
     private synchronized void connect(Context c) {

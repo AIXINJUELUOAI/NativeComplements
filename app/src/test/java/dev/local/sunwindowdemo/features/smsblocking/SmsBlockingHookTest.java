@@ -120,6 +120,33 @@ public class SmsBlockingHookTest {
         assertNull(local("deleting").get());
     }
 
+    @Test public void bodyIsAttachedOnlyToExactConfirmedDeletionAndNeverLeaksToAnotherMessage() throws Throwable {
+        install(); Object current = pending(true); local("pending").set(current);
+        Field text = current.getClass().getDeclaredField("text"); text.setAccessible(true);
+        Field decision = current.getClass().getDeclaredField("decision"); decision.setAccessible(true);
+        Object blocked = decision.get(current);
+        Method entryMethod = blocked.getClass().getDeclaredMethod("entry"); entryMethod.setAccessible(true);
+        Bundle entry = (Bundle) entryMethod.invoke(blocked);
+        byte[][] pdus = {SmsRecordBodyTest.pdu("被拦正文")};
+        status("sender", 0);
+        call("filterSms", host, new Object[]{pdus, -1, trackerType.getConstructor().newInstance(), null, true, true}, () -> false);
+        assertNull(text.get(current));
+        call("filterSms", host, new Object[]{new byte[][]{pdus[0], pdus[0]}, -1, tracker, null, true, true}, () -> false);
+        assertNull(text.get(current)); // native count mismatch cannot be treated as assembled text
+        call("filterSms", host, new Object[]{pdus, -1, tracker, null, false, true}, () -> true);
+        assertNull(text.get(current)); // locked/unconfirmed filtering is not a record source
+        call("filterSms", host, new Object[]{pdus, -1, tracker, null, true, true}, () -> false);
+        assertEquals("被拦正文", text.get(current)); assertFalse(entry.containsKey("body"));
+        delete(0); assertFalse(entry.containsKey("body")); assertEquals(0, posted);
+        delete(1); assertEquals("被拦正文", entry.getString("body")); assertEquals(1, posted);
+        Object next = pending(true); local("pending").set(next); status("sender", 0);
+        call("filterSms", host, new Object[]{pdus, 9200, tracker, null, true, true}, () -> false);
+        assertNull(text.get(next));
+        Object nextBlocked = decision.get(next);
+        Bundle nextEntry = (Bundle) entryMethod.invoke(nextBlocked);
+        delete(1); assertFalse(nextEntry.containsKey("body")); assertEquals(2, posted);
+    }
+
     @Test public void nestedInboundAndThrowingNativeRestoreThreadState() throws Throwable {
         install(); Object outer = pending(true); local("pending").set(outer);
         RuntimeException failure = new IllegalStateException("native");
