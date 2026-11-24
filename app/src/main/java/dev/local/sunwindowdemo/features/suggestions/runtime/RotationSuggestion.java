@@ -47,17 +47,26 @@ final class RotationSuggestion {
         },new android.content.IntentFilter(LauncherRotationSuggestion.ACTION),null,new android.os.Handler(Looper.getMainLooper()),android.content.Context.RECEIVER_EXPORTED);
     }
 
+    static Method currentView(Class<?> button)throws NoSuchMethodException{
+        Method method=button.getMethod("getCurrentView");
+        if(!View.class.isAssignableFrom(method.getReturnType())||java.lang.reflect.Modifier.isStatic(method.getModifiers()))
+            throw new NoSuchMethodException("RotationButton.getCurrentView");
+        method.setAccessible(true);return method;
+    }
+
     static void install(XposedModule module, ClassLoader loader, Consumer<String> log) {
         try {
             Class<?> controller = Class.forName("com.android.systemui.shared.rotation.RotationButtonController", false, loader);
             Method state = controller.getDeclaredMethod("setRotateSuggestionButtonState", boolean.class, boolean.class);
             Field button = controller.getDeclaredField("mRotationButton");
-            Field keyView = button.getType().getDeclaredField("mKeyButtonView");
+            // LineageOS declares mRotationButton as the RotationButton interface; PixelOS may narrow it.
+            // The interface exposes the same live view without assuming a concrete key-view field.
+            Method current = currentView(button.getType());
             Field proposal = controller.getDeclaredField("mLastRotationSuggestion");
             Field pending = controller.getDeclaredField("mPendingRotationSuggestion");
             Field handler = controller.getDeclaredField("mUiHandler");
             Field cancel = controller.getDeclaredField("mCancelPendingRotationProposal");
-            state.setAccessible(true); button.setAccessible(true); keyView.setAccessible(true); proposal.setAccessible(true);
+            state.setAccessible(true); button.setAccessible(true); current.setAccessible(true); proposal.setAccessible(true);
             pending.setAccessible(true); handler.setAccessible(true); cancel.setAccessible(true);
             module.hook(state).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 SystemUiHost host = SystemUiHost.live;
@@ -72,7 +81,7 @@ final class RotationSuggestion {
                 }
                 Object owner = chain.getThisObject();
                 Object nativeButton = button.get(owner);
-                View view = nativeButton == null ? null : (View) keyView.get(nativeButton);
+                View view = nativeButton == null ? null : (View) current.invoke(nativeButton);
                 if (view == null || !view.hasOnClickListeners()) {
                     RotationDiagnostics.update("host", view==null?"原生按钮为空":"原生按钮尚无点击监听");
                     return chain.proceed();

@@ -65,7 +65,14 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             ToggleRow("双击桌面锁屏", value = desktopDoubleTapSleep) {
                 ShadeStore.setDesktopDoubleTapSleep(context, it)
             }
-            ToggleRow("抽屉莫奈图标", value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
+            val hint = when {
+                systemThemed -> null
+                dev.local.sunwindowdemo.core.LauncherTargets.home(context) == "com.android.launcher3" ->
+                    "需先在“壁纸与样式”中将应用图标样式设为 Minimal"
+                else -> "需先在“壁纸与样式”中打开主题图标"
+            }
+            ToggleRow("抽屉莫奈图标", hint ?: "应用抽屉与推荐行使用和桌面相同的主题图标",
+                value = drawerMonet && systemThemed, enabled = systemThemed) { ShadeStore.setDrawerMonet(context, it) }
             ToggleRow("遮罩莫奈图标", value = coverMonet && systemThemed, enabled = systemThemed) { ShadeStore.setCoverMonet(context, it) }
             ToggleRow("小白条沉浸", value = navbarImmersive) {
                 NavbarStore.setEnabled(context, it)

@@ -28,6 +28,7 @@
 | 通话、短信、UID 传感器政策、输入过滤 | [系统策略](<system-policy-boundary.md>) |
 | 诊断、配置与身份 | [共享边界](<shared-boundary.md>) |
 | 角落输入、通知／跨应用小窗及恢复 | [小窗接入](<floating-window.md>) |
+| Alive 壁纸、原生生命周期与 Direct Boot | [Alive 平台](<alive-platform.md>)、[绑定例外](<alive-module.md>)、[系统交接](<alive-systemui.md>) |
 
 ## 共享宿主不等于共享开关
 

@@ -13,6 +13,8 @@
 | 系统设置主进程 | [SettingsIconModule](<../../app/src/main/java/dev/local/sunwindowdemo/features/iconlayers/SettingsIconModule.java>)只替换本用户应用图标底图，保留原生阴影与徽标 |
 | 已知 Launcher 主进程 | 手势冲突保护、历史任务、图标和原生导航源；宿主匹配不替代桥接 UID 认证 |
 
+Alive 完整保留于 `full`，后续拆分独立项目；当前仍通过既有 system_server／SystemUI 入口安装局部接入，壁纸服务使用原生生命周期，不新增 flavor 或模块入口。配置、Direct Boot 与授权边界见[Alive 平台合同](<alive-platform.md>)。
+
 准确入口为[九项注册表](<../../app/src/full/resources/META-INF/xposed/java_init.list>)；[六项静态作用域](<../../app/src/main/resources/META-INF/xposed/scope.list>)为 system、SystemUI、Pixel Launcher、Launcher3、电话及系统设置。[LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)只允许白名单内系统／更新系统 HOME，授权时重新解析实际 HOME 与本用户真实 UID，不向已安装但非 HOME 的桌面回退。ROM 维护记录只用于署名和反馈，不授予 Hook 或 IPC 权限。
 
 ## 事件、规则与执行

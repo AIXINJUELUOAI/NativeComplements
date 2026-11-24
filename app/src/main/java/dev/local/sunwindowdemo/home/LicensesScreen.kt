@@ -12,6 +12,9 @@ import dev.local.sunwindowdemo.core.ui.*
 private data class Notice(val name: String, val owner: String, val license: String, val usage: String, val url: String?)
 
 private val references = listOf(
+    Notice("OpenAlive", "Maga-King and OpenAlive contributors", "MIT",
+        "照片动画、矩阵与遮罩解码 Java 改编；完整 MIT 与 NOTICE 随包保留，原生库和官方素材仅由用户本地导入，不属 MIT 授权",
+        "https://github.com/Maga-King/OpenAlive/tree/2d54c72a573b2f66e20b558283bef58cdb0ada60"),
     Notice("SunOS android_sun-sdk", "The Nameless-AOSP Project", "Apache-2.0",
         "小窗缩放常数、9:16 画布、手势阈值、操作条尺寸、转场时长与曲线，以及迷你窗菜单图标资源",
         "https://github.com/SunOS-Project/android_sun-sdk"),

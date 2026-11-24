@@ -58,17 +58,25 @@ final class DesktopDoubleTap {
         Field l=field(listener,"mLauncher",launcher),w=field(listener,"mWorkspace",workspace);
         Field normal=state.getDeclaredField("NORMAL");normal.setAccessible(true);
         if(!Modifier.isStatic(normal.getModifiers())||!state.isAssignableFrom(normal.getType()))throw new NoSuchFieldException("NORMAL");
+        // LineageOS 24.0 narrows the return to LauncherDragController; PixelOS keeps DragController.
+        Method dragController=dragController(launcher,drag);
         return new Targets(method(listener,"onTouch",boolean.class,View.class,MotionEvent.class),l,w,
             method(container,"isInState",boolean.class,baseState),normal.get(null),
             method(floating,"getTopOpenView",floating,activity),field(workspace,"mIsSwitchingState",boolean.class),
             field(workspace,"mOverlayShown",boolean.class),method(paged,"isPageInTransition",boolean.class),
             method(paged,"isHandlingTouch",boolean.class),method(paged,"getCurrentPage",int.class),
-            method(paged,"getPageAt",View.class,int.class),method(launcher,"getDragController",drag),
+            method(paged,"getPageAt",View.class,int.class),dragController,
             method(drag,"isDragging",boolean.class),cell,
             method(cell,"pointToCellExact",void.class,int.class,int.class,int[].class),
             method(cell,"isOccupied",boolean.class,int.class,int.class),
             method(cell,"cellToRect",void.class,int.class,int.class,int.class,int.class,Rect.class),
             field(cell,"mCountX",int.class),field(cell,"mCountY",int.class));
+    }
+    static Method dragController(Class<?> launcher,Class<?> drag)throws NoSuchMethodException{
+        Method method=launcher.getDeclaredMethod("getDragController");
+        if(!drag.isAssignableFrom(method.getReturnType())||Modifier.isStatic(method.getModifiers()))
+            throw new NoSuchMethodException("getDragController return");
+        method.setAccessible(true);return method;
     }
     private static Method method(Class<?> type,String name,Class<?> result,Class<?>...args)throws Exception{
         Method m=type.getDeclaredMethod(name,args);m.setAccessible(true);

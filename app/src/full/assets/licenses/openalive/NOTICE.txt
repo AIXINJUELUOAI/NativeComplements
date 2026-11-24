@@ -1,0 +1,10 @@
+OpenAlive photo rendering adaptation
+Upstream: https://github.com/Maga-King/OpenAlive
+Source revision: 2d54c72a573b2f66e20b558283bef58cdb0ada60 (0.4.41-preview)
+Copyright (c) 2026 Maga-King and OpenAlive contributors
+
+This module includes adapted self-implemented Java animation/matrix/mask-decoding code under the accompanying MIT license. Changes: photo-only renderer, local verified runtime/resource import, Android native WallpaperService lifecycle; no ColorOS system modifications, official editor DEX, Vivo/Xiaomi renderers, AOD clock or notification effects.
+
+Official Flyme shaders (including those embedded in libalive_clean.so), masks and other official resources are NOT covered by that MIT license and are NOT bundled here. They retain their respective owners' rights. A user may explicitly import the pinned upstream APK from local storage, subject to the applicable rights and licenses. Provenance is not a grant of redistribution rights. User photos remain on-device.
+
+Upstream resource notice: https://github.com/Maga-King/OpenAlive/blob/2d54c72a573b2f66e20b558283bef58cdb0ada60/THIRD_PARTY.md

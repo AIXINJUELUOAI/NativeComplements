@@ -33,14 +33,10 @@ final class MobileSignalBinder {
         Class<?> binder = Class.forName("com.android.systemui.statusbar.pipeline.mobile.ui.binder.MobileIconBinder", false, loader);
         Class<?> model = Class.forName("com.android.systemui.statusbar.pipeline.mobile.ui.viewmodel.LocationBasedMobileViewModel", false, loader);
         Class<?> logger = Class.forName("com.android.systemui.statusbar.pipeline.mobile.ui.MobileViewLogger", false, loader);
-        Method bind = binder.getDeclaredMethod("bind", ViewGroup.class, model, int.class, logger);
+        Method bind = bindMethod(binder,model,logger);
         Method subscriptionId = ReflectiveAccess.method(model, "getSubscriptionId");
         if (subscriptionId.getReturnType() != int.class || java.lang.reflect.Modifier.isStatic(subscriptionId.getModifiers()))
             throw new NoSuchMethodException("mobile subscription id");
-        if (java.lang.reflect.Modifier.isStatic(bind.getModifiers())
-                || !bind.getReturnType().getSimpleName().equals("ModernStatusBarViewBinding"))
-            throw new NoSuchMethodException("MobileIconBinder.bind return/instance ABI");
-        bind.setAccessible(true);
         Method image = ImageView.class.getDeclaredMethod("setImageDrawable", Drawable.class);
         Method level = Drawable.class.getDeclaredMethod("setLevel", int.class);
         Method register = TelephonyManager.class.getMethod("registerTelephonyCallback", java.util.concurrent.Executor.class, TelephonyCallback.class);
@@ -102,6 +98,14 @@ final class MobileSignalBinder {
             for (var hook : hooks) try { hook.unhook(); } catch (Throwable ignored) {}
             throw failure;
         }
+    }
+
+    static Method bindMethod(Class<?> binder,Class<?> model,Class<?> logger)throws NoSuchMethodException{
+        Method method=binder.getDeclaredMethod("bind",ViewGroup.class,model,int.class,logger);
+        // Kotlin @JvmStatic and instance bind have identical argument positions; neither needs a receiver here.
+        if(!method.getReturnType().getSimpleName().equals("ModernStatusBarViewBinding"))
+            throw new NoSuchMethodException("MobileIconBinder.bind return ABI");
+        method.setAccessible(true);return method;
     }
 
     static boolean repositoryCallback(Class<?> type) {

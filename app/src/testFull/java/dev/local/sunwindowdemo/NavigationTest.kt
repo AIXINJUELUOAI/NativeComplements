@@ -55,10 +55,11 @@ class NavigationTest {
         return next
     }
 
-    @Test fun removedWallpaperPageIsNotExposedOnHome() {
-        launch(intent())
-        compose.onNodeWithText("Alive 壁纸").assertDoesNotExist()
-        assertFalse(Page.entries.any { it.name == "Alive" })
+    @Test fun aliveWallpaperRemainsAvailableForLaterExtraction() {
+        val (_, home) = launch(intent())
+        compose.onNodeWithText("Alive 壁纸").performScrollTo().assertIsDisplayed().performClick()
+        nextPage(home, Page.Alive)
+        assertTrue(Page.entries.any { it == Page.Alive })
     }
 
     @Test fun targetExclusionsOpenInSharedPickerAndReturnToPrevention() {

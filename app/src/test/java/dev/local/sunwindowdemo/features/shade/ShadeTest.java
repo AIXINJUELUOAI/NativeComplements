@@ -113,6 +113,114 @@ public class ShadeTest {
         } finally { split.setInt(null, 0); full.setInt(null, 0); }
     }
 
+    static class AsyncRepository {
+        final android.content.res.Resources resources;
+        final java.util.List<Boolean> values = new java.util.concurrent.CopyOnWriteArrayList<>();
+        kotlinx.coroutines.flow.FlowCollector<? super Boolean> downstream;
+        final MapEmission mapper = new MapEmission();
+        AsyncRepository(android.content.res.Resources resources) { this.resources = resources; }
+        Object collect() {
+            kotlinx.coroutines.flow.Flow<Boolean> nativeMap = (collector, continuation) -> {
+                downstream = collector;
+                return kotlin.coroutines.intrinsics.IntrinsicsKt.getCOROUTINE_SUSPENDED();
+            };
+            return kotlinx.coroutines.flow.FlowKt.distinctUntilChanged(nativeMap).collect((value, continuation) -> {
+                values.add(value); return kotlin.Unit.INSTANCE;
+            }, continuation());
+        }
+        static kotlin.coroutines.Continuation<kotlin.Unit> continuation() {
+            return new kotlin.coroutines.Continuation<>() {
+                public kotlin.coroutines.CoroutineContext getContext() { return kotlin.coroutines.EmptyCoroutineContext.INSTANCE; }
+                public void resumeWith(Object result) { kotlin.ResultKt.throwOnFailure(result); }
+            };
+        }
+        final class MapEmission {
+            Object emit(int id) { return downstream.emit(resources.getBoolean(id), continuation()); }
+        }
+        final class UnrelatedNested {
+            boolean invokeSuspend(int id) { return resources.getBoolean(id); }
+        }
+    }
+    public static class AsyncConfigCallback {
+        final AsyncRepository split, fullWidth;
+        final java.util.concurrent.ExecutorService worker = java.util.concurrent.Executors.newSingleThreadExecutor();
+        AsyncConfigCallback(AsyncRepository split, AsyncRepository fullWidth) { this.split=split; this.fullWidth=fullWidth; }
+        public void onConfigChanged(Configuration value) throws Exception {
+            worker.submit(() -> { split.mapper.emit(101); fullWidth.mapper.emit(102); }).get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
+    @Test public void suspendedFlowsEvaluateAsyncBeforeDistinctAndRestoreOnDisableAndRotation() throws Exception {
+        var type = ComposeShadeLayout.class;
+        var owner = type.getDeclaredField("repositoryOwner"); owner.setAccessible(true);
+        var refs = type.getDeclaredField("repositoryResources"); refs.setAccessible(true);
+        var callbacks = type.getDeclaredField("callbacks"); callbacks.setAccessible(true);
+        var callbackMethod = type.getDeclaredField("onConfigChanged"); callbackMethod.setAccessible(true);
+        var splitId = type.getDeclaredField("splitId"); splitId.setAccessible(true);
+        var fullWidthId = type.getDeclaredField("fullWidthId"); fullWidthId.setAccessible(true);
+        var resourcesList = (java.util.List<java.lang.ref.WeakReference<android.content.res.Resources>>) refs.get(null);
+        var callbackList = (java.util.List<java.lang.ref.WeakReference<Object>>) callbacks.get(null);
+        var enabled = new java.util.concurrent.atomic.AtomicBoolean(false);
+        Configuration config = new Configuration(context.getResources().getConfiguration());
+        config.orientation = Configuration.ORIENTATION_LANDSCAPE; config.screenWidthDp = 874;
+        var base = context.getResources();
+        var resources = new android.content.res.Resources(base.getAssets(), base.getDisplayMetrics(), config) {
+            @Override public boolean getBoolean(int id) {
+                boolean nativeValue = id == 102;
+                return (Boolean) ComposeShadeLayout.readBoolean(nativeValue, this, id,
+                        value -> LandscapeShade.forceSplit(enabled.get(), value.getConfiguration()));
+            }
+        };
+        AsyncRepository split = new AsyncRepository(resources), full = new AsyncRepository(resources);
+        AsyncConfigCallback callback = new AsyncConfigCallback(split, full);
+        try {
+            owner.set(null, AsyncRepository.class.getName()); splitId.setInt(null,101); fullWidthId.setInt(null,102);
+            resourcesList.add(new java.lang.ref.WeakReference<>(resources));
+            callbackMethod.set(null, AsyncConfigCallback.class.getDeclaredMethod("onConfigChanged",Configuration.class));
+            callbackList.add(new java.lang.ref.WeakReference<>(callback));
+            assertSame(kotlin.coroutines.intrinsics.IntrinsicsKt.getCOROUTINE_SUSPENDED(), split.collect());
+            assertSame(kotlin.coroutines.intrinsics.IntrinsicsKt.getCOROUTINE_SUSPENDED(), full.collect());
+            ComposeShadeLayout.refresh(config);
+            enabled.set(true); ComposeShadeLayout.refresh(config);
+            ComposeShadeLayout.refresh(config); // Native distinctUntilChanged still suppresses duplicates.
+            enabled.set(false); ComposeShadeLayout.refresh(config);
+            enabled.set(true); config.orientation=Configuration.ORIENTATION_PORTRAIT;
+            resources.updateConfiguration(config,base.getDisplayMetrics()); ComposeShadeLayout.refresh(config);
+            assertEquals(java.util.List.of(false,true,false),split.values);
+            assertEquals(java.util.List.of(true,false,true),full.values);
+            config.orientation=Configuration.ORIENTATION_LANDSCAPE;
+            resources.updateConfiguration(config,base.getDisplayMetrics()); ComposeShadeLayout.refresh(config);
+            assertEquals(java.util.List.of(false,true,false,true),split.values);
+            assertFalse("same resources outside the repository mapper stay native",resources.getBoolean(101));
+            assertFalse("unrelated nested continuation stays native",split.new UnrelatedNested().invokeSuspend(101));
+            assertFalse("unrelated bool stays native",(Boolean)ComposeShadeLayout.readBoolean(false,resources,103,value->true));
+            resourcesList.clear(); ComposeShadeLayout.refresh(config);
+            assertEquals("another Resources identity must not inherit the scope",false,split.values.get(split.values.size()-1));
+        } finally {
+            callback.worker.shutdownNow(); resourcesList.clear(); callbackList.clear();
+            owner.set(null,null); callbackMethod.set(null,null); splitId.setInt(null,0); fullWidthId.setInt(null,0);
+        }
+    }
+    @Test public void missingNativeRefreshCallbackFailsBeforeInstallingAnOverride() throws Exception {
+        ClassLoader loader = new ClassLoader(getClass().getClassLoader()) {
+            @Override public Class<?> loadClass(String name) throws ClassNotFoundException {
+                if(name.contains("ConfigurationRepositoryImpl$onConfigurationChange")) throw new ClassNotFoundException(name);
+                return super.loadClass(name);
+            }
+        };
+        var resolve=ComposeShadeLayout.class.getDeclaredMethod("resolve",ClassLoader.class); resolve.setAccessible(true);
+        var error=assertThrows(java.lang.reflect.InvocationTargetException.class,()->resolve.invoke(null,loader));
+        assertTrue(error.getCause() instanceof ClassNotFoundException);
+        assertTrue(error.getCause().getMessage().contains("ConfigurationRepositoryImpl$onConfigurationChange"));
+    }
+    @Test public void repositoryScopeRejectsLookalikeOwnerAndUnrelatedNestedMethods() {
+        String owner="com.android.systemui.shade.data.repository.ShadeConfigRepository";
+        assertTrue(ComposeShadeLayout.repositoryEvaluation(new StackTraceElement[]{new StackTraceElement(owner+"$legacy$map$1$2","emit","file",1)},owner));
+        assertFalse(ComposeShadeLayout.repositoryEvaluation(new StackTraceElement[]{new StackTraceElement(owner+"Other$map$1$2","emit","file",1)},owner));
+        assertFalse(ComposeShadeLayout.repositoryEvaluation(new StackTraceElement[]{new StackTraceElement(owner+"$callback","invokeSuspend","file",1)},owner));
+        assertFalse(ComposeShadeLayout.repositoryEvaluation(new StackTraceElement[]{new StackTraceElement(owner,"getLegacyUseSplitShade","file",1)},owner));
+        assertFalse(ComposeShadeLayout.repositoryEvaluation(new StackTraceElement[0],null));
+    }
+
     public static class ConfigCallback {
         Configuration last;
         int calls;

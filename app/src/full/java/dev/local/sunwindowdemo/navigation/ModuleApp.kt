@@ -62,6 +62,10 @@ fun ModuleApp(
     openIconApp: (String) -> Unit = {},
     openBackgroundApp: (String) -> Unit = {},
 ) {
+    if (page == Page.Alive) {
+        dev.local.sunwindowdemo.features.alive.AliveScreen(onBack = back)
+        return
+    }
     val context = LocalContext.current
     var iconBatch by rememberSaveable { mutableStateOf(false) }
     var iconSelection by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -154,7 +158,7 @@ fun ModuleApp(
                         onEdgeTouch = { navigate(Page.EdgeTouch) },
                         onSuggestions = { navigate(Page.Suggestions) }, onMotion = { navigate(Page.Motion) },
                         onIcons = { navigate(Page.IconLayers) }, onGameMode = { navigate(Page.GameMode) },
-                        onShade = { navigate(Page.Shade) },
+                        onShade = { navigate(Page.Shade) }, onAlive = { navigate(Page.Alive) },
                         onBackground = { navigate(Page.Background) },
                     )
 

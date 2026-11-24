@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 251
-        versionName = "0.12.30-notification-icons-test1"
+        versionCode = 252
+        versionName = "0.12.31-lineage-alive-test1"
     }
     flavorDimensions += "product"
     productFlavors {

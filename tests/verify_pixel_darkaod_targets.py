@@ -36,7 +36,9 @@ checks(S+"settings/UserTrackerImpl;", [("getUserId", "()I")], inherited=True)
 checks(A+"hardware/display/AmbientDisplayConfiguration;", [("alwaysOnEnabled", "(I)Z")], inherited=True)
 checks(S+"doze/DozeTriggers;", fields=[("mDozeSensors", S+"doze/DozeSensors;")], inherited=True)
 checks(S+"doze/DozeSensors;", fields=[("mProximitySensor", PROX)], inherited=True)
-checks(PROX, [("isNear", "()Ljava/lang/Boolean;")], [("mRegistered", "Z"), ("mPaused", "Z")], True)
+checks(PROX, [("isNear", "()Ljava/lang/Boolean;"), ("alertListeners", "()V"),
+              ("onSensorEvent", "("+S+"util/sensors/ThresholdSensorEvent;)V")],
+       [("mRegistered", "Z"), ("mPaused", "Z")], True)
 checks(STATE, fields=[(n, STATE) for n in ("DOZE_AOD", "DOZE_AOD_PAUSING", "DOZE_AOD_PAUSED")])
 
 # Type-only reflection targets remain part of the DarkAod contract.

@@ -57,7 +57,17 @@ final class BackgroundFreezerAccess {
         uidForPid = method(android.os.Process.class, "getUidForPid", int.class, int.class);
         thaw = method(optimizer, "unfreezeAppLSP", void.class, process, int.class);
         getFreezer = method(am, "getFreezer", freezer);
-        binder = method(freezer, "freezeBinder", int.class, int.class, boolean.class, int.class);
+        binder = binderMethod(freezer);
+    }
+
+    static Method binderMethod(Class<?> freezer) throws NoSuchMethodException {
+        // The first int.class is the return type, followed by exactly (pid, freeze, timeout).
+        // Both archived targets and fixed LineageOS source use this ABI; do not guess a UID overload.
+        return method(freezer, "freezeBinder", int.class, int.class, boolean.class, int.class);
+    }
+
+    static void recoverBinder(Method binder, Object freezer, int pid) throws ReflectiveOperationException, IOException {
+        if ((Integer) binder.invoke(freezer, pid, false, 0) != 0) throw new IOException("Binder recovery failed");
     }
 
     static BackgroundFreezerAccess install(XposedModule module, ClassLoader loader, BackgroundHost host,
@@ -212,7 +222,7 @@ final class BackgroundFreezerAccess {
             try {
                 Identity current = identity(pid, uid);
                 if (current.start == Long.parseLong(data[3]) && current.stopped) {
-                    if ((Integer) binder.invoke(freezer, pid, false, 0) != 0) throw new IOException("Binder recovery failed");
+                    recoverBinder(binder, freezer, pid);
                     Os.kill(pid, OsConstants.SIGCONT);
                     host.freezerEvent("KILL19_RECOVERED");
                 }

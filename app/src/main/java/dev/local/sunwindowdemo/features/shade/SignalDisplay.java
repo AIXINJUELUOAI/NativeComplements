@@ -137,13 +137,15 @@ public final class SignalDisplay {
                     }));
                 }
             }
-            installStacked(module,loader);
             log.accept("SIGNAL_DISPLAY_READY standard mobile drawable");
         }catch(Throwable failure){
             enabled=false;for(var hook:HOOKS)try{hook.unhook();}catch(Throwable ignored){}HOOKS.clear();
             log.accept("SIGNAL_SYNTHETIC_EMITTER_UNAVAILABLE "+StackedSignalTargets.describe(failure));
             installBinder(module,loader);
         }
+        // Stacked dual-SIM rendering is independent from the standard mobile drawable path and
+        // from R8-numbered callback classes; keep it available on either emitter fallback.
+        installStacked(module,loader);
     }
     private static void installBinder(XposedModule module,ClassLoader loader){
         try {
@@ -195,10 +197,16 @@ public final class SignalDisplay {
             // The restart callback and parent composable may inline the render entry.
             // Parent view model is StackedMobileIconViewModel (legacy) or StackedMobileIconViewModelImpl (QPR2).
             Method parent=StackedSignalTargets.parent(draw,modifier,composer);
-            Class<?> restart=Class.forName(prefix+"shared.ui.composable.StackedMobileIconKt$$ExternalSyntheticLambda6",false,loader);
-            Method restartInvoke=StackedSignalTargets.restart(restart,dual);
             if(!module.deoptimize(parent))throw new IllegalStateException("deoptimize "+parent);
-            if(!module.deoptimize(restartInvoke))throw new IllegalStateException("deoptimize "+restartInvoke);
+            // R8 numbers this lambda differently per build. It only invalidates our own revision
+            // copy, so an absent synthetic must not disable the complete stacked renderer.
+            try{
+                Class<?> restart=Class.forName(prefix+"shared.ui.composable.StackedMobileIconKt$$ExternalSyntheticLambda6",false,loader);
+                Method restartInvoke=StackedSignalTargets.restart(restart,dual);
+                if(!module.deoptimize(restartInvoke))throw new IllegalStateException("deoptimize "+restartInvoke);
+            }catch(ReflectiveOperationException|RuntimeException unavailable){
+                log.accept("SIGNAL_STACKED_RESTART_UNAVAILABLE "+unavailable.getClass().getSimpleName());
+            }
             stackedRevision=revision;stackedRevisionRead=read;stackedRevisionWrite=write;
             HOOKS.addAll(hooks);log.accept("SIGNAL_STACKED_READY explicit subscription presentation copies "+render.getName());
         }catch(Throwable failure){

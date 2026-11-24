@@ -61,7 +61,8 @@ final class BackgroundWakeLockAccess {
         Class<?> wakeLock = target(loader, "power.PowerManagerService$WakeLock");
         var access = new BackgroundWakeLockAccess(host, power, wakeLock);
         Method decide = method(power, "setWakeLockDisabledStateLocked", boolean.class, wakeLock);
-        Method setDisabled = method(wakeLock, "setDisabled", boolean.class, boolean.class);
+        // Verified AOSP/LineageOS setter. A second boolean has no established semantics here.
+        Method setDisabled = disabledMethod(wakeLock);
         Method update = method(power, "updatePowerStateLocked", void.class);
         Method attribution = method(wakeLock, "updateWorkSource", void.class, WorkSource.class);
         Method ready = method(power, "systemReady", void.class);
@@ -96,6 +97,10 @@ final class BackgroundWakeLockAccess {
             for (var handle : handles) handle.unhook();
             throw failure;
         }
+    }
+
+    static Method disabledMethod(Class<?> wakeLock)throws NoSuchMethodException{
+        return method(wakeLock,"setDisabled",boolean.class,boolean.class);
     }
 
     void connect(Context context) {
