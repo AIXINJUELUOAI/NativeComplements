@@ -212,3 +212,37 @@ for cls,kind,name,descriptor in [
  assert any(m['name']==name and m['descriptor' if kind=='methods' else 'type']==descriptor
             for m in shade['classes'][cls][kind]),(cls,name,descriptor)
 print('PASS: archived legacy Split Shade members; on-device Hook/layout remain unverified')
+
+# Native focus selection must skip a stale nonfocusable mini, including when Home is behind it.
+mini_focus=json.loads((root/'tests/target/mini-focus-members.json').read_text())
+assert mini_focus['artifacts'][0]['sha256']==compat['sha256']
+for cls,name,descriptor in [
+ ('Lcom/android/server/wm/WindowContainer;','getTaskDisplayArea','()Lcom/android/server/wm/TaskDisplayArea;'),
+ ('Lcom/android/server/wm/TaskDisplayArea;','getNextFocusableRootTask','(Lcom/android/server/wm/Task;Z)Lcom/android/server/wm/Task;'),
+ ('Lcom/android/server/wm/ActivityRecord;','getTask','()Lcom/android/server/wm/Task;')]:
+ assert any(m['name']==name and m['descriptor']==descriptor and not m['access']&8 for m in mini_focus['classes'][cls]['methods']),(cls,name,descriptor)
+print('PASS: exact archived same-task-area native background focus selector; live key dispatch remains unverified')
+
+# Observe the AAudio system multiplier from player birth; signatures are not an audibility test.
+audio_gain=json.loads((root/'tests/target/audio-gain-members.json').read_text())
+assert [a['sha256'] for a in audio_gain['artifacts']]==[continuation['sha256'],compat['sha256']]
+for cls,name,descriptor in [
+ ('Landroid/media/AudioPlaybackConfiguration;','<init>','(Landroid/media/PlayerBase$PlayerIdCard;III)V'),
+ ('Landroid/media/AudioPlaybackConfiguration;','getClientUid','()I'),
+ ('Landroid/media/AudioPlaybackConfiguration;','getPlayerInterfaceId','()I'),
+ ('Landroid/media/AudioPlaybackConfiguration;','getPlayerType','()I'),
+ ('Landroid/media/AudioPlaybackConfiguration;','getPlayerProxy','()Landroid/media/PlayerProxy;'),
+ ('Landroid/media/PlayerProxy;','setVolume','(F)V'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','trackPlayer','(Landroid/media/PlayerBase$PlayerIdCard;)I'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','releasePlayer','(II)V'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','mutePlayersForCall','([I)V'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','unmutePlayersForCall','()V'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','playerDeath','(I)V'),
+ ('Lcom/android/server/audio/AudioService;','releasePlayer','(I)V')]:
+ assert any(m['name']==name and m['descriptor']==descriptor and not m['access']&8 for m in audio_gain['classes'][cls]['methods']),(cls,name,descriptor)
+for cls,name,descriptor in [
+ ('Landroid/media/PlayerProxy;','mConf','Landroid/media/AudioPlaybackConfiguration;'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','mPlayers','Ljava/util/HashMap;'),
+ ('Lcom/android/server/audio/PlaybackActivityMonitor;','mPlayerLock','Ljava/lang/Object;')]:
+ assert any(f['name']==name and f['type']==descriptor and not f['access']&8 for f in audio_gain['classes'][cls]['fields']),(cls,name,descriptor)
+print('PASS: archived AAudio birth, native multiplier and player release boundary; live MMAP silence/restoration remains unverified')

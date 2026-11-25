@@ -2570,11 +2570,21 @@ final class WindowEngine {
             Object display=a.call(s.task,"getDisplayContent"),focusedApp=a.field(display,"mFocusedApp");
             if(focusedApp==null||a.call(focusedApp,"getTask")!=s.task)return;
             Object target=a.focused.invoke(root);
+            // A stale preferred/focused task can still be this now non-focusable mini.
+            // Ask its native display area for the next visible focusable root, including Home.
+            if(target==null||target==s.task){
+                Object area=a.call(s.task,"getTaskDisplayArea");
+                if(area==null)return;
+                target=a.call(area,"getNextFocusableRootTask",new Class<?>[]{a.task,boolean.class},s.task,true);
+            }
             if(target==null||target==s.task||!a.bool(target,"isFocusable")||!a.bool(target,"isVisibleRequested")
                 ||a.call(target,"getDisplayContent")!=display||(Integer)a.field(target,"mUserId")!=s.userId)return;
             Object top=a.call(target,"topRunningActivity");
             if(top==null||(Boolean)a.field(top,"finishing")||!a.bool(top,"isVisibleRequested")
                 ||!a.bool(top,"attachedToProcess"))return;
+            Object leaf=a.call(top,"getTask");
+            if(leaf==null||leaf==s.task||(Integer)a.field(leaf,"mUserId")!=s.userId
+                ||a.call(leaf,"getDisplayContent")!=display||!a.bool(leaf,"isFocusable"))return;
             // Window focus alone does not update InputDispatcher's focused application.
             a.call(display,"setFocusedApp",new Class<?>[]{a.activity},top);
             a.call(wms,"updateFocusedWindowLocked",new Class<?>[]{int.class,boolean.class},0,true);

@@ -2,7 +2,10 @@ package dev.local.sunwindowdemo;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.RectF;
+import android.hardware.display.DisplayManager;
+import android.view.Display;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.view.Gravity;
@@ -14,6 +17,7 @@ import android.widget.TextView;
 import io.github.libxposed.api.XposedInterface;
 import io.github.libxposed.api.XposedModule;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -28,7 +32,7 @@ import java.util.function.Consumer;
  */
 final class SwipeMini {
     static final String CHANNEL=Wire.PKG+".swipeMini.v1";
-    /** Finger travel as a fraction of display height. */
+    /** Finger travel as a fraction of the native navigation axis's display extent. */
     static final float THRESHOLD=1f/3f;
     private static volatile IBinder sink;
     private static volatile boolean showHint=true;
@@ -65,9 +69,9 @@ final class SwipeMini {
     }
 
     record Targets(Method displacement,Method endTarget,Method haptic,Field recents,Field gesture,Field context,
-                   Method runningIds,Method nativeEnd,Field handles,Method simulator,Method currentRect,Method currentRadius,
+                   Field deviceState,Method navBarPosition,Method leftEdge,Method rightEdge,Method runningIds,Method nativeEnd,Field handles,Method simulator,Method currentCrop,Method currentMatrix,Method currentRadius,
                    Method transformParams,Method targetAlpha,Method workspaceView,Method invalidate,Method invalidateLauncher,
-                   Object home,Object recentsTarget){}
+                   Constructor<?> displayInfo,Method readDisplayInfo,Field logicalWidth,Field logicalHeight,Object home,Object recentsTarget){}
     /** Live-tile params of an accepted handoff: the system mask owns the visuals, so the native
      *  home fly-out (which shrinks toward the centre when no icon exists) stays invisible. */
     private static final java.util.Set<Object> hiddenTiles=java.util.Collections.synchronizedSet(
@@ -94,12 +98,18 @@ final class SwipeMini {
         endTarget.setAccessible(true);
         Method haptic=exact(handler.getDeclaredMethod("performHapticFeedback"),void.class);
         Field recents=field(handler,"mRecentsView",recentsView),gesture=field(logic,"mGestureState",state),context=field(logic,"mContext",Context.class);
+        Class<?> device=Class.forName("com.android.quickstep.RecentsAnimationDeviceState",false,loader);
+        Class<?> nav=Class.forName("com.android.quickstep.util.NavBarPosition",false,loader);
+        Field deviceState=field(handler,"mDeviceState",device);
+        Method navBarPosition=exact(device.getDeclaredMethod("getNavBarPosition"),nav);
+        Method leftEdge=exact(nav.getDeclaredMethod("isLeftEdge"),boolean.class),rightEdge=exact(nav.getDeclaredMethod("isRightEdge"),boolean.class);
         Method runningIds=exact(state.getDeclaredMethod("getRunningTaskIds",boolean.class),int[].class);
         Method nativeEnd=exact(state.getDeclaredMethod("getEndTarget"),target);
         // The live tile is a transformed surface, not the overview TaskView: read its simulator pose.
         Field handles=field(logic,"mRemoteTargetHandles",java.lang.reflect.Array.newInstance(handle,0).getClass());
         Method simulator=exact(handle.getDeclaredMethod("getTaskViewSimulator"),simulatorType);
-        Method currentRect=exact(simulatorType.getDeclaredMethod("getCurrentRect"),RectF.class);
+        Method currentCrop=exact(simulatorType.getDeclaredMethod("getCurrentCropRect"),RectF.class);
+        Method currentMatrix=exact(simulatorType.getDeclaredMethod("getCurrentMatrix"),Matrix.class);
         Method currentRadius=exact(simulatorType.getDeclaredMethod("getCurrentCornerRadius"),float.class);
         Class<?> paramsType=Class.forName("com.android.quickstep.util.TransformParams",false,loader);
         Method transformParams=exact(handle.getDeclaredMethod("getTransformParams"),paramsType);
@@ -110,14 +120,18 @@ final class SwipeMini {
         Method workspaceView=exact(launcherHandler.getDeclaredMethod("findWorkspaceView",List.class,taskType),View.class);
         Method invalidate=exact(handler.getDeclaredMethod("invalidateHandler"),void.class);
         Method invalidateLauncher=exact(handler.getDeclaredMethod("invalidateHandlerWithLauncher"),void.class);
+        Class<?> info=Class.forName("android.view.DisplayInfo",false,loader);
+        Constructor<?> displayInfo=info.getDeclaredConstructor();displayInfo.setAccessible(true);
+        Method readDisplayInfo=exact(Display.class.getDeclaredMethod("getDisplayInfo",info),boolean.class);
+        Field logicalWidth=field(info,"logicalWidth",int.class),logicalHeight=field(info,"logicalHeight",int.class);
         Object home=null,recentsTarget=null;
         for(Object value:target.getEnumConstants()){
             String name=((Enum<?>)value).name();
             if(name.equals("HOME"))home=value;else if(name.equals("RECENTS"))recentsTarget=value;
         }
         if(home==null||recentsTarget==null)throw new NoSuchFieldException("GestureEndTarget");
-        return new Targets(displacement,endTarget,haptic,recents,gesture,context,runningIds,nativeEnd,handles,simulator,currentRect,currentRadius,
-            transformParams,targetAlpha,workspaceView,invalidate,invalidateLauncher,home,recentsTarget);
+        return new Targets(displacement,endTarget,haptic,recents,gesture,context,deviceState,navBarPosition,leftEdge,rightEdge,runningIds,nativeEnd,handles,simulator,currentCrop,currentMatrix,currentRadius,
+            transformParams,targetAlpha,workspaceView,invalidate,invalidateLauncher,displayInfo,readDisplayInfo,logicalWidth,logicalHeight,home,recentsTarget);
     }
 
     static void install(XposedModule module,ClassLoader loader,Consumer<String> logger){
@@ -167,17 +181,26 @@ final class SwipeMini {
 
     private static void track(Targets t,Object handler,float displacement)throws Exception{
         Context c=(Context)t.context().get(handler);
-        int height=c.getResources().getDisplayMetrics().heightPixels;
-        if(height<=0)return;
+        // Launcher may stay portrait while the foreground app and physical display rotate.
+        Display display=c.getSystemService(DisplayManager.class).getDisplay(Display.DEFAULT_DISPLAY);
+        Object info=t.displayInfo().newInstance();
+        // getRealSize also applies the calling Resources' max bounds/fixed rotation.
+        if(display==null||!(Boolean)t.readDisplayInfo().invoke(display,info)){reset(handler);return;}
+        Object device=t.deviceState().get(handler);
+        Object nav=device==null?null:t.navBarPosition().invoke(device);
+        if(nav==null){reset(handler);return;}
+        // Match OtherActivityInputConsumer.getDisplacement: side bars use X, bottom uses Y.
+        int extent=((Boolean)t.leftEdge().invoke(nav)||(Boolean)t.rightEdge().invoke(nav)?t.logicalWidth():t.logicalHeight()).getInt(info);
+        if(extent<=0||!Float.isFinite(displacement)){reset(handler);return;}
         boolean was,now,fresh;
         synchronized(SwipeMini.class){
             fresh=owner.get()!=handler;
             if(fresh){owner=new WeakReference<>(handler);armed=false;hiddenTiles.clear();}
-            progress=-displacement/height;
+            progress=-displacement/extent;
             was=armed;now=progress>THRESHOLD;armed=now;
         }
         if(was==now&&!(fresh&&!now))return;
-        log.accept("SWIPE_MINI_THRESHOLD armed="+now+" displacement="+displacement+" height="+height);
+        log.accept("SWIPE_MINI_THRESHOLD armed="+now+" displacement="+displacement+" extent="+extent);
         if(now)t.haptic().invoke(handler);
         View anchor=(View)t.recents().get(handler);
         showHint(anchor,now);
@@ -193,10 +216,15 @@ final class SwipeMini {
             if(remote==null||remote.length!=1||remote[0]==null)return reject("remote-handles");
             Object simulator=t.simulator().invoke(remote[0]);
             if(simulator==null)return reject("simulator");
-            // Display-space pose of the live tile the user is holding at release.
-            RectF screen=new RectF((RectF)t.currentRect().invoke(simulator));
+            // getCurrentRect is Launcher-space (it undoes display rotation). Use the same crop,
+            // surface matrix and surface-space radius that Quickstep submits to SurfaceControl.
+            RectF screen=new RectF((RectF)t.currentCrop().invoke(simulator));
+            Matrix matrix=new Matrix((Matrix)t.currentMatrix().invoke(simulator));
             float radius=(Float)t.currentRadius().invoke(simulator);
-            if(screen.isEmpty()||!Float.isFinite(radius))return reject("pose");
+            if(!Float.isFinite(radius)||radius<0)return reject("pose");
+            matrix.mapRect(screen);radius=matrix.mapRadius(radius);
+            if(screen.isEmpty()||!Float.isFinite(screen.left)||!Float.isFinite(screen.top)
+                ||!Float.isFinite(screen.right)||!Float.isFinite(screen.bottom)||!Float.isFinite(radius)||radius<0)return reject("pose");
             Parcel data=Parcel.obtain(),reply=Parcel.obtain();
             try{
                 data.writeInterfaceToken(CHANNEL);data.writeInt(ids[0]);data.writeTypedObject(screen,0);data.writeFloat(radius);

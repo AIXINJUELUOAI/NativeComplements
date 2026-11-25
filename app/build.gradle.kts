@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 254
-        versionName = "0.12.33-window-recovery-test1"
+        versionCode = 255
+        versionName = "0.12.34-mini-recovery-test1"
     }
     flavorDimensions += "product"
     productFlavors {

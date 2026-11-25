@@ -186,8 +186,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
     private boolean swipeMini(int taskId,android.graphics.RectF card,float radius){
         Config c=config;
         if(c==null||!c.enabled()||!c.swipeMini()||!ready()||!backendReady||taskId<=0||taskId==activeTask||taskId==pinnedTask
-            ||card==null||!Float.isFinite(radius)||getSystemService(KeyguardManager.class).isKeyguardLocked()
-            ||getResources().getConfiguration().orientation!=Configuration.ORIENTATION_PORTRAIT)return false;
+            ||card==null||!Float.isFinite(radius)||getSystemService(KeyguardManager.class).isKeyguardLocked())return false;
         long now=android.os.SystemClock.elapsedRealtime();if(now-lastSwipe<800)return false;
         try{
             android.app.ActivityManager.RunningTaskInfo task=null;

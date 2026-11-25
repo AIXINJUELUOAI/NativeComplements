@@ -17,6 +17,8 @@
 
 角落只处理默认显示器、合格单指流及当前安全环境；达到斜向阈值后才 `pilferPointers()`，未 claim 的点击／长按继续原生。禁用、配置变化、截图、安全界面、锁屏、旋转或输入异常撤销自有状态。原生 `proceed()`位于解析异常处理之外，只调用一次；外层接收器的 `finishInputEvent`仍由原生执行。
 
+桌面上滑挂起沿原生 HOME／RECENTS 结束目标准入，横竖屏均使用当前物理显示器大小及原生导航位移轴计算严格三分之一阈值；接管姿态来自原生 TaskViewSimulator 的 surface crop／matrix／radius，不将锁竖 Launcher 坐标冒充物理显示坐标。已验证 HOME UID、单任务、用户／显示器、后端、安全与租约边界不随方向放宽。
+
 宿主使用默认显示器 WindowContext。`setTrustedOverlay()`必须可用，不降级成不受信覆盖层。控制触区优先通过 InternalInsetsInfo 合并，内容穿透并扣除普通窗内容／拖柄，保留已捕获流；预检或建窗失败回退旧六窗。回退只能保留最大未遮挡矩形，全遮禁触，不承诺表达所有不连通区域。
 
 ## 启动路由
@@ -47,11 +49,15 @@
 
 [ServerViewport](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/ServerViewport.java>)仅处理 owned 客户端出站 Configuration／Insets：Activity transaction、初次 add、relayout／resize、直接 Insets 通知保持一致。复制共享配置／源，不修改 WMS 全局缓存或普通 app；系统 Task 仍为 mode 5，客户端映射遵守现有应用规则。它不是普通应用 Activity／ViewRoot Hook。
 
-[TaskCover](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskCover.java>)跟随 SF 帧节奏，只在完全不透明时复用真实呈现，揭开前刷新；转场 Surface 和同步完成事务有明确转交责任。[TaskDecoration](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskDecoration.java>)的白色 backing 是 Task 下自有最低层 ColorLayer，继承 crop／圆角／缩放／显隐；透明到外部的像素深色模式仍白，不猜固定顶部高度。原生 Task Surface 不可释放，自有子层在替换／恢复／dispose 清理。普通拖柄和独立贴边条共用随系统深浅模式切换的对比色，不改变应用透明背景规则。完全贴边且动画结束后，隐藏受管 Task 子树、backing 与装饰，保留独立恢复条；向内拖出／还原时沿既有事务重新显示，不能只依赖屏外坐标，也不改逻辑任务生命周期或截图安全权限。旋转取消进行中的拖动但保留贴边侧，复用已有位置重映射。不可聚焦迷你窗若仍占用输入系统 focusedApp，只对当前受管身份将其让给原生选出的同用户／显示器、可见可聚焦背景，续跑退出后重验；不强启桌面、不移动任务或覆盖其他应用／安全窗口焦点。
+[TaskCover](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskCover.java>)跟随 SF 帧节奏，只在完全不透明时复用真实呈现，揭开前刷新；转场 Surface 和同步完成事务有明确转交责任。[TaskDecoration](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/TaskDecoration.java>)的白色 backing 是 Task 下自有最低层 ColorLayer，继承 crop／圆角／缩放／显隐；透明到外部的像素深色模式仍白，不猜固定顶部高度。原生 Task Surface 不可释放，自有子层在替换／恢复／dispose 清理。普通拖柄和独立贴边条共用随系统深浅模式切换的对比色，不改变应用透明背景规则。完全贴边且动画结束后，隐藏受管 Task 子树、backing 与装饰，保留独立恢复条；向内拖出／还原时沿既有事务重新显示，不能只依赖屏外坐标，也不改逻辑任务生命周期或截图安全权限。旋转取消进行中的拖动但保留贴边侧，复用已有位置重映射。不可聚焦迷你窗若仍占用输入系统 focusedApp，只对当前受管身份将其让给原生选出的同用户／显示器、可见可聚焦背景，续跑退出后重验；若缓存的 focused task 仍是迷你窗或为空，从该任务的 TaskDisplayArea 按原生顺序选择下一可聚焦可见根任务（包含桌面），并核实际顶部 Activity 的叶任务身份；不强启桌面、不移动任务或覆盖其他应用／安全窗口焦点。
 
 原生安全窗口集合决定暂停：外部安全 Task 隐藏自有展示与输入；同 Task 权限确认保留真实内容和必要焦点，只撤自有遮罩／装饰。alpha=0不能代替 sink／keys／touch 门控，不提高自有层压过安全窗口。边侧续跑仅合格 owned mini、活租约和显式开关，不全局保活；清理宽限仅重放已延期的内部清理请求，外部强停和显式结束即时原生执行。
 
 普通受管任务及其 Activity 的转场保持模块呈现控制：只有完整目标族均属本模块、使用原始 Surface 且无旋转／快照／安全暂停等原生责任时，才从发送 Shell 的 changes 中排除；不删除原生 targets 或完成事务，不修改无关任务的动画标志。开始与完成事务都写入当前小窗几何，避免 Shell 再次重设位置／矩阵或将 Activity 移出任务缩放树。原位轻缩淡出的关闭路径不增加向下位移。该控制边界的规则与事务回归不等于设备视觉验收。
+
+## 单应用静音
+
+[WindowAudio](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAudio.java>)普通播放器沿用独立 VolumeShaper；AAudio／独占 MMAP 使用 [WindowAudioGain](<../../app/src/main/java/dev/local/sunwindowdemo/features/floatingwindow/legacy/WindowAudioGain.java>) 叠加其原生 IPlayer 系统乘子，不改应用 stream volume、全局媒体音量或 APM 端口音量。可选观察在选定后端的同步启动阶段安装，从播放器创建时确认初值，拦截系统后续乘子更新以保留通话等原生静音，取消模块静音时恢复最新原生值而非固定 1。未观察到出生的播放器不猜初值，部分失败撤销本次已应用状态，恢复失败保留待恢复条目，并由原工作线程去重延迟重试，不依赖后续播放事件；恢复成功或播放器释放后停止重试。新播放器继续按真实 UID 处理。成员／调用者预检失败仅停用该可选路径，不能以 UI 状态当成 MMAP 已静音的设备证据。
 
 ## 线程、通信与恢复
 

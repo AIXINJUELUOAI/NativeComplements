@@ -37,7 +37,7 @@ for folder in ("floatingwindow/legacy", "suggestions", "barrage", "motion", "edg
 
 # Reuse only source-referenced members, not entire incidental class inventories.
 for inventory in ("new-members", "rotation-members", "viewport-members", "handoff-members",
-                  "launch-input-members", "window-request-members", "size-compat-members"):
+                  "launch-input-members", "window-request-members", "size-compat-members", "mini-focus-members", "audio-gain-members"):
     snapshot = json.loads((ROOT / f"tests/target/{inventory}.json").read_text(encoding="utf-8"))
     for owner, body in snapshot["classes"].items():
         for kind in ("methods", "fields"):
@@ -204,8 +204,17 @@ for name in ("HOME", "RECENTS"):
     field(END_TARGET, name, END_TARGET)
 field(QS + "SwipeUpAnimationLogic;", "mRemoteTargetHandles", "[" + QS + "RemoteTargetGluer$RemoteTargetHandle;")
 method(QS + "RemoteTargetGluer$RemoteTargetHandle;", "getTaskViewSimulator", "()" + QS + "util/TaskViewSimulator;")
-method(QS + "util/TaskViewSimulator;", "getCurrentRect", "()Landroid/graphics/RectF;")
+method(QS + "util/TaskViewSimulator;", "getCurrentCropRect", "()Landroid/graphics/RectF;")
+method(QS + "util/TaskViewSimulator;", "getCurrentMatrix", "()Landroid/graphics/Matrix;")
 method(QS + "util/TaskViewSimulator;", "getCurrentCornerRadius", "()F")
+field(QS + "AbsSwipeUpHandler;", "mDeviceState", QS + "RecentsAnimationDeviceState;")
+method(QS + "RecentsAnimationDeviceState;", "getNavBarPosition", "()" + QS + "util/NavBarPosition;")
+method(QS + "util/NavBarPosition;", "isLeftEdge", "()Z")
+method(QS + "util/NavBarPosition;", "isRightEdge", "()Z")
+method("Landroid/view/Display;", "getDisplayInfo", "(Landroid/view/DisplayInfo;)Z")
+method("Landroid/view/DisplayInfo;", "<init>", "()V")
+field("Landroid/view/DisplayInfo;", "logicalWidth", "I")
+field("Landroid/view/DisplayInfo;", "logicalHeight", "I")
 method(QS + "RemoteTargetGluer$RemoteTargetHandle;", "getTransformParams", "()" + QS + "util/TransformParams;")
 method(QS + "util/TransformParams;", "setTargetAlpha", "(F)" + QS + "util/TransformParams;")
 method(WM + "Task;", "isVisibleRequested", "()Z")

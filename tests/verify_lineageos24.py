@@ -356,9 +356,21 @@ def main() -> None:
     has("Launcher3/quickstep/src/com/android/quickstep/RemoteTargetGluer.java",
         r"public TransformParams getTransformParams\(\)", "LOS swipe params")
     has("Launcher3/quickstep/src/com/android/quickstep/util/TaskViewSimulator.java",
-        r"public RectF getCurrentRect\(\)", "LOS swipe rect")
+        r"public RectF getCurrentCropRect\(\)", "LOS swipe surface crop")
+    has("Launcher3/quickstep/src/com/android/quickstep/util/TaskViewSimulator.java",
+        r"public Matrix getCurrentMatrix\(\)", "LOS swipe surface matrix")
     has("Launcher3/quickstep/src/com/android/quickstep/util/TaskViewSimulator.java",
         r"public float getCurrentCornerRadius\(\)", "LOS swipe radius")
+    has("frameworks_base/core/java/android/view/Display.java",
+        r"public boolean getDisplayInfo\(DisplayInfo outDisplayInfo\)", "LOS raw display info")
+    for dimension in ("Width", "Height"):
+        has("frameworks_base/core/java/android/view/DisplayInfo.java",
+            rf"public int logical{dimension};", f"LOS raw logical {dimension.lower()}")
+    has("Launcher3/quickstep/src/com/android/quickstep/RecentsAnimationDeviceState.java",
+        r"public NavBarPosition getNavBarPosition\(\)", "LOS native navigation axis")
+    for edge in ("Left", "Right"):
+        has("Launcher3/quickstep/src/com/android/quickstep/util/NavBarPosition.java",
+            rf"public (?:final )?boolean is{edge}Edge\(\)", f"LOS {edge.lower()} navigation edge")
     has("Launcher3/quickstep/src/com/android/quickstep/LauncherSwipeHandlerV2.java",
         r"private View findWorkspaceView\(List<IBinder> launchCookies, TaskView sourceTaskView\)",
         "LOS swipe workspace view")

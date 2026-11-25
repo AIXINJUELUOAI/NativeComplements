@@ -1,0 +1,177 @@
+{
+  "artifacts": [
+    {
+      "name": "framework.jar",
+      "sha256": "89faef564a6b48459c5ffa39ff73523801481524b669493b5b054709cc0e734f"
+    },
+    {
+      "name": "services.jar",
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    }
+  ],
+  "classes": {
+    "Landroid/media/AudioPlaybackConfiguration;": {
+      "superclass": "Ljava/lang/Object;",
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(I)V",
+          "access": 65538
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/media/PlayerBase$PlayerIdCard;III)V",
+          "access": 65537
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;)V",
+          "access": 65538
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;Landroid/media/AudioPlaybackConfiguration-IA;)V",
+          "access": 69632
+        },
+        {
+          "name": "getClientUid",
+          "descriptor": "()I",
+          "access": 1
+        },
+        {
+          "name": "getPlayerInterfaceId",
+          "descriptor": "()I",
+          "access": 1
+        },
+        {
+          "name": "getPlayerProxy",
+          "descriptor": "()Landroid/media/PlayerProxy;",
+          "access": 1
+        },
+        {
+          "name": "getPlayerType",
+          "descriptor": "()I",
+          "access": 1
+        }
+      ],
+      "fields": [
+        {
+          "name": "PLAYER_TYPE_AAUDIO",
+          "type": "I",
+          "access": 25
+        }
+      ]
+    },
+    "Landroid/media/PlayerBase$PlayerIdCard;": {
+      "superclass": "Ljava/lang/Object;",
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(ILandroid/media/AudioAttributes;Landroid/media/IPlayer;I)V",
+          "access": 65536
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;)V",
+          "access": 65538
+        },
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/os/Parcel;Landroid/media/PlayerBase-IA;)V",
+          "access": 69632
+        }
+      ],
+      "fields": []
+    },
+    "Landroid/media/PlayerProxy;": {
+      "superclass": "Ljava/lang/Object;",
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/media/AudioPlaybackConfiguration;)V",
+          "access": 65536
+        },
+        {
+          "name": "setVolume",
+          "descriptor": "(F)V",
+          "access": 1
+        }
+      ],
+      "fields": [
+        {
+          "name": "mConf",
+          "type": "Landroid/media/AudioPlaybackConfiguration;",
+          "access": 18
+        }
+      ]
+    },
+    "Lcom/android/server/audio/AudioService;": {
+      "superclass": "Landroid/media/IAudioService$Stub;",
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/content/Context;Lcom/android/server/audio/AudioSystemAdapter;Lcom/android/server/audio/SystemServerAdapter;Lcom/android/server/audio/SettingsAdapter;Lcom/android/server/audio/AudioVolumeGroupHelperBase;Lcom/android/server/audio/AudioPolicyFacade;Landroid/os/Looper;Landroid/app/AppOpsManager;Landroid/os/PermissionEnforcer;Lcom/android/server/audio/AudioServerPermissionProvider;Ljava/util/concurrent/Executor;)V",
+          "access": 65537
+        },
+        {
+          "name": "releasePlayer",
+          "descriptor": "(I)V",
+          "access": 1
+        },
+        {
+          "name": "trackPlayer",
+          "descriptor": "(Landroid/media/PlayerBase$PlayerIdCard;)I",
+          "access": 1
+        }
+      ],
+      "fields": []
+    },
+    "Lcom/android/server/audio/PlaybackActivityMonitor;": {
+      "superclass": "Ljava/lang/Object;",
+      "methods": [
+        {
+          "name": "<init>",
+          "descriptor": "(Landroid/content/Context;ILjava/util/function/Consumer;Ljava/util/function/Function;)V",
+          "access": 65537
+        },
+        {
+          "name": "mutePlayersForCall",
+          "descriptor": "([I)V",
+          "access": 1
+        },
+        {
+          "name": "playerDeath",
+          "descriptor": "(I)V",
+          "access": 1
+        },
+        {
+          "name": "releasePlayer",
+          "descriptor": "(II)V",
+          "access": 1
+        },
+        {
+          "name": "trackPlayer",
+          "descriptor": "(Landroid/media/PlayerBase$PlayerIdCard;)I",
+          "access": 1
+        },
+        {
+          "name": "unmutePlayersForCall",
+          "descriptor": "()V",
+          "access": 1
+        }
+      ],
+      "fields": [
+        {
+          "name": "mPlayerLock",
+          "type": "Ljava/lang/Object;",
+          "access": 17
+        },
+        {
+          "name": "mPlayers",
+          "type": "Ljava/util/HashMap;",
+          "access": 17
+        }
+      ]
+    }
+  }
+}

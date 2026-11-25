@@ -317,6 +317,8 @@ public final class SunWindowModule extends XposedModule {
                     }finally{engine.activityStartResult(ticket,success);}
                 }));
             engine.preflightReady();
+            // WMS.main runs before AudioService: observe AAudio gains from player birth, not a guessed late baseline.
+            handles.addAll(WindowAudio.install(this,p.getClassLoader(),this::note));
             note("HOOKS_READY count="+handles.size()+" version="+BuildConfig.VERSION_NAME+"; system scopes only");
         } catch (Throwable e) {
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }

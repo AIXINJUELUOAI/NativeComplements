@@ -1,0 +1,65 @@
+{
+  "artifacts": [
+    {
+      "name": "services.jar",
+      "sha256": "3ace355c3bfc525cf0145088dc6bdcad37b0b09c1a163ad09a2276aa653f2de9"
+    }
+  ],
+  "classes": {
+    "Lcom/android/server/wm/WindowContainer;": {
+      "superclass": "Lcom/android/server/wm/ConfigurationContainer;",
+      "methods": [
+        {
+          "name": "getTask",
+          "descriptor": "(Ljava/util/function/Predicate;)Lcom/android/server/wm/Task;",
+          "access": 1
+        },
+        {
+          "name": "getTask",
+          "descriptor": "(Ljava/util/function/Predicate;Lcom/android/server/wm/WindowContainer;ZZ)Lcom/android/server/wm/Task;",
+          "access": 17
+        },
+        {
+          "name": "getTask",
+          "descriptor": "(Ljava/util/function/Predicate;Lcom/android/server/wm/WindowContainer;ZZ[Z)Lcom/android/server/wm/Task;",
+          "access": 17
+        },
+        {
+          "name": "getTask",
+          "descriptor": "(Ljava/util/function/Predicate;Z)Lcom/android/server/wm/Task;",
+          "access": 1
+        },
+        {
+          "name": "getTaskDisplayArea",
+          "descriptor": "()Lcom/android/server/wm/TaskDisplayArea;",
+          "access": 1
+        }
+      ]
+    },
+    "Lcom/android/server/wm/ActivityRecord;": {
+      "superclass": "Lcom/android/server/wm/WindowToken;",
+      "methods": [
+        {
+          "name": "getTask",
+          "descriptor": "()Lcom/android/server/wm/Task;",
+          "access": 1
+        }
+      ]
+    },
+    "Lcom/android/server/wm/TaskDisplayArea;": {
+      "superclass": "Lcom/android/server/wm/DisplayArea;",
+      "methods": [
+        {
+          "name": "getNextFocusableRootTask",
+          "descriptor": "(Lcom/android/server/wm/Task;Z)Lcom/android/server/wm/Task;",
+          "access": 1
+        },
+        {
+          "name": "getTaskDisplayArea",
+          "descriptor": "()Lcom/android/server/wm/TaskDisplayArea;",
+          "access": 1
+        }
+      ]
+    }
+  }
+}

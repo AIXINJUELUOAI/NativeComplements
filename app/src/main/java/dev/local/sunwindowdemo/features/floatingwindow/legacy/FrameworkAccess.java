@@ -93,6 +93,9 @@ final class FrameworkAccess {
         method(task,"setFocusable",boolean.class);method(task,"isFocusable");
         method(activity,"moveFocusableActivityToTop",String.class);
         method(dc,"setFocusedApp",activity);method(wms,"updateFocusedWindowLocked",int.class,boolean.class);
+        Method taskArea=method(wc,"getTaskDisplayArea"),nextFocus=method(tda,"getNextFocusableRootTask",task,boolean.class);
+        if(taskArea.getReturnType()!=tda||nextFocus.getReturnType()!=task||Modifier.isStatic(taskArea.getModifiers())||Modifier.isStatic(nextFocus.getModifiers()))
+            throw new NoSuchMethodException("native task-area focus selection");
         Class<?> fragment=Class.forName("com.android.server.wm.TaskFragment",false,loader);
         method(fragment,"canBeResumed",activity);method(fragment,"getVisibility",activity);
         method(fragment,"shouldSleepOrShutDownActivities");method(fragment,"getTask");
