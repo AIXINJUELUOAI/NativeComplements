@@ -10,6 +10,7 @@ interface HostExtras extends AutoCloseable {
     void closeBarrage();
     void notification(NotificationListenerService source, StatusBarNotification notification);
     void notificationRemoved(StatusBarNotification notification);
+    default boolean suppressBarrageHeadsUp(StatusBarNotification notification){return false;}
     boolean rotationSuggestion(Runnable click, Runnable restore);
     void publishRotationSettings();
     boolean blocksEdgeTouch(float x, float y);

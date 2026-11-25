@@ -4,9 +4,7 @@ package dev.local.sunwindowdemo.features.barrage
 internal class BarrageState {
     data class Delivery(val sender: String, val text: String, val time: Long)
     data class Seen(val delivery: Delivery, val postTime: Long)
-    data class Version(val key: String, val postTime: Long)
     private val recent = linkedMapOf<String, Seen>()
-    private val ignoredRemovals = linkedSetOf<Version>()
 
     fun observe(key: String, delivery: Delivery, postTime: Long): Boolean {
         val previous = recent.put(key, Seen(delivery, postTime))
@@ -17,12 +15,7 @@ internal class BarrageState {
     fun displayFailed(key: String, delivery: Delivery, postTime: Long) {
         if (current(key, delivery, postTime)) recent.remove(key)
     }
-    fun expectRemoval(version: Version) {
-        ignoredRemovals.add(version)
-        if (ignoredRemovals.size > 128) ignoredRemovals.remove(ignoredRemovals.first())
-    }
-    fun consumeRemoval(version: Version) = ignoredRemovals.remove(version)
-    fun clear() { recent.clear(); ignoredRemovals.clear() }
+    fun clear() { recent.clear() }
 
     companion object {
         fun enabled(closed: Boolean, blocked: Boolean, enabled: Boolean, selected: Boolean) = !closed && !blocked && enabled && selected
@@ -37,6 +30,5 @@ internal class BarrageState {
         fun lane(occupied: Set<Int>): Int = generateSequence(0) { it + 1 }.first { it !in occupied }
         fun row(lane: Int, rows: Int) = lane % rows.coerceAtLeast(1)
         fun canSave(saving: Boolean, saved: Boolean) = !saving && !saved
-        fun canCancel(saved: Boolean, stillPlaying: Boolean, currentVersion: Boolean) = saved && stillPlaying && currentVersion
     }
 }

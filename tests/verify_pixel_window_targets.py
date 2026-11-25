@@ -224,12 +224,26 @@ field(SYS + "shared/system/InputMonitorCompat;", "mInputMonitor", "Landroid/view
 field(SYS + "navigationbar/gestural/DisplayBackGestureHandlerImpl;", "inputMonitorCompat", SYS + "shared/system/InputMonitorCompat;")
 method("Landroid/view/InputMonitor;", "pilferPointers", "()V")
 # Barrage/shortcut suggestions receive notifications through the native listener.
+# Only the separate opt-in OTP hide setting still cancels matched SMS notifications.
 method("Landroid/service/notification/NotificationListenerService;", "cancelNotification", "(Ljava/lang/String;)V")
 method("Landroid/service/notification/NotificationListenerService;", "onNotificationPosted", "(Landroid/service/notification/StatusBarNotification;)V")
 method("Landroid/service/notification/NotificationListenerService;", "onNotificationRemoved", "(Landroid/service/notification/StatusBarNotification;)V")
 method("Landroid/app/Instrumentation;", "callApplicationOnCreate", "(Landroid/app/Application;)V")
 method(SYS + "statusbar/NotificationListener;", "onNotificationPosted", "(Landroid/service/notification/StatusBarNotification;Landroid/service/notification/NotificationListenerService$RankingMap;)V")
 method(SYS + "statusbar/NotificationListener;", "onNotificationRemoved", "(Landroid/service/notification/StatusBarNotification;Landroid/service/notification/NotificationListenerService$RankingMap;I)V")
+# Barrage replaces only the HUN decision, never cancels the native notification.
+BARRAGE_PROVIDER = SYS + "statusbar/notification/interruption/VisualInterruptionDecisionProviderImpl;"
+BARRAGE_DECISION = BARRAGE_PROVIDER[:-1] + "$DecisionImpl;"
+BARRAGE_ENTRY = SYS + "statusbar/notification/collection/NotificationEntry;"
+for name in ("makeAndLogHeadsUpDecision", "makeUnloggedHeadsUpDecision"):
+    method(BARRAGE_PROVIDER, name, "(" + BARRAGE_ENTRY + ")" + BARRAGE_DECISION)
+method(BARRAGE_DECISION, "<init>", "(Ljava/lang/String;Z)V")
+field(BARRAGE_DECISION, "shouldInterrupt", "Z")
+field(BARRAGE_ENTRY, "mSbn", "Landroid/service/notification/StatusBarNotification;")
+BARRAGE_CALLER = SYS + "statusbar/notification/collection/coordinator/HeadsUpCoordinator$mNotifCollectionListener$1;"
+method(BARRAGE_CALLER, "onEntryAdded", "(" + BARRAGE_ENTRY + ")V")
+method(BARRAGE_CALLER, "onEntryUpdated", "(" + BARRAGE_ENTRY + SYS + "statusbar/notification/collection/notifcollection/UpdateSource;)V")
+method(BARRAGE_CALLER, "onRankingApplied", "()V")
 method("Lcom/android/server/power/PowerManagerService;", "userActivityNoUpdateLocked", "(Lcom/android/server/power/PowerGroup;JIII)Z")
 field("Lcom/android/server/power/PowerManagerService;", "mContext", "Landroid/content/Context;")
 for name, signature in (("getGroupId", "()I"), ("getWakefulnessLocked", "()I"), ("isPolicyDimLocked", "()Z")):

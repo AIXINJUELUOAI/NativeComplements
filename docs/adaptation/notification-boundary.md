@@ -4,13 +4,15 @@
 
 - [SuggestionHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionHost.java>)接收剪贴板、受 UID 校验的配置/短信/亮屏广播、相机/蓝牙回调和通知；[SuggestionRules](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionRules.java>)负责有界本地识别、整体短信匹配、有效期调整、旋转准入和异步操作代际。打开与验证码输入共用 `Attempt`，旧回复/超时不能完成新请求；真实 Intent、ResultReceiver、主线程、相机及 WakeLock 仍由宿主执行。
 - 亮屏建议由 [full ProductFeatures](<../../app/src/full/java/dev/local/sunwindowdemo/ProductFeatures.java>)输入触摸/灯光标志、默认组、唤醒/变暗事实；原生事件先执行成功，再在原生交互/锁屏检查后发布。`undimEvent/undimReady` 只收值，不持有 PowerGroup。屏幕关闭、锁屏和功能关闭保持原释放行为。
-- [BarrageHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageHost.kt>)从原生通知提取结构化正文；[BarrageState](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageState.kt>)持有有界投递去重/精确版本移除账本，决定消息准入、排队、空闲轨道、轨道复用及保存后取消资格。`Notice/source/View/expire` 的真实身份与队列仍留宿主；不把原生对象转成纯层身份。
+- [BarrageHost](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageHost.kt>)从原生通知提取结构化正文；[BarrageState](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageState.kt>)持有有界投递去重账本，决定消息准入、排队、空闲轨道和轨道复用。`Notice/View/expire` 的真实身份与队列仍留宿主；不把原生对象转成纯层身份。
 - 弹幕最大待播 32、最近版本 128，档位 3/5/无限。满额只排队，降低档位不移除在播消息；无限档只复用可见轨道的行位置。截图标题 `ScreenshotUI` 不暂停或重建在播 View，键盘、其他系统面板仍暂停原 View，前台切换/息屏/关闭按原路径移除。
 
 ## 安全与失败恢复
 
 - [BarrageProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageProvider.java>)与 [SuggestionProvider](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/SuggestionProvider.java>)只向管理器／实际 SystemUI UID 提供对应数据；弹幕历史仅 SystemUI 写入，建议状态上报只接受固定短字段，不提供任意远端偏好写入。存储、Bundle、通知监听与设备保护偏好不进纯层。
-- 弹幕 `addView` 成功登记在播 → 历史 `commit` 返回成功 → 主线程确认仍在播且为同 key/postTime/投递内容 → 调原生取消。显示/保存/取消失败不吞原通知；旧版本保存或移除不能影响新版本，保存失败可由同投递重试。配置或宿主失败保留原有快照退避/原生清理路径。
+- 弹幕不取消、隐藏或标记已读原通知；历史保存成功与否均保留通知栏原条目、原始点击／回复／分组。原生移除仍只清理对应 key/postTime 的弹幕；保存失败可由同投递重试。配置或宿主失败保留原有快照退避／原生清理路径。
+- [BarrageHeadsUp](<../../app/src/main/java/dev/local/sunwindowdemo/features/barrage/BarrageHeadsUp.java>)在原生已允许的悬浮横幅判断后，仅当本用户已选全屏游戏环境安全、消息通过共用准入且已显示或入队时，以新建拒绝结果替代本次横幅；不修改可能共享的原生结果，不改声音／振动／勿扰。不在主线程、同步窗口失败或队列溢出时保留原生；已入队后若稍后显示失败，不补发横幅，原通知仍在通知栏。两个已核实的现代 logged／unlogged 入口覆盖新通知、更新及排序重评估；来电／闹钟／持续通知及任何非空 fullScreenIntent 均保持原生，避免影响全屏提醒。未知成员或安装失败只停用横幅抑制。
+- 弹幕覆盖层沿完整显示区域布局，不额外扣除挖孔／系统栏安全边距，设置原生 `LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS` 与不拟合 Insets；固定轨道间距、非触摸／非焦点和安全环境暂停规则保持不变。物理挖孔本身不可显示像素，不承诺该处文字可见。
 - 旋转由 [SystemUI 适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/RotationSuggestion.java>)与 [Launcher 适配](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/LauncherRotationSuggestion.java>)持有原生提议/按钮/Binder；只在用户点击且当前提议仍匹配时调用原生动作，不改自动旋转总开关。关闭恢复原生；Hook、窗口或主机确认失败放回原生展示，不吞原生按钮。
 - [SuggestionEnvironment](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionEnvironment.java>)在 WMS 就绪后独立读取默认显示器、本用户的原生焦点、IME 与安全遮挡，以受信系统 UID、协议及有界新鲜度向共享宿主提供事实；沿用 STATUS 心跳和真实焦点／遮挡变化，无小窗资格也不创建或争抢任务引擎。缺失、过期或读取失败仍隐藏建议，不把后端关闭伪装成系统遮挡。
 - [SuggestionInput](<../../app/src/main/java/dev/local/sunwindowdemo/features/suggestions/runtime/SuggestionInput.java>)由独立建议环境安装，不依赖小窗总开关。复用纯数字/延迟校验；请求真实 UID、本用户／默认显示器、token、应用窗口类型与 UID、原生焦点同对象、IME 可见性、锁屏、WM 锁及定向 DOWN/UP 注入留原生，保持逐步短路重验；每个已提交 DOWN 始终配对 UP。

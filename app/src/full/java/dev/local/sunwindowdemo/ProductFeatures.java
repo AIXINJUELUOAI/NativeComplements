@@ -27,7 +27,10 @@ final class ProductFeatures {
         dev.local.sunwindowdemo.features.shade.SignalDisplay.install(module,loader,note);
         RotationSuggestion.install(module,loader,note);
     }
-    static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){installSuggestionNotifications(module,loader,note);}
+    static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){
+        installSuggestionNotifications(module,loader,note);
+        BarrageHeadsUp.install(module,loader,note);
+    }
     static void connectSystemUi(android.app.Application app,Consumer<String> note){
         dev.local.sunwindowdemo.features.alive.AliveColorDelivery.connect(app,note);
         try{dev.local.sunwindowdemo.features.shade.LandscapeShade.connect(app);}
@@ -123,7 +126,8 @@ final class ProductFeatures {
             catch(RuntimeException unavailable){android.util.Log.w("NativeComplements","GAMEMODE_HOST_UNAVAILABLE",unavailable);}
         }
         private void quick(String id){SystemUiHost host=SystemUiHost.live;if(host!=null)host.quickAction(id);}
-        public void notification(NotificationListenerService source,StatusBarNotification notification){if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(source,notification);}
+        public void notification(NotificationListenerService source,StatusBarNotification notification){if(suggestions!=null)suggestions.notification(source,notification);if(barrage!=null)barrage.notification(notification);}
+        public boolean suppressBarrageHeadsUp(StatusBarNotification notification){return barrage!=null&&barrage.suppressHeadsUp(notification);}
         public void notificationRemoved(StatusBarNotification notification){if(suggestions!=null)suggestions.notificationRemoved(notification.getKey());if(barrage!=null)barrage.notificationRemoved(notification);}
         public boolean rotationSuggestion(Runnable click,Runnable restore){if(suggestions==null){RotationDiagnostics.update("host","建议宿主未初始化");return false;}return suggestions.rotationSuggestion(click,restore);}
         public void publishRotationSettings(){if(suggestions!=null)suggestions.publishRotationSettings();}

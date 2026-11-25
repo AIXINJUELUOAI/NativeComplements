@@ -227,6 +227,7 @@ public final class SystemUiHost extends ContextWrapper implements ComponentCallb
         main.post(()->{if(extras!=null)extras.notification(source,notification);});
     }
     void suggestionNotificationRemoved(android.service.notification.StatusBarNotification notification){main.post(()->{if(extras!=null)extras.notificationRemoved(notification);});}
+    boolean suppressBarrageHeadsUp(android.service.notification.StatusBarNotification notification){return extras!=null&&extras.suppressBarrageHeadsUp(notification);}
     boolean rotationSuggestion(Runnable click,Runnable restore){return extras!=null&&extras.rotationSuggestion(click,restore);}
     void publishRotationSettings(){if(extras!=null)extras.publishRotationSettings();}
     boolean blocksEdgeTouch(float x,float y){return extras!=null&&extras.blocksEdgeTouch(x,y);}

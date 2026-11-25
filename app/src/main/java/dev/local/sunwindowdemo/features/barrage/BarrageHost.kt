@@ -5,15 +5,12 @@ import android.content.*
 import android.graphics.PixelFormat
 import android.net.Uri
 import android.os.*
-import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.view.*
-import android.view.WindowInsets
 import androidx.core.app.NotificationCompat
 import dev.local.sunwindowdemo.features.barrage.BarrageStore
 import dev.local.sunwindowdemo.features.barrage.BarrageState
 import dev.local.sunwindowdemo.features.barrage.BarrageState.Delivery
-import dev.local.sunwindowdemo.features.barrage.BarrageState.Version
 import dev.local.sunwindowdemo.features.iconlayers.IconAssets
 import java.util.concurrent.Executors
 
@@ -59,7 +56,6 @@ class BarrageHost(private val context: Context): AutoCloseable {
     private var blocked=true
     private var closed=false
     private data class Notice(
-        val source: NotificationListenerService,
         val key: String,
         val packageName: String,
         val postTime: Long,
@@ -123,31 +119,38 @@ class BarrageHost(private val context: Context): AutoCloseable {
         context.getSystemService(PowerManager::class.java).isInteractive&&!context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
     private fun admissible(sbn: StatusBarNotification): Boolean {
         val n=sbn.notification
-        return sbn.packageName != gamePackage && sbn.packageName != foreground &&
+        return n.fullScreenIntent == null && sbn.packageName != gamePackage && sbn.packageName != foreground &&
             n.extras.getInt(Notification.EXTRA_PROGRESS_MAX) <= 0 &&
             n.extras.getInt(Notification.EXTRA_PROGRESS) <= 0 &&
             !n.extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE) &&
             BarrageState.admissible(sbn.user==Process.myUserHandle(),n.flags and Notification.FLAG_GROUP_SUMMARY!=0,
                 n.flags and Notification.FLAG_ONGOING_EVENT!=0,n.visibility==Notification.VISIBILITY_SECRET,n.category)
     }
-    fun notification(source: NotificationListenerService,sbn: StatusBarNotification) {
-        if(!eligible() || !admissible(sbn))return
+    fun notification(sbn: StatusBarNotification): Boolean {
+        if(!eligible() || !admissible(sbn))return false
         val n=sbn.notification
         val appLabel=runCatching {context.packageManager.getApplicationLabel(context.packageManager.getApplicationInfo(sbn.packageName,0)).toString()}
             .getOrDefault(sbn.packageName)
         val content = content(n, appLabel)
-        if(content.sender.isBlank()&&content.text.isBlank())return
+        if(content.sender.isBlank()&&content.text.isBlank())return false
         val delivery = Delivery(content.sender, content.text, content.messageTime.takeIf { it > 0 } ?: sbn.postTime)
+        // Native heads-up evaluation can precede several listener deliveries for the same key.
+        val active = playing.values.firstOrNull { it.notice.key == sbn.key && it.notice.postTime == sbn.postTime && it.notice.delivery == delivery }
+        if (active != null) { saveHistory(active); return true }
+        if (pending.any { it.key == sbn.key && it.postTime == sbn.postTime && it.delivery == delivery }) return true
         if (state.observe(sbn.key, delivery, sbn.postTime)) {
-            playing.values.firstOrNull { it.notice.key == sbn.key && it.notice.delivery == delivery }
-                ?.let { saveHistory(it) }
-            return
+            return true // An already completed delivery must not regain a heads-up on ranking updates.
         }
-        // Queued notifications stay in the native tray until they are displayed and saved.
-        if (!BarrageState.canEnqueue(pending.size)) return
-        pending.addLast(Notice(source, sbn.key, sbn.packageName, sbn.postTime, appLabel, content, delivery))
+        // Barrage replaces only heads-up presentation; the native tray always retains ownership.
+        if (!BarrageState.canEnqueue(pending.size)) { state.displayFailed(sbn.key, delivery, sbn.postTime); return false }
+        pending.addLast(Notice(sbn.key, sbn.packageName, sbn.postTime, appLabel, content, delivery))
         drain()
+        return state.current(sbn.key, delivery, sbn.postTime)
     }
+
+    /** Called only on SystemUI's main-thread heads-up decision; failure leaves the native verdict. */
+    fun suppressHeadsUp(sbn: StatusBarNotification): Boolean =
+        Looper.myLooper() == Looper.getMainLooper() && notification(sbn)
 
     private fun drain() {
         val limit = BarrageStore.lineLimit(config.getInt("lines",3))
@@ -178,16 +181,16 @@ class BarrageHost(private val context: Context): AutoCloseable {
             }
             val density=context.resources.displayMetrics.density
             val metrics=wm.currentWindowMetrics
-            val safe=metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.displayCutout() or WindowInsets.Type.systemBars())
-            val width=(metrics.bounds.width()-safe.left-safe.right).coerceAtLeast(1)
+            val width=metrics.bounds.width().coerceAtLeast(1)
             val lane=maxOf((30*density).toInt(),(BarrageStore.size(config.getInt("size",18))*context.resources.displayMetrics.scaledDensity+8*density).toInt())
             @Suppress("WrongConstant")
             val p=WindowManager.LayoutParams(width,lane,SystemUiHost.OVERLAY_TYPE,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,PixelFormat.TRANSLUCENT)
-            p.gravity=Gravity.TOP or Gravity.LEFT;p.x=safe.left
+            p.gravity=Gravity.TOP or Gravity.LEFT;p.x=0
             val spacing = lane+(4*density).toInt()
-            val rows = ((metrics.bounds.height()-safe.top-safe.bottom-(12*density).toInt())/spacing).coerceAtLeast(1)
-            p.y=safe.top+(12*density).toInt()+BarrageState.row(laneIndex,rows)*spacing
+            val rows = ((metrics.bounds.height()-(12*density).toInt())/spacing).coerceAtLeast(1)
+            p.y=(12*density).toInt()+BarrageState.row(laneIndex,rows)*spacing
+            p.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
             p.setFitInsetsTypes(0);p.title="NativeComplements-barrage-$laneIndex";p.windowAnimations=0;SystemUiHost.trust(p)
             added = lyrics
             wm.addView(lyrics,p)
@@ -211,15 +214,6 @@ class BarrageHost(private val context: Context): AutoCloseable {
         recordHistory(notice) { saved ->
             entry.saving = false
             entry.saved = saved
-            if (!BarrageState.canCancel(saved, saved && entry in playing.values,
-                    saved && state.current(notice.key, notice.delivery, notice.postTime))) return@recordHistory
-            // Cancellation is key-based: recheck the native tray after asynchronous persistence.
-            val current = runCatching { notice.source.activeNotifications?.firstOrNull { it.key == notice.key } }.getOrNull()
-            if (current == null || !admissible(current) || current.postTime != notice.postTime || content(current.notification, notice.app) != notice.content) return@recordHistory
-            val removal = Version(notice.key, notice.postTime)
-            state.expectRemoval(removal)
-            runCatching { notice.source.cancelNotification(notice.key) }
-                .onFailure { state.consumeRemoval(removal) }
         }
     }
 
@@ -237,8 +231,6 @@ class BarrageHost(private val context: Context): AutoCloseable {
         }
     }
     fun notificationRemoved(removed: StatusBarNotification) {
-        val removal = Version(removed.key, removed.postTime)
-        if (state.consumeRemoval(removal)) return
         pending.removeAll { it.key == removed.key && it.postTime == removed.postTime }
         val lanes = playing.filterValues { it.notice.key == removed.key && it.notice.postTime == removed.postTime }.keys.toList()
         lanes.forEach { finish(it, advance = false) }
@@ -254,6 +246,7 @@ class BarrageHost(private val context: Context): AutoCloseable {
     }
 
     private fun hide() {
+        pending.forEach { state.displayFailed(it.key, it.delivery, it.postTime) }
         pending.clear()
         playing.keys.toList().forEach { finish(it, advance = false) }
     }

@@ -11,8 +11,8 @@ android {
         applicationId = "dev.nativecomplements.module"
         minSdk = 34
         targetSdk = 37
-        versionCode = 255
-        versionName = "0.12.34-mini-recovery-test1"
+        versionCode = 256
+        versionName = "0.12.35-barrage-headsup-test1"
     }
     flavorDimensions += "product"
     productFlavors {

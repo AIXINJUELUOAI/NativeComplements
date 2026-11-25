@@ -118,7 +118,110 @@ class BarrageHostTest {
         // The native notification tray keeps one version for a reused key.
         listener.cancelNotification(sbn.key)
         shadowOf(listener).addActiveNotification(sbn)
-        host.notification(listener, sbn)
+        host.notification( sbn)
+    }
+
+    @Test fun headsUpReplacementRetainsNotificationActionsAndNativeRemovalStillStopsTheLine() {
+        val sbn = notification("保留原通知", 100)
+        val click = android.app.PendingIntent.getActivity(context, 1, android.content.Intent("example.OPEN"), android.app.PendingIntent.FLAG_IMMUTABLE)
+        sbn.notification.contentIntent = click
+        sbn.notification.actions = arrayOf(Notification.Action.Builder(0, "回复", click).build())
+        shadowOf(listener).addActiveNotification(sbn)
+        assertTrue(host.suppressHeadsUp(sbn)) // May run before the listener's queued delivery.
+        val original = entries().getValue(0)
+        host.notification(sbn); drain()
+        assertSame(original, entries().getValue(0))
+        assertEquals(1, provider.history.size)
+        assertEquals(listOf(sbn.key), listener.activeNotifications.map { it.key })
+        assertSame(click, listener.activeNotifications.single().notification.contentIntent)
+        assertEquals("回复", listener.activeNotifications.single().notification.actions.single().title)
+        host.notificationRemoved(sbn)
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun interleavedHeadsUpAndListenerUpdatesDoNotDuplicatePlayingOrQueuedVersions() {
+        val first = notification("第一条", 1)
+        val second = notification("第二条", 2)
+        assertTrue(host.suppressHeadsUp(first)); assertTrue(host.suppressHeadsUp(second))
+        host.notification(first); host.notification(second); drain()
+        assertEquals(listOf("QQ：第一条", "QQ：第二条"), texts())
+        assertEquals(2, provider.history.size)
+        finish(0); finish(1)
+        assertTrue(host.suppressHeadsUp(second)) // Ranking updates after animation never re-alert.
+        assertTrue(entries().isEmpty())
+        post(notification("占满0", 3, "example.zero")); post(notification("占满1", 4, "example.one")); post(notification("占满2", 5, "example.two"))
+        val queuedA = notification("队列A", 6)
+        val queuedB = notification("队列B", 7)
+        assertTrue(host.suppressHeadsUp(queuedA)); assertTrue(host.suppressHeadsUp(queuedB))
+        host.notification(queuedA); host.notification(queuedB)
+        assertEquals(2, ReflectionHelpers.getField<ArrayDeque<*>>(host, "pending").size)
+    }
+
+    @Test fun queueOverflowAndWindowFailureKeepTheNativeHeadsUp() {
+        repeat(35) { assertTrue(host.suppressHeadsUp(notification("排队$it", it.toLong(), id = it))) }
+        val overflow = notification("超出队列", 40, id = 40)
+        assertFalse(host.suppressHeadsUp(overflow))
+        finish(0)
+        assertTrue(host.suppressHeadsUp(overflow)) // Overflow is not recorded as successfully handled.
+        host.close()
+        val real = context.getSystemService(WindowManager::class.java)
+        val failing = java.lang.reflect.Proxy.newProxyInstance(javaClass.classLoader, arrayOf(WindowManager::class.java)) { _, method, args ->
+            if (method.name == "addView") throw IllegalStateException("window unavailable")
+            method.invoke(real, *(args ?: emptyArray()))
+        } as WindowManager
+        val overlay = object : android.content.ContextWrapper(context) {
+            override fun getSystemService(name: String): Any? = if (name == Context.WINDOW_SERVICE) failing else super.getSystemService(name)
+        }
+        host = BarrageHost(overlay); worker = ReflectionHelpers.getField(host, "worker")
+        drain(); host.environment("example.game", true, false)
+        assertFalse(host.suppressHeadsUp(notification("显示失败", 50)))
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun headsUpIsNotSuppressedOutsideEligibleGameOrForExcludedNotifications() {
+        host.environment("example.game", true, true)
+        assertFalse(host.suppressHeadsUp(notification("暂停", 1)))
+        host.environment("example.game", false, false)
+        assertFalse(host.suppressHeadsUp(notification("非全屏", 2)))
+        host.environment("example.game", true, false)
+        for (category in listOf(Notification.CATEGORY_CALL, Notification.CATEGORY_ALARM, Notification.CATEGORY_TRANSPORT)) {
+            assertFalse(host.suppressHeadsUp(notification("特殊提醒", 3).apply { notification.category = category }))
+        }
+        assertFalse(host.suppressHeadsUp(notification("全屏提醒", 4).apply {
+            notification.fullScreenIntent = android.app.PendingIntent.getActivity(context, 2, android.content.Intent("example.FSI"), android.app.PendingIntent.FLAG_IMMUTABLE)
+        }))
+        assertFalse(host.suppressHeadsUp(notification("游戏", 4, "example.game")))
+        assertFalse(host.suppressHeadsUp(notification("进度", 5).apply { notification.extras.putInt(Notification.EXTRA_PROGRESS_MAX, 100) }))
+        assertTrue(entries().isEmpty())
+    }
+
+    @Test fun cutoutAndSystemBarInsetsDoNotShiftOrShortenBarrageInEitherOrientation() {
+        host.close()
+        val real = context.getSystemService(WindowManager::class.java)
+        var bounds = android.graphics.Rect(0, 0, 1200, 2670)
+        val insets = android.view.WindowInsets.Builder().setInsetsIgnoringVisibility(
+            android.view.WindowInsets.Type.displayCutout() or android.view.WindowInsets.Type.systemBars(),
+            android.graphics.Insets.of(120, 90, 60, 80)).build()
+        val windows = java.lang.reflect.Proxy.newProxyInstance(javaClass.classLoader, arrayOf(WindowManager::class.java)) { _, method, args ->
+            if (method.name == "getCurrentWindowMetrics") android.view.WindowMetrics(bounds, insets)
+            else method.invoke(real, *(args ?: emptyArray()))
+        } as WindowManager
+        val overlayContext = object : android.content.ContextWrapper(context) {
+            override fun getSystemService(name: String): Any? = if (name == Context.WINDOW_SERVICE) windows else super.getSystemService(name)
+        }
+        host = BarrageHost(overlayContext)
+        worker = ReflectionHelpers.getField(host, "worker")
+        drain(); host.environment("example.game", true, false)
+        for ((index, size) in listOf(1200 to 2670, 2670 to 1200).withIndex()) {
+            bounds = android.graphics.Rect(0, 0, size.first, size.second)
+            post(notification("不避让挖孔", index.toLong()))
+            val p = view(entries().getValue(0)).layoutParams as WindowManager.LayoutParams
+            assertEquals(size.first, p.width); assertEquals(0, p.x)
+            assertEquals((12 * context.resources.displayMetrics.density).toInt(), p.y)
+            assertEquals(WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS, p.layoutInDisplayCutoutMode)
+            assertEquals(0, p.fitInsetsTypes)
+            finish(0)
+        }
     }
 
     @Test fun fullscreenGameAndActualForegroundKeepTheirNativeNotifications() {
@@ -270,7 +373,7 @@ class BarrageHostTest {
             drain()
             assertTrue(texts().contains("QQ：测试2"))
             assertTrue(ReflectionHelpers.getField<Boolean>(entries().getValue(1), "saved"))
-            assertFalse(listener.activeNotifications.any { it.key == newest.key })
+            assertTrue(listener.activeNotifications.any { it.key == newest.key })
         } finally { blocked.countDown() }
     }
 
@@ -299,17 +402,17 @@ class BarrageHostTest {
         assertTrue(entries().isEmpty())
     }
 
-    @Test fun historyFailureKeepsNativeNotificationUntilTheSamePlayingDeliveryIsSaved() {
+    @Test fun historyFailureAndSuccessfulRetryBothKeepTheNativeNotification() {
         provider.save=false
         val notice=notification("保存重试",100)
         post(notice);drain()
         val entry=entries().getValue(0)
         assertFalse(ReflectionHelpers.getField<Boolean>(entry,"saved"))
         assertTrue(listener.activeNotifications.any { it.key==notice.key })
-        provider.save=true;host.notification(listener,notice);drain()
+        provider.save=true;host.notification(notice);drain()
         assertSame(entry,entries().getValue(0))
         assertTrue(ReflectionHelpers.getField<Boolean>(entry,"saved"))
-        assertFalse(listener.activeNotifications.any { it.key==notice.key })
+        assertTrue(listener.activeNotifications.any { it.key==notice.key })
     }
 
     @Test fun suspensionPausesAllLinesAndResumesTheirExistingViews() {
