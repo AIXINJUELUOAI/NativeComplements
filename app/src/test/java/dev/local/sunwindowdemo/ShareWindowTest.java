@@ -59,6 +59,17 @@ public class ShareWindowTest {
         assertEquals(5,ActivityOptions.class.getDeclaredMethod("getLaunchWindowingMode").invoke(next));
         assertEquals(0,ActivityOptions.class.getDeclaredMethod("getLaunchWindowingMode").invoke(original));
     }
+    @Test public void automaticSharingNeverOverridesAnExplicitTaskDestination()throws Exception{
+        assertFalse(ShareWindow.explicitTask(null));
+        ActivityOptions options=ActivityOptions.makeBasic();assertFalse(ShareWindow.explicitTask(options));
+        ActivityOptions.class.getDeclaredMethod("setLaunchTaskId",int.class).invoke(options,42);
+        assertTrue(ShareWindow.explicitTask(options));
+        assertEquals(42,ActivityOptions.class.getDeclaredMethod("getLaunchTaskId").invoke(options));
+        ActivityOptions.class.getDeclaredMethod("setLaunchTaskId",int.class).invoke(options,-1);
+        assertFalse(ShareWindow.explicitTask(options));
+        ActivityOptions.class.getDeclaredMethod("setLaunchTaskFragmentToken",android.os.IBinder.class).invoke(options,new android.os.Binder());
+        assertTrue(ShareWindow.explicitTask(options));
+    }
     @Test public void installerUsesAnIndependentFullscreenContainerWithoutMutatingSourceOptionsOrIntent()throws Exception{
         Intent install=new Intent(Intent.ACTION_VIEW).setDataAndType(Uri.parse("content://files.test/update.apk"),"application/vnd.android.package-archive")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION).putExtra("request",73);

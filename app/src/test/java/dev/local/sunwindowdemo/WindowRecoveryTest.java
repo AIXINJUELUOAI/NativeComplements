@@ -44,18 +44,39 @@ public class WindowRecoveryTest {
     }
     public static final class Atm {
         public final Recents mRecentTasks;
+        int deferred,continued;
         Atm(Recents value){mRecentTasks=value;}
+        public void deferWindowLayout(){deferred++;}
+        public void continueWindowLayout(){continued++;}
     }
     public static final class Root {
         Object task;
+        int visibleCalls,resumeCalls;
+        final Rect nativeCanvas=new Rect(0,0,1200,2133);
         public Object anyTaskForId(int id,int mode){assertEquals(192,id);assertTrue(mode==0||mode==1);return task;}
+        public void ensureActivitiesVisible(){visibleCalls++;((Task)task).mLastNonFullscreenBounds=new Rect(nativeCanvas);}
+        public void resumeFocusedTasksTopActivities(){resumeCalls++;}
     }
+    public static final class Wms {
+        int traversals;
+        public void requestTraversal(){traversals++;}
+    }
+    public static final class Animator { public boolean hasLeash(){return false;} }
+    public static final class TransitionController { public boolean inTransition(Task task){return false;} }
     public static class Task {
         public int mTaskId=192,mUserId=0;
+        public final Animator mSurfaceAnimator=new Animator();
+        public final TransitionController mTransitionController=new TransitionController();
+        public Rect mLastNonFullscreenBounds=new Rect(1,2,301,502);
         public android.content.ComponentName realActivity=new android.content.ComponentName("example.old","example.old.Main");
         public String baseIdentifier="old-page";
+        final Configuration requested=new Configuration();
+        int configWrites,compatVisits;
         public Intent getBaseIntent(){return new Intent().setIdentifier(baseIdentifier);}
         public boolean isAttached(){return false;}
+        public void onRequestedOverrideConfigurationChanged(Configuration value){configWrites++;requested.setTo(value);}
+        public Configuration getRequestedOverrideConfiguration(){return requested;}
+        public void forAllActivities(java.util.function.Consumer<Object> consumer){compatVisits++;}
     }
     @Before public void setup()throws Throwable{
         Context context=RuntimeEnvironment.getApplication();
@@ -63,7 +84,7 @@ public class WindowRecoveryTest {
         Class<?> unsafe=Class.forName("sun.misc.Unsafe");Field singleton=unsafe.getDeclaredField("theUnsafe");singleton.setAccessible(true);
         FrameworkAccess access=(FrameworkAccess)unsafe.getMethod("allocateInstance",Class.class).invoke(singleton.get(null),FrameworkAccess.class);
         set(access,"methods",new HashMap<>());set(access,"fields",new HashMap<>());
-        set(access,"lookup",Root.class.getMethod("anyTaskForId",int.class,int.class));
+        set(access,"lookup",Root.class.getMethod("anyTaskForId",int.class,int.class));set(access,"wc",Task.class);
         engine=new WindowEngine(access,logs::add);set(engine,"context",context);set(engine,"root",new Root());
         set(engine,"lock",new Object());set(engine,"atm",new Atm(recents));set(engine,"uiLease",new Binder());
         set(engine,"handler",new Handler(Looper.getMainLooper()));set(engine,"openGeneration",7L);
@@ -80,6 +101,49 @@ public class WindowRecoveryTest {
     }
     private void idle(long millis){Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(millis));}
 
+    @Test public void boundsHistoryJournalPreservesUnknownNullEmptyAndConcreteBounds()throws Throwable{
+        org.json.JSONObject legacy=(org.json.JSONObject)call("encode",new Class<?>[]{session.getClass()},session);
+        assertFalse(legacy.has("lastNonFullscreenBounds"));
+        Object unknown=call("decode",new Class<?>[]{org.json.JSONObject.class},legacy);
+        assertFalse((Boolean)get(unknown,"restoreNonFullscreenBounds"));
+        set(session,"restoreNonFullscreenBounds",true);
+        for(Rect bounds:new Rect[]{null,new Rect(),new Rect(20,30,620,1030)}){
+            set(session,"lastNonFullscreenBounds",bounds);
+            org.json.JSONObject saved=(org.json.JSONObject)call("encode",new Class<?>[]{session.getClass()},session);
+            assertTrue(saved.has("lastNonFullscreenBounds"));
+            Object restored=call("decode",new Class<?>[]{org.json.JSONObject.class},saved);
+            assertTrue((Boolean)get(restored,"restoreNonFullscreenBounds"));
+            assertEquals(bounds,get(restored,"lastNonFullscreenBounds"));
+        }
+        legacy.put("lastNonFullscreenBounds","bad rectangle");
+        try{call("decode",new Class<?>[]{org.json.JSONObject.class},legacy);fail("Malformed cache must reject recovery");}
+        catch(java.io.IOException expected){assertTrue(expected.getMessage().contains("边界缓存"));}
+    }
+    @Test public void successfulRestoreWritesKnownBoundsHistoryAfterNativeLayoutButLeavesLegacyUnknownAlone()throws Throwable{
+        Root root=(Root)get(engine,"root");Atm atm=(Atm)get(engine,"atm");Wms wms=new Wms();set(engine,"wms",wms);
+        recents.loaded=true;set(session,"mode",1);set(session,"topState",2);
+        Configuration original=(Configuration)get(session,"originalConfig");Object window=get(original,"windowConfiguration");
+        window.getClass().getDeclaredMethod("setWindowingMode",int.class).invoke(window,1);
+        Method top=window.getClass().getDeclaredMethod("setAlwaysOnTop",int.class);top.setAccessible(true);top.invoke(window,2);
+        Rect concrete=new Rect(20,30,620,1030);
+        for(int state=0;state<4;state++){
+            Task task=new Task();root.task=task;set(session,"component",task.realActivity.flattenToString());
+            Rect expected=state==1?new Rect():state>=2?new Rect(concrete):null;
+            set(session,"restoreNonFullscreenBounds",state<3);set(session,"lastNonFullscreenBounds",expected);
+            // ensureActivitiesVisible overwrites the cache after configuration restoration; only the tail write can win.
+            assertEquals(true,call("restoreTask",new Class<?>[]{session.getClass(),boolean.class},session,false));
+            assertEquals(1,task.configWrites);assertEquals(1,task.compatVisits);
+            if(state<3){
+                assertEquals(expected,task.mLastNonFullscreenBounds);
+                if(expected!=null){
+                    assertNotSame(expected,task.mLastNonFullscreenBounds);task.mLastNonFullscreenBounds.offset(7,9);
+                    assertEquals(state==1?new Rect():concrete,expected);
+                }
+            }else assertEquals("legacy cache is unknown and must not be overwritten",root.nativeCanvas,task.mLastNonFullscreenBounds);
+        }
+        assertEquals(4,root.visibleCalls);assertEquals(4,root.resumeCalls);assertEquals(4,wms.traversals);
+        assertEquals(4,atm.deferred);assertEquals(4,atm.continued);
+    }
     @Test public void missingTaskWaitsForUnlockAndLoadedRecentsBeforeReleasingJournal()throws Throwable{
         Context context=RuntimeEnvironment.getApplication();Class<?>[] signature={session.getClass(),boolean.class};
         recents.loaded=true;Shadows.shadowOf(context.getSystemService(UserManager.class)).setUserUnlocked(false);

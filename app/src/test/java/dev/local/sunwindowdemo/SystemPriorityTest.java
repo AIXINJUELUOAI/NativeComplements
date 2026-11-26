@@ -59,6 +59,47 @@ public class SystemPriorityTest {
         assertEquals(0,WindowEngine.systemPriority(null,task,10001,null,other,10002,true));
         assertEquals(0,WindowEngine.systemPriority(display,task,-1,display,other,10002,true));
     }
+    private static WindowLifecycle.KeyguardShell shell(int blocker){
+        return new WindowLifecycle.KeyguardShell(blocker!=0,blocker!=1,blocker==2?-1:0,blocker==3?1:0,
+            blocker==4?-1:10170,blocker==5?10171:10170,blocker==6,blocker!=7,blocker!=8,
+            blocker==9?2009:2040,blocker==10?0x2000:0x100000,blocker==11?0:0x80000,
+            blocker==12?8:blocker==13?1:2);
+    }
+    @Test public void onlyExactLockedNativeShadeHostCanYieldPresentationWithoutBlockingContinuation(){
+        assertTrue(WindowLifecycle.keyguardShell(shell(-1)));
+        assertFalse(WindowLifecycle.keyguardShell(null));
+        for(int blocker=0;blocker<=13;blocker++){
+            assertFalse("native evidence "+blocker,WindowLifecycle.keyguardShell(shell(blocker)));
+            assertEquals("blocking priority "+blocker,2,WindowLifecycle.continuationPriority(2,shell(blocker)));
+        }
+        // A matching appId in another user is not the actual full UID, nor this session's user.
+        assertFalse(WindowLifecycle.keyguardShell(new WindowLifecycle.KeyguardShell(true,true,0,0,10170,110170,
+            false,true,true,2040,0,0x80000,0)));
+        assertFalse(WindowLifecycle.keyguardShell(new WindowLifecycle.KeyguardShell(true,true,1,1,10170,10170,
+            false,true,true,2040,0,0x80000,0)));
+        assertTrue(WindowLifecycle.keyguardShell(new WindowLifecycle.KeyguardShell(true,true,1,1,110170,110170,
+            false,true,true,2040,0,0x80000,0)));
+        for(int type:new int[]{1,2000,2009,2010,2017,2024,2038,2041})
+            assertFalse("Other SystemUI type "+type,WindowLifecycle.keyguardShell(new WindowLifecycle.KeyguardShell(
+                true,true,0,0,10170,10170,false,true,true,type,0,0x80000,0)));
+        assertFalse(WindowLifecycle.keyguardShell(new WindowLifecycle.KeyguardShell(true,true,0,0,10170,10170,
+            false,true,true,2040,0,0x80000,2|8)));
+    }
+    @Test public void shellExemptionNeverClearsPermissionScreenshotOrOtherConcurrentPriority(){
+        WindowLifecycle.KeyguardShell shell=shell(-1);
+        assertEquals(0,WindowLifecycle.continuationPriority(2,shell));
+        assertEquals(1,WindowLifecycle.continuationPriority(1,shell));
+        assertEquals(2,WindowLifecycle.continuationPriority(2,null)); // Screenshot or unknown metadata.
+        assertEquals(0,WindowLifecycle.continuationPriority(0,shell));
+        for(int blocker:new int[]{1,2}){
+            int shellPriority=WindowLifecycle.continuationPriority(2,shell);
+            int securityPriority=WindowLifecycle.continuationPriority(blocker,null);
+            assertEquals(blocker,Math.max(shellPriority,securityPriority));
+            assertEquals(blocker,Math.max(securityPriority,shellPriority));
+        }
+        assertTrue(WindowLifecycle.priority(2).blocked()); // No presentation/input exemption.
+        assertTrue(WindowLifecycle.priority(2).hide());
+    }
     @Test public void externalInstallerSuspendsInputAndRestoresPlacementWithoutMovingFocus()throws Exception{
         Object display=new Object();Task task=new Task(display);Object session=session(task),placement=get(session,"placement");
         Wms wms=new Wms();wms.mHidingNonSystemOverlayWindows.add(new Window(new Task(display),display,10002));

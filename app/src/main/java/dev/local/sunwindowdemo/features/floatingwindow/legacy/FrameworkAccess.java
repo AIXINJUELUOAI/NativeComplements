@@ -116,7 +116,7 @@ final class FrameworkAccess {
         method(task,"isForceOpaque");
         method(android.app.ActivityOptions.class,"setAvoidMoveToFront");
         method(root,"resumeFocusedTasksTopActivities");method(root,"ensureActivitiesVisible");
-        field(task,"mLastSurfaceSize");
+        field(task,"mLastSurfaceSize");field(task,"mLastNonFullscreenBounds");
         field(task,"mLastTimeMoved");
         for (String name : new String[]{"getBaseIntent", "getParent", "getDisplayArea", "getActivityType", "getWindowingMode",
                 "getConfiguration", "getRequestedOverrideConfiguration", "getBounds", "isAlwaysOnTop",

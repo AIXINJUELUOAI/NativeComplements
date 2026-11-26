@@ -59,7 +59,11 @@ final class AndroidWindowAdmission {
         Object requested=a.windowConfig(task,true);s.originalConfig=new Configuration(a.config(task,true));
         s.mode=a.integer(requested,"getWindowingMode");s.topState=(Integer)a.field(requested,"mAlwaysOnTop");
         s.bounds=new Rect((Rect)a.call(requested,"getBounds"));
+        Rect lastNonFullscreenBounds=(Rect)a.field(task,"mLastNonFullscreenBounds");
+        s.lastNonFullscreenBounds=lastNonFullscreenBounds==null?null:new Rect(lastNonFullscreenBounds);s.restoreNonFullscreenBounds=true;
         if(inherited){
+            // The pre-inheritance cache is unknown: clear it at this local fullscreen endpoint, not an original-state restore.
+            s.lastNonFullscreenBounds=null;
             // Save a local fullscreen endpoint without clearing the ordinary task type validated above.
             s.originalConfig=new Configuration();Object original=a.field(s.originalConfig,"windowConfiguration");
             a.call(original,"setActivityType",new Class<?>[]{int.class},1);

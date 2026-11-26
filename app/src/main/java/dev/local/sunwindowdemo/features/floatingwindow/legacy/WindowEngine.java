@@ -54,9 +54,20 @@ final class WindowEngine {
     private volatile java.util.Set<String> windowExcludedPackages=java.util.Set.of();
     private volatile boolean autoMinimizeOnOpen=true;
     private WindowContinuation continuation;
+    private WindowAudioContinuation audioContinuation;
+    private boolean audioWindowHooksReady;
+    private final java.util.concurrent.atomic.AtomicInteger audioSecurityChanges=new java.util.concurrent.atomic.AtomicInteger();
+    void audioContinuation(WindowAudioContinuation bridge){audioContinuation=bridge;}
+    void audioWindowHooksReady(){audioWindowHooksReady=true;}
+    private void revokeAudioContinuation(){if(audioContinuation!=null)audioContinuation.clear();}
     private boolean continuationReady;
     void continuationReady(){continuationReady=true;}
-    record ShareLaunch(Object request,ActivityOptions options,IBinder lease,Object sourceTask,boolean nativeFullscreen) {}
+    record ShareLaunch(Object request,ActivityOptions options,IBinder lease,Object sourceTask,boolean nativeFullscreen,
+            java.util.Map<Object,Rect> boundsHistory) {
+        ShareLaunch(Object request,ActivityOptions options,IBinder lease,Object sourceTask,boolean nativeFullscreen){
+            this(request,options,lease,sourceTask,nativeFullscreen,new java.util.IdentityHashMap<>());
+        }
+    }
     private record ShareStarted(Session target,Session displaced,Session previous,Session previousPinned) {}
     private record ShareReused(Session target) {}
     final ThreadLocal<ShareLaunch> shareLaunch=new ThreadLocal<>();
@@ -422,7 +433,7 @@ final class WindowEngine {
         float placementMargin;
         Rect safeBounds,miniBounds;
         Geometry.Placement miniPlacement;
-        String lastRuntimeState;
+        String lastRuntimeState,lastMiniResumeState;
         Rect lastSurfaceCrop;
         String pkg, token, component, baseId;
         String frame="normal";
@@ -430,7 +441,8 @@ final class WindowEngine {
         TaskDecoration decoration; volatile boolean presented;
         Point crop; boolean closing; int animationRev; float defaultScale;
         long nextStatus;
-        Rect bounds;
+        Rect bounds,lastNonFullscreenBounds;
+        boolean restoreNonFullscreenBounds;
         boolean alwaysOnTop, landscape, forceTranslucent, restoreTranslucent;
         Object orientationActivity;int orientationRequest;
         boolean orientationBaseline;
@@ -442,7 +454,7 @@ final class WindowEngine {
         long startedAt=SystemClock.elapsedRealtime();
         volatile boolean restoring;
         volatile boolean screenSuspended;
-        volatile boolean prioritySuspended,priorityHideTask;
+        volatile boolean prioritySuspended,priorityHideTask,continuationPrioritySuspended;
         boolean priorityWasFocusable;
         long priorityFocusUntil;
         IBinder lease;
@@ -479,6 +491,7 @@ final class WindowEngine {
                 try{dev.local.sunwindowdemo.features.iconlayers.IconAssets.connect(context);}
                 catch(RuntimeException unavailable){log.accept("ICON_ASSETS_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
                 audio=WindowAudio.create(context,handler,log);
+                if(audioContinuation!=null)audioContinuation.attach(context);
                 swipeFrames=Choreographer.getInstance();
                 try{frames=(Choreographer)Choreographer.class.getDeclaredMethod("getSfInstance").invoke(null);}
                 catch(Exception e){frames=Choreographer.getInstance();log.accept("SF_CLOCK_FALLBACK "+e.getClass().getSimpleName());}
@@ -499,6 +512,8 @@ final class WindowEngine {
                         }
                         Bundle extras=i.getExtras();
                         if(getSentFromUid()==uiUid&&i.getIntExtra("protocol",0)==Wire.PROTOCOL&&extras!=null){
+                            if(uiLease!=extras.getBinder("lease")||!i.getBooleanExtra("hostReady",false)
+                                ||keepEdgeAwake!=i.getBooleanExtra("keepEdgeAwake",false))revokeAudioContinuation();
                             uiLease=extras.getBinder("lease");uiSeen=SystemClock.elapsedRealtime();
                             uiReady=i.getBooleanExtra("hostReady",false);
                             landscapeShareWindow=i.getBooleanExtra("landscapeShareWindow",false);
@@ -530,8 +545,10 @@ final class WindowEngine {
             attached = true;
             IntentFilter screen=new IntentFilter(Intent.ACTION_SCREEN_OFF);
             screen.addAction(Intent.ACTION_SCREEN_ON);screen.addAction(Intent.ACTION_USER_PRESENT);
+            screen.addAction("android.intent.action.USER_SWITCHED");
             context.registerReceiver(new BroadcastReceiver(){
                 @Override public void onReceive(Context c,Intent i){
+                    revokeAudioContinuation();
                     if(Intent.ACTION_SCREEN_OFF.equals(i.getAction()))cancelRecoveryOpen(null);
                     if(screenBlocked())synchronized(lock){
                         // A sleeping display may stop delivering vsync callbacks entirely.
@@ -985,7 +1002,10 @@ final class WindowEngine {
     ShareLaunch prepareInstaller(Object request,Object source,ActivityOptions options,int realCallingUid)throws Exception{
         if(lock==null||context==null||request==null)return null;
         synchronized(lock){
-            if(!nativeWindowRequest(request)&&!excludedNewWindow((String)a.field(request,"packageName")))return null;
+            // Resolver/chooser is a native interaction, not a managed app window. Do not let
+            // it inherit mode 5; its eventual real target goes through the ordinary share path.
+            if(!nativeWindowRequest(request)&&!(Boolean)a.call(request,"isResolverOrDelegateActivity")
+                &&!excludedNewWindow((String)a.field(request,"packageName")))return null;
             source=launchSource(request,source,realCallingUid);
             Object task=source==null?null:a.call(source,"getTask");Session owner=sessionFor(task);
             if(owner==null||owner.restoring||owner.closing||recovering||screenBlocked()
@@ -1016,6 +1036,7 @@ final class WindowEngine {
                 ||a.integer(sourceTask,"getWindowingMode")!=1)return null;
             Object display=a.call(sourceTask,"getDisplayContent");Rect bounds=(Rect)a.call(display,"getBounds");
             if((Integer)a.field(display,"mDisplayId")!=0||a.integer(sourceTask,"getActivityType")!=1)return null;
+            if(ShareWindow.explicitTask(options))return null;
             if(options!=null){int mode=(Integer)a.call(options,"getLaunchWindowingMode");if(mode!=0&&mode!=1)return null;}
             NativeForeground before=launchForeground.get();
             if(before!=null&&keepNativeForeground(before,before.task,pkg,
@@ -1027,12 +1048,20 @@ final class WindowEngine {
             return new ShareLaunch(request,next,uiLease,sourceTask,false);
         }
     }
+    void shareTarget(Object request,Object task)throws Exception{
+        ShareLaunch launch=shareLaunch.get();
+        if(launch==null||launch.nativeFullscreen||launch.request!=request||task==null||task==launch.sourceTask
+            ||owns(task)||launch.boundsHistory.containsKey(task))return;
+        // Sample reused destinations before native launch layout overwrites their history with our canvas.
+        Rect history=(Rect)a.field(task,"mLastNonFullscreenBounds");
+        launch.boundsHistory.put(task,history==null?null:new Rect(history));
+    }
     private Object startShare(Object request,Object started,ShareLaunch launch)throws Exception{
         Object task=a.call(started,"getTask");
-        if(task==null||!launch.lease.isBinderAlive())return null;
+        if(task==null||task==launch.sourceTask||!launch.lease.isBinderAlive())return null;
         Session retained=sessionFor(task);
         if(retained==null&&windowExcludedPackages.contains((String)a.field(request,"packageName"))){
-            releaseToFullscreen(task);return null;
+            releaseToFullscreen(task,launch);return null;
         }
         if(retained!=null){
             // Native ActivityStarter has already delivered the real Intent/grants/result chain.
@@ -1047,13 +1076,17 @@ final class WindowEngine {
         catch(Exception error){
             // An unsupported target keeps its native launch rather than an unmanaged freeform task.
             if(a.integer(task,"getWindowingMode")==5&&!owns(task)){
-                releaseToFullscreen(task);
+                releaseToFullscreen(task,launch);
             }
             throw error;
         }
+        if(launch.boundsHistory.containsKey(task)){
+            Rect history=launch.boundsHistory.get(task);
+            s.lastNonFullscreenBounds=history==null?null:new Rect(history);
+        }
         s.entryFade=true;
         s.launchFlow=new LaunchCoverFlow(SystemClock.elapsedRealtime());
-        try{bindAndSave(s,launch.lease);}catch(Exception error){releaseToFullscreen(task);throw error;}
+        try{bindAndSave(s,launch.lease);}catch(Exception error){releaseToFullscreen(task,launch);throw error;}
         Session previous=active,previousPinned=pinned,displaced=normalOccupied()?previous:null;
         if(displaced==null){if(previous!=null)pinned=previous;active=null;}
         try{
@@ -1135,21 +1168,25 @@ final class WindowEngine {
         return present;
     }
     /** One native-fullscreen exit for a freeform task the module does not (or no longer) manage. */
-    private void releaseToFullscreen(Object task)throws Exception{
+    private void releaseToFullscreen(Object task)throws Exception{releaseToFullscreen(task,null);}
+    private void releaseToFullscreen(Object task,ShareLaunch launch)throws Exception{
         a.call(task,"setWindowingMode",new Class<?>[]{int.class},1);
         a.call(task,"setBounds",new Class<?>[]{Rect.class},new Rect());
         try{restoreFloatingCompat(task);}
         catch(Exception error){log.accept("FULLSCREEN_COMPAT_RELEASE_FAILED "+FrameworkAccess.reason(error));}
+        // A newly inherited task has only a local fullscreen endpoint; a reused one keeps its prior history.
+        Rect history=launch==null?null:launch.boundsHistory.get(task);
+        a.field(task.getClass(),"mLastNonFullscreenBounds").set(task,history==null?null:new Rect(history));
     }
     void shareFinished(ShareLaunch launch,Object starter){
         try{synchronized(lock){
             Object started=a.field(starter,"mLastStartActivityRecord");
             Object task=started==null?null:a.call(started,"getTask");
-            if(task==null||owns(task)||a.integer(task,"getWindowingMode")!=5)return;
+            if(task==null||task==launch.sourceTask||owns(task)||a.integer(task,"getWindowingMode")!=5)return;
             ComponentName component=(ComponentName)a.field(task,"realActivity");
             if(component==null||!component.getPackageName().equals(a.field(launch.request,"packageName")))return;
             // A failed/unsupported acquisition must not leave a raw freeform task behind.
-            releaseToFullscreen(task);
+            releaseToFullscreen(task,launch);
             log.accept("SHARE_WINDOW_NATIVE_FALLBACK task="+a.field(task,"mTaskId"));
         }}catch(Exception error){log.accept("SHARE_WINDOW_FALLBACK_FAILED "+FrameworkAccess.reason(error));}
     }
@@ -1215,6 +1252,52 @@ final class WindowEngine {
             // This does not admit the proxy or relax sameWindowCaller for unowned tasks.
             log.accept("OWNED_LAUNCH_KEEP task="+owner.taskId+" sourceOwned="+(source!=null&&sessionFor(a.call(source,"getTask"))!=null));
             return ShareWindow.launchOptions(options,new Rect(0,0,owner.placement.width(),owner.placement.height()));
+        }
+    }
+    /** Stop an owned floating source from exporting mode 5 into an existing native fullscreen task. */
+    boolean keepNativeFullscreen(Object request,Object source,Object target,ActivityOptions options,int realCallingUid)throws Exception{
+        if(request==null||source==null||target==null||lock==null||context==null||recovering)return false;
+        synchronized(lock){
+            if(shareLaunch.get()!=null||sessionFor(target)!=null)return false;
+            Session owner=sessionFor(a.call(source,"getTask"));
+            if(owner==null||owner!=active||owner.restoring||owner.closing||owner.fullTransition||owner.transitioning||owner.entering
+                ||owner.returning||owner.parked||owner.prioritySuspended||owner.screenSuspended||!"normal".equals(owner.frame)
+                ||!uiReady||owner.lease==null||owner.lease!=uiLease||!owner.lease.isBinderAlive()||screenBlocked())return false;
+            Object task=owner.task;
+            if(task==target||!a.bool(task,"isAttached")||find(owner.taskId)!=task||!a.bool(task,"isVisibleRequested")
+                ||a.integer(task,"getWindowingMode")!=5||a.call(task,"topRunningActivity")!=source
+                ||(Boolean)a.field(source,"finishing")||!a.bool(source,"attachedToProcess")
+                ||a.bool(source,"getLaunchedFromBubble")||(Boolean)a.field(task,"mLaunchNextToBubble"))return false;
+            if(realCallingUid!=owner.uid||!WindowPolicy.sameWindowCaller((Integer)a.field(request,"launchedFromUid"),realCallingUid,
+                a.integer(source,"getUid"),(String)a.field(request,"launchedFromPackage"),owner.pkg)
+                ||!owner.pkg.equals(a.field(source,"packageName")))return false;
+            Object display=a.call(task,"getDisplayContent");
+            int currentUser=(Integer)a.field(a.field(wms,"mPolicy"),"mCurrentUserId");
+            if(owner.userId!=currentUser||owner.uid/100000!=currentUser||(Integer)a.field(task,"mUserId")!=currentUser
+                ||display==null||display!=a.call(root,"getDefaultDisplay")||(Integer)a.field(display,"mDisplayId")!=0
+                ||a.call(target,"getDisplayContent")!=display||(Integer)a.field(target,"mUserId")!=currentUser
+                ||!a.bool(target,"isAttached")||!a.bool(target,"isLeafTask")||!a.bool(target,"isRootTask")
+                ||find((Integer)a.field(target,"mTaskId"))!=target||a.integer(target,"getActivityType")!=1
+                ||a.integer(target,"getWindowingMode")!=1||a.bool(target,"isAlwaysOnTop")
+                ||(Boolean)a.field(target,"mLaunchNextToBubble")||(Boolean)a.field(target,"mReparentLeafTaskIfRelaunch")
+                ||(Boolean)a.field(target,"mReparentLeafTaskIfRelaunchFromHome"))return false;
+            Object nativeTop=a.call(target,"topRunningActivity");int uid=a.integer(request,"getUid");
+            if(nativeTop==null||uid<10000||uid/100000!=currentUser||uid!=a.integer(nativeTop,"getUid")
+                ||!a.field(request,"packageName").equals(a.field(nativeTop,"packageName")))return false;
+            Object requestDisplay=a.call(request,"getDisplayContent");
+            if(requestDisplay!=null&&requestDisplay!=display)return false;
+            Configuration requested=(Configuration)a.call(target,"getRequestedOverrideConfiguration");
+            int requestedMode=(Integer)a.call(a.field(requested,"windowConfiguration"),"getWindowingMode");
+            if((requestedMode!=0&&requestedMode!=1)||!((Rect)a.call(a.field(requested,"windowConfiguration"),"getBounds")).isEmpty())return false;
+            Intent intent=(Intent)a.field(request,"intent");
+            if(intent==null||(intent.getFlags()&(Intent.FLAG_ACTIVITY_CLEAR_TASK|Intent.FLAG_ACTIVITY_NEW_DOCUMENT|Intent.FLAG_ACTIVITY_TASK_ON_HOME))!=0)return false;
+            if(options!=null){
+                int mode=(Integer)a.call(options,"getLaunchWindowingMode");
+                if((mode!=0&&mode!=1)||options.getLaunchBounds()!=null||ShareWindow.explicitTask(options)
+                    ||(Integer)a.call(options,"getLaunchDisplayId")!=-1||(Integer)a.call(options,"getCallerDisplayId")!=-1
+                    ||a.call(options,"getLaunchTaskDisplayArea")!=null||(Integer)a.call(options,"getLaunchTaskDisplayAreaFeatureId")!=-1)return false;
+            }
+            return true;
         }
     }
     private static boolean ownedLaunch(int targetUid,int ownerUid,int targetUser,int ownerUser,Object requestDisplay,Object targetDisplay){
@@ -1508,6 +1591,7 @@ final class WindowEngine {
     }
     /** Failed acquisition is not a close: restore the actual destination visibly. */
     private void fallbackVisible(Session s){
+        revokeAudioContinuation();
         if(active==s)active=null;
         if(pinned==s)pinned=null;
         s.restoreForeground=true;s.restoring=true;s.parked=false;s.animationRev++;
@@ -1517,6 +1601,7 @@ final class WindowEngine {
     }
     private void retire(Session s){
         if(s==active||s.restoring)return;
+        revokeAudioContinuation();
         s.restoring=true;s.parked=true;s.animationRev++;
         restoreRetired(s,0);
     }
@@ -1766,6 +1851,7 @@ final class WindowEngine {
         handler.post(()->{if(active==s&&!s.restoring&&!returnFromTask(s))close(s);});return true;
     }
     private void close(Session s){
+        revokeAudioContinuation();
         if(!visible(s)||s.restoring||s.closing)return;
         log.accept("CLOSE_REQUEST source=control-or-switch task="+s.taskId);
         rememberOrientation(s);
@@ -2525,10 +2611,11 @@ final class WindowEngine {
         if(sessions.isEmpty())return false;
         Session s;
         try{s=sessionFor(a.call(fragment,"getTask"));}catch(Exception e){return false;}
-        if(s==null||!WindowLifecycle.resumeCandidate(new WindowLifecycle.Resume(visible(s),s.restoring,s.closing,s.fullTransition,s.parked,s.prioritySuspended))||s.screenSuspended&&!continueHidden(s)||lock==null
+        if(s==null||!WindowLifecycle.resumeCandidate(new WindowLifecycle.Resume(visible(s),s.restoring,s.closing,s.fullTransition,s.parked,s.prioritySuspended&&!continueHidden(s)))||s.screenSuspended&&!continueHidden(s)||lock==null
             ||!("mini".equals(s.frame)||"normal".equals(s.frame)))return false;
         try{synchronized(lock){
             if(!visible(s)||a.call(fragment,"getTask")!=s.task||!s.lease.isBinderAlive()
+                ||s.prioritySuspended&&!continueHidden(s)||s.screenSuspended&&!continueHidden(s)
                 ||context.getSystemService(KeyguardManager.class).isKeyguardLocked()&&!continueHidden(s)
                 ||a.bool(fragment,"shouldSleepOrShutDownActivities"))return false;
             Object top=a.call(fragment,"topRunningActivity");
@@ -2550,14 +2637,15 @@ final class WindowEngine {
                 &&a.call(fragment,"topRunningActivity")==activity;
         }catch(Exception e){return false;}
     }
-    boolean shouldResumeMiniActivity(Object activity,Object resuming){
-        if(!retainMiniActivity(activity,resuming))return false;
+    boolean shouldResumeMiniActivity(Object activity,Object resuming){return miniResumeBlock(activity,resuming)==null;}
+    private String miniResumeBlock(Object activity,Object resuming){
+        if(!retainMiniActivity(activity,resuming))return "retain";
         try{
             // These are the remaining native shouldBeResumed checks. Do not
             // bypass pause completion, same-Activity guards or process compat.
-            return (Boolean)a.call(activity,"shouldMakeActive",new Class<?>[]{a.activity},resuming)
-                &&a.bool(activity,"canResumeByCompat");
-        }catch(Exception e){return false;}
+            if(!(Boolean)a.call(activity,"shouldMakeActive",new Class<?>[]{a.activity},resuming))return "make-active";
+            return a.bool(activity,"canResumeByCompat")?null:"compat";
+        }catch(Exception e){return "unavailable";}
     }
     // Native Task resume is gated on focusability, also used to choose Home and
     // recents' running task. Keep that gate intact. A visible mini can use the
@@ -2597,14 +2685,32 @@ final class WindowEngine {
             if(!WindowLifecycle.resumeMini(visibleResumeReady,visible(s),s.frame,s.transitioning,s.backRequested,pendingStart!=null))return;
             Object top=a.call(s.task,"topRunningActivity");if(top==null)return;
             String state=String.valueOf(a.call(top,"getState"));
-            if(!WindowLifecycle.resumableState(state))return;
+            if(!WindowLifecycle.resumableState(state)){
+                if("RESUMED".equals(state))s.lastMiniResumeState=null;
+                return;
+            }
             Object fragment=a.call(top,"getTaskFragment");
-            if(!shouldResumeMiniActivity(top,null))return;
-            a.call(fragment,"resumeTopActivity",new Class<?>[]{a.activity,ActivityOptions.class,boolean.class},null,null,false);
+            String blocked=miniResumeBlock(top,null);
+            if(blocked!=null){traceMiniResume(s,fragment,top,blocked);return;}
+            boolean resumed=(Boolean)a.call(fragment,"resumeTopActivity",new Class<?>[]{a.activity,ActivityOptions.class,boolean.class},null,null,false);
+            traceMiniResume(s,fragment,top,resumed?"native-true":"native-false");
         }catch(Exception e){
             // This optional continuation must not trigger fullscreen recovery.
             visibleResumeReady=false;log.accept("MINI_RESUME_UNAVAILABLE "+FrameworkAccess.reason(e));
         }finally{yieldMiniFocus(s);}
+    }
+    // Observe the native selector and return value, never alter focus, resume admission or recovery.
+    private void traceMiniResume(Session s,Object fragment,Object top,String stage){
+        String detail;
+        try{
+            detail="stage="+stage+" state="+a.call(top,"getState")
+                +" selected="+(a.call(fragment,"topRunningActivity",new Class<?>[]{boolean.class},true)==top)
+                +" focusable="+a.bool(top,"isFocusable")+" canBeTop="+a.bool(top,"canBeTopRunning");
+        }catch(Exception|LinkageError ignored){detail="stage="+stage+" detail=unavailable";}
+        if(!detail.equals(s.lastMiniResumeState)){
+            s.lastMiniResumeState=detail;
+            try{log.accept("MINI_RESUME task="+s.taskId+" "+detail);}catch(Exception|LinkageError ignored){}
+        }
     }
     boolean ownsActivityToken(IBinder token)throws Exception{
         // A provisional share launch owns its request before any session exists.
@@ -3149,15 +3255,21 @@ final class WindowEngine {
         });
     }
     private void failure(Session s, Throwable e) {
+        revokeAudioContinuation();
         // Disarm transform hooks before posting recovery; never throw into a WM caller.
         s.restoring = true;
         if (handler != null) handler.post(() -> { if (sessions.contains(s)) recover("适配异常：" + FrameworkAccess.reason(e)); });
     }
     private boolean continueHidden(Session s){
-        if(s==null)return false;
-        return WindowLifecycle.continuation(new WindowLifecycle.Continuation(continuationReady,continuation!=null,keepEdgeAwake,
-            visible(s),s.restoring,s.closing,s.parked,s.fullTransition,s.prioritySuspended,s.edgeHidden,s.frame,s.uid))
-            &&s.lease!=null&&s.lease.isBinderAlive();
+        if(s==null||lock==null)return false;
+        try{synchronized(lock){
+            if(!WindowLifecycle.continuation(new WindowLifecycle.Continuation(continuationReady,continuation!=null,keepEdgeAwake,
+                visible(s),s.restoring,s.closing,s.parked,s.fullTransition,s.continuationPrioritySuspended,s.edgeHidden,s.frame,s.uid)))return false;
+            // Bouncer/security flags can change on the same native window without a list-change event.
+            // Recheck at the sleep/visibility boundary; never render or change focus from this predicate.
+            priorityState(s);
+            return !s.continuationPrioritySuspended&&s.lease!=null&&s.lease.isBinderAlive();
+        }}catch(Exception|LinkageError unknown){revokeAudioContinuation();return false;}
     }
     boolean continueHiddenTask(Object fragment){
         try{synchronized(lock){return !(Boolean)a.field(atm,"mShuttingDown")&&continueHidden(sessionFor(a.call(fragment,"getTask")));}}
@@ -3171,13 +3283,53 @@ final class WindowEngine {
     }
     private void updateContinuation(){
         if(continuation==null||lock==null)return;
+        long epoch=audioContinuation==null?0:audioContinuation.epoch();
         java.util.Map<Integer,String> desired=new java.util.HashMap<>();
-        synchronized(lock){for(Session s:sessions)if(continueHidden(s))desired.put(s.uid,s.pkg);}
+        java.util.Map<Integer,WindowAudioContinuation.Grant> audible=new java.util.HashMap<>();
+        synchronized(lock){for(Session s:sessions)if(continueHidden(s)){
+            desired.put(s.uid,s.pkg);
+            if(audioWindowHooksReady&&audioContinuationCandidate(s))
+                audible.put(s.uid,new WindowAudioContinuation.Grant(s.pkg,s.lease));
+        }}
         continuation.update(desired);
+        // Package/UID validation and AppOps notification run outside the WM lock.
+        if(audioContinuation!=null)audioContinuation.update(epoch,audible);
+    }
+    private boolean audioContinuationCandidate(Session s){
+        try{
+            if(audioSecurityChanges.get()!=0||!uiReady||uiLease==null||s.lease!=uiLease
+                ||!s.screenSuspended||!continueHidden(s)||(Boolean)a.field(atm,"mShuttingDown"))return false;
+            Object display=a.call(s.task,"getDisplayContent"),top=a.call(s.task,"topRunningActivity");
+            return s.userId==0&&s.uid/100000==s.userId&&(Integer)a.field(a.field(wms,"mPolicy"),"mCurrentUserId")==s.userId
+                &&display!=null&&display==a.call(root,"getDefaultDisplay")&&(Integer)a.field(display,"mDisplayId")==0
+                &&find(s.taskId)==s.task&&(Integer)a.field(s.task,"mUserId")==s.userId
+                &&a.bool(s.task,"isAttached")&&top!=null&&a.integer(top,"getUid")==s.uid
+                &&!(Boolean)a.field(top,"finishing")&&a.bool(top,"attachedToProcess");
+        }catch(Exception|LinkageError unknown){return false;}
+    }
+    // Never enter WM/PM/AppOps locks here: this is also called before native window mutations.
+    boolean audioWindowAttributesChanging(android.view.WindowManager.LayoutParams attrs){
+        if(audioContinuation==null||attrs==null)return false;
+        boolean security;
+        try{
+            int input=(Integer)a.field(attrs,"inputFeatures"),privateFlags=(Integer)a.field(attrs,"privateFlags");
+            security=(attrs.flags&0x2000)!=0||(input&~2)!=0
+                ||(privateFlags&0x80000)!=0&&attrs.type!=2040;
+        }catch(Exception|LinkageError unknown){security=true;}
+        if(!security)return false;
+        // Inhibit new publication for the whole native mutation, not just its entry edge.
+        audioSecurityChanges.incrementAndGet();revokeAudioContinuation();return true;
+    }
+    void audioWindowAttributesChanged(boolean security){
+        if(security){revokeAudioContinuation();audioSecurityChanges.decrementAndGet();}
     }
     private final java.util.concurrent.atomic.AtomicBoolean priorityQueued=new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.atomic.AtomicBoolean priorityReportQueued=new java.util.concurrent.atomic.AtomicBoolean();
     void priorityWindowsChanged(){
+        // This after-hook can run under WM: sample/revoke now, not after a queued authentication frame.
+        if(audioContinuation!=null&&lock!=null)try{synchronized(lock){
+            for(Session s:sessions)if(visible(s)&&!s.restoring)priorityState(s);
+        }}catch(Exception|LinkageError unknown){revokeAudioContinuation();}
         if(handler==null||lock==null||sessions.isEmpty()||!priorityQueued.compareAndSet(false,true))return;
         handler.post(()->{
             priorityQueued.set(false);
@@ -3227,16 +3379,35 @@ final class WindowEngine {
     static int systemPriority(Object display,Object task,int uid,Object windowDisplay,Object windowTask,int windowUid,boolean visible){
         return WindowLifecycle.priority(display!=null&&display==windowDisplay,task==windowTask,uid,windowUid,visible);
     }
+    private boolean keyguardShell(Session s,Object display,Object window,Object windowTask,int ownerUid){
+        try{
+            Object policy=a.field(wms,"mPolicy");
+            android.view.WindowManager.LayoutParams attrs=(android.view.WindowManager.LayoutParams)a.field(window,"mAttrs");
+            return WindowLifecycle.keyguardShell(new WindowLifecycle.KeyguardShell(
+                a.bool(policy,"isKeyguardShowingAndNotOccluded"),display!=null&&display==a.call(window,"getDisplayContent"),
+                s.userId,(Integer)a.field(policy,"mCurrentUserId"),uiUid,ownerUid,windowTask!=null,
+                window==a.field(a.call(display,"getDisplayPolicy"),"mNotificationShade"),
+                a.bool(window,"hideNonSystemOverlayWindowsWhenVisible"),attrs.type,attrs.flags,
+                (Integer)a.field(attrs,"privateFlags"),(Integer)a.field(attrs,"inputFeatures")));
+        }catch(Exception|LinkageError unknown){return false;}
+    }
     private int priorityState(Session s)throws Exception{
+        // Fail closed if native sampling fails. Presentation and input always retain native priority.
+        s.continuationPrioritySuspended=true;
         Object display=a.call(s.task,"getDisplayContent");
-        if(screenshotPriority(display,s))return 2;
-        if(a.overlayHidingWindows==null||wms==null)return 0;
-        int result=0;
+        if(screenshotPriority(display,s)){revokeAudioContinuation();return 2;}
+        if(a.overlayHidingWindows==null||wms==null){s.continuationPrioritySuspended=false;return 0;}
+        int result=0,continuation=0;
         for(Object window:(java.util.List<?>)a.overlayHidingWindows.get(wms)){
-            result=Math.max(result,systemPriority(display,s.task,s.uid,a.call(window,"getDisplayContent"),
-                a.call(window,"getTask"),a.integer(window,"getOwningUid"),a.bool(window,"isVisible")));
-            if(result==2)break;
+            Object windowTask=a.call(window,"getTask");int ownerUid=a.integer(window,"getOwningUid");
+            int priority=systemPriority(display,s.task,s.uid,a.call(window,"getDisplayContent"),
+                windowTask,ownerUid,a.bool(window,"isVisible"));
+            result=Math.max(result,priority);
+            // A concurrent permission/authentication window must still win over the locked shell.
+            continuation=Math.max(continuation,priority==2&&keyguardShell(s,display,window,windowTask,ownerUid)?0:priority);
         }
+        s.continuationPrioritySuspended=continuation!=0;
+        if(s.continuationPrioritySuspended)revokeAudioContinuation();
         return result;
     }
     private boolean updatePriorityState(Session s)throws Exception{
@@ -3325,7 +3496,10 @@ final class WindowEngine {
                 if(updatePriorityState(s))renderFrame(s);
                 handler.post(this::updateContinuation);
                 WindowLifecycle.Pause pause=WindowLifecycle.pause(s.prioritySuspended,s.screenSuspended);
-                if(pause==WindowLifecycle.Pause.PRIORITY){renderFrame(s);a.call(wms,"requestTraversal");handler.postDelayed(()->tick(s),pause.delay);return;}
+                if(pause==WindowLifecycle.Pause.PRIORITY){
+                    if(continueHidden(s)){resumeMini(s);traceVisibleRuntime(s,a.call(s.task,"getDisplayContent"));}
+                    renderFrame(s);a.call(wms,"requestTraversal");handler.postDelayed(()->tick(s),pause.delay);return;
+                }
                 if(pause==WindowLifecycle.Pause.SCREEN){
                     if(continueHidden(s)){resumeMini(s);traceVisibleRuntime(s,a.call(s.task,"getDisplayContent"));}
                     handler.postDelayed(()->tick(s),pause.delay);return;
@@ -3350,6 +3524,8 @@ final class WindowEngine {
             .put("baseId",s.baseId==null?JSONObject.NULL:s.baseId).put("cropX",s.crop.x).put("cropY",s.crop.y)
             .put("mode",s.mode).put("bounds",s.bounds.flattenToString()).put("alwaysOnTop",s.alwaysOnTop)
             .put("topState",s.topState).put("forceTranslucent",s.forceTranslucent);
+        if(s.restoreNonFullscreenBounds)o.put("lastNonFullscreenBounds",s.lastNonFullscreenBounds==null
+            ?JSONObject.NULL:s.lastNonFullscreenBounds.flattenToString());
         if(s.originalConfig!=null){Parcel parcel=Parcel.obtain();try{
             s.originalConfig.writeToParcel(parcel,0);
             o.put("originalConfig",android.util.Base64.encodeToString(parcel.marshall(),android.util.Base64.NO_WRAP));
@@ -3383,6 +3559,11 @@ final class WindowEngine {
                 s.originalConfig=Configuration.CREATOR.createFromParcel(parcel);
             }finally{parcel.recycle();}
         }
+        s.restoreNonFullscreenBounds=o.has("lastNonFullscreenBounds");
+        if(s.restoreNonFullscreenBounds&&!o.isNull("lastNonFullscreenBounds")){
+            s.lastNonFullscreenBounds=Rect.unflattenFromString(o.getString("lastNonFullscreenBounds"));
+            if(s.lastNonFullscreenBounds==null)throw new IOException("恢复边界缓存不匹配");
+        }
         s.mode=o.getInt("mode");s.bounds=Rect.unflattenFromString(o.getString("bounds"));
         s.topState=o.getInt("topState");s.alwaysOnTop=o.getBoolean("alwaysOnTop");
         s.forceTranslucent=version>=3&&o.getBoolean("forceTranslucent");s.restoreTranslucent=version>=3;
@@ -3408,6 +3589,7 @@ final class WindowEngine {
         return java.util.List.copyOf(result);
     }
     private void forget(Session s)throws Exception{
+        revokeAudioContinuation();
         java.util.ArrayList<Session> next=new java.util.ArrayList<>(sessions);next.remove(s);
         writeJournal(next);sessions=java.util.List.copyOf(next);
         handler.post(WindowEngine.this::updateContinuation);
@@ -3559,10 +3741,19 @@ final class WindowEngine {
                 surfaceVisible(s,true);a.opacity(task,1f);
             }
             a.call(root,"ensureActivitiesVisible");a.call(root,"resumeFocusedTasksTopActivities");a.call(wms,"requestTraversal");
+            // Native freeform layout persists our logical canvas separately from requested configuration.
+            // Restore it only after all configuration/layout calls; old journals leave unknown history alone.
+            if(s.restoreNonFullscreenBounds){
+                a.field(task.getClass(),"mLastNonFullscreenBounds").set(task,
+                    s.lastNonFullscreenBounds==null?null:new Rect(s.lastNonFullscreenBounds));
+                if(!java.util.Objects.equals(s.lastNonFullscreenBounds,a.field(task,"mLastNonFullscreenBounds")))
+                    throw new IllegalStateException("原非全屏边界缓存尚未恢复");
+            }
             return true;
         }finally{a.call(atm,"continueWindowLayout");}
     }
     private void finishGroup(Session selected,boolean foreground,String why){
+        revokeAudioContinuation();
         java.util.ArrayList<Session> group=new java.util.ArrayList<>();
         for(Session s:sessions)if(s.token.equals(selected.token))group.add(s);
         group.remove(selected);group.add(selected);
@@ -3646,6 +3837,7 @@ final class WindowEngine {
         }
     }
     private void recover(String why){
+        revokeAudioContinuation();
         try{synchronized(lock){
             // A new open can recheck an existing recovery. Keep one retry queue,
             // otherwise a leftover callback could restore the newly opened task.

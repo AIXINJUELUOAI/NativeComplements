@@ -15,9 +15,31 @@ public class WindowLifecycleAdapterTest {
     static final Object LOCK=new Object();
     static final List<String> CALLS=new ArrayList<>();
     public static final class Task {
-        boolean rejectRecovery;
+        boolean rejectRecovery;final Display display=new Display();
+        public Display getDisplayContent(){assertTrue(Thread.holdsLock(LOCK));return display;}
         public boolean isAttached(){assertTrue(Thread.holdsLock(LOCK));CALLS.add("attached");if(rejectRecovery)throw new IllegalStateException("native recovery unavailable");return false;}
         public Object topRunningActivity(){assertTrue(Thread.holdsLock(LOCK));CALLS.add("top");return new Object();}
+    }
+    public static final class Policy {
+        public int mCurrentUserId;
+        public boolean isKeyguardShowingAndNotOccluded(){assertTrue(Thread.holdsLock(LOCK));return true;}
+    }
+    public static final class Display {
+        public Window mNotificationShade;
+        public Display getDisplayPolicy(){assertTrue(Thread.holdsLock(LOCK));return this;}
+    }
+    public static final class Window {
+        final Display display;public final android.view.WindowManager.LayoutParams mAttrs=new android.view.WindowManager.LayoutParams();
+        Window(Display display)throws Exception{this.display=display;mAttrs.type=2040;set(mAttrs,"privateFlags",0x80000);}
+        public Object getTask(){assertTrue(Thread.holdsLock(LOCK));return null;}
+        public Display getDisplayContent(){assertTrue(Thread.holdsLock(LOCK));return display;}
+        public int getOwningUid(){assertTrue(Thread.holdsLock(LOCK));return 10170;}
+        public boolean isVisible(){assertTrue(Thread.holdsLock(LOCK));return true;}
+        public boolean hideNonSystemOverlayWindowsWhenVisible(){assertTrue(Thread.holdsLock(LOCK));return true;}
+    }
+    public static final class Wms {
+        public final Policy mPolicy=new Policy();
+        public final ArrayList<Window> mHidingNonSystemOverlayWindows=new ArrayList<>();
     }
     public static final class Root {
         final Object task;Root(Object task){this.task=task;}
@@ -66,12 +88,17 @@ public class WindowLifecycleAdapterTest {
     }
     @Test public void continuationDoesNotReadLeaseUntilExactHiddenMiniAndAppUidEligibility()throws Exception{
         CALLS.clear();Lease lease=new Lease();WindowEngine engine=new WindowEngine(access(),message->{});WindowEngine.Session s=new WindowEngine.Session();
-        s.frame="mini";s.edgeHidden=true;s.uid=9999;s.lease=lease;set(engine,"active",s);set(engine,"sessions",List.of(s));
+        s.frame="mini";s.edgeHidden=true;s.uid=9999;s.lease=lease;s.task=new Task();
+        set(engine,"active",s);set(engine,"sessions",List.of(s));set(engine,"lock",LOCK);
         set(engine,"continuationReady",true);set(engine,"keepEdgeAwake",true);set(engine,"continuation",allocate(WindowContinuation.class));
         assertEquals(false,call(engine,"continueHidden",s));assertEquals(0,lease.reads);
         s.uid=10000;assertEquals(true,call(engine,"continueHidden",s));assertEquals(1,lease.reads);
-        s.prioritySuspended=true;assertEquals(false,call(engine,"continueHidden",s));assertEquals(1,lease.reads);
-        s.prioritySuspended=false;lease.alive=false;assertEquals(false,call(engine,"continueHidden",s));assertEquals(2,lease.reads);
+        s.prioritySuspended=true;set(s,"continuationPrioritySuspended",true);
+        assertEquals(false,call(engine,"continueHidden",s));assertEquals(1,lease.reads);
+        // A fresh native sample with no blocker still requires the exact mini and a live lease.
+        set(s,"continuationPrioritySuspended",false);assertEquals(true,call(engine,"continueHidden",s));assertEquals(2,lease.reads);
+        assertTrue(s.prioritySuspended);s.edgeHidden=false;assertEquals(false,call(engine,"continueHidden",s));assertEquals(2,lease.reads);
+        s.edgeHidden=true;lease.alive=false;assertEquals(false,call(engine,"continueHidden",s));assertEquals(3,lease.reads);
         assertFalse(s.restoring);assertTrue(s.edgeHidden);
     }
     public static final class Fragment {
@@ -86,6 +113,32 @@ public class WindowLifecycleAdapterTest {
         public boolean finishing;boolean visible=true,attached=true;int visibleReads,attachedReads;
         public boolean isVisibleRequested(){visibleReads++;return visible;}
         public boolean attachedToProcess(){attachedReads++;return attached;}
+    }
+    @Test public void shellContinuationRetainsNativeResumeGatesWithoutReenablingPresentation()throws Exception{
+        FrameworkAccess a=access();set(a,"activity",Object.class);Task task=new Task();Fragment fragment=new Fragment(task);fragment.top=new Top();Lease lease=new Lease();
+        WindowEngine engine=new WindowEngine(a,message->{});WindowEngine.Session s=new WindowEngine.Session();s.task=task;s.lease=lease;
+        s.frame="mini";s.edgeHidden=true;s.uid=10000;s.prioritySuspended=true;s.screenSuspended=true;
+        set(engine,"active",s);set(engine,"sessions",List.of(s));set(engine,"lock",LOCK);
+        Window shell=new Window(task.display);task.display.mNotificationShade=shell;Wms wms=new Wms();wms.mHidingNonSystemOverlayWindows.add(shell);
+        a.overlayHidingWindows=Wms.class.getField("mHidingNonSystemOverlayWindows");set(engine,"wms",wms);set(engine,"uiUid",10170);
+        set(engine,"context",org.robolectric.RuntimeEnvironment.getApplication());set(engine,"continuationReady",true);
+        set(engine,"keepEdgeAwake",true);set(engine,"continuation",allocate(WindowContinuation.class));
+        assertTrue(engine.keepVisibleResumed(fragment,null));assertTrue(s.prioritySuspended);assertTrue(s.screenSuspended);
+        // Same WindowState and same native list: security changes must revoke a previously cached shell exemption synchronously.
+        for(int sensitive:new int[]{0x2000,8}){
+            set(s,"continuationPrioritySuspended",false);shell.mAttrs.flags=sensitive==0x2000?0x2000:0;
+            set(shell.mAttrs,"inputFeatures",sensitive==8?8:0);int leaseReads=lease.reads;
+            assertEquals(false,call(engine,"continueHidden",s));assertEquals(leaseReads,lease.reads);
+            assertTrue(s.continuationPrioritySuspended);assertFalse(engine.keepVisibleResumed(fragment,null));
+        }
+        shell.mAttrs.flags=0;set(shell.mAttrs,"inputFeatures",0);set(s,"continuationPrioritySuspended",false);
+        assertTrue(engine.keepVisibleResumed(fragment,null));
+        s.edgeHidden=false;assertFalse(engine.keepVisibleResumed(fragment,null));
+        s.edgeHidden=true;s.frame="normal";assertFalse(engine.keepVisibleResumed(fragment,null));
+        s.frame="mini";lease.alive=false;assertFalse(engine.keepVisibleResumed(fragment,null));lease.alive=true;
+        fragment.sleeping=true;assertFalse(engine.keepVisibleResumed(fragment,null));fragment.sleeping=false;
+        fragment.top.finishing=true;assertFalse(engine.keepVisibleResumed(fragment,null));
+        assertTrue(s.prioritySuspended);assertTrue(s.screenSuspended);assertFalse(s.restoring);
     }
     @Test public void visibleResumeKeepsSleepAndFinishingShortCircuitBeforeLaterNativeQueries()throws Exception{
         FrameworkAccess a=access();set(a,"activity",Object.class);Task task=new Task();Fragment fragment=new Fragment(task);fragment.top=new Top();Lease lease=new Lease();

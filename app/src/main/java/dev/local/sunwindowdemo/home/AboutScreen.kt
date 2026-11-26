@@ -53,6 +53,7 @@ fun AboutScreen(onLicenses: () -> Unit, onTools: () -> Unit, onLogs: () -> Unit 
         SettingRow("诊断日志", onClick = onLogs)
         SettingRow("开源许可", onClick = onLicenses)
     }
+    BackupSettings()
     if (toolsVisible) {
         Spacer(Modifier.height(24.dp))
         SettingsGroup { SettingRow("开发者工具", onClick = onTools) }

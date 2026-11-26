@@ -49,11 +49,14 @@ public final class SunWindowModule extends XposedModule {
     }
     private void installBackend(SystemServerStartingParam p){
         List<XposedInterface.HookHandle> handles = new ArrayList<>();
+        WindowAudioContinuation audioBridge=null;
         try {
             FrameworkAccess a = new FrameworkAccess(p.getClassLoader());
             WindowEngine engine = new WindowEngine(a, this::note);
             engine.installCleanupGuard(this, p.getClassLoader());
             WindowContinuation.install(this,a,engine,this::note);
+            audioBridge=WindowAudioContinuation.install(this,a,handles,this::note);
+            engine.audioContinuation(audioBridge);
             handles.add(hook(a.systemReady).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 Object result = chain.proceed(); note("WMS_READY_SEEN"); engine.attach(chain.getThisObject()); return result;
             }));
@@ -82,11 +85,12 @@ public final class SunWindowModule extends XposedModule {
                 return chain.proceed();
             }));
             Class<?> window=Class.forName("com.android.server.wm.WindowState",false,p.getClassLoader());
+            boolean priorityHookReady=false;
             if(a.overlayVisibilityChanged!=null)try{
                 handles.add(hook(a.overlayVisibilityChanged).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object result=chain.proceed();engine.priorityWindowsChanged();return result;
                 }));
-                note("SYSTEM_PRIORITY_HOOK_READY");
+                priorityHookReady=true;note("SYSTEM_PRIORITY_HOOK_READY");
             }catch(Exception error){note("SYSTEM_PRIORITY_HOOK_UNAVAILABLE "+FrameworkAccess.reason(error));}
             else note("SYSTEM_PRIORITY_HOOK_UNAVAILABLE native-list");
             try{
@@ -245,6 +249,7 @@ public final class SunWindowModule extends XposedModule {
                 note("ROTATION_VISIBILITY_HOOK_READY");
             }catch(Exception e){note("ROTATION_VISIBILITY_HOOK_UNAVAILABLE "+FrameworkAccess.reason(e));}
             ServerViewport.install(this,a,engine,handles);
+            if(priorityHookReady)engine.audioWindowHooksReady();
             try{
                 handles.add(hook(a.method(a.activity,"setRequestedOrientation",int.class))
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
@@ -321,6 +326,7 @@ public final class SunWindowModule extends XposedModule {
             handles.addAll(WindowAudio.install(this,p.getClassLoader(),this::note));
             note("HOOKS_READY count="+handles.size()+" version="+BuildConfig.VERSION_NAME+"; system scopes only");
         } catch (Throwable e) {
+            if(audioBridge!=null)audioBridge.close();
             for (XposedInterface.HookHandle h : handles) try { h.unhook(); } catch (Throwable ignored) { }
             note("DISABLED signature-preflight " + FrameworkAccess.reason(e));
         }

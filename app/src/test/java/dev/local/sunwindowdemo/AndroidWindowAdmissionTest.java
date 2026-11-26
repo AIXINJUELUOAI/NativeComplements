@@ -36,6 +36,7 @@ public class AndroidWindowAdmissionTest {
         public final TransitionController mTransitionController=new TransitionController();
         public int mTaskId=42,mUserId;public ComponentName realActivity=new ComponentName("example.app","example.app.Main");
         public Point mLastSurfaceSize=new Point(1200,2133);
+        public Rect mLastNonFullscreenBounds;
         final ThreadLocal<Object> candidate;final Area area=new Area();final Display display=new Display();
         final Configuration requested=new Configuration();
         int mode=1,activityType=1,relativeRotation,displayReads,resizeReads;boolean opaque,root=true,freeform=true,areaValid=true,throwResize,top,focusable=true;
@@ -118,6 +119,36 @@ public class AndroidWindowAdmissionTest {
         try{synchronized(LOCK){adapter.validate(task,true);}fail("linked entry must still wait for relative rotation");}
         catch(WindowEngine.EntryNotReady expected){assertNull(candidate.get());}
     }
+    @Test public void snapshotDeepCopiesNativeNonFullscreenCacheAndPreservesKnownNullAndEmpty()throws Exception{
+        ThreadLocal<Object> candidate=new ThreadLocal<>();Task task=new Task(candidate);FrameworkAccess a=access();
+        AndroidWindowAdmission adapter=new AndroidWindowAdmission(a,new Atm(),candidate);
+        Object nativeConfig=a.field(task.requested,"windowConfiguration");
+        a.call(nativeConfig,"setWindowingMode",new Class<?>[]{int.class},1);a.call(nativeConfig,"setAlwaysOnTop",new Class<?>[]{int.class},2);
+        WindowEngine.Session snapshot;
+        synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",false,null);}
+        assertTrue(snapshot.restoreNonFullscreenBounds);assertNull(snapshot.lastNonFullscreenBounds);
+        task.mLastNonFullscreenBounds=new Rect(20,30,620,1030);
+        synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",false,null);}
+        assertTrue(snapshot.restoreNonFullscreenBounds);assertEquals(task.mLastNonFullscreenBounds,snapshot.lastNonFullscreenBounds);
+        assertNotSame(task.mLastNonFullscreenBounds,snapshot.lastNonFullscreenBounds);
+        task.mLastNonFullscreenBounds.set(0,0,1200,2133);
+        assertEquals(new Rect(20,30,620,1030),snapshot.lastNonFullscreenBounds);
+        snapshot.lastNonFullscreenBounds.setEmpty();assertEquals(new Rect(0,0,1200,2133),task.mLastNonFullscreenBounds);
+        task.mLastNonFullscreenBounds.setEmpty();
+        synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",false,null);}
+        assertTrue(snapshot.restoreNonFullscreenBounds);assertNotNull(snapshot.lastNonFullscreenBounds);assertTrue(snapshot.lastNonFullscreenBounds.isEmpty());
+    }
+    @Test public void cachedBoundsSnapshotNeverAdmitsDirtyFullscreenRequestedBounds()throws Exception{
+        ThreadLocal<Object> candidate=new ThreadLocal<>();Task task=new Task(candidate);FrameworkAccess a=access();
+        AndroidWindowAdmission adapter=new AndroidWindowAdmission(a,new Atm(),candidate);
+        Object nativeConfig=a.field(task.requested,"windowConfiguration");
+        a.call(nativeConfig,"setWindowingMode",new Class<?>[]{int.class},1);a.call(nativeConfig,"setAlwaysOnTop",new Class<?>[]{int.class},2);
+        Rect dirty=new Rect(0,0,1200,2133);a.call(nativeConfig,"setBounds",new Class<?>[]{Rect.class},dirty);
+        task.mLastNonFullscreenBounds=new Rect(dirty);
+        try{synchronized(LOCK){adapter.snapshot(task,"example.app","token",true,null);}fail("dirty requested bounds must still reject");}
+        catch(IllegalStateException error){assertEquals(WindowAdmission.Rejection.OVERRIDE.message,error.getMessage());}
+        assertEquals(dirty,a.call(nativeConfig,"getBounds"));assertEquals(dirty,task.mLastNonFullscreenBounds);
+    }
     @Test public void snapshotCopiesNativeConfigurationAndInheritedFreeformGetsLocalFullscreenEndpoint()throws Exception{
         ThreadLocal<Object> candidate=new ThreadLocal<>();Task task=new Task(candidate);FrameworkAccess a=access();
         AndroidWindowAdmission adapter=new AndroidWindowAdmission(a,new Atm(),candidate);
@@ -127,11 +158,14 @@ public class AndroidWindowAdmissionTest {
         synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",true,null);}
         assertSame(task,snapshot.task);assertNotSame(task.requested,snapshot.originalConfig);assertTrue(snapshot.forceTranslucent);
         assertEquals(1,snapshot.mode);assertTrue(snapshot.bounds.isEmpty());assertEquals(1200,snapshot.logicalShort);
-        task.mode=5;task.focusable=false;
+        task.mode=5;task.focusable=false;task.mLastNonFullscreenBounds=new Rect(20,30,620,1030);
         a.call(nativeConfig,"setWindowingMode",new Class<?>[]{int.class},5);a.call(nativeConfig,"setAlwaysOnTop",new Class<?>[]{int.class},1);
         a.call(nativeConfig,"setBounds",new Class<?>[]{Rect.class},new Rect(20,30,620,1030));
         synchronized(LOCK){snapshot=adapter.snapshot(task,"example.app","token",true,null);}
         assertEquals(1,snapshot.mode);assertEquals(2,snapshot.topState);assertTrue(snapshot.bounds.isEmpty());
+        assertTrue("local fullscreen endpoint must clear the inherited cache on restore",snapshot.restoreNonFullscreenBounds);
+        assertNull(snapshot.lastNonFullscreenBounds);
+        assertEquals("sampling must not mutate native cache",new Rect(20,30,620,1030),task.mLastNonFullscreenBounds);
         Object endpoint=a.field(snapshot.originalConfig,"windowConfiguration");
         assertEquals("fullscreen restore must retain the admitted ordinary task type",1,a.integer(endpoint,"getActivityType"));
         assertEquals(1,a.integer(endpoint,"getWindowingMode"));assertTrue(((Rect)a.call(endpoint,"getBounds")).isEmpty());

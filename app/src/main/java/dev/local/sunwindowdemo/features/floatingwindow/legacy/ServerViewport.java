@@ -128,7 +128,7 @@ final class ServerViewport {
         int installed=0,added=0;
         for(Method method:wms.getDeclaredMethods())if(method.getName().equals("relayoutWindow")||method.getName().equals("addWindow")){
             boolean initial=method.getName().equals("addWindow");
-            Class<?>[] types=method.getParameterTypes();int client=-1,result=-1;
+            Class<?>[] types=method.getParameterTypes();int client=-1,result=-1,attributes=-1;
             Field returnedRelayout=null,returnedCode=null;
             if(initial){
                 boolean out=method.getReturnType()==int.class&&types.length==9
@@ -145,12 +145,16 @@ final class ServerViewport {
             for(int i=0;i<types.length;i++){
                 if(types[i].getName().equals("android.view.IWindow"))client=i;
                 if(types[i]==resultType)result=i;
+                if(types[i]==android.view.WindowManager.LayoutParams.class)attributes=i;
             }
-            if(client<0||(result<0&&returnedRelayout==null))continue;
-            final int clientIndex=client,resultIndex=result;
+            if(client<0||attributes<0||(result<0&&returnedRelayout==null))continue;
+            final int clientIndex=client,resultIndex=result,attributesIndex=attributes;
             final Field addRelayout=returnedRelayout,addCode=returnedCode;method.setAccessible(true);
             handles.add(module.hook(method).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                Object value=chain.proceed();
+                // Revoke before a same-window secure/bouncer flag update can enter native layout.
+                boolean security=engine.audioWindowAttributesChanging((android.view.WindowManager.LayoutParams)chain.getArg(attributesIndex));
+                Object value;
+                try{value=chain.proceed();}finally{engine.audioWindowAttributesChanged(security);}
                 if((value instanceof Integer&&(Integer)value<0)||(addCode!=null&&(value==null||addCode.getInt(value)<0)))return value;
                 Object resultObject=addRelayout==null?chain.getArg(resultIndex):addRelayout.get(value);
                 Object owner=resultObject==null?null:engine.clientOwner(chain.getArg(clientIndex));

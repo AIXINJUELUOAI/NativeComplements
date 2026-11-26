@@ -22,6 +22,18 @@ final class WindowLifecycle {
     static int priority(boolean sameDisplay,boolean sameTask,int uid,int windowUid,boolean visible){
         return !visible||!sameDisplay||uid<0||windowUid<0||windowUid==uid?0:sameTask?1:2;
     }
+    record KeyguardShell(boolean locked,boolean sameDisplay,int userId,int currentUserId,int systemUiUid,int ownerUid,
+        boolean hasTask,boolean policyHost,boolean hidesOverlays,int type,int flags,int privateFlags,int inputFeatures) {}
+    /** Only a sampled native priority candidate; policyHost means the display policy's exact shade WindowState. */
+    static boolean keyguardShell(KeyguardShell f){
+        // TYPE_NOTIFICATION_SHADE; privileged HIDE_NON_SYSTEM_OVERLAY_WINDOWS; reject secure/bouncer input.
+        return f!=null&&f.locked&&f.sameDisplay&&f.userId>=0&&f.userId==f.currentUserId
+            &&f.systemUiUid>=0&&f.ownerUid==f.systemUiUid&&f.ownerUid/100000==f.userId
+            &&!f.hasTask&&f.policyHost&&f.hidesOverlays&&f.type==2040&&(f.privateFlags&0x80000)!=0
+            &&(f.flags&0x2000)==0&&(f.inputFeatures&~2)==0;
+    }
+    /** Presentation/input keep their original priority; only hidden continuation uses this result. */
+    static int continuationPriority(int priority,KeyguardShell shell){return priority==2&&keyguardShell(shell)?0:priority;}
     static boolean screenshotIntent(String action,String mime,String scheme,String source){
         return ("android.intent.action.EDIT".equals(action)||"android.intent.action.VIEW".equals(action))
             &&"image/png".equals(mime)&&"content".equals(scheme)&&"screenshot".equals(source);
