@@ -1,5 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <permission android:name="${applicationId}.permission.HBM_CONTROL" android:protectionLevel="signature" />
+    <uses-permission android:name="${applicationId}.permission.HBM_CONTROL" />
     <application>
+        <service android:name=".features.manualhbm.HbmTileService" android:label="@string/manual_hbm_label"
+            android:icon="@drawable/ic_manual_hbm" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
         <provider android:name=".features.background.BackgroundProvider" android:authorities="${applicationId}.background" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <provider android:name=".features.darkaod.DarkAodProvider" android:authorities="${applicationId}.darkaod" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <receiver android:name=".core.WindowBackendSelection" android:enabled="false" android:exported="false" />

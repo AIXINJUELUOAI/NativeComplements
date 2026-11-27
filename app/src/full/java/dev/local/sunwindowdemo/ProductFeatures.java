@@ -13,6 +13,7 @@ final class ProductFeatures {
     private ProductFeatures() {}
     static void installServer(XposedModule module,ClassLoader loader,Consumer<String> note){
         SuggestionEnvironment.install(module,loader,note);
+        dev.local.sunwindowdemo.features.manualhbm.ManualHbmModule.install(module,loader,note);
         installUndimSuggestion(module,loader,note);
         dev.local.sunwindowdemo.features.edgetouch.EdgeInputFilter.install(module,loader,note);
         dev.local.sunwindowdemo.features.motion.MotionAccess.install(module,loader,note);
