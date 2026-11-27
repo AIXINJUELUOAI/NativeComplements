@@ -74,7 +74,7 @@ final class MediaPlayers {
     void observe(Runnable observer) { observers.add(observer); }
     void unobserve(Runnable observer) { observers.remove(observer); }
     List<App> apps() { return enabled ? apps : List.of(); }
-    int gain(App app) { return preferences.getInt(app.key(), 100); }
+    int gain(App app) { return Math.max(0, Math.min(100, preferences.getInt(app.key(), 100))); }
 
     void preview(App app, int gain) {
         if (!enabled) return;
@@ -110,7 +110,8 @@ final class MediaPlayers {
             try {
                 if ((Integer) playerType.invoke(config) == aaudio) continue;
                 int uid = (Integer) clientUid.invoke(config);
-                if (uid < 10_000 || uid == android.os.Process.myUid()) continue;
+                if (uid < 10_000 || uid == android.os.Process.myUid()
+                        || uid / 100_000 != android.os.Process.myUid() / 100_000) continue;
                 String[] names = packages.getPackagesForUid(uid);
                 if (names == null || names.length != 1) continue;
                 Object proxy = playerProxy.invoke(config);

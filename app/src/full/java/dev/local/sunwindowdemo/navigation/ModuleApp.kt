@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -72,6 +73,8 @@ fun ModuleApp(
     BackHandler(selectingIcons && !showIconBatch) { cancelIconBatch() }
     val iconApp = if (page == Page.IconApp) controller.apps.firstOrNull { it.packageName == appPackage } else null
     var windowExclusions by rememberSaveable(page) { mutableStateOf(false) }
+    var showSystemApps by rememberSaveable { mutableStateOf(false) }
+    var appListMenu by remember { mutableStateOf(false) }
     BackHandler(windowExclusions) { windowExclusions = false }
     var query by rememberSaveable(page) { mutableStateOf("") }
     var searching by rememberSaveable(page) { mutableStateOf(false) }
@@ -97,6 +100,16 @@ fun ModuleApp(
         expandedTitle = !selectingIcons && !searchOpen,
         titleContent = if (searchOpen) ({ AppQueryField(query) { query = it } }) else null,
         actions = {
+            if (windowExclusions) Box {
+                IconButton(onClick = { appListMenu = true }) {
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "应用列表选项")
+                }
+                DropdownMenu(appListMenu, onDismissRequest = { appListMenu = false }) {
+                    DropdownMenuItem(text = { Text("显示系统应用") },
+                        leadingIcon = { Checkbox(showSystemApps, onCheckedChange = null) },
+                        onClick = { showSystemApps = !showSystemApps; appListMenu = false })
+                }
+            }
             if (searchable && !searchOpen) IconButton(onClick = { searching = true }) {
                 Icon(Icons.Default.Search, contentDescription = "搜索应用")
             }
@@ -120,14 +133,14 @@ fun ModuleApp(
         },
     ) { bottomInset ->
         CompositionLocalProvider(LocalAppQuery provides (if (searchOpen) query else "")) {
-        if (windowExclusions) AppPickerScreen(controller, bottomInset = bottomInset, windowExclusions = true)
+        if (windowExclusions) AppPickerScreen(controller, bottomInset = bottomInset, windowExclusions = true, showSystemApps = showSystemApps)
         else when (page) {
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.Sms, Page.SmsRecords -> SmsBlockingScreen(page == Page.SmsRecords, bottomInset, onRecords = { navigate(Page.SmsRecords) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
-            Page.Shade -> ShadeScreen(bottomInset) {
+            Page.Shade -> ShadeScreen(bottomInset, desktopExtras = {
                 dev.local.sunwindowdemo.features.minusone.MinusOneToggle()
-            }
+            }, displayExtras = { dev.local.sunwindowdemo.features.manualhbm.HbmTileSettings() })
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.GameMode -> GameModeScreen(controller.apps, controller.catalogLoaded, bottomInset,
                 onQuick = { navigate(Page.GameQuick) }, onBarrage = { navigate(Page.Barrage) }, onCorner = { navigate(Page.GameCorner) },

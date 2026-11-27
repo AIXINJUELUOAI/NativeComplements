@@ -1,5 +1,9 @@
 package dev.local.sunwindowdemo.features.floatingwindow.ui
 
+import android.content.pm.ApplicationInfo
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.compose.foundation.Image
@@ -21,12 +25,28 @@ import dev.local.sunwindowdemo.core.ui.*
 
 /** Shared picker for gesture suppression and target-window exclusions; the two lists stay separate. */
 @Composable
-fun AppPickerScreen(controller: WindowController, bottomInset: Dp = 0.dp, windowExclusions: Boolean = false) {
+fun AppPickerScreen(controller: WindowController, bottomInset: Dp = 0.dp, windowExclusions: Boolean = false, showSystemApps: Boolean = false) {
     val excluded = if (windowExclusions) controller.preferences.windowExcludedPackages else controller.preferences.blocked
     val save: (Set<String>) -> Unit = if (windowExclusions) controller::windowExcludedPackages else controller::blocked
-    val catalog = controller.apps
+    val context = LocalContext.current
+    val systemApps by produceState<List<LaunchableApp>?>(null, windowExclusions, showSystemApps) {
+        value = if (windowExclusions && showSystemApps) withContext(Dispatchers.IO) {
+            context.packageManager.getInstalledApplications(0)
+                .filter { it.packageName != context.packageName &&
+                    it.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0 }
+                .mapNotNull { info ->
+                    runCatching { LaunchableApp(info.packageName, info.loadLabel(context.packageManager).toString(),
+                        info.loadIcon(context.packageManager)) }.getOrNull()
+                }
+        } else emptyList()
+    }
+    val catalog = remember(controller.apps, systemApps, windowExclusions, showSystemApps) {
+        if (!(windowExclusions && showSystemApps)) controller.apps else (controller.apps + systemApps.orEmpty()).distinctBy { it.packageName }
+            .sortedWith(compareBy<LaunchableApp> { dev.local.sunwindowdemo.AppCatalog.sectionForLabel(it.label) }
+                .thenBy { it.label }.thenBy { it.packageName })
+    }
     dev.local.sunwindowdemo.features.gamemode.AppListPicker(catalog, "已选择 ${excluded.size} 个应用", bottomInset,
-        modifier = Modifier.widthIn(max = 680.dp), loaded = controller.catalogLoaded) { app ->
+        modifier = Modifier.widthIn(max = 680.dp), loaded = controller.catalogLoaded && (!(windowExclusions && showSystemApps) || systemApps != null)) { app ->
         val checked = app.packageName in excluded
         Surface(shape = RoundedCornerShape(4.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().clickable {

@@ -25,6 +25,7 @@ final class ProductFeatures {
         dev.local.sunwindowdemo.features.shade.StatusBarOffset.install(module,loader,note);
         dev.local.sunwindowdemo.features.shade.SignalDisplay.install(module,loader,note);
         dev.local.sunwindowdemo.features.appvolume.MediaVolumeModule.install(module,loader,note);
+        LockscreenDoubleTap.install(module,loader,note);
         RotationSuggestion.install(module,loader,note);
     }
     static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){
@@ -38,6 +39,7 @@ final class ProductFeatures {
         catch(RuntimeException unavailable){note.accept("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
         dev.local.sunwindowdemo.features.shade.SignalDisplay.connect(app);
         DesktopSleepHost.connect(app,note);
+        LockscreenDoubleTap.connect(app,note);
         RotationSuggestion.connect(app);
     }
     static void installLauncher(XposedModule module,ClassLoader loader,Consumer<String> note){

@@ -17,12 +17,13 @@ import dev.local.sunwindowdemo.features.iconlayers.IconLayerStore
 import dev.local.sunwindowdemo.features.navbar.NavbarStore
 
 @Composable
-fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = {}) {
+fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = {}, displayExtras: @Composable () -> Unit = {}) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var appVolume by remember { mutableStateOf(ShadeStore.read(context).getBoolean("appVolume")) }
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
     var coverMonet by remember { mutableStateOf(ShadeStore.coverMonet(context)) }
+    var lockscreenDoubleTapSleep by remember { mutableStateOf(ShadeStore.lockscreenDoubleTapSleep(context)) }
     var desktopDoubleTapSleep by remember { mutableStateOf(ShadeStore.desktopDoubleTapSleep(context)) }
     var systemThemed by remember { mutableStateOf(IconLayerStore.systemThemed(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
@@ -39,6 +40,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
             drawerMonet = ShadeStore.drawerMonet(context)
             coverMonet = ShadeStore.coverMonet(context)
             desktopDoubleTapSleep = ShadeStore.desktopDoubleTapSleep(context)
+            lockscreenDoubleTapSleep = ShadeStore.lockscreenDoubleTapSleep(context)
             offset = ShadeStore.offset(context)
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
@@ -83,6 +85,12 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
                 NavbarStore.setEnabled(context, it)
             }
         }
+        GroupTitle("锁屏")
+        SettingsGroup {
+            ToggleRow("双击锁屏空白处息屏", value = lockscreenDoubleTapSleep) {
+                ShadeStore.setLockscreenDoubleTapSleep(context, it)
+            }
+        }
         GroupTitle("状态栏与控制中心")
         SettingsGroup {
             ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
@@ -107,10 +115,11 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
             SettingsGroup {
                 ToggleRow("视频悬浮窗保持高刷", "QQ、微信的视频悬浮窗不会将前台应用限制在 60 Hz",
                     value = floatingCallRefresh) { ShadeStore.setFloatingCallRefresh(context, it) }
+                displayExtras()
             }
         }
         if (android.os.Build.VERSION.SDK_INT == 37 && android.os.Build.DEVICE == "dada") {
-            GroupTitle("音量面板")
+            GroupTitle("音量")
             SettingsGroup {
                 ToggleRow("独立应用音量", "为当前播放媒体的应用显示单独的音量滑杆", value = appVolume) {
                     ShadeStore.setAppVolume(context, it)

@@ -87,7 +87,30 @@ public final class MinusOneActivity extends Activity {
     };
     private AppWidgetManager widgetManager;
     private AppWidgetHost host;
-    private Sha…332 tokens truncated…      if (saved != null) {
+    private SharedPreferences preferences;
+    private int pending = NO_WIDGET;
+    private boolean pickerSessionStarted, dimWallpaper;
+    private WidgetGrid workspaceGrid, grid;
+    private String loadedSlots = "";
+    private WidgetCanvas canvas;
+    private ScrollView scroll;
+    private FrameLayout overlay;
+    private View header, removeAction;
+    private ResizableWidgetFrame resizeTarget;
+    private CanvasEdit edit;
+    private FeedOptionsPopup optionsPopup;
+    private ColorDrawable wallpaperDim;
+    private ValueAnimator widgetAppearance, dimAppearance;
+    private float widgetBackgroundOpacity = 1f;
+
+    @Override protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
+        getWindow().setDecorFitsSystemWindows(false);
+        preferences = MinusOneSettings.preferences(this);
+        widgetManager = AppWidgetManager.getInstance(this);
+        host = new AppWidgetHost(this, HOST_ID);
+        widgets.addAll(readWidgets());
+        if (saved != null) {
             pending = saved.getInt("pending", NO_WIDGET);
             pickerSessionStarted = saved.getBoolean("picker_session_started");
         }

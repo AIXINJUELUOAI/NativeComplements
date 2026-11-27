@@ -31,12 +31,23 @@ public final class ShadeStore {
         result.putBoolean("drawerMonet", drawerMonet(context));
         result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));
         result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
+        result.putBoolean("lockscreenDoubleTapSleep", lockscreenDoubleTapSleep(context));
         return result;
     }
 
     public static void setAppVolume(Context context, boolean enabled) {
         preferences(context).edit().putBoolean("app_volume", enabled).apply();
         context.getContentResolver().notifyChange(android.net.Uri.parse("content://" + AUTHORITY + "/app_volume"), null);
+    }
+
+    public static boolean lockscreenDoubleTapSleep(Context context) {
+        return preferences(context).getBoolean("lockscreen_double_tap_sleep", false);
+    }
+
+    public static void setLockscreenDoubleTapSleep(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("lockscreen_double_tap_sleep", enabled).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
 
     public static boolean desktopDoubleTapSleep(Context context) {
