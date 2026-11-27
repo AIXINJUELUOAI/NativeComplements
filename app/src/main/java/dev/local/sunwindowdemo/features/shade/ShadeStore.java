@@ -29,8 +29,14 @@ public final class ShadeStore {
         result.putInt("systemIconScale", iconScale(context, false));
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         result.putBoolean("drawerMonet", drawerMonet(context));
+        result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));
         result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
         return result;
+    }
+
+    public static void setAppVolume(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("app_volume", enabled).apply();
+        context.getContentResolver().notifyChange(android.net.Uri.parse("content://" + AUTHORITY + "/app_volume"), null);
     }
 
     public static boolean desktopDoubleTapSleep(Context context) {
