@@ -6,6 +6,7 @@ Assets are stored as ic_game_*.xml, ic_qs_*.xml, ic_suggestion_*.xml and ic_barr
 ic_flashlight_off and ic_statusbar_airplanemode (ic_qs_flashlight.xml, ic_qs_airplane.xml), Apache-2.0.
 Source: https://android.googlesource.com/platform/frameworks/base/+/refs/heads/main/packages/SystemUI/res/drawable/
 Theme/state tint is applied by the native ImageView; the fixed white disc and black glyph styling are module UI code.
+The Bluetooth headset volume suggestion combines the `headphones`, `bluetooth`, and `arrow_downward` vectors from the same revision. Scaling, placement, and conditional display of the arrow are module adaptations.
 
 Geometry.java adapts the mini-window scale constants, 9:16 canvas ratio and opposite-orientation scale factor from WindowResizingAlgorithm.java, Copyright (C) 2023-2024 The Nameless-AOSP Project, SPDX-License-Identifier: Apache-2.0.
 

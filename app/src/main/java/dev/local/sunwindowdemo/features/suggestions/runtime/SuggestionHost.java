@@ -38,6 +38,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private ClipboardManager clipboard;
     private CameraManager cameras;
     private AudioManager audio;
+    private BluetoothHeadsetVolume headsetVolume;
     private PowerManager.WakeLock awakeLock;
     private Bundle settings=new Bundle();
     private View view;
@@ -69,6 +70,8 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     private String code,smsBody,mapText,displayedSmsBody;
     private long displayedSmsUntil;
     private long codeUntil,contentUntil,torchUntil,bluetoothUntil,awakeUntil;
+    private BluetoothHeadsetVolume.Hint headsetVolumeHint;
+    private long headsetVolumeUntil;
     private SuggestionRules.Link link;
     private List<String> maps=List.of();
     private final Map<String,Notice> notices=new LinkedHashMap<>();
@@ -86,7 +89,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 long time=intent.getLongExtra("time",0);
                 if(getSentFromUid()==1000&&enabled("awake")&&!locked()&&SystemClock.uptimeMillis()-time>=0
                         &&SystemClock.uptimeMillis()-time<2000&&(awakeLock==null||!awakeLock.isHeld())){awakeUntil=offerUntil();render();}
-            }else if(Intent.ACTION_SCREEN_OFF.equals(action)){rotationClick=null;rotationRestore=null;awakeUntil=0;releaseAwake();removeView();chooser=false;}
+            }else if(Intent.ACTION_SCREEN_OFF.equals(action)){rotationClick=null;rotationRestore=null;awakeUntil=0;clearHeadsetVolume();releaseAwake();removeView();chooser=false;}
             else render();
         }
     };
@@ -149,9 +152,11 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     long time=now();
                     codeUntil=SuggestionRules.adjustUntil(codeUntil,time,delta);contentUntil=SuggestionRules.adjustUntil(contentUntil,time,delta);
                     torchUntil=SuggestionRules.adjustUntil(torchUntil,time,delta);bluetoothUntil=SuggestionRules.adjustUntil(bluetoothUntil,time,delta);awakeUntil=SuggestionRules.adjustUntil(awakeUntil,time,delta);
+                    headsetVolumeUntil=SuggestionRules.adjustUntil(headsetVolumeUntil,time,delta);
                     boolean offerBluetooth=next.getBoolean("enabled")&&next.getBoolean("bluetooth")&&(!enabled("bluetooth")
                         ||!Objects.equals(settings.getString("bluetooth_app"),next.getString("bluetooth_app")));
                     settings=next;
+                    configureHeadsetVolume();
                     RotationDiagnostics.update("settings","已读取: enabled="+settings.getBoolean("enabled")+", rotate="+settings.getBoolean("rotate"));
                     if(offerBluetooth&&audioConnected){bluetoothUsed=false;bluetoothUntil=offerUntil();}
                     if(!enabled("otp")){code=null;smsBody=null;displayedSmsBody=null;notices.clear();}
@@ -164,7 +169,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                 });
             }catch(Exception e){main.post(()->{if(!closed){
                 RotationDiagnostics.update("settings","读取失败: "+e.getClass().getSimpleName());
-                settings=new Bundle();awakeUntil=0;releaseAwake();removeView();restoreRotation();publishRotationSettings();
+                settings=new Bundle();configureHeadsetVolume();awakeUntil=0;releaseAwake();removeView();restoreRotation();publishRotationSettings();
                 main.postDelayed(retry,dev.local.sunwindowdemo.core.HostSnapshot.open(context,"suggestions").retryDelay(3000));
             }});}
         });
@@ -183,6 +188,36 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
                     ||type==AudioDeviceInfo.TYPE_HEARING_AID)connected=true;
         }}catch(RuntimeException ignored){}
         if(connected!=audioConnected){audioConnected=connected;bluetoothUsed=false;bluetoothUntil=connected?offerUntil():0;}render();
+    }
+    private void configureHeadsetVolume() {
+        if (!enabled("headset_volume")) {
+            clearHeadsetVolume();
+            if (headsetVolume != null) headsetVolume.configure(0);
+            return;
+        }
+        try {
+            if (headsetVolume == null && audio != null) {
+                headsetVolume = new BluetoothHeadsetVolume(context, audio, main, this::offerHeadsetVolume);
+            }
+            if (headsetVolume != null) headsetVolume.configure(settings.getInt("headset_volume_limit", 1));
+        } catch (RuntimeException unavailable) {
+            status("HEADSET_VOLUME_UNAVAILABLE");
+        }
+    }
+    private void offerHeadsetVolume(BluetoothHeadsetVolume.Hint hint) {
+        if (closed || !enabled("headset_volume")) return;
+        if (hint == null || locked()) {
+            if (headsetVolumeHint == null) return;
+            clearHeadsetVolume();
+        } else {
+            headsetVolumeHint = hint;
+            headsetVolumeUntil = offerUntil();
+        }
+        render();
+    }
+    private void clearHeadsetVolume() {
+        headsetVolumeHint = null;
+        headsetVolumeUntil = 0;
     }
     private void clipboardChanged(){
         if(closed||!settings.getBoolean("enabled")||locked())return;
@@ -245,6 +280,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         }
     }
     private void prune(){
+        if(headsetVolumeUntil<=now())clearHeadsetVolume();
         if(codeUntil<=now()){code=null;smsBody=null;}
         if(displayedSmsUntil<=now())displayedSmsBody=null;
         if(contentUntil<=now()){link=null;mapText=null;chooser=false;}
@@ -338,6 +374,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
         if(torchUntil>now())main.postDelayed(expire,torchUntil-now());
         if(bluetoothUntil>now())main.postDelayed(expire,bluetoothUntil-now());
         if(awakeUntil>now())main.postDelayed(expire,awakeUntil-now());
+        if(headsetVolumeUntil>now())main.postDelayed(expire,headsetVolumeUntil-now());
         removeView();if(locked()){awakeUntil=0;releaseAwake();return;}
         if(!settings.getBoolean("enabled")||systemOverlay)return;
         LinearLayout row=new LinearLayout(windowContext);row.setOrientation(LinearLayout.VERTICAL);row.setGravity(settings.getBoolean("right")?Gravity.RIGHT:Gravity.LEFT);row.setPadding(dp(3),dp(3),dp(3),dp(3));
@@ -368,6 +405,12 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
             if(enabled("bluetooth")&&audioConnected&&!bluetoothUsed&&bluetoothUntil>now()&&installed(bluetooth))addAppButton(row,icon(bluetooth),"打开蓝牙目标应用",()->{
                 Intent launch=context.getPackageManager().getLaunchIntentForPackage(bluetooth);open(launch,bluetooth,()->{bluetoothUsed=true;render();});
             },()->bluetoothUsed=true);
+            if (enabled("headset_volume") && headsetVolumeHint != null) {
+                String icon = headsetVolumeHint.reduced() ? "ic_suggestion_headphones_down" : "ic_suggestion_headphones";
+                ImageView headphones = addButton(row, glyph(icon), headsetVolumeHint.description(),
+                        () -> { clearHeadsetVolume(); render(); }, this::clearHeadsetVolume);
+                paint(headphones, SuggestionTones.tone(night(), SuggestionTones.BLUETOOTH_LIGHT, SuggestionTones.BLUETOOTH_DARK));
+            }
             if(enabled("otp")&&code!=null&&!inputAttempt.running()){
                 ImageView otp=addButton(row,glyph("ic_suggestion_otp"),inputAttempt.running()?"正在逐位填入验证码":"逐位填入验证码",this::input,()->{code=null;smsBody=null;displayedSmsBody=null;displayedSmsUntil=0;});
                 paint(otp,SuggestionTones.tone(night(),SuggestionTones.OTP_LIGHT,SuggestionTones.OTP_DARK));
@@ -488,6 +531,7 @@ final class SuggestionHost implements ComponentCallbacks,AutoCloseable {
     @Override public void onLowMemory(){}
     @Override public void close(){
         closed=true;restoreRotation();publishRotationSettings();releaseAwake();removeView();main.removeCallbacksAndMessages(null);worker.shutdownNow();
+        if(headsetVolume!=null)headsetVolume.close();
         if(registered){context.unregisterReceiver(receiver);context.unregisterComponentCallbacks(this);}
         if(clipboard!=null)clipboard.removePrimaryClipChangedListener(clipListener);
         if(cameras!=null)cameras.unregisterTorchCallback(torchCallback);

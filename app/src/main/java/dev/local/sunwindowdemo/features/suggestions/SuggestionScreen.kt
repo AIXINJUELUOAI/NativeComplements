@@ -3,6 +3,7 @@ package dev.local.sunwindowdemo.features.suggestions
 import android.Manifest
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
@@ -31,7 +32,7 @@ import dev.local.sunwindowdemo.R
 import dev.local.sunwindowdemo.WindowController
 import dev.local.sunwindowdemo.core.ui.*
 
-private enum class SuggestionSheet { Bluetooth, Otp, Button }
+private enum class SuggestionSheet { Bluetooth, HeadsetVolume, Otp, Button }
 
 @Composable
 fun SuggestionAppsScreen() {
@@ -85,7 +86,7 @@ fun SuggestionScreen(controller: WindowController, onSupportedApps: () -> Unit) 
     fun tone(light: Long, night: Long) = Color(if (dark) night else light)
     val torchTone = tone(SuggestionTones.TORCH_LIGHT.toLong(), SuggestionTones.TORCH_DARK.toLong())
     val awakeTone = tone(SuggestionTones.AWAKE_LIGHT.toLong(), SuggestionTones.AWAKE_DARK.toLong())
-    val bluetoothTone = tone(0xFF1A73E8, 0xFF8AB4F8)
+    val bluetoothTone = tone(SuggestionTones.BLUETOOTH_LIGHT.toLong(), SuggestionTones.BLUETOOTH_DARK.toLong())
     val otpTone = tone(SuggestionTones.OTP_LIGHT.toLong(), SuggestionTones.OTP_DARK.toLong())
     val linkTone = tone(0xFF7B4DBD, 0xFFC4A7FF)
     val locationTone = tone(SuggestionTones.MAP_LIGHT.toLong(), SuggestionTones.MAP_DARK.toLong())
@@ -105,6 +106,10 @@ fun SuggestionScreen(controller: WindowController, onSupportedApps: () -> Unit) 
             leading = { SuggestionIcon(R.drawable.ic_suggestion_awake, awakeTone) })
         SplitSwitchRow("蓝牙音频设备", bluetoothSubtitle, config.getBoolean("bluetooth"), { toggle("bluetooth", it) },
             { sheet = SuggestionSheet.Bluetooth }, leading = { SuggestionIcon(R.drawable.ic_suggestion_bluetooth, bluetoothTone) })
+        SplitSwitchRow("蓝牙耳机音量", "${config.getInt("headset_volume_limit", 1)} 档上限",
+            config.getBoolean("headset_volume"), { toggle("headset_volume", it) },
+            { sheet = SuggestionSheet.HeadsetVolume },
+            leading = { SuggestionIcon(R.drawable.ic_suggestion_headphones, bluetoothTone) })
         SplitSwitchRow("验证码填充", value = config.getBoolean("otp"), onToggle = { toggle("otp", it) },
             onDetails = { sheet = SuggestionSheet.Otp }, leading = { SuggestionIcon(R.drawable.ic_suggestion_otp, otpTone) })
         SplitSwitchRow("链接与分享口令", value = config.getBoolean("links"), onToggle = { toggle("links", it) },
@@ -141,6 +146,28 @@ fun SuggestionScreen(controller: WindowController, onSupportedApps: () -> Unit) 
                                     RadioButton(selected == app.packageName, onClick = null)
                                     Text(app.label, Modifier.padding(start = 12.dp))
                                 }
+                            }
+                        }
+                    }
+                    SuggestionSheet.HeadsetVolume -> {
+                        Text("蓝牙耳机音量", style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+                        Text("耳机接管媒体播放时，只降低超过上限的音量。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 12.dp))
+                        val maxVolume = remember(context) {
+                            runCatching { context.getSystemService(AudioManager::class.java)
+                                ?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15 }
+                                .getOrDefault(15).coerceIn(1, 150)
+                        }
+                        SettingsGroup {
+                            if (maxVolume > 1) {
+                                IconSliderRow("媒体音量上限", value = config.getInt("headset_volume_limit", 1).coerceIn(1, maxVolume),
+                                    range = 1..maxVolume, unit = " 档",
+                                    onCommit = { SuggestionStore.setHeadsetVolumeLimit(context, it) },
+                                    leading = { SuggestionIcon(R.drawable.ic_suggestion_headphones, bluetoothTone) })
+                            } else {
+                                SettingRow("媒体音量上限", "1 档")
                             }
                         }
                     }

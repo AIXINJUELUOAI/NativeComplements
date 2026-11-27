@@ -9,6 +9,7 @@ public final class SuggestionTones {
     public static final int OTP_LIGHT = 0xFF00897B, OTP_DARK = 0xFF4DB6AC;
     public static final int MAP_LIGHT = 0xFF2E7D32, MAP_DARK = 0xFF81C784;
     public static final int ROTATE_LIGHT = 0xFF00639B, ROTATE_DARK = 0xFF8ECDF8;
+    public static final int BLUETOOTH_LIGHT = 0xFF1A73E8, BLUETOOTH_DARK = 0xFF8AB4F8;
     /** Same 16% tonal container used behind the in-app suggestion glyph. */
     public static final float CONTAINER_ALPHA = 0.16f;
     private SuggestionTones() {}
