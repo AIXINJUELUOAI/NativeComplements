@@ -6,12 +6,22 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Process;
+import android.os.UserHandle;
 
-/** Own/SystemUI configuration readers; Launcher gets only the drawer projection. No remote writes. */
+/** Read-only projections for SystemUI, the home launcher, and the system display policy. */
 public final class ShadeProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
     @Override public Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
+        if (ShadeStore.CALL_REFRESH_READ.equals(method)) {
+            if (uid != Process.SYSTEM_UID
+                    || !Process.myUserHandle().equals(UserHandle.getUserHandleForUid(Process.SYSTEM_UID)))
+                throw new SecurityException("floating call refresh reader");
+            Bundle result = new Bundle();
+            result.putBoolean("enabled", ShadeStore.floatingCallRefresh(getContext()));
+            return result;
+        }
         if ("drawer".equals(method)) {
             if (uid != getContext().getApplicationInfo().uid
                     && !dev.local.sunwindowdemo.core.LauncherTargets.isLauncherUid(getContext(), uid))
