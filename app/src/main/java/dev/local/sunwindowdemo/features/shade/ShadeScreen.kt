@@ -20,6 +20,7 @@ import dev.local.sunwindowdemo.features.navbar.NavbarStore
 fun ShadeScreen(bottomInset: Dp = 0.dp) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
+    var appVolume by remember { mutableStateOf(ShadeStore.read(context).getBoolean("appVolume")) }
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
     var coverMonet by remember { mutableStateOf(ShadeStore.coverMonet(context)) }
     var desktopDoubleTapSleep by remember { mutableStateOf(ShadeStore.desktopDoubleTapSleep(context)) }
@@ -33,6 +34,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
         val prefs = ShadeStore.preferences(context)
         val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
             enabled = ShadeStore.read(context).getBoolean("enabled")
+            appVolume = ShadeStore.read(context).getBoolean("appVolume")
             drawerMonet = ShadeStore.drawerMonet(context)
             coverMonet = ShadeStore.coverMonet(context)
             desktopDoubleTapSleep = ShadeStore.desktopDoubleTapSleep(context)
@@ -94,6 +96,14 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             }
             SliderRow("图标垂直位置", value = offset, range = -32..32, unit = " dp") {
                 ShadeStore.setOffset(context, it)
+            }
+        }
+        if (android.os.Build.VERSION.SDK_INT == 37 && android.os.Build.DEVICE == "dada") {
+            GroupTitle("音量面板")
+            SettingsGroup {
+                ToggleRow("独立应用音量", "为当前播放媒体的应用显示单独的音量滑杆", value = appVolume) {
+                    ShadeStore.setAppVolume(context, it)
+                }
             }
         }
     }
