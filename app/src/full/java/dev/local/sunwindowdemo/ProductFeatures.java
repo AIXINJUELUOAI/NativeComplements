@@ -17,6 +17,7 @@ final class ProductFeatures {
         dev.local.sunwindowdemo.features.edgetouch.EdgeInputFilter.install(module,loader,note);
         dev.local.sunwindowdemo.features.motion.MotionAccess.install(module,loader,note);
         dev.local.sunwindowdemo.features.background.BackgroundHost.install(module,loader,note);
+        dev.local.sunwindowdemo.features.callrefresh.FloatingCallRefresh.install(module,loader,note);
     }
     static void installSystemUi(XposedModule module,ClassLoader loader,Consumer<String> note){
         dev.local.sunwindowdemo.features.shade.LandscapeShade.install(module,loader,note);

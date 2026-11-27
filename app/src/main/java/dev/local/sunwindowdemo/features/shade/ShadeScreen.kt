@@ -28,6 +28,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
     var systemIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, false)) }
     var signalDisplay by remember { mutableStateOf(ShadeStore.read(context).getBoolean("signalDisplay")) }
+    var floatingCallRefresh by remember { mutableStateOf(ShadeStore.floatingCallRefresh(context)) }
     var navbarImmersive by remember { mutableStateOf(NavbarStore.preferences(context).getBoolean("enabled", false)) }
     DisposableEffect(context) {
         val prefs = ShadeStore.preferences(context)
@@ -40,6 +41,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
             signalDisplay = ShadeStore.read(context).getBoolean("signalDisplay")
+            floatingCallRefresh = ShadeStore.floatingCallRefresh(context)
         }
         val icons = IconLayerStore.prefs(context)
         val themeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
@@ -94,6 +96,14 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             }
             SliderRow("图标垂直位置", value = offset, range = -32..32, unit = " dp") {
                 ShadeStore.setOffset(context, it)
+            }
+        }
+        if (android.os.Build.VERSION.SDK_INT == 37 &&
+            android.os.Process.myUserHandle() == android.os.UserHandle.getUserHandleForUid(android.os.Process.SYSTEM_UID)) {
+            GroupTitle("显示")
+            SettingsGroup {
+                ToggleRow("视频悬浮窗保持高刷", "QQ、微信的视频悬浮窗不会将前台应用限制在 60 Hz",
+                    value = floatingCallRefresh) { ShadeStore.setFloatingCallRefresh(context, it) }
             }
         }
     }
