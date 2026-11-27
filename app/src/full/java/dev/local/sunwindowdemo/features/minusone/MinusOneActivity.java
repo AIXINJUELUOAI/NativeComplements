@@ -4,6 +4,7 @@ import android.animation.ValueAnimator;
 import dev.local.sunwindowdemo.R;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.appwidget.AppWidgetHost;
 import android.appwidget.AppWidgetHostView;
@@ -12,6 +13,7 @@ import android.appwidget.AppWidgetProviderInfo;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -47,6 +49,7 @@ import android.widget.RemoteViews;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -85,6 +88,10 @@ public final class MinusOneActivity extends Activity {
             if (!Objects.equals(workspaceGrid, MinusOneSettings.widgetGrid(MinusOneActivity.this))) render();
         }
     };
+    private final BroadcastReceiver clockReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) { updateGreeting(); }
+    };
+    private TextView greeting;
     private AppWidgetManager widgetManager;
     private AppWidgetHost host;
     private SharedPreferences preferences;
@@ -108,7 +115,11 @@ public final class MinusOneActivity extends Activity {
         getWindow().setDecorFitsSystemWindows(false);
         preferences = MinusOneSettings.preferences(this);
         widgetManager = AppWidgetManager.getInstance(this);
-        host = new AppWidgetHost(this, HOST_ID);
+        host = new AppWidgetHost(this, HOST_ID) {
+            @Override protected AppWidgetHostView onCreateView(Context context, int id, AppWidgetProviderInfo info) {
+                return new FeedWidgetView(context);
+            }
+        };
         widgets.addAll(readWidgets());
         if (saved != null) {
             pending = saved.getInt("pending", NO_WIDGET);
@@ -144,6 +155,11 @@ public final class MinusOneActivity extends Activity {
         } else {
             if (dimWallpaper != preferences.getBoolean(DIM, false)) updateWallpaperDim();
         }
+        var clockChanges = new IntentFilter(Intent.ACTION_TIME_TICK);
+        clockChanges.addAction(Intent.ACTION_TIME_CHANGED);
+        clockChanges.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+        registerReceiver(clockReceiver, clockChanges, Context.RECEIVER_NOT_EXPORTED);
+        updateGreeting();
         if (listeningActivity != this) {
             // The preview and the embedded page share one system widget host ID.
             if (listeningActivity != null) listeningActivity.host.stopListening();
@@ -157,7 +173,10 @@ public final class MinusOneActivity extends Activity {
         awaitingPicker = false;
         main.removeCallbacks(pickerTimeout);
         getContentResolver().unregisterContentObserver(pickerObserver);
-        if (!isPickerSession()) getContentResolver().unregisterContentObserver(gridObserver);
+        if (!isPickerSession()) {
+            getContentResolver().unregisterContentObserver(gridObserver);
+            unregisterReceiver(clockReceiver);
+        }
         if (edit != null) finishCanvasEdit(false);
         if (resizeTarget != null) selectResize(null);
         if (listeningActivity == this) {
@@ -225,7 +244,8 @@ public final class MinusOneActivity extends Activity {
         header = headerLayout;
         headerLayout.setGravity(Gravity.CENTER_VERTICAL);
         var title = new TextView(this);
-        title.setText("负一屏");
+        greeting = title;
+        updateGreeting();
         title.setTextColor(Color.WHITE);
         title.setTextSize(24);
         title.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
@@ -273,6 +293,16 @@ public final class MinusOneActivity extends Activity {
         overlay.addView(root, 0, new FrameLayout.LayoutParams(-1, -1));
         setContentView(overlay);
         if (previousScroll != 0) scroll.post(() -> scroll.scrollTo(0, previousScroll));
+    }
+
+    static String greetingForHour(int hour) {
+        if (hour < 6 || hour >= 18) return "晚上好";
+        return hour < 12 ? "上午好" : "下午好";
+    }
+
+    private void updateGreeting() {
+        String label = greetingForHour(LocalTime.now().getHour());
+        if (!label.contentEquals(greeting.getText())) greeting.setText(label);
     }
 
     private void updateWallpaperDim() {
