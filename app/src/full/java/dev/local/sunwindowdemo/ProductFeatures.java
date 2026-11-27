@@ -41,6 +41,7 @@ final class ProductFeatures {
         RotationSuggestion.connect(app);
     }
     static void installLauncher(XposedModule module,ClassLoader loader,Consumer<String> note){
+        dev.local.sunwindowdemo.features.minusone.LauncherMinusOne.install(module,loader,note);
         LauncherRotationSuggestion.install(module,loader,note);
         DesktopDoubleTap.install(module,loader,note);
     }

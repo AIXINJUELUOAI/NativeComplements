@@ -17,7 +17,7 @@ import dev.local.sunwindowdemo.features.iconlayers.IconLayerStore
 import dev.local.sunwindowdemo.features.navbar.NavbarStore
 
 @Composable
-fun ShadeScreen(bottomInset: Dp = 0.dp) {
+fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = {}) {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(ShadeStore.read(context).getBoolean("enabled")) }
     var appVolume by remember { mutableStateOf(ShadeStore.read(context).getBoolean("appVolume")) }
@@ -69,6 +69,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp) {
             ToggleRow("双击桌面锁屏", value = desktopDoubleTapSleep) {
                 ShadeStore.setDesktopDoubleTapSleep(context, it)
             }
+            desktopExtras()
             val hint = when {
                 systemThemed -> null
                 dev.local.sunwindowdemo.core.LauncherTargets.home(context) == "com.android.launcher3" ->

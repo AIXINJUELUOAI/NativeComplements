@@ -125,7 +125,9 @@ fun ModuleApp(
             Page.Calls, Page.Records -> CallBlockingScreen(page == Page.Records, bottomInset, onRecords = { navigate(Page.Records) })
             Page.Sms, Page.SmsRecords -> SmsBlockingScreen(page == Page.SmsRecords, bottomInset, onRecords = { navigate(Page.SmsRecords) })
             Page.EdgeTouch -> EdgeTouchScreen(bottomInset)
-            Page.Shade -> ShadeScreen(bottomInset)
+            Page.Shade -> ShadeScreen(bottomInset) {
+                dev.local.sunwindowdemo.features.minusone.MinusOneToggle()
+            }
             Page.Motion -> MotionScreen(controller.apps, controller.catalogLoaded, bottomInset)
             Page.GameMode -> GameModeScreen(controller.apps, controller.catalogLoaded, bottomInset,
                 onQuick = { navigate(Page.GameQuick) }, onBarrage = { navigate(Page.Barrage) }, onCorner = { navigate(Page.GameCorner) },
