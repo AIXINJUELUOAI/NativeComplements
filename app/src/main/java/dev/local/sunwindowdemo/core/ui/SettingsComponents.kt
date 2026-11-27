@@ -169,7 +169,6 @@ fun Glyph(kind: String, container: Color = MaterialTheme.colorScheme.surfaceCont
         "phone" -> R.drawable.ic_call_blocking
         "shake" -> R.drawable.ic_motion
         "edge" -> R.drawable.ic_edge_touch
-        "alive" -> R.drawable.ic_alive
         else -> null
     }
     Box(Modifier.size(44.dp).background(container, CircleShape), contentAlignment = Alignment.Center) {

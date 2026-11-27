@@ -49,19 +49,24 @@ public class WindowAudioContinuationTest {
     }
     private void update(){bridge.update(bridge.epoch(),Map.of(UID,new WindowAudioContinuation.Grant(PKG,lease)));}
     private void idle(long ms){Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(ms));}
-    private void assertDenied(){assertEquals(1,bridge.evaluate(UID,154,4,1));assertEquals(1,bridge.evaluate(UID,155,4,1));}
+    private static final int[] OPS={32,154,155};
+    private void assertDenied(){for(int op:OPS)assertEquals(1,bridge.evaluate(UID,op,4,1));}
+    private void assertAllowed(){for(int op:OPS)assertEquals(0,bridge.evaluate(UID,op,4,1));}
     @Test public void onlyNativeForegroundAudioDenialChangesAndClearNotifiesExactOps(){
         update();assertTrue(service.calls.isEmpty());
-        assertEquals(0,bridge.evaluate(UID,154,4,1));assertEquals(0,bridge.evaluate(UID,155,4,1));
-        for(int raw:new int[]{0,1,2,3,5})for(int result:new int[]{0,1,2,3})assertEquals(result,bridge.evaluate(UID,154,raw,result));
-        assertEquals(2,bridge.evaluate(UID,154,4,2));assertEquals(1,bridge.evaluate(UID,26,4,1));
-        assertEquals(1,bridge.evaluate(UID+100000,154,4,1));
-        idle(0);assertEquals(List.of("154:"+UID,"155:"+UID),service.calls);
+        assertAllowed();
+        for(int op:OPS) {
+            for(int raw:new int[]{0,1,2,3,5})for(int result:new int[]{0,1,2,3,4})assertEquals(result,bridge.evaluate(UID,op,raw,result));
+            for(int result:new int[]{0,2,3,4})assertEquals(result,bridge.evaluate(UID,op,4,result));
+            assertEquals(1,bridge.evaluate(UID+100000,op,4,1));assertEquals(1,bridge.evaluate(UID+1,op,4,1));
+        }
+        assertEquals(1,bridge.evaluate(UID,26,4,1));
+        idle(0);assertEquals(List.of("32:"+UID,"154:"+UID,"155:"+UID),service.calls);
         bridge.clear();assertDenied();idle(0);
-        assertEquals(List.of("154:"+UID,"155:"+UID,"154:"+UID,"155:"+UID),service.calls);
+        assertEquals(List.of("32:"+UID,"154:"+UID,"155:"+UID,"32:"+UID,"154:"+UID,"155:"+UID),service.calls);
     }
     @Test public void sharedUidAndChangedPackageMembershipAreNeverCached(){
-        update();assertEquals(0,bridge.evaluate(UID,154,4,1));
+        update();assertAllowed();
         install("audio.continuation.sibling",UID);update();assertDenied();
         bridge.update(bridge.epoch(),Map.of(UID,new WindowAudioContinuation.Grant("wrong.pkg",lease)));assertDenied();
         bridge.update(bridge.epoch(),Map.of(UID+100000,new WindowAudioContinuation.Grant(PKG,lease)));assertDenied();
@@ -71,27 +76,27 @@ public class WindowAudioContinuationTest {
         Shadows.shadowOf(context.getPackageManager()).installPackage(info);update();assertDenied();
     }
     @Test public void closingBridgeRevokesAndPermanentlyRejectsLaterUpdates(){
-        update();idle(0);bridge.close();assertDenied();update();assertDenied();idle(0);assertEquals(4,service.calls.size());
+        update();idle(0);bridge.close();assertDenied();update();assertDenied();idle(0);assertEquals(6,service.calls.size());
     }
     @Test public void independentNativeHandlerExpiresEvenWithoutControllerRefresh(){
-        update();idle(0);idle(999);assertEquals(0,bridge.evaluate(UID,154,4,1));
-        idle(1);assertDenied();assertEquals(4,service.calls.size());assertTrue(lease.deaths.isEmpty());
+        update();idle(0);idle(999);assertAllowed();
+        idle(1);assertDenied();assertEquals(6,service.calls.size());assertTrue(lease.deaths.isEmpty());
     }
     @Test public void refreshExtendsSingleExpiryWithoutOldTimerClearingNewSnapshot(){
-        update();idle(750);update();idle(250);assertEquals(0,bridge.evaluate(UID,154,4,1));
-        assertEquals(2,service.calls.size());idle(749);assertEquals(0,bridge.evaluate(UID,154,4,1));
-        idle(1);assertDenied();assertEquals(4,service.calls.size());
+        update();idle(750);update();idle(250);assertAllowed();
+        assertEquals(3,service.calls.size());idle(749);assertAllowed();
+        idle(1);assertDenied();assertEquals(6,service.calls.size());
     }
     @Test public void expiredSnapshotRefreshNotifiesRegrantEvenBeforeExpiryWasDispatched(){
         update();idle(0);org.robolectric.shadows.ShadowSystemClock.advanceBy(Duration.ofMillis(1001));
-        assertDenied();update();assertEquals(0,bridge.evaluate(UID,154,4,1));idle(0);
-        assertEquals(4,service.calls.size());assertEquals(0,bridge.evaluate(UID,154,4,1));
-        idle(1000);assertDenied();assertEquals(6,service.calls.size());
+        assertDenied();update();assertAllowed();idle(0);
+        assertEquals(6,service.calls.size());assertAllowed();
+        idle(1000);assertDenied();assertEquals(9,service.calls.size());
     }
     @Test public void clearEpochRejectsCollectedOldUpdatesAndQueuedGrantNotificationsCannotRegrant(){
         long collected=bridge.epoch();update();bridge.clear();
         bridge.update(collected,Map.of(UID,new WindowAudioContinuation.Grant(PKG,lease)));assertDenied();
-        idle(0);assertDenied();assertEquals(4,service.calls.size());assertTrue(lease.deaths.isEmpty());
+        idle(0);assertDenied();assertEquals(6,service.calls.size());assertTrue(lease.deaths.isEmpty());
     }
     @Test public void clearDuringOutOfLockValidationRejectsPublicationAndUnlinksNewLease(){
         lease.onLink=bridge::clear;update();assertDenied();assertTrue(lease.deaths.isEmpty());
@@ -99,7 +104,7 @@ public class WindowAudioContinuationTest {
     }
     @Test public void leaseDeathRevokesSynchronouslyAndNotifiesNative(){
         update();idle(0);assertEquals(1,lease.deaths.size());lease.die();assertDenied();
-        idle(0);assertEquals(4,service.calls.size());assertTrue(lease.deaths.isEmpty());
+        idle(0);assertEquals(6,service.calls.size());assertTrue(lease.deaths.isEmpty());
     }
     @Test public void deathDuringRegistrationCannotPublishAStaleGrant(){
         lease.dieOnLink=true;update();assertDenied();idle(0);assertTrue(lease.deaths.isEmpty());
@@ -108,9 +113,78 @@ public class WindowAudioContinuationTest {
         service.reject=true;update();idle(0);assertDenied();assertTrue(service.calls.size()>=3);
         service.reject=false;update();assertDenied();
     }
+    @Test public void refreshDiagnosticsAreNumericBoundedAndCannotAffectAuthorization()throws Exception{
+        List<String> logs=new ArrayList<>();
+        bridge=new WindowAudioContinuation(access(),line->{logs.add(line);if(line.startsWith("EDGE_AUDIO_REFRESH"))throw new Error("private sink");});
+        bridge.attach(context,service);
+        bridge.update(bridge.epoch(),Map.of());assertEquals(1,logs.size()); // READY only for an idle feature.
+        update();assertAllowed();for(int i=0;i<10;i++)update();
+        assertEquals(1,logs.stream().filter(line->line.startsWith("EDGE_AUDIO_REFRESH")).count());
+        String refresh=logs.stream().filter(line->line.startsWith("EDGE_AUDIO_REFRESH")).findFirst().orElseThrow();
+        assertTrue(refresh.contains("desired=1 granted=1 epochValid=true ttlMillis=1000 disabled=false"));
+        assertFalse(refresh.contains(PKG));assertFalse(refresh.contains("private sink"));
+        idle(30_000);assertDenied();update();assertAllowed();
+        assertEquals(2,logs.stream().filter(line->line.startsWith("EDGE_AUDIO_REFRESH")).count());
+    }
+    public static final class Evaluation {
+        public int evalMode(int uid,int op,int mode){return mode;}
+        public int callerOne(int op,int mode){return mode;}
+        public int callerTwo(int uid,int op,int mode){return mode;}
+    }
+    @Test public void nativeEvaluationHookPreservesOriginalCallsAndRollbackDisablesHalfInstallation()throws Throwable{
+        Map<String,io.github.libxposed.api.XposedInterface.Hooker> hooks=new HashMap<>();
+        int[] nativeCalls={0},deopts={0},unhooks={0};boolean[] deoptAllowed={true};
+        io.github.libxposed.api.XposedModule module=new io.github.libxposed.api.XposedModule(){};
+        module.attachFramework((io.github.libxposed.api.XposedInterface)Proxy.newProxyInstance(getClass().getClassLoader(),
+            new Class[]{io.github.libxposed.api.XposedInterface.class},(p,m,args)->{
+                if(m.getName().equals("deoptimize")){deopts[0]++;return deoptAllowed[0];}
+                if(m.getName().equals("hook"))return Proxy.newProxyInstance(getClass().getClassLoader(),
+                    new Class[]{io.github.libxposed.api.XposedInterface.HookBuilder.class},(bp,bm,ba)->{
+                        if(bm.getName().equals("setExceptionMode"))return bp;
+                        if(bm.getName().equals("intercept")){
+                            hooks.put("eval",(io.github.libxposed.api.XposedInterface.Hooker)ba[0]);
+                            return new io.github.libxposed.api.XposedInterface.HookHandle(){
+                                public Executable getExecutable(){return (Executable)args[0];}
+                                public void unhook(){unhooks[0]++;hooks.clear();}
+                            };
+                        }
+                        throw new AssertionError(bm);
+                    });
+                throw new AssertionError(m);
+            }));
+        Method eval=Evaluation.class.getMethod("evalMode",int.class,int.class,int.class);
+        List<Method> callers=List.of(Evaluation.class.getMethod("callerOne",int.class,int.class),Evaluation.class.getMethod("callerTwo",int.class,int.class,int.class));
+        assertTrue(bridge.installEvaluation(module,eval,callers,new ArrayList<>()));assertEquals(2,deopts[0]);update();
+        for(int op:OPS){
+            assertEquals(0,invoke(hooks.get("eval"),new Object[]{UID,op,4},()->{nativeCalls[0]++;return 1;}));
+            Integer original=Integer.valueOf(2);assertSame(original,invoke(hooks.get("eval"),new Object[]{UID,op,4},()->{nativeCalls[0]++;return original;}));
+        }
+        Error original=new AssertionError("native private error");
+        try{invoke(hooks.get("eval"),new Object[]{UID,32,4},()->{nativeCalls[0]++;throw original;});fail();}catch(Throwable actual){assertSame(original,actual);}
+        Integer untouched=Integer.valueOf(1);
+        assertSame(untouched,invoke(hooks.get("eval"),new Object[]{UID},()->{nativeCalls[0]++;return untouched;})); // Observation fault must preserve native.
+        assertEquals(8,nativeCalls[0]);
+        WindowAudioContinuation failing=new WindowAudioContinuation(access(),line->{});
+        List<io.github.libxposed.api.XposedInterface.HookHandle> rejected=new ArrayList<>(){
+            @Override public boolean addAll(Collection<? extends io.github.libxposed.api.XposedInterface.HookHandle> values){super.addAll(values);throw new Error("handoff rejected");}
+        };
+        assertFalse(failing.installEvaluation(module,eval,callers,rejected));assertEquals(1,unhooks[0]);assertTrue(hooks.isEmpty());assertTrue(rejected.isEmpty());
+        failing.attach(context,service);failing.update(failing.epoch(),Map.of(UID,new WindowAudioContinuation.Grant(PKG,lease)));
+        for(int op:OPS)assertEquals(1,failing.evaluate(UID,op,4,1));
+        deoptAllowed[0]=false;assertFalse(failing.installEvaluation(module,eval,callers,new ArrayList<>()));assertTrue(hooks.isEmpty());
+    }
+    interface Native {Object run()throws Throwable;}
+    private Object invoke(io.github.libxposed.api.XposedInterface.Hooker hook,Object[] args,Native body)throws Throwable{
+        return hook.intercept((io.github.libxposed.api.XposedInterface.Chain)Proxy.newProxyInstance(getClass().getClassLoader(),
+            new Class[]{io.github.libxposed.api.XposedInterface.Chain.class},(p,m,a)->{
+                if(m.getName().equals("getArg"))return args[(Integer)a[0]];
+                if(m.getName().equals("proceed"))return body.run();
+                throw new AssertionError(m);
+            }));
+    }
     @Test public void missingNativeAbiDoesNotAuthorize()throws Exception{
         WindowAudioContinuation unavailable=new WindowAudioContinuation(access(),message->{});unavailable.attach(context,new Object());
         unavailable.update(unavailable.epoch(),Map.of(UID,new WindowAudioContinuation.Grant(PKG,lease)));
-        assertEquals(1,unavailable.evaluate(UID,154,4,1));
+        for(int op:OPS)assertEquals(1,unavailable.evaluate(UID,op,4,1));
     }
 }

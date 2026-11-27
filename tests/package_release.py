@@ -67,11 +67,8 @@ def main():
         entries = archive.read("META-INF/xposed/java_init.list").decode().splitlines()
         assert len(entries) == len(ENTRIES) and set(entries) == ENTRIES, entries
         assert not any(name.endswith((".keystore", ".jks", ".p12", ".pfx")) for name in names)
-        assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/")) for name in names), "Restricted Alive runtime/resources must remain user-imported"
-        for notice in ("LICENSE", "NOTICE.txt"):
-            path = "assets/licenses/openalive/" + notice
-            assert archive.read(path) == (ROOT / "app/src/full" / path).read_bytes(), "Missing or changed OpenAlive notice: " + notice
-        assert archive.read("assets/licenses/openalive/LICENSE") == (ROOT / "app/src/full/java/org/aliveclean/LICENSE").read_bytes(), "Keep complete OpenAlive MIT license with adapted code"
+        assert not any(name.endswith("libalive_clean.so") or name.startswith(("assets/masks/", "assets/shader/", "assets/editor/")) for name in names), "Removed Alive runtime/resources in APK"
+        assert not any(name.startswith("assets/licenses/openalive/") for name in names), "Removed Alive asset in APK"
         required_types = {"Ldev/local/sunwindowdemo/" + name + ";" for name in (
             "CornerGesture", "FanView", "AndroidWindowAdmission", "WindowAdmission",
             "SwipeMini", "DesktopDoubleTap", "DesktopSleepHost")}
@@ -82,10 +79,6 @@ def main():
             "SmsBlockingModule", "SmsBlockingProvider", "SmsBlockingStore", "SmsBlockingRules")}
         required_types |= {"Ldev/local/sunwindowdemo/features/diagnostics/" + name + ";" for name in (
             "DiagnosticsCapture", "DiagnosticsRecordingService")}
-        required_types |= {"Ldev/local/sunwindowdemo/features/alive/" + name + ";" for name in (
-            "AliveWallpaperService", "AliveAmbientWallpaperService", "AliveBootReceiver", "AliveSettings",
-            "AliveAssets", "AliveAmbientAccess", "AliveWallpaperAccess", "AliveSystemUi", "AliveSleepHandoff", "AliveHandoffTransport")}
-        required_types |= {"Lorg/aliveclean/" + name + ";" for name in ("AliveRenderer", "NativeScene")}
         required_types |= {"Ldev/local/sunwindowdemo/features/iconlayers/" + name + ";" for name in (
             "SettingsIconModule", "SettingsIconAccess", "NotificationCardIcons")}
         found = set()
@@ -97,6 +90,7 @@ def main():
             assert "Ldev/local/sunwindowdemo/WindowAccessibilityService;" not in owners, "Retired accessibility entry in DEX"
             assert not any(t.startswith("Ldev/local/sunwindowdemo/features/ltpo/") or
                            t.startswith("Ldev/local/sunwindowdemo/RefreshRateBadge") for t in owners), "Retired LTPO code in DEX"
+            assert not any(t.startswith(("Ldev/local/sunwindowdemo/features/alive/", "Lorg/aliveclean/")) for t in owners), "Removed Alive code in DEX"
             found |= owners & required_types
         assert found == required_types, "Integrated corner/admission runtime missing after R8: " + str(required_types - found)
         assert any(b'dev.local.sunwindowdemo.core.WindowBackendEligibility' in archive.read(name)
@@ -123,24 +117,11 @@ def main():
     marker = next((block for block in re.split(r'(?m)^\s*E:', manifest)
                    if block.lstrip().startswith('receiver') and 'WindowBackendSelection' in block), '')
     assert re.search(r'enabled[^\n]*=false', marker) and re.search(r'exported[^\n]*=false', marker), "Preserve private legacy backend marker"
-    for component in ("AliveWallpaperService", "AliveAmbientWallpaperService"):
-        service = next((block for block in re.split(r'(?m)^\s*E:', manifest)
-                        if block.lstrip().startswith('service') and 'features.alive.' + component in block), '')
-        assert re.search(r'directBootAware[^\n]*=true', service), component + " must support prepared DE data"
-        assert re.search(r'exported[^\n]*=true', service) and 'android.permission.BIND_WALLPAPER' in service, "Only platform wallpaper binding may reach " + component
-    boot = next((block for block in re.split(r'(?m)^\s*E:', manifest)
-                 if block.lstrip().startswith('receiver') and 'features.alive.AliveBootReceiver' in block), '')
-    assert re.search(r'exported[^\n]*=false', boot) and not re.search(r'directBootAware[^\n]*=true', boot), "Alive migration receiver must remain private and post-unlock"
+    assert "features.alive." not in manifest and "android.service.wallpaper.WallpaperService" not in manifest, "Removed Alive component in manifest"
     assert "android.permission.AMBIENT_WALLPAPER" not in manifest
     assert "android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE" not in manifest
     resources = run(aapt2, "dump", "resources", apk)
-    for metadata, ambient in (("alive_wallpaper", False), ("alive_ambient_wallpaper", True)):
-        entry = re.search(r'(?m)^\s*resource (0x[0-9a-f]+) xml/' + re.escape(metadata)
-                          + r'\s*\n\s*\(\) \(file\) (\S+) type=XML', resources)
-        assert entry, "Missing Alive wallpaper metadata"
-        # Resource optimization shortens APK paths; resolve from the actual resource table.
-        tree = run(aapt2, "dump", "xmltree", apk, "--file", entry.group(2))
-        assert re.search(r'supportsAmbientMode[^\n]*=' + str(ambient).lower(), tree), "Alive ambient metadata must stay truthful"
+    assert "xml/alive_wallpaper" not in resources and "xml/alive_ambient_wallpaper" not in resources and "drawable/ic_alive" not in resources, "Removed Alive resource in APK"
     assert "xml/window_accessibility_service" not in resources
     assert "WindowShortcutActivity" not in manifest and "android.app.shortcuts" not in manifest, "Retired shortcut must remain absent"
     # Copy only after all identity, signature, runtime and product checks pass.
@@ -149,7 +130,7 @@ def main():
     digest = hashlib.sha256(apk.read_bytes()).hexdigest()
     assert hashlib.sha256(target.read_bytes()).hexdigest() == digest
     print(badging); print(f"APK={target}"); print(f"SHA256={digest}")
-    print("Original certificate, main identity, static scopes, entries, integrated window/Alive runtime, Direct Boot, licenses and retirement boundaries verified; device effects unverified")
+    print("Original certificate, main identity, static scopes, entries, integrated window runtime, Alive removal and retirement boundaries verified; device effects unverified")
 
 
 if __name__ == "__main__":

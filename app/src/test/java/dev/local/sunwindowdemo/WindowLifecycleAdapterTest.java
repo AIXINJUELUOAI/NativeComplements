@@ -94,9 +94,9 @@ public class WindowLifecycleAdapterTest {
         assertEquals(false,call(engine,"continueHidden",s));assertEquals(0,lease.reads);
         s.uid=10000;assertEquals(true,call(engine,"continueHidden",s));assertEquals(1,lease.reads);
         s.prioritySuspended=true;set(s,"continuationPrioritySuspended",true);
-        assertEquals(false,call(engine,"continueHidden",s));assertEquals(1,lease.reads);
-        // A fresh native sample with no blocker still requires the exact mini and a live lease.
-        set(s,"continuationPrioritySuspended",false);assertEquals(true,call(engine,"continueHidden",s));assertEquals(2,lease.reads);
+        // A stale continuation denial must not prevent a fresh native sample from clearing it.
+        assertEquals(true,call(engine,"continueHidden",s));assertEquals(2,lease.reads);
+        assertFalse(s.continuationPrioritySuspended);
         assertTrue(s.prioritySuspended);s.edgeHidden=false;assertEquals(false,call(engine,"continueHidden",s));assertEquals(2,lease.reads);
         s.edgeHidden=true;lease.alive=false;assertEquals(false,call(engine,"continueHidden",s));assertEquals(3,lease.reads);
         assertFalse(s.restoring);assertTrue(s.edgeHidden);

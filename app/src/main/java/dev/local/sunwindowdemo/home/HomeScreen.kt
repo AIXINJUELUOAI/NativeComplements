@@ -22,7 +22,6 @@ fun HomeScreen(
     onIcons: () -> Unit = {},
     onGameMode: () -> Unit = {},
     onShade: () -> Unit = {},
-    onAlive: (() -> Unit)? = null,
     onBackground: (() -> Unit)? = null,
 ) {
     AdaptationNotice(onAbout)
@@ -38,7 +37,6 @@ fun HomeScreen(
         FeatureRow("加速度传感器控制", "shake", onMotion)
         FeatureRow("边缘防误触", "edge", onEdgeTouch)
         FeatureRow("外观与控制", "window", onShade)
-        onAlive?.let { FeatureRow("Alive 壁纸", "alive", it) }
     }
     Spacer(Modifier.height(16.dp))
     SettingsGroup {

@@ -287,6 +287,7 @@ public final class SunWindowModule extends XposedModule {
                 engine.launchRoutingReady();note("WINDOW_LAUNCH_IDENTITY_READY");
             }catch(Exception error){note("WINDOW_LAUNCH_IDENTITY_UNAVAILABLE "+FrameworkAccess.reason(error));}
             java.lang.reflect.Method startResult=WindowServerTargets.startResult(p.getClassLoader(),starter,a.activity,transition,a.task);
+            WindowLauncherLaunch launcherLaunch=WindowLauncherLaunch.install(this,a,engine,handles,this::note);
             handles.add(hook(startResult)
                 .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
                     Object ticket=null;
@@ -296,6 +297,10 @@ public final class SunWindowModule extends XposedModule {
                         Object request=launchOrigin[0].get(chain.getThisObject());
                         shortcutTicket=engine.shortcutLaunchTicket(request==null?null:launchOrigin[1].get(request),sourceRecord.get(chain.getThisObject()));
                     }catch(Exception error){note("WINDOW_LAUNCH_OBSERVE_FAILED "+FrameworkAccess.reason(error));}
+                    if(shortcutTicket==null&&launcherLaunch!=null)try{
+                        launcherLaunch.beforeStartResult(chain.getThisObject(),chain.getArg(0),lastStarted.get(chain.getThisObject()),
+                            (android.app.ActivityOptions)chain.getArg(1),code,realCallingUid.getInt(chain.getThisObject()));
+                    }catch(Exception error){note("LAUNCHER_MINI_NATIVE "+FrameworkAccess.reason(error));}
                     if(code>=0&&code<=3){
                         try{
                             android.content.Intent intent=(android.content.Intent)activityIntent.get(chain.getArg(0));

@@ -56,12 +56,6 @@ Preview20: mini menu vector icons, circle/menu shapes, colors, 42dp buttons and 
 
 0.9.12: the status-bar vertical offset and the suggestion-row rotation replacement are original module adapters written against read-only inspection of the target Android 17 SystemUI; no framework code is bundled. The rotation glyph is Material Symbols Rounded `screen_rotation` from the same Apache-2.0 snapshot cited above, stored as `ic_suggestion_rotate.xml`. Iconify (GPL-3.0) was consulted only to compare published slider ranges; no Iconify code, resources or assets are included.
 
-## OpenAlive photo renderer
-
-The Alive photo renderer adapts Java animation, matrix and mask-decoding code from [OpenAlive](https://github.com/Maga-King/OpenAlive/tree/2d54c72a573b2f66e20b558283bef58cdb0ada60), revision `2d54c72a573b2f66e20b558283bef58cdb0ada60` (0.4.41-preview), Copyright (c) 2026 Maga-King and OpenAlive contributors, under the [MIT license](<app/src/full/assets/licenses/openalive/LICENSE>). The [bundled notice](<app/src/full/assets/licenses/openalive/NOTICE.txt>) describes the photo-only adaptation and native WallpaperService integration.
-
-Official Flyme shaders, native render libraries, masks and other official resources are not covered by that MIT license and are not bundled. Local user import of the pinned upstream APK remains subject to the applicable rights; provenance does not grant redistribution rights. See the upstream [third-party notice](https://github.com/Maga-King/OpenAlive/blob/2d54c72a573b2f66e20b558283bef58cdb0ada60/THIRD_PARTY.md).
-
 ## Retired navigation bar templates
 
 Earlier versions used HyperOS OS4.0.0.19 rule-table data (dataVersion 260904) and HyperNavBar Rules community data (dataVersion 261031). HyperNavBar Rules is MIT, Copyright (c) 2025 Ianzb; source: https://github.com/HyperNavBar/HyperNavBarRules . Those templates, their converter/evaluator and bundled template assets have been removed from the current product. The current immersive-navigation switch uses native SystemUI / supported Taskbar Insets and background-drawing adapters, not that template data. This historical attribution does not claim that the current APK bundles a template license file; applicable notices for earlier versions remain with those versions.

@@ -355,12 +355,25 @@ INHERITED = {
 INHERITED.update(SUGGESTION_ENVIRONMENT_CHECKS)
 
 
-def verify(classes):
+# These optional lookups fail closed on the archived PixelUI host. The launcher
+# adapter rejects installation during ABI preflight; the fullscreen guard throws
+# to its existing native fallback. Do not treat this as support for either path.
+PIXELUI_UNAVAILABLE = {
+    ("Landroid/app/ActivityOptions;", "fields", "mLaunchNextToBubble", "Z"),
+    ("Landroid/app/ActivityOptions;", "methods", "getLaunchNextToBubble", "()Z"),
+    (WM + "Task;", "fields", "mLaunchNextToBubble", "Z"),
+}
+
+
+def verify(classes, unavailable=()):
     failures = []
     for owner, kind, name, signature in sorted(set(CHECKS)):
         key = "descriptor" if kind == "methods" else "type"
         rows = members(classes, owner, kind) if (owner, kind, name, signature) in INHERITED else classes.get(owner, {}).get(kind, [])
-        if not any(m["name"] == name and m[key] == signature for m in rows):
+        present = any(m["name"] == name and m[key] == signature for m in rows)
+        if (owner, kind, name, signature) in unavailable:
+            assert not present, ("Update optional ABI expectation", owner, name)
+        elif not present:
             failures.append((owner, name, signature))
     return failures
 
@@ -451,7 +464,11 @@ def main():
                 if "SystemUI" in name and (owner.startswith("Lcom/android/quickstep/") or owner.startswith(dex.BAR)):
                     continue
                 classes.setdefault(owner, body)
-        failures = verify(classes)
+        unavailable = PIXELUI_UNAVAILABLE if label == "PixelUI" else set()
+        assert unavailable <= set(CHECKS), "Optional target inventory changed"
+        failures = verify(classes, unavailable)
+        if unavailable:
+            print("SKIP", label, "3 absent bubble members: optional launcher/fullscreen paths retain native fallback; those features are unverified")
         add_args = "(" + WM + "Session;Landroid/view/IWindow;Landroid/view/WindowManager$LayoutParams;IIII"
         expected_add = add_args + (")" + ADD if label == "PixelUI" else "Landroid/view/InputChannel;Landroid/view/WindowRelayoutResult;)I")
         assert any(m["name"] == "addWindow" and m["descriptor"] == expected_add for m in classes[WM + "WindowManagerService;"]["methods"])
@@ -498,7 +515,7 @@ def main():
                         failures.append((owner, member, signature))
         failed |= bool(failures)
         if not failures:
-            print("PASS", label, len(set(CHECKS)), "exact window/task/input/notification/suggestion/Motion/edge members + test4 ABI variants")
+            print("PASS", label, len(set(CHECKS) - unavailable), "available window/task/input/notification/suggestion/Motion/edge members + test4 ABI variants")
     print("LIMIT: no device effects, ART installation, native SensorService command semantics or visual/recovery acceptance asserted")
     return int(failed)
 

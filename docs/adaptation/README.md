@@ -18,19 +18,14 @@
 | 快捷建议、旋转与弹幕 | [通知与建议边界](<notification-boundary.md>) |
 | 通话、传感器与边缘触控 | [系统策略边界](<system-policy-boundary.md>) |
 | 配置快照与诊断 | [共享边界](<shared-boundary.md>) |
-| Alive 壁纸、编辑与 Direct Boot | [平台合同](<alive-platform.md>) |
-| Alive 固定资源导入与许可证 | [资源合同](<alive-assets.md>) |
-| Alive ambient 局部绑定例外 | [绑定合同](<alive-module.md>) |
-| Alive 宿主能力与有界视觉交接 | [SystemUI 合同](<alive-systemui.md>) |
-| Alive 渲染、预览与资源生命周期 | [渲染合同](<alive-renderer.md>) |
 
 ## 目标归档检查
 
 系统文件仅保留在本地忽略的 `verification`，不随源码发布。当前 dada／PixelOS 样本为 Android 17、CP2A.260605.016；PixelUI 样本为 Pixel 10 Pro Android 17 QPR2、CP4A.261105.040.A1。ROM 名称不参与运行时目标选择。
 
 - [窗口与共享宿主](<../../tests/verify_pixel_window_targets.py>)、[外观／图标](<../../tests/verify_icon_target.py>)与[导航](<../../tests/verify_navbar_target.py>)直接读取两套归档，核实际声明、精确签名及列出的调用关系。
-- [Alive／暗处 AOD](<../../tests/verify_pixel_alive_targets.py>)默认核 dada，`--host pixelui`／`all` 核 QPR2 的精确宿主目标及所列调用路径；[独立暗处 AOD 检查](<../../tests/verify_pixel_darkaod_targets.py>)保留 DozeMachine、接近传感器与原生省电／用户门。归档目标存在不等于运行路径已全部兼容。
 - [来电](<../../tests/verify_pixel_call_targets.py>)与[短信](<../../tests/verify_pixel_sms_targets.py>)读取两套实际 Telecom（telephonycore APEX）／Telephony 归档；PixelUI 的 `isInEmergencySmsMode` 取自 framework.jar，不以相近 AOSP 或另一系统代替。
+- [暗处 AOD 检查](<../../tests/verify_pixel_darkaod_targets.py>)核 DozeMachine、接近传感器与原生省电／用户门。
 
 这些检查证明所列目标和调用边界，不证明 ART 已安装命中、native SensorService 命令有效或设备视觉／功耗／恢复效果。
 

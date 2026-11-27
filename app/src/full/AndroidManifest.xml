@@ -3,16 +3,5 @@
         <provider android:name=".features.background.BackgroundProvider" android:authorities="${applicationId}.background" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <provider android:name=".features.darkaod.DarkAodProvider" android:authorities="${applicationId}.darkaod" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <receiver android:name=".core.WindowBackendSelection" android:enabled="false" android:exported="false" />
-        <receiver android:name=".features.alive.AliveBootReceiver" android:exported="false">
-            <intent-filter><action android:name="android.intent.action.MY_PACKAGE_REPLACED" /><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
-        </receiver>
-        <service android:directBootAware="true" android:name=".features.alive.AliveWallpaperService" android:label="Alive 壁纸" android:permission="android.permission.BIND_WALLPAPER" android:exported="true">
-            <intent-filter><action android:name="android.service.wallpaper.WallpaperService" /></intent-filter>
-            <meta-data android:name="android.service.wallpaper" android:resource="@xml/alive_wallpaper" />
-        </service>
-        <service android:directBootAware="true" android:name=".features.alive.AliveAmbientWallpaperService" android:label="Alive 壁纸 · 息屏实验版" android:permission="android.permission.BIND_WALLPAPER" android:exported="true">
-            <intent-filter><action android:name="android.service.wallpaper.WallpaperService" /></intent-filter>
-            <meta-data android:name="android.service.wallpaper" android:resource="@xml/alive_ambient_wallpaper" />
-        </service>
     </application>
 </manifest>

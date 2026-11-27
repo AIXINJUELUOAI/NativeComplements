@@ -6,7 +6,7 @@
 
 维护者信息仅用于首次一次提示、关于页署名与反馈路由，不作为权限或兼容性认证。维护者仓库未开启 Issues 时使用[主项目反馈](https://github.com/AIXINJUELUOAI/NativeComplements/issues)，不要求贡献者补测试模板或报告，不在各功能页添加兼容警告。
 
-仅维护 `full` 主模块。静态作用域为 system、SystemUI、Pixel Launcher、Launcher3、电话（仅短信拦截）和系统设置（仅设置内图标），不新增普通应用作用域。Alive 完整保留，后续拆独立项目；目前无额外 flavor。
+仅维护 `full` 主模块。静态作用域为 system、SystemUI、Pixel Launcher、Launcher3、电话（仅短信拦截）和系统设置（仅设置内图标），不新增普通应用作用域。当前无额外 flavor。
 
 [LauncherTargets](<../../app/src/main/java/dev/local/sunwindowdemo/core/LauncherTargets.java>)核已知系统实际 HOME 与本用户真实 UID；ROM 名称或包存在不授予权限。相同 Hook、规则与恢复共用，真正不同的签名和安装时机放在功能局部 Access／Targets，必要目标未知则保持原生。
 
@@ -22,8 +22,6 @@
 | 信号／旋转 | Kotlin 静态 binder 与接口 getter 局部接入；保原生订阅、输入、点击和超时，各组 deopt／安装失败局部回滚 |
 | 后台管理 | freezeBinder 参数按真实方法解析，返回值不算调用参数；WakeLock 仅保已确证单布尔 setter，未知不猜测 |
 | 暗处 AOD | mDozeHost 接口／实现按可赋值关系解析，保用户、系统 AOD、原生省电和接近保护；不丢已有接近事件回调 |
-| Alive | 使用原生壁纸服务；repository／配置接口或实现按实际 ABI 选择，投影与交接保当前用户、组件、AOD、nonce、显示器及期限。详见[平台合同](<alive-platform.md>)、[系统交接](<alive-systemui.md>) |
-| Alive 应用 | 无原生预览 Activity 时才走精确自有组件桥，核真实发送包／UID、用户、SYSTEM／LOCK、AppOps 与发送用户政策；两目标实际确认后提交。见[绑定与应用](<alive-module.md>) |
 | 来电／短信／边缘 | 共用规则与原生执行；电话作用域仅短信使用，不扩大 Provider 或输入过滤授权 |
 
 ## 资料与验证

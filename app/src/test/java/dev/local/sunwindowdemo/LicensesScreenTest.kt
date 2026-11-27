@@ -25,7 +25,7 @@ class LicensesScreenTest {
             }
         }
         compose.onNodeWithText("类原生补全计划").assertExists()
-        compose.onNodeWithText("OpenAlive").assertHasClickAction()
+        compose.onNodeWithText("OpenAlive").assertDoesNotExist()
         compose.onNodeWithText("SunOS android_sun-sdk").assertHasClickAction()
         compose.onNodeWithText("完美图标计划").assertExists()
         compose.onNodeWithText("Jetpack Compose").assertHasClickAction()

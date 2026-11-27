@@ -6,6 +6,7 @@ import android.content.pm.PackageInfo;
 import android.os.*;
 import android.view.WindowManager;
 import java.lang.reflect.*;
+import java.time.Duration;
 import java.util.*;
 import org.junit.*;
 import org.junit.runner.RunWith;
@@ -42,16 +43,18 @@ public class WindowAudioAdmissionTest {
     public static final class Window {
         final Display display;
         public final WindowManager.LayoutParams mAttrs=new WindowManager.LayoutParams();
+        boolean visible=true;
         Window(Display display)throws Exception{this.display=display;mAttrs.type=2040;set(mAttrs,"privateFlags",0x80000);}
         public Object getTask(){assertTrue(Thread.holdsLock(LOCK));return null;}
         public Display getDisplayContent(){assertTrue(Thread.holdsLock(LOCK));return display;}
         public int getOwningUid(){assertTrue(Thread.holdsLock(LOCK));return UI_UID;}
-        public boolean isVisible(){assertTrue(Thread.holdsLock(LOCK));return true;}
+        public boolean isVisible(){assertTrue(Thread.holdsLock(LOCK));return visible;}
         public boolean hideNonSystemOverlayWindowsWhenVisible(){assertTrue(Thread.holdsLock(LOCK));return true;}
     }
     public static final class Policy {
         public int mCurrentUserId;
-        public boolean isKeyguardShowingAndNotOccluded(){assertTrue(Thread.holdsLock(LOCK));return true;}
+        boolean keyguard=true;
+        public boolean isKeyguardShowingAndNotOccluded(){assertTrue(Thread.holdsLock(LOCK));return keyguard;}
     }
     public static final class Wms {
         public final Policy mPolicy=new Policy();
@@ -70,7 +73,14 @@ public class WindowAudioAdmissionTest {
     public static final class NativeService {
         public final Handler mHandler=new Handler(Looper.getMainLooper());
         int notifications;
-        public void notifyWatchersOnDefaultDevice(int op,int uid){assertFalse(Thread.holdsLock(LOCK));notifications++;}
+        final List<Integer> operations=new ArrayList<>();
+        public void notifyWatchersOnDefaultDevice(int op,int uid){assertFalse(Thread.holdsLock(LOCK));assertEquals(UID,uid);notifications++;operations.add(op);}
+    }
+    public static final class NativePower {
+        int renewals;
+        public void addToTemporaryAllowList(String pkg,int reason,String tag,long duration){
+            assertFalse(Thread.holdsLock(LOCK));assertEquals(PKG,pkg);assertEquals(60000L,duration);renewals++;
+        }
     }
     private WindowEngine engine;
     private WindowEngine.Session session;
@@ -82,6 +92,9 @@ public class WindowAudioAdmissionTest {
     private Atm atm;
     private Root root;
     private Lease lease;
+    private WindowContinuation power;
+    private NativePower nativePower;
+    private Map<Integer,PowerManager.WakeLock> wakeLocks;
     private static void set(Object target,String name,Object value)throws Exception{
         Field f=target.getClass().getDeclaredField(name);f.setAccessible(true);f.set(target,value);
     }
@@ -103,29 +116,39 @@ public class WindowAudioAdmissionTest {
         set(engine,"lock",LOCK);set(engine,"root",root);set(engine,"wms",wms);set(engine,"atm",atm);set(engine,"context",context);set(engine,"uiUid",UI_UID);
         set(engine,"handler",new Handler(Looper.getMainLooper()));set(engine,"active",session);set(engine,"sessions",List.of(session));
         set(engine,"uiReady",true);set(engine,"uiLease",lease);
-        set(engine,"keepEdgeAwake",true);set(engine,"continuationReady",true);set(engine,"continuation",allocate(WindowContinuation.class));
+        power=(WindowContinuation)allocate(WindowContinuation.class);nativePower=new NativePower();wakeLocks=new HashMap<>();
+        set(power,"context",context);set(power,"log",(java.util.function.Consumer<String>)message->{});
+        set(power,"locks",wakeLocks);set(power,"renewed",new HashMap<Integer,Long>());set(power,"exemptions",nativePower);
+        set(power,"allow",NativePower.class.getMethod("addToTemporaryAllowList",String.class,int.class,String.class,long.class));
+        set(engine,"keepEdgeAwake",true);set(engine,"continuationReady",true);set(engine,"continuation",power);
         service=new NativeService();bridge=new WindowAudioContinuation(access,message->{});bridge.attach(context,service);engine.audioContinuation(bridge);
         // Deliberately do not mark audioWindowHooksReady: candidate eligibility is independent of installation readiness.
     }
-    @After public void cleanup(){bridge.clear();service.mHandler.removeCallbacksAndMessages(null);}
+    @After public void cleanup()throws Exception{
+        Field field=WindowEngine.class.getDeclaredField("handler");field.setAccessible(true);
+        ((Handler)field.get(engine)).removeCallbacksAndMessages(null);
+        power.update(Map.of());bridge.clear();service.mHandler.removeCallbacksAndMessages(null);
+    }
     private boolean candidate()throws Exception{
         Method method=WindowEngine.class.getDeclaredMethod("audioContinuationCandidate",WindowEngine.Session.class);method.setAccessible(true);
         synchronized(LOCK){return (Boolean)method.invoke(engine,session);}
     }
-    private void rejectCandidate()throws Exception{
-        assertFalse(candidate());
-        // The native priority sampler caches a denial; each independent identity case starts from a fresh eligible shell.
-        session.continuationPrioritySuspended=false;
-    }
+    private void rejectCandidate()throws Exception{assertFalse(candidate());}
     private void publish(long epoch){bridge.update(epoch,Map.of(UID,new WindowAudioContinuation.Grant(PKG,lease)));}
     private void grant(){
         publish(bridge.epoch());
-        assertEquals(0,bridge.evaluate(UID,154,4,1));assertEquals(0,bridge.evaluate(UID,155,4,1));
+        granted();
     }
-    private void denied(){assertEquals(1,bridge.evaluate(UID,154,4,1));assertEquals(1,bridge.evaluate(UID,155,4,1));}
-    @Test public void candidateRequiresSuspendedLiveOptedHiddenMiniWithoutReenablingPresentation()throws Exception{
+    private void granted(){for(int op:new int[]{32,154,155})assertEquals("op="+op,0,bridge.evaluate(UID,op,4,1));}
+    private void denied(){for(int op:new int[]{32,154,155})assertEquals("op="+op,1,bridge.evaluate(UID,op,4,1));}
+    private void update()throws Exception{
+        Method method=WindowEngine.class.getDeclaredMethod("updateContinuation");method.setAccessible(true);
+        try{method.invoke(engine);}catch(InvocationTargetException failure){throw new AssertionError(failure.getCause());}
+    }
+    private void integratedUpdate()throws Exception{set(engine,"audioWindowHooksReady",true);update();Shadows.shadowOf(Looper.getMainLooper()).idle();}
+    @Test public void candidateRequiresLiveOptedHiddenMiniRegardlessOfScreenWithoutReenablingPresentation()throws Exception{
         assertTrue(candidate());assertTrue(session.screenSuspended);assertTrue(session.prioritySuspended);
-        session.screenSuspended=false;assertFalse(candidate());session.screenSuspended=true;
+        session.screenSuspended=false;assertTrue(candidate());session.screenSuspended=true;
         session.edgeHidden=false;assertFalse(candidate());session.edgeHidden=true;
         session.frame="normal";assertFalse(candidate());session.frame="mini";
         session.restoring=true;assertFalse(candidate());session.restoring=false;
@@ -180,10 +203,73 @@ public class WindowAudioAdmissionTest {
         }finally{engine.audioWindowAttributesChanged(inner);engine.audioWindowAttributesChanged(outer);}
         assertTrue(candidate());denied();
     }
+    @Test public void enginePublishesPowerAndAllAudioOpsAcrossScreenCyclesAndSameUidPlayerReplacement()throws Exception{
+        session.screenSuspended=false;shell.visible=false;wms.mPolicy.keyguard=false;
+        integratedUpdate();granted();assertEquals(List.of(32,154,155),service.operations);
+        assertEquals(1,nativePower.renewals);PowerManager.WakeLock wake=wakeLocks.get(UID);assertNotNull(wake);assertTrue(wake.isHeld());
+        for(int tick=0;tick<100;tick++){
+            boolean locked=tick%2==0;session.screenSuspended=locked;shell.visible=locked;wms.mPolicy.keyguard=locked;
+            task.top=new Top(); // Native player activities may replace one another without changing owner UID.
+            Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(250));
+            update();Shadows.shadowOf(Looper.getMainLooper()).idle();granted();
+            assertTrue(session.edgeHidden);assertEquals("mini",session.frame);assertTrue(session.prioritySuspended);
+            for(int op:new int[]{32,154,155})assertEquals(1,bridge.evaluate(UID+1,op,4,1));
+            assertSame(wake,wakeLocks.get(UID));assertTrue(wake.isHeld());
+        }
+        assertEquals(3,service.notifications);assertEquals(1,nativePower.renewals);
+        // Stop refreshing: the independent native-handler TTL must revoke every operation.
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(WindowAudioContinuation.VALID_MS));denied();
+        assertEquals(List.of(32,154,155,32,154,155),service.operations);
+        update();Shadows.shadowOf(Looper.getMainLooper()).idle();granted();assertEquals(9,service.notifications);
+    }
+    @Test public void completedNestedNativeMutationFreshlySamplesAtOutermostEdgeOnly()throws Exception{
+        integratedUpdate();granted();WindowManager.LayoutParams attrs=new WindowManager.LayoutParams();attrs.flags=0x2000;
+        boolean outer=engine.audioWindowAttributesChanging(attrs),inner=engine.audioWindowAttributesChanging(attrs);
+        assertTrue(outer);assertTrue(inner);denied();
+        update();Shadows.shadowOf(Looper.getMainLooper()).idle();denied();
+        engine.audioWindowAttributesChanged(inner);Shadows.shadowOf(Looper.getMainLooper()).idle();denied();
+        engine.audioWindowAttributesChanged(outer);denied();Shadows.shadowOf(Looper.getMainLooper()).idle();granted();
+        assertEquals(List.of(32,154,155,32,154,155,32,154,155),service.operations);
+        assertEquals(1,nativePower.renewals);assertTrue(wakeLocks.get(UID).isHeld());
+    }
+    @Test public void persistentNativeAuthenticationDeniesThenSameWindowClearingRecoversWithoutListEvent()throws Exception{
+        integratedUpdate();granted();Window original=task.display.mNotificationShade;
+        WindowManager.LayoutParams attrs=new WindowManager.LayoutParams();attrs.flags=0x2000;
+        boolean security=engine.audioWindowAttributesChanging(attrs);shell.mAttrs.flags=0x2000;
+        engine.audioWindowAttributesChanged(security);Shadows.shadowOf(Looper.getMainLooper()).idle();denied();
+        assertTrue(session.continuationPrioritySuspended);assertTrue(wakeLocks.isEmpty());
+        security=engine.audioWindowAttributesChanging(attrs);shell.mAttrs.flags=0;
+        engine.audioWindowAttributesChanged(security);denied();Shadows.shadowOf(Looper.getMainLooper()).idle();granted();
+        assertSame(original,task.display.mNotificationShade);assertSame(original,wms.mHidingNonSystemOverlayWindows.get(0));
+        assertFalse(session.continuationPrioritySuspended);assertTrue(wakeLocks.get(UID).isHeld());assertEquals(2,nativePower.renewals);
+        assertEquals(List.of(32,154,155,32,154,155,32,154,155),service.operations);
+    }
+    @Test public void engineWithdrawsPublicationOnExitIdentityChangesAndDeadOrForeignLease()throws Exception{
+        integratedUpdate();granted();PowerManager.WakeLock wake=wakeLocks.get(UID);
+        session.edgeHidden=false;integratedUpdate();denied();assertFalse(wake.isHeld());assertTrue(wakeLocks.isEmpty());
+        session.edgeHidden=true;integratedUpdate();granted();
+        session.frame="normal";integratedUpdate();denied();session.frame="mini";
+        task.top.uid=UID+1;integratedUpdate();denied();task.top.uid=UID;
+        task.mUserId=1;integratedUpdate();denied();task.mUserId=0;
+        task.display.mDisplayId=1;integratedUpdate();denied();task.display.mDisplayId=0;
+        root.found=new Task();integratedUpdate();denied();root.found=task;
+        set(engine,"uiLease",new Binder());integratedUpdate();denied();set(engine,"uiLease",lease);
+        integratedUpdate();granted();lease.alive=false;integratedUpdate();denied();assertTrue(wakeLocks.isEmpty());
+        set(engine,"sessions",List.of());integratedUpdate();denied();
+        for(int op:new int[]{32,154,155})assertEquals(1,bridge.evaluate(UID+100000,op,4,1));
+        assertTrue(service.operations.stream().allMatch(op->op==32||op==154||op==155));
+    }
+    @Test public void mixedShellAndAuthenticationRevokesBothPowerAndPublishedAudio()throws Exception{
+        integratedUpdate();granted();Window auth=new Window(task.display);auth.mAttrs.flags=0x2000;
+        wms.mHidingNonSystemOverlayWindows.add(auth);integratedUpdate();denied();assertTrue(wakeLocks.isEmpty());
+        assertEquals(List.of(32,154,155,32,154,155),service.operations);
+        wms.mHidingNonSystemOverlayWindows.remove(auth);integratedUpdate();granted();assertTrue(wakeLocks.get(UID).isHeld());
+        assertEquals(9,service.notifications);
+    }
     @Test public void sameWindowSameNativeListSecurityMutationRevokesSynchronously()throws Exception{
         assertTrue(candidate());Window original=task.display.mNotificationShade;
         for(int flag:new int[]{0x2000,8}){
-            shell.mAttrs.flags=0;set(shell.mAttrs,"inputFeatures",0);session.continuationPrioritySuspended=false;
+            shell.mAttrs.flags=0;set(shell.mAttrs,"inputFeatures",0);
             assertTrue(candidate());grant();long epoch=bridge.epoch();
             shell.mAttrs.flags=flag==0x2000?0x2000:0;set(shell.mAttrs,"inputFeatures",flag==8?8:0);
             engine.priorityWindowsChanged();

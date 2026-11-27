@@ -9,9 +9,10 @@ import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.Consumer;
 
-/** Bounded, single-package UID exception for the two native audio foreground operations only. */
+/** Bounded, single-package UID exception for native audio/focus foreground evaluations only. */
 final class WindowAudioContinuation {
     static final long VALID_MS=1000;
+    private static final int[] OPS={32,154,155};
     record Grant(String pkg,IBinder lease) {}
     private record Entry(Grant grant,IBinder.DeathRecipient death) {}
     private record Snapshot(Map<Integer,Entry> entries,long until) {}
@@ -26,27 +27,58 @@ final class WindowAudioContinuation {
     private Method notify;
     private long epoch;
     private boolean timerQueued;
+    private long nextRefreshLog;
     private final Runnable expiry=this::expire;
     WindowAudioContinuation(FrameworkAccess access,Consumer<String> log){this.access=access;this.log=log;}
 
     static WindowAudioContinuation install(XposedModule module,FrameworkAccess access,List<XposedInterface.HookHandle> handles,Consumer<String> log){
+        WindowAudioContinuation bridge=new WindowAudioContinuation(access,log);
         try{
             Class<?> ops=AppOpsManager.class;
-            if(access.field(ops,"OP_CONTROL_AUDIO").getInt(null)!=154||access.field(ops,"OP_CONTROL_AUDIO_PARTIAL").getInt(null)!=155)
+            if(access.field(ops,"OP_TAKE_AUDIO_FOCUS").getInt(null)!=32
+                ||access.field(ops,"OP_CONTROL_AUDIO").getInt(null)!=154||access.field(ops,"OP_CONTROL_AUDIO_PARTIAL").getInt(null)!=155)
                 throw new NoSuchFieldException("audio operation identity");
             Method defaults=access.method(ops,"opToDefaultMode",int.class);
-            if((Integer)defaults.invoke(null,154)!=4||(Integer)defaults.invoke(null,155)!=4)
+            if(defaults.getReturnType()!=int.class||!java.lang.reflect.Modifier.isStatic(defaults.getModifiers()))
+                throw new NoSuchMethodException("audio default mode");
+            if((Integer)defaults.invoke(null,32)!=4||(Integer)defaults.invoke(null,154)!=4||(Integer)defaults.invoke(null,155)!=4)
                 throw new IllegalStateException("audio foreground defaults");
-            Method eval=access.method(Class.forName("com.android.server.appop.AppOpsUidStateTrackerImpl",false,access.task.getClassLoader()),
+            ClassLoader loader=access.task.getClassLoader();
+            Method eval=access.method(Class.forName("com.android.server.appop.AppOpsUidStateTrackerImpl",false,loader),
                 "evalMode",int.class,int.class,int.class);
-            if(eval.getReturnType()!=int.class)throw new NoSuchMethodException("audio foreground evaluation");
-            WindowAudioContinuation bridge=new WindowAudioContinuation(access,log);
-            handles.add(module.hook(eval).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
-                int nativeMode=(Integer)chain.proceed();
-                return bridge.evaluate((Integer)chain.getArg(0),(Integer)chain.getArg(1),(Integer)chain.getArg(2),nativeMode);
+            Method uidEval=access.method(Class.forName("com.android.server.appop.AppOpsService$UidState",false,loader),
+                "evalMode",int.class,int.class);
+            Method foreground=access.method(Class.forName("com.android.server.appop.AppOpsService",false,loader),
+                "evaluateForegroundMode",int.class,int.class,int.class);
+            for(Method method:List.of(eval,uidEval,foreground))if(method.getReturnType()!=int.class
+                ||java.lang.reflect.Modifier.isStatic(method.getModifiers()))throw new NoSuchMethodException("audio foreground evaluation");
+            return bridge.installEvaluation(module,eval,List.of(uidEval,foreground),handles)?bridge:null;
+        }catch(Throwable error){
+            bridge.disabled=true;
+            try{log.accept("EDGE_AUDIO_UNAVAILABLE "+error.getClass().getSimpleName());}catch(Throwable ignored){}
+            return null;
+        }
+    }
+    boolean installEvaluation(XposedModule module,Method eval,List<Method> deopts,List<XposedInterface.HookHandle> handles){
+        List<XposedInterface.HookHandle> local=new ArrayList<>();
+        try{
+            for(Method method:deopts)if(!module.deoptimize(method))throw new IllegalStateException("audio evaluation deopt");
+            local.add(module.hook(eval).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain->{
+                Object result=chain.proceed(); // Exactly once; native Throwable/result identity is not diagnostic recovery.
+                try{
+                    int nativeMode=(Integer)result;
+                    int evaluated=evaluate((Integer)chain.getArg(0),(Integer)chain.getArg(1),(Integer)chain.getArg(2),nativeMode);
+                    return evaluated==nativeMode?result:evaluated;
+                }catch(Throwable observation){return result;}
             }));
-            return bridge;
-        }catch(Exception|LinkageError error){log.accept("EDGE_AUDIO_UNAVAILABLE "+FrameworkAccess.reason(error));return null;}
+            handles.addAll(local);return true;
+        }catch(Throwable error){
+            disabled=true;
+            try{handles.removeAll(local);}catch(Throwable ignored){}
+            for(XposedInterface.HookHandle handle:local)try{handle.unhook();}catch(Throwable ignored){}
+            try{log.accept("EDGE_AUDIO_UNAVAILABLE "+error.getClass().getSimpleName());}catch(Throwable ignored){}
+            return false;
+        }
     }
     void attach(Context context){
         try{
@@ -63,13 +95,13 @@ final class WindowAudioContinuation {
             Method changed=access.method(nativeService.getClass(),"notifyWatchersOnDefaultDevice",int.class,int.class);
             if(nativeHandler==null||changed.getReturnType()!=void.class)throw new NoSuchMethodException("audio mode notification");
             synchronized(gate){if(disabled)return;this.context=context;service=nativeService;notify=changed;handler=nativeHandler;}
-            log.accept("EDGE_AUDIO_READY ops=154,155");
+            log.accept("EDGE_AUDIO_READY ops=32,154,155");
         }catch(Exception|LinkageError error){disable(Set.of(),error);}
     }
     void close(){synchronized(gate){disabled=true;}clear();}
     long epoch(){synchronized(gate){return epoch;}}
     int evaluate(int uid,int op,int rawMode,int nativeMode){
-        if(disabled||rawMode!=4||nativeMode!=1||(op!=154&&op!=155))return nativeMode;
+        if(disabled||rawMode!=4||nativeMode!=1||(op!=32&&op!=154&&op!=155))return nativeMode;
         Snapshot current=snapshot;Entry entry=current.entries.get(uid);
         return entry!=null&&SystemClock.elapsedRealtime()<current.until&&entry.grant.lease.isBinderAlive()?0:nativeMode;
     }
@@ -107,7 +139,7 @@ final class WindowAudioContinuation {
             if(disabled||epoch!=expectedEpoch||!checked.isEmpty()&&!timerQueued){after=null;}
             else{after=new Snapshot(Map.copyOf(checked),SystemClock.elapsedRealtime()+VALID_MS);snapshot=after;}
         }
-        if(after==null){unlinkNew(checked,before.entries);return;}
+        if(after==null){unlinkNew(checked,before.entries);refreshLog(desired.size(),expectedEpoch,before);return;}
         unlinkNew(before.entries,after.entries);
         Set<Integer> changed=new HashSet<>(before.entries.keySet());changed.addAll(after.entries.keySet());
         if(before.until>SystemClock.elapsedRealtime())
@@ -115,6 +147,18 @@ final class WindowAudioContinuation {
         postNotifications(changed);
         // A lease can die between linkToDeath and publication; do not miss that first death callback.
         if(after.entries.values().stream().anyMatch(entry->!entry.grant.lease.isBinderAlive()))clear();
+        refreshLog(desired.size(),expectedEpoch,before);
+    }
+    private void refreshLog(int desired,long expectedEpoch,Snapshot before){
+        if(desired==0&&before.entries.isEmpty())return;
+        String line;
+        synchronized(gate){
+            long now=SystemClock.elapsedRealtime();if(now<nextRefreshLog)return;nextRefreshLog=now+30_000;
+            Snapshot current=snapshot;
+            line="EDGE_AUDIO_REFRESH desired="+desired+" granted="+current.entries.size()+" epochValid="+(epoch==expectedEpoch)
+                +" ttlMillis="+Math.max(0,current.until-now)+" disabled="+disabled;
+        }
+        try{log.accept(line);}catch(Throwable ignored){/* Numeric observation must not affect publication/revocation. */}
     }
     void clear(){
         Snapshot old;
@@ -152,7 +196,7 @@ final class WindowAudioContinuation {
         }))disable(copied,new IllegalStateException("audio notification rejected"));
     }
     private void notifyNative(Set<Integer> uids)throws Exception{
-        for(int uid:uids)for(int op:new int[]{154,155})notify.invoke(service,op,uid);
+        for(int uid:uids)for(int op:OPS)notify.invoke(service,op,uid);
     }
     private void disable(Set<Integer> extra,Throwable error){
         Snapshot old;boolean first;
@@ -163,7 +207,7 @@ final class WindowAudioContinuation {
             log.accept("EDGE_AUDIO_UNAVAILABLE "+FrameworkAccess.reason(error));
             Handler target=handler;
             if(target!=null&&!revoke.isEmpty())target.post(()->{
-                for(int uid:revoke)for(int op:new int[]{154,155})try{notify.invoke(service,op,uid);}
+                for(int uid:revoke)for(int op:OPS)try{notify.invoke(service,op,uid);}
                 catch(Exception|LinkageError ignored){/* Native notification is best effort after disabling the exception. */}
             });
         }

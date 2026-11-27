@@ -277,24 +277,6 @@ def main() -> None:
     has(f"{ui}/doze/DozeSensors.java", r"private final ProximitySensor mProximitySensor;",
         "LOS DozeSensors proximity")
     has(f"{ui}/util/sensors/ProximitySensorImpl.java", r"protected boolean mPaused;", "LOS proximity paused")
-    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java", r"private ViewGroup mWindowRootView;",
-        "LOS shade root ViewGroup")
-    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java",
-        r"private Consumer<Integer> mScrimsVisibilityListener;", "LOS scrims Consumer")
-    has(f"{ui}/shade/NotificationShadeWindowState.kt", r"@JvmField var keyguardShowing", "LOS shade state fields")
-    has(f"{ui}/keyguard/shared/model/TransitionStep.kt", r"data class TransitionStep", "LOS transition step")
-    has(f"{ui}/statusbar/LightRevealScrim.kt", r"var revealAmount: Float", "LOS reveal amount")
-    has(f"{ui}/statusbar/phone/ScreenOffAnimationController.kt", r"private val animations: List<ScreenOffAnimation>",
-        "LOS screen-off animations")
-    has(f"{ui}/statusbar/phone/UnlockedScreenOffAnimationController.kt",
-        r"private var lightRevealAnimationPlaying = false", "LOS unlocked animation flag")
-    has(f"{ui}/statusbar/phone/UnlockedScreenOffAnimationController.kt",
-        r"private var decidedToAnimateGoingToSleep: Boolean\? = null", "LOS unlocked decision")
-    has(f"{ui}/biometrics/AuthRippleView.kt", r"override fun onDraw\(canvas: Canvas\)", "LOS auth ripple draw")
-    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
-        r"@ShadeDisplayAware configurationInteractor: ConfigurationInteractor", "LOS wallpaper repo interface")
-    has(f"{ui}/wallpapers/domain/interactor/WallpaperInteractor.kt",
-        r"val wallpaperRepository: WallpaperRepository", "LOS wallpaper interactor interface")
     has("frameworks_base/packages/SystemUI/pods/util/settings/src/api/UserSettingsProxy.kt",
         r"public fun getIntForUser\(name: String, default: Int, userHandle: Int\): Int",
         "LOS settings name-first")
@@ -506,122 +488,6 @@ def main() -> None:
         r"public void setColor\(@ColorInt int color\)", "LOS blur color")
     has("frameworks_base/core/java/android/view/WindowManager.java",
         r"public void setTrustedOverlay\(\)", "LOS trusted overlay")
-
-    # Alive's remaining sleep/content/ambient source contracts.
-    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java",
-        r"private void applyWindowLayoutParams\(\)", "LOS shade layout apply")
-    has(f"{ui}/shade/NotificationShadeWindowControllerImpl.java",
-        r"private void apply\(NotificationShadeWindowState state\)", "LOS shade state apply")
-    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
-        r"private boolean mShowing;", "LOS keyguard showing")
-    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
-        r"private boolean mOccluded;", "LOS keyguard occluded")
-    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
-        r"private boolean mKeyguardGoingAway;", "LOS keyguard going away")
-    has(f"{ui}/statusbar/policy/KeyguardStateControllerImpl.java",
-        r"private boolean mKeyguardFadingAway;", "LOS keyguard fading")
-    has(f"{ui}/keyguard/KeyguardService.java",
-        r"public void onStartedGoingToSleep\(@PowerManager\.GoToSleepReason int pmSleepReason\)",
-        "LOS keyguard sleep")
-    has(f"{ui}/keyguard/KeyguardService.java",
-        r"public void onStartedWakingUp\(", "LOS keyguard wake")
-    has(f"{ui}/statusbar/phone/ScreenOffAnimationController.kt",
-        r"override fun onStartedGoingToSleep\(\)", "LOS screen off entry")
-    has(f"{ui}/statusbar/LightRevealScrim.kt", r"var revealEffect: LightRevealEffect = LiftReveal",
-        "LOS reveal effect")
-    has(f"{ui}/statusbar/LightRevealScrim.kt", r"override fun onDraw\(canvas: Canvas\)", "LOS scrim draw")
-    has("frameworks_base/packages/SystemUI/src/com/android/keyguard/ClockEventController.kt",
-        r"private var smallClockFrame: ViewGroup\? = null", "LOS clock frame")
-    has("frameworks_base/packages/SystemUI/src/com/android/keyguard/ClockEventController.kt",
-        r"private fun handleDoze\(doze: Float\)", "LOS clock doze")
-    has(f"{ui}/statusbar/notification/stack/NotificationStackScrollLayoutController.java",
-        r"private NotificationStackScrollLayout mView;", "LOS notification stack view")
-    has(f"{ui}/statusbar/notification/stack/NotificationStackScrollLayoutController.java",
-        r"private void updateAlpha\(\)", "LOS notification alpha")
-    has(f"{ui}/statusbar/notification/stack/NotificationStackScrollLayoutController.java",
-        r"private float mMaxAlphaForKeyguard = 1.0f;", "LOS notification keyguard alpha")
-    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
-        r"override val lockscreenWallpaperInfo: StateFlow<WallpaperInfo\?>", "LOS lock wallpaper")
-    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
-        r"override val wallpaperInfo: StateFlow<WallpaperInfo\?>", "LOS home wallpaper")
-    has(f"{ui}/wallpapers/data/repository/WallpaperRepository.kt",
-        r"override val wallpaperSupportsAmbientMode: Flow<Boolean>", "LOS ambient wallpaper")
-    has(f"{ui}/theme/ThemeOverlayController.java",
-        r"private final OnColorsChangedListener mOnColorsChangedListener", "LOS theme color listener")
-    has(f"{ui}/theme/ThemeOverlayController.java",
-        r"public void onColorsChanged\(WallpaperColors wallpaperColors, int which, int userId\)",
-        "LOS theme color callback")
-    has(f"{ui}/theme/ThemeOverlayController.java", r"private boolean mAcceptColorEvents = true;",
-        "LOS theme color gate")
-    has(f"{ui}/theme/ThemeOverlayController.java", r"private final UserTracker mUserTracker;",
-        "LOS theme user tracker")
-    has(f"{ui}/settings/UserTracker.kt", r"val userId: Int", "LOS user tracker id")
-    has(f"{ui}/statusbar/NotificationShadeDepthController.kt",
-        r"@VisibleForTesting var wallpaperSupportsAmbientMode: Boolean = false", "LOS depth ambient field")
-    has(f"{ui}/statusbar/NotificationShadeDepthController.kt",
-        r"private var prevDozeAmount: Float = 0f", "LOS depth doze field")
-    has(f"{ui}/statusbar/NotificationShadeDepthController.kt",
-        r"private fun getNewWakeBlurRadius\(ratio: Float\): Float", "LOS wake blur calculation")
-    has(f"{ui}/user/data/repository/UserRepositoryImpl.kt",
-        r"override val selectedUser: StateFlow<SelectedUserModel>", "LOS selected user")
-    has("frameworks_base/packages/SystemUI/pods/user/data/src/api/model/SelectedUserModel.kt",
-        r"public data class SelectedUserModel", "LOS selected user model")
-    has("frameworks_base/packages/SystemUI/pods/user/data/src/api/model/SelectedUserModel.kt",
-        r"SELECTION_COMPLETE", "LOS selection complete")
-    has("frameworks_base/services/core/java/com/android/server/wallpaper/WallpaperData.java",
-        r"final int userId;", "LOS wallpaper user")
-    has("frameworks_base/services/core/java/com/android/server/wallpaper/WallpaperManagerService.java",
-        r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description, boolean force,\s*boolean fromUser, WallpaperData wallpaper, IRemoteCallback reply\)",
-        "LOS ambient bind exact")
-
-    # Live wallpaper application: LineageOS' picker has no framework preview activity, so the
-    # module's own component is applied through the verified service permission boundary.
-    wallpaper_service = "frameworks_base/services/core/java/com/android/server/wallpaper"
-    has(f"{wallpaper_service}/WallpaperManagerService.java",
-        r"public void setWallpaperComponentChecked\(WallpaperDescription description,\s*String callingPackage, @SetWallpaperFlags int which, int userId\)",
-        "LOS live wallpaper checked entry")
-    has(f"{wallpaper_service}/WallpaperManagerService.java",
-        r"private boolean setWallpaperDescriptionInternal\(@NonNull WallpaperDescription description,",
-        "LOS live wallpaper description apply")
-    has(f"{wallpaper_service}/WallpaperManagerService.java",
-        r"void systemReady\(\)", "LOS wallpaper ready")
-    has(f"{wallpaper_service}/WallpaperManagerService.java",
-        r"public boolean isWallpaperSupported\(String callingPackage\)", "LOS wallpaper support gate")
-    has(f"{wallpaper_service}/WallpaperManagerService.java",
-        r"public boolean isSetWallpaperAllowed\(String callingPackage\)", "LOS wallpaper policy gate")
-    has(f"{wallpaper_service}/WallpaperManagerService.java",
-        r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description, boolean force,\s*boolean fromUser, WallpaperData wallpaper, IRemoteCallback reply\)",
-        "LOS ambient live wallpaper bind")
-    has(f"{wallpaper_service}/WallpaperData.java", r"final int userId;", "LOS wallpaper user field")
-    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
-        r"public ComponentName getComponent\(\)", "LOS wallpaper description component")
-    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
-        r"public static final class Builder", "LOS wallpaper description builder")
-    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
-        r"public Builder setComponent\(@Nullable ComponentName component\)", "LOS wallpaper builder component")
-    has("frameworks_base/core/java/android/app/wallpaper/WallpaperDescription.java",
-        r"public WallpaperDescription build\(\)", "LOS wallpaper builder build")
-    has("frameworks_base/core/java/android/app/WallpaperManager.java",
-        r"public boolean setWallpaperComponent\(ComponentName name\)", "LOS live wallpaper component setter")
-    has("frameworks_base/core/java/android/app/WallpaperManager.java",
-        r"public boolean setWallpaperComponentWithFlags\(@NonNull ComponentName name,\s*@SetWallpaperFlags int which, int userId\)",
-        "LOS live wallpaper flags setter")
-    # LineageOS WallpaperPicker2 and ThemePicker intentionally expose no CHANGE_LIVE_WALLPAPER
-    # activity; the app must use the verified service path or the native customization picker.
-    has_not("packages_apps_WallpaperPicker2/AndroidManifest.xml",
-            r"android\.service\.wallpaper\.CHANGE_LIVE_WALLPAPER", "LOS picker direct preview absence")
-    has_not("packages_apps_ThemePicker/AndroidManifest.xml",
-            r"android\.service\.wallpaper\.CHANGE_LIVE_WALLPAPER", "LOS theme picker direct preview absence")
-    has("packages_apps_WallpaperPicker2/AndroidManifest.xml",
-        r"android\.intent\.action\.SET_WALLPAPER", "LOS picker customization entry")
-    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
-        r"public @Nullable WallpaperColors onComputeColors\(\)", "LOS wallpaper colors compute")
-    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
-        r"public void notifyColorsChanged\(\)", "LOS wallpaper colors notify")
-    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
-        r"public int getWallpaperFlags\(\)", "LOS wallpaper destination")
-    has("frameworks_base/core/java/android/service/wallpaper/WallpaperService.java",
-        r"public Context getDisplayContext\(\)", "LOS wallpaper display context")
 
     # Background management hooks against AM/WM/Power shapes.
     has("frameworks_base/services/core/java/com/android/server/am/ActivityManagerService.java",
@@ -939,12 +805,8 @@ def main() -> None:
     has(f"{telecom}/callfiltering/CallFilteringResult.java", r"public static class Builder", "LOS filtering builder")
     has(f"{telecom}/callfiltering/CallFilteringResult.java", r"public static Builder from\(", "LOS filtering builder.from")
 
-    # Wallpaper/ambient binding is still the same service shape.
-    has("frameworks_base/services/core/java/com/android/server/wallpaper/WallpaperManagerService.java",
-        r"boolean bindWallpaperDescriptionLocked\(WallpaperDescription description", "LOS ambient bind")
-
     print("PASS: LineageOS 24.0 source contract "
-          "(framework/window, SystemUI, Launcher3/iconloader, Telecom, SMS/telephony, wallpaper); "
+          "(framework/window, SystemUI, Launcher3/iconloader, Telecom, SMS/telephony); "
           "static source only, no device behavior implied")
 
 
