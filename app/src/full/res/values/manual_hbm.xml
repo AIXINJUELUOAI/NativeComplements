@@ -1,0 +1,7 @@
+<resources>
+    <string name="manual_hbm_label">手动峰值亮度</string>
+    <string name="manual_hbm_on">可用滑条调到峰值</string>
+    <string name="manual_hbm_auto">请关闭自适应亮度</string>
+    <string name="manual_hbm_protected">亮度保护中</string>
+    <string name="manual_hbm_unavailable">当前显示不可用</string>
+</resources>
