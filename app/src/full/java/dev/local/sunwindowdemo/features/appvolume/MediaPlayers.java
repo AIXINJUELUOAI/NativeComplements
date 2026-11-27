@@ -27,6 +27,7 @@ final class MediaPlayers {
     private final SharedPreferences preferences;
     private final Method clientUid, playerId, playerState, playerType, playerProxy, applyShaper, setShaperId;
     private final int aaudio;
+    private final int mediaPlayerType;
     private final int paused;
     private final int started;
     private final VolumeShaper.Operation replace;
@@ -50,6 +51,7 @@ final class MediaPlayers {
         playerState = config.getMethod("getPlayerState");
         playerType = config.getMethod("getPlayerType");
         aaudio = config.getField("PLAYER_TYPE_AAUDIO").getInt(null);
+        mediaPlayerType = config.getField("PLAYER_TYPE_JAM_MEDIAPLAYER").getInt(null);
         started = config.getField("PLAYER_STATE_STARTED").getInt(null);
         paused = config.getField("PLAYER_STATE_PAUSED").getInt(null);
         playerProxy = config.getMethod("getPlayerProxy");
@@ -106,9 +108,13 @@ final class MediaPlayers {
         Map<String, App> visible = new LinkedHashMap<>();
         for (AudioPlaybackConfiguration config : snapshot) {
             int usage = config.getAudioAttributes().getUsage();
-            if (usage != AudioAttributes.USAGE_MEDIA && usage != AudioAttributes.USAGE_GAME) continue;
+            if (usage != AudioAttributes.USAGE_MEDIA && usage != AudioAttributes.USAGE_GAME
+                    && usage != AudioAttributes.USAGE_UNKNOWN) continue;
             try {
-                if ((Integer) playerType.invoke(config) == aaudio) continue;
+                int type = (Integer) playerType.invoke(config);
+                if (type == aaudio) continue;
+                // Android routes MediaPlayer playback with unset usage through STREAM_MUSIC.
+                if (usage == AudioAttributes.USAGE_UNKNOWN && type != mediaPlayerType) continue;
                 int uid = (Integer) clientUid.invoke(config);
                 if (uid < 10_000 || uid == android.os.Process.myUid()
                         || uid / 100_000 != android.os.Process.myUid() / 100_000) continue;
