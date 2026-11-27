@@ -1,5 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <activity android:name=".features.minusone.MinusOneActivity" android:excludeFromRecents="true"
+            android:exported="false" android:theme="@style/MinusOneTheme" />
+        <activity-alias android:name="${applicationId}.MinusOneOverlay" android:exported="true"
+            android:permission="android.permission.SYSTEM_APPLICATION_OVERLAY"
+            android:targetActivity=".features.minusone.MinusOneActivity">
+            <intent-filter>
+                <action android:name="com.android.launcher3.WINDOW_OVERLAY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+        <provider android:name=".features.minusone.MinusOneSettings" android:authorities="${applicationId}.minusone"
+            android:exported="true" android:grantUriPermissions="false" />
         <provider android:name=".features.background.BackgroundProvider" android:authorities="${applicationId}.background" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <provider android:name=".features.darkaod.DarkAodProvider" android:authorities="${applicationId}.darkaod" android:exported="true" android:directBootAware="true" android:grantUriPermissions="false" />
         <receiver android:name=".core.WindowBackendSelection" android:enabled="false" android:exported="false" />
