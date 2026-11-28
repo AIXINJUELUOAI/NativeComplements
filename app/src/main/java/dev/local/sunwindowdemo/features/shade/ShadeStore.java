@@ -28,6 +28,7 @@ public final class ShadeStore {
         result.putInt("notificationIconScale", iconScale(context, true));
         result.putInt("systemIconScale", iconScale(context, false));
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
+        result.putBoolean("mergeSignalIcons", mergeSignalIcons(context));
         result.putBoolean("drawerMonet", drawerMonet(context));
         result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));
         result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
@@ -71,6 +72,16 @@ public final class ShadeStore {
 
     public static void setSignalDisplay(Context context, boolean enabled) {
         preferences(context).edit().putBoolean("signal_display", enabled).apply();
+        context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
+                BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+    }
+
+    public static boolean mergeSignalIcons(Context context) {
+        return preferences(context).getBoolean("merge_signal_icons", false);
+    }
+
+    public static void setMergeSignalIcons(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("merge_signal_icons", enabled).apply();
         context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
     }
