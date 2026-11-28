@@ -110,8 +110,10 @@ final class DesktopDoubleTap {
             log.accept("DESKTOP_DOUBLE_TAP_READY");
         }catch(Throwable unavailable){log.accept("DESKTOP_DOUBLE_TAP_UNAVAILABLE "+unavailable.getClass().getSimpleName());}
     }
-    private static View eligible(Targets t,Object listener,View view,MotionEvent event)throws Exception{
-        if(view!=t.workspace().get(listener)||!view.hasWindowFocus()||!view.isAttachedToWindow()
+    static View eligible(Targets t,Object listener,View view,MotionEvent event)throws Exception{
+        // A notification can take window focus while blank workspace touches still arrive.
+        // The SystemUI endpoint independently rechecks the actual foreground HOME before sleep.
+        if(view!=t.workspace().get(listener)||!view.isAttachedToWindow()
             ||view.getWindowVisibility()!=View.VISIBLE||view.getDisplay()==null||view.getDisplay().getDisplayId()!=0)return null;
         Object launcher=t.launcher().get(listener);
         if(!(Boolean)t.inState().invoke(launcher,t.normal())||t.topOpen().invoke(null,launcher)!=null

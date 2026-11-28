@@ -35,6 +35,12 @@ REQUIRED = {
         "androidx.compose.runtime.Composer", "androidx.compose.ui.Modifier"},
     (PREFIX + "features/shade/StackedSignalDisplay;", "<init>"): {"sun.misc.Unsafe"},
     (PREFIX + "TaskCleanupGuard;", "install"): {"com.android.server.am.ActivityManagerService", "forceStopPackage"},
+    (PREFIX + "features/appvolume/MediaVolumeModule;", "installSideMixer"): {
+        "kotlinx.coroutines.CoroutineScope",
+        "com.android.systemui.volume.dialog.ui.binder.VolumeDialogViewBinder",
+        "androidx.constraintlayout.widget.ConstraintLayout$LayoutParams"},
+    (PREFIX + "features/minusone/LauncherMinusOne;", "connect"): {
+        "com.android.launcher3.qsb.OSEManager", "reloadOse", "recreateOverlay"},
 }
 
 # Verify the delivered APK includes the restored runtime and the integrated navigation host.
@@ -70,7 +76,7 @@ REMOVED_NAVBAR_OWNERS = {PREFIX + "features/navbar/" + name + ";" for name in RE
 
 
 def check(apk, window=False):
-    excluded = {"features/navbar/", "features/edgetouch/", "features/shade/"}
+    excluded = {"features/navbar/", "features/edgetouch/", "features/shade/", "features/appvolume/", "features/minusone/"}
     shared = lambda owner: not any(owner.startswith(prefix) for prefix in excluded) and owner not in {"features/iconlayers/IconOverrides", "features/iconlayers/IconPolicy", "features/iconlayers/IconImages"}
     required = {key: value for key, value in REQUIRED.items() if not window or shared(key[0][len(PREFIX):])}
     runtime = {PREFIX + owner + ";": methods for owner, methods in RUNTIME_METHODS.items() if not window or shared(owner)}
@@ -84,6 +90,8 @@ def check(apk, window=False):
             data = dex.Dex(archive.read(name))
             # Inspect definitions, not type references: include nested remnants without parsing every class body.
             owners = {data.types[data.u32(data.u32(100) + 32 * i)] for i in range(data.u32(96))}
+            if PREFIX + "features/appvolume/AppMixerView;" in owners:
+                raise RuntimeError("Removed application volume sheet still present in final DEX")
             obsolete = {owner for owner in owners if owner.split("$", 1)[0].rstrip(";") + ";" in REMOVED_NAVBAR_OWNERS}
             if obsolete:
                 raise RuntimeError(f"Removed navigation runtime still present in final DEX: {sorted(obsolete)}")

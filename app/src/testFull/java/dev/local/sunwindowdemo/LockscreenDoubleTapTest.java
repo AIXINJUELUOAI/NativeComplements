@@ -16,6 +16,38 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=35)
 public class LockscreenDoubleTapTest {
+    public static final class NativeStack extends FrameLayout {
+        Object hit;
+        public NativeStack(android.content.Context context) { super(context); }
+        public Object getChildAtRawPosition(float x, float y) { return hit; }
+    }
+
+    @Test public void usesNativeNotificationHitInsteadOfMeasuredRowHeight() throws Exception {
+        var type = LockscreenDoubleTap.class.getDeclaredField("notificationStack");
+        var method = LockscreenDoubleTap.class.getDeclaredField("notificationAt");
+        type.setAccessible(true);
+        method.setAccessible(true);
+        try (var activity = Robolectric.buildActivity(Activity.class).setup()) {
+            NativeStack stack = new NativeStack(activity.get());
+            View measuredRow = new View(activity.get());
+            measuredRow.setClickable(true);
+            stack.addView(measuredRow, new FrameLayout.LayoutParams(400,600));
+            activity.get().setContentView(stack);
+            stack.layout(0,0,400,600);
+            measuredRow.layout(0,0,400,600);
+            type.set(null, NativeStack.class);
+            method.set(null, NativeStack.class.getMethod("getChildAtRawPosition", float.class, float.class));
+            int[] location = new int[2];
+            stack.getLocationOnScreen(location);
+            assertTrue(LockscreenDoubleTap.blank(stack,location[0]+200,location[1]+300,true));
+            stack.hit = measuredRow;
+            assertFalse(LockscreenDoubleTap.blank(stack,location[0]+200,location[1]+300,true));
+        } finally {
+            type.set(null, null);
+            method.set(null, null);
+        }
+    }
+
     @Test public void staleAndMissingSettingsNeverEnableSleep() {
         Bundle config = new Bundle();
         config.putBoolean("lockscreenDoubleTapSleep", true);
@@ -46,9 +78,19 @@ public class LockscreenDoubleTapTest {
             assertFalse(LockscreenDoubleTap.blank(root,location[0]+50,location[1]+50,true));
             assertTrue(LockscreenDoubleTap.blank(root,location[0]+200,location[1]+300,true));
             assertFalse(LockscreenDoubleTap.blank(root,location[0]+500,location[1]+300,true));
+            View fullScreenFocusContainer = new View(activity.get());
+            fullScreenFocusContainer.setFocusable(true);
+            root.addView(fullScreenFocusContainer, new FrameLayout.LayoutParams(400,600));
+            fullScreenFocusContainer.layout(0,0,400,600);
+            assertTrue(LockscreenDoubleTap.blank(root,location[0]+200,location[1]+300,true));
         }
         assertTrue(LockscreenDoubleTap.protectedView("com.android.systemui.statusbar.notification.row.ExpandableNotificationRow"));
         assertTrue(LockscreenDoubleTap.protectedView("com.android.systemui.biometrics.UdfpsView"));
         assertTrue(LockscreenDoubleTap.protectedView("com.android.keyguard.KeyguardSecurityContainer"));
+        assertFalse(LockscreenDoubleTap.protectedView("com.android.systemui.deviceentry.ui.view.UdfpsAccessibilityOverlayOverlappingTouchHandlingView"));
+        assertTrue(LockscreenDoubleTap.blankReceiver("com.android.systemui.deviceentry.ui.view.UdfpsAccessibilityOverlayOverlappingTouchHandlingView"));
+        assertFalse(LockscreenDoubleTap.blankReceiver("androidx.compose.ui.platform.AndroidComposeView"));
+        assertTrue(LockscreenDoubleTap.decorativeView("com.android.systemui.scrim.ScrimView"));
+        assertFalse(LockscreenDoubleTap.blankReceiver("com.android.systemui.scrim.ScrimView"));
     }
 }

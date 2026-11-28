@@ -27,10 +27,18 @@ public final class MinusOneSettings extends ContentProvider {
         return context.getSharedPreferences("minus_one", Context.MODE_PRIVATE);
     }
 
-    public static boolean enabled(Context context) { return preferences(context).getBoolean(ENABLED, false); }
+    private static synchronized SharedPreferences enabledPreferences(Context context) {
+        var saved = context.createDeviceProtectedStorageContext().getSharedPreferences("minus_one_control", Context.MODE_PRIVATE);
+        if (!saved.contains(ENABLED) && context.getSystemService(android.os.UserManager.class).isUserUnlocked()) {
+            saved.edit().putBoolean(ENABLED, preferences(context).getBoolean(ENABLED, false)).commit();
+        }
+        return saved;
+    }
+
+    public static boolean enabled(Context context) { return enabledPreferences(context).getBoolean(ENABLED, false); }
 
     public static void setEnabled(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean(ENABLED, enabled).apply();
+        enabledPreferences(context).edit().putBoolean(ENABLED, enabled).commit();
     }
 
     public static boolean enabledForLauncher(Context context) {
@@ -70,7 +78,9 @@ public final class MinusOneSettings extends ContentProvider {
         var saved = preferences(context);
         return new WidgetGrid(saved.getInt("grid_columns", 0), saved.getInt("grid_rows", 0),
                 saved.getInt("grid_cell_width", 0), saved.getInt("grid_cell_height", 0),
-                saved.getInt("grid_gap_x", 0), saved.getInt("grid_gap_y", 0));
+                saved.getInt("grid_gap_x", 0), saved.getInt("grid_gap_y", 0),
+                saved.getInt("grid_padding_left", 0), saved.getInt("grid_padding_top", 0),
+                saved.getInt("grid_padding_right", 0), saved.getInt("grid_padding_bottom", 0));
     }
 
     private synchronized void updateGrid(Bundle values) {
@@ -80,7 +90,9 @@ public final class MinusOneSettings extends ContentProvider {
         if (!grid.valid() || grid.equals(widgetGrid(context))) return;
         preferences(context).edit().putInt("grid_columns", grid.columns()).putInt("grid_rows", grid.rows())
                 .putInt("grid_cell_width", grid.cellWidth()).putInt("grid_cell_height", grid.cellHeight())
-                .putInt("grid_gap_x", grid.gapX()).putInt("grid_gap_y", grid.gapY()).apply();
+                .putInt("grid_gap_x", grid.gapX()).putInt("grid_gap_y", grid.gapY())
+                .putInt("grid_padding_left", grid.paddingLeft()).putInt("grid_padding_top", grid.paddingTop())
+                .putInt("grid_padding_right", grid.paddingRight()).putInt("grid_padding_bottom", grid.paddingBottom()).apply();
         context.getContentResolver().notifyChange(WIDGET_GRID_URI, null);
     }
 

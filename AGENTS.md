@@ -3,6 +3,7 @@
 ## 产品与代码边界
 
 - 默认简体中文。管理界面使用 Compose Material 3、系统动态颜色与深色模式；共用 SettingsPage 标题栏和安全区，不创建占位功能或重复 Scaffold。
+- 产品界面禁止自行添加解释性文案，包括功能原理、行为说明、开关／列表副标题、页脚说明及额外兼容性提示。除非用户明确要求，只保留必要的功能名称、操作入口、实际状态和操作结果／错误反馈；不得以“帮助理解”或“提示用户”为由补回已删除的说明。
 - 仅维护 `app` 模块的 `full` 产品。主导航在 [ModuleApp](<app/src/full/java/dev/local/sunwindowdemo/navigation/ModuleApp.kt>)；开发者工具从“关于”连续点击版本号七次后显示。
 - 应用 ID `dev.nativecomplements.module`、源码包 `dev.local.sunwindowdemo`、升级签名、签名权限及已有配置键是兼容点，不随意修改。当前宿主协议为 16。
 - 静态作用域为 `system`、`com.android.systemui`、`com.google.android.apps.nexuslauncher`、`com.android.launcher3`、`com.android.phone`（仅短信拦截）及 `com.android.settings`（仅设置内图标）。旧安装需在 LSPosed 补勾新增宿主，未勾选时对应功能不生效。桌面只信任已知系统实际 HOME 及本用户真实 UID；包存在或 ROM 名称不授予权限。

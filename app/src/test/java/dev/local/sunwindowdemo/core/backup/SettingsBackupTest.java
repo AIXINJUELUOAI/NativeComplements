@@ -120,7 +120,7 @@ public class SettingsBackupTest {
     }
 
     @Test public void structuredRulesOrderedListsLegacyNumbersAndMigrationRoundTrip(){
-        String rules="{\"example.one\":{\"mode\":\"STRICT\",\"batch\":\"FREEZE\",\"processes\":{\"example.one:worker\":\"TRIM\"},\"keep_active\":true}}";
+        String rules="{\"example.one\":{\"mode\":\"STRICT\",\"batch\":\"FREEZE\",\"processes\":{\"example.one:worker\":\"TRIM\"},\"keep_active\":true,\"protect_background\":true}}";
         String locks="{\"example.one\":{\"delay\":30,\"budget\":15,\"period\":60},\"example.two\":false}";
         prefs("background_management").edit().putString("rules",rules).putString("background_wake_locks",locks).commit();
         prefs("motion_access").edit().putInt("default_mode",1).putString("rules","{\"example.one\":2}").commit();

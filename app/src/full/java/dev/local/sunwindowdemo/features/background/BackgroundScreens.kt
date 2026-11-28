@@ -217,6 +217,9 @@ fun BackgroundAppScreen(pkg: String?) {
         return
     }
     SettingsGroup {
+        ToggleRow("后台保护", value = rule.protectBackground()) {
+            BackgroundStore.protectBackground(context, pkg, it)
+        }
         ToggleRow("不进缓存", value = rule.keepActive()) {
             BackgroundStore.keepActive(context, pkg, it)
         }

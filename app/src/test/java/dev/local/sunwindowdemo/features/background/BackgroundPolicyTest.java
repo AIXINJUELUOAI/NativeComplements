@@ -162,7 +162,7 @@ public final class BackgroundPolicyTest {
         app.uid += 100000;
         assertFalse(BackgroundStore.eligible(app));
 
-        AppRule custom = new AppRule(Mode.DEFAULT, null, Map.of(QQ, Action.TRIM, PUSH, Action.TRIM), true, false);
+        AppRule custom = new AppRule(Mode.DEFAULT, null, Map.of(QQ, Action.TRIM, PUSH, Action.TRIM), true, false, false);
         assertEquals(Action.ALLOW, action(custom, QQ, QQ, QQ));
         assertEquals(Action.TRIM, action(custom, QQ, PUSH, QQ));
     }
@@ -182,6 +182,32 @@ public final class BackgroundPolicyTest {
         BackgroundStore.process(context, pkg, push, Action.ALLOW);
         selected = BackgroundStore.settings(context).rule(pkg);
         assertEquals(Action.ALLOW, action(selected, pkg, push, pkg));
+    }
+
+    @Test public void backgroundProtectionRetainsOnlyMainCachedRankAndDoesNotChangeFreezing() {
+        Context context = RuntimeEnvironment.getApplication();
+        String pkg = "user.protected.app";
+        AppRule old = BackgroundStore.settings(context).rule(pkg);
+        assertFalse(old.protectBackground());
+        assertEquals(999, backgroundAdj(old, pkg, pkg, 999));
+        BackgroundStore.protectBackground(context, pkg, true);
+        AppRule rule = BackgroundStore.settings(BackgroundStore.read(context)).rule(pkg);
+        assertTrue(rule.protectBackground());
+        assertFalse(rule.keepActive());
+        assertEquals(Action.FREEZE, action(rule, pkg, pkg, pkg));
+        assertTrue(BackgroundProcessAccess.usesStrictTiming(Mode.STRICT, Action.FREEZE, false,
+            backgroundAdj(rule, pkg, pkg, 999)));
+        assertEquals(900, backgroundAdj(rule, pkg, pkg, 999));
+        assertEquals(900, backgroundAdj(rule, pkg, pkg, 900));
+        assertEquals(999, backgroundAdj(rule, pkg + ":worker", pkg, 999));
+        for (int adj : new int[]{-1000, 0, 200, 500, 850, 899, 1000, 1001})
+            assertEquals(adj, backgroundAdj(rule, pkg, pkg, adj));
+        BackgroundStore.mode(context, pkg, Mode.SYSTEM);
+        rule = BackgroundStore.settings(context).rule(pkg);
+        assertNull(action(rule, pkg, pkg, pkg));
+        assertEquals(900, backgroundAdj(rule, pkg, pkg, 950));
+        BackgroundStore.protectBackground(context, pkg, false);
+        assertEquals(950, backgroundAdj(BackgroundStore.settings(context).rule(pkg), pkg, pkg, 950));
     }
 
     @Test public void observerKeepsResidentSwapAndMissingValuesSeparate() {

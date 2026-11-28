@@ -30,9 +30,19 @@ public final class ShadeStore {
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         result.putBoolean("drawerMonet", drawerMonet(context));
         result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));
+        result.putBoolean("appVolumePercentage", appVolumePercentage(context));
         result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
         result.putBoolean("lockscreenDoubleTapSleep", lockscreenDoubleTapSleep(context));
         return result;
+    }
+
+    public static boolean appVolumePercentage(Context context) {
+        return preferences(context).getBoolean("app_volume_percentage", true);
+    }
+
+    public static void setAppVolumePercentage(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("app_volume_percentage", enabled).apply();
+        context.getContentResolver().notifyChange(Uri.parse("content://" + AUTHORITY + "/app_volume"), null);
     }
 
     public static void setAppVolume(Context context, boolean enabled) {

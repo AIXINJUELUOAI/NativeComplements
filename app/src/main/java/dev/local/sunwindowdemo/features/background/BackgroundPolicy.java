@@ -7,7 +7,7 @@ public final class BackgroundPolicy {
     public enum Mode { SYSTEM, DEFAULT, STRICT }
     public enum Action { ALLOW, FREEZE, RECLAIM, TRIM }
     public record AppRule(Mode mode, Action batch, Map<String, Action> actions,
-                          boolean protectPlayback, boolean keepActive) {
+                          boolean protectPlayback, boolean keepActive, boolean protectBackground) {
         public AppRule { actions = Map.copyOf(actions); }
 
         public boolean playbackProtected() { return mode != Mode.STRICT || protectPlayback; }
@@ -24,8 +24,8 @@ public final class BackgroundPolicy {
     private static final String QQ = "com.tencent.mobileqq";
     private static final String WECHAT = "com.tencent.mm";
     private static final String DOUYIN = "com.ss.android.ugc.aweme";
-    private static final AppRule STANDARD = new AppRule(Mode.STRICT, null, Map.of(), true, false);
-    private static final AppRule DOUYIN_TEST = new AppRule(Mode.STRICT, null, Map.of(), false, false);
+    private static final AppRule STANDARD = new AppRule(Mode.STRICT, null, Map.of(), true, false, false);
+    private static final AppRule DOUYIN_TEST = new AppRule(Mode.STRICT, null, Map.of(), false, false, false);
 
     private BackgroundPolicy() {}
 
@@ -39,6 +39,12 @@ public final class BackgroundPolicy {
     }
 
     static boolean canBatch(Action action) { return action == null || action == Action.ALLOW || action == Action.FREEZE; }
+
+    /** Remain cached/freezable and killable; only improve the opted-in main process's cached rank. */
+    static int backgroundAdj(AppRule rule, String process, String main, int nativeAdj) {
+        return rule.protectBackground() && process.equals(main) && nativeAdj >= 900 && nativeAdj <= 999
+            ? 900 : nativeAdj;
+    }
 
     public static Action action(AppRule rule, String pkg, String process, String main) {
         Action override = rule.actions().get(process);

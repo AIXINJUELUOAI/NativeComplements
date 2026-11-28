@@ -1,15 +1,18 @@
 package dev.local.sunwindowdemo.features.appvolume;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.animation.OvershootInterpolator;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -23,11 +26,12 @@ final class SideAppMixerView extends LinearLayout {
     private final MediaPlayers players;
     private final Runnable userActivity;
     private final Runnable observer = this::render;
-    private final int surface, track, accent, text;
+    private final int track, accent, text;
     private final NumberFormat percentage;
     private Collection<View> touchableBounds;
     private List<MediaPlayers.App> rendered = List.of();
     private GainRail dragging;
+    private boolean expanded, collapsing;
 
     SideAppMixerView(Context context, MediaPlayers players, Runnable userActivity) {
         super(context);
@@ -35,18 +39,53 @@ final class SideAppMixerView extends LinearLayout {
         this.userActivity = userActivity;
         setTag(TAG);
         setOrientation(HORIZONTAL);
+        setClipChildren(false);
+        setClipToPadding(false);
         setVisibility(GONE);
         percentage = NumberFormat.getPercentInstance(getResources().getConfiguration().getLocales().get(0));
-        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                == Configuration.UI_MODE_NIGHT_YES;
-        surface = dark ? 0xff202a2e : 0xfff1f7f8;
-        track = dark ? 0xff3b4a50 : 0xffd8e4e7;
-        accent = context.getColor(dark ? android.R.color.system_accent1_200
-                : android.R.color.system_accent1_700);
-        text = dark ? 0xffe3eaeb : 0xff253237;
+        track = nativeColor("materialColorSurfaceContainerHighest");
+        accent = nativeColor("materialColorPrimary");
+        text = nativeColor("materialColorOnSurface");
+    }
+
+    private int nativeColor(String name) {
+        return getContext().getColor(getResources().getIdentifier(name, "color", "com.android.systemui"));
     }
 
     int gap() { return dp(5); }
+    int footerHeight() { return dp(52); }
+    boolean toggleExpanded() {
+        if (!players.enabled()) return false;
+        if (dragging != null) return true;
+        expanded = !expanded;
+        userActivity.run();
+        if (!expanded && getChildCount() > 0) {
+            collapsing = true;
+            animateRails(false);
+        } else {
+            boolean reopening = collapsing;
+            collapsing = false;
+            render();
+            if (reopening) animateRails(true);
+        }
+        return true;
+    }
+
+    private void animateRails(boolean show) {
+        int count = getChildCount();
+        for (int i = 0; i < count; i++) {
+            View rail = getChildAt(i);
+            rail.animate().cancel();
+            var animation = rail.animate().alpha(show ? 1f : 0f).translationX(show ? 0f : dp(18))
+                    .setDuration(show ? 200 : 160).setStartDelay((show ? count - 1L - i : i) * 60);
+            if (!show && i == count - 1) animation.withEndAction(() -> {
+                collapsing = false;
+                render();
+            });
+            else animation.withEndAction(null);
+            animation.start();
+        }
+    }
 
     void setTouchableBounds(Collection<View> bounds) {
         touchableBounds = bounds;
@@ -64,12 +103,15 @@ final class SideAppMixerView extends LinearLayout {
         if (touchableBounds != null) touchableBounds.remove(this);
         players.unobserve(observer);
         dragging = null;
+        expanded = false;
+        collapsing = false;
+        for (int i = 0; i < getChildCount(); i++) getChildAt(i).animate().cancel();
         super.onDetachedFromWindow();
     }
 
     private void render() {
-        if (dragging != null) return;
-        var apps = players.apps();
+        if (dragging != null || collapsing) return;
+        var apps = expanded ? players.apps() : List.<MediaPlayers.App>of();
         List<MediaPlayers.App> next = List.copyOf(apps.subList(0, Math.min(MAX_RAILS, apps.size())));
         if (next.equals(rendered)) {
             for (int i = 0; i < getChildCount(); i++) {
@@ -78,14 +120,21 @@ final class SideAppMixerView extends LinearLayout {
             }
             return;
         }
+        boolean opening = rendered.isEmpty() && !next.isEmpty();
         rendered = next;
         removeAllViews();
         for (MediaPlayers.App app : next) {
-            var layout = new LayoutParams(dp(42), LayoutParams.MATCH_PARENT);
+            var layout = new LayoutParams(dp(52), LayoutParams.MATCH_PARENT);
             if (getChildCount() != 0) layout.setMarginStart(gap());
-            addView(new GainRail(getContext(), app), layout);
+            var rail = new GainRail(getContext(), app);
+            if (opening) {
+                rail.setAlpha(0f);
+                rail.setTranslationX(dp(18));
+            }
+            addView(rail, layout);
         }
         setVisibility(next.isEmpty() ? GONE : VISIBLE);
+        if (opening) animateRails(true);
     }
 
     private int dp(int value) {
@@ -98,13 +147,20 @@ final class SideAppMixerView extends LinearLayout {
         private final Drawable icon;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rectangle = new RectF();
+        private final Path segment = new Path();
         private final Runnable pushGain;
         private int gain;
         private boolean pending;
+        private float overscroll;
+        private ValueAnimator rebound;
 
         GainRail(Context context, MediaPlayers.App app) {
             super(context);
             this.app = app;
+            var background = context.getDrawable(getResources().getIdentifier(
+                    "volume_dialog_background", "drawable", "com.android.systemui")).mutate();
+            if (background instanceof GradientDrawable shape) shape.setCornerRadius(dp(26));
+            setBackground(background);
             var constant = app.icon().getConstantState();
             icon = constant == null ? app.icon() : constant.newDrawable(getResources());
             pushGain = () -> {
@@ -127,40 +183,50 @@ final class SideAppMixerView extends LinearLayout {
             int width = getWidth();
             int height = getHeight();
             if (height < dp(70)) return;
-            paint.setColor(surface);
-            canvas.drawRoundRect(0f, 0f, width, height, dp(19), dp(19), paint);
-
-            float top = dp(27);
-            float bottom = height - dp(32);
-            rectangle.set(dp(9), top, width - dp(9), bottom);
+            float top = trackTop();
+            float bottom = trackBottom();
+            rectangle.set(dp(6), top, width - dp(6), bottom);
             paint.setColor(track);
-            canvas.drawRoundRect(rectangle, dp(10), dp(10), paint);
             float endpoint = bottom - (bottom - top) * gain / 100f;
+            if (gain < 100) {
+                rectangle.bottom = Math.max(top, endpoint - dp(8));
+                drawSegment(canvas, dp(13), dp(2));
+            }
             if (gain > 0) {
-                int save = canvas.save();
-                canvas.clipRect(rectangle.left, endpoint, rectangle.right, bottom);
+                rectangle.top = Math.min(bottom, endpoint + dp(8));
+                rectangle.bottom = bottom;
                 paint.setColor(accent);
-                canvas.drawRoundRect(rectangle, dp(10), dp(10), paint);
-                canvas.restoreToCount(save);
+                drawSegment(canvas, dp(2), dp(13));
             }
             paint.setColor(accent);
-            canvas.drawRoundRect(dp(6), endpoint - dp(1), width - dp(6), endpoint + dp(1),
-                    dp(1), dp(1), paint);
+            canvas.drawRoundRect(dp(5), endpoint - dp(2), width - dp(5), endpoint + dp(2),
+                    dp(2), dp(2), paint);
 
             paint.setColor(text);
             paint.setTextAlign(Paint.Align.CENTER);
-            paint.setTextSize(dp(11));
-            canvas.drawText(percentage.format(gain / 100.0), width / 2f, dp(18), paint);
-            int iconSize = dp(21);
+            paint.setTextSize(dp(12));
+            if (players.showPercentage())
+                canvas.drawText(percentage.format(gain / 100.0), width / 2f, dp(27), paint);
+            int iconSize = dp(32);
             int iconLeft = (width - iconSize) / 2;
-            icon.setBounds(iconLeft, height - dp(26), iconLeft + iconSize, height - dp(26) + iconSize);
+            int iconTop = height - (width + iconSize) / 2;
+            icon.setBounds(iconLeft, iconTop, iconLeft + iconSize, iconTop + iconSize);
             icon.draw(canvas);
+        }
+
+        private void drawSegment(Canvas canvas, float topRadius, float bottomRadius) {
+            if (rectangle.height() <= 0) return;
+            segment.reset();
+            segment.addRoundRect(rectangle, new float[] {topRadius, topRadius, topRadius, topRadius,
+                    bottomRadius, bottomRadius, bottomRadius, bottomRadius}, Path.Direction.CW);
+            canvas.drawPath(segment, paint);
         }
 
         @Override public boolean onTouchEvent(MotionEvent event) {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN -> {
                     if (dragging != null) return false;
+                    if (rebound != null) rebound.cancel();
                     dragging = this;
                     getParent().requestDisallowInterceptTouchEvent(true);
                     move(event.getY());
@@ -179,6 +245,14 @@ final class SideAppMixerView extends LinearLayout {
                     pending = false;
                     players.save(app, gain);
                     dragging = null;
+                    rebound = ValueAnimator.ofFloat(overscroll, 0f);
+                    rebound.setDuration(220);
+                    rebound.setInterpolator(new OvershootInterpolator(.6f));
+                    rebound.addUpdateListener(value -> {
+                        overscroll = (float) value.getAnimatedValue();
+                        setTranslationY(overscroll);
+                    });
+                    rebound.start();
                     getParent().requestDisallowInterceptTouchEvent(false);
                     render();
                 }
@@ -187,17 +261,29 @@ final class SideAppMixerView extends LinearLayout {
             return true;
         }
 
+        private int trackTop() { return dp(players.showPercentage() ? 46 : 30); }
+        private int trackBottom() { return getHeight() - footerHeight() - dp(2); }
+
         private void move(float y) {
             userActivity.run();
-            int height = getHeight() - dp(59);
+            int height = trackBottom() - trackTop();
             if (height <= 0) return;
-            int next = Math.max(0, Math.min(100, Math.round((getHeight() - dp(32) - y) * 100f / height)));
+            float extra = y < trackTop() ? y - trackTop() : y > trackBottom() ? y - trackBottom() : 0f;
+            overscroll = Math.copySign(Math.min(dp(56), Math.abs(extra) / 4f), extra);
+            setTranslationY(overscroll);
+            int next = Math.max(0, Math.min(100, Math.round((trackBottom() - y) * 100f / height)));
             if (next == gain) return;
             setProgress(next);
             if (!pending) {
                 pending = true;
                 postOnAnimation(pushGain);
             }
+        }
+
+        @Override protected void onDetachedFromWindow() {
+            if (rebound != null) rebound.cancel();
+            removeCallbacks(pushGain);
+            super.onDetachedFromWindow();
         }
 
         @Override public boolean performClick() {

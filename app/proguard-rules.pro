@@ -7,4 +7,5 @@
 # Allow unused dependencies to be removed, but preserve names and member signatures.
 -keepnames class kotlin.** { *; }
 -keepnames class androidx.** { *; }
+-keepnames interface kotlinx.coroutines.CoroutineScope { *; }
 -keepattributes Signature,InnerClasses,EnclosingMethod,*Annotation*,SourceFile,LineNumberTable

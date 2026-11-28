@@ -37,6 +37,7 @@ final class MediaPlayers {
     private List<Player> players = List.of();
     private List<App> apps = List.of();
     private boolean enabled;
+    private boolean showPercentage = true;
 
     MediaPlayers(Context context, Handler handler, boolean enabled) throws ReflectiveOperationException {
         AudioManager audio = context.getSystemService(AudioManager.class);
@@ -69,6 +70,14 @@ final class MediaPlayers {
                 update(configurations);
             }
         }, handler);
+    }
+
+    boolean showPercentage() { return showPercentage; }
+    boolean enabled() { return enabled; }
+    void setShowPercentage(boolean show) {
+        if (showPercentage == show) return;
+        showPercentage = show;
+        notifyObservers();
     }
 
     void observe(Runnable observer) { observers.add(observer); }

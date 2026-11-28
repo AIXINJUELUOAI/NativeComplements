@@ -15,8 +15,6 @@ fun MinusOneToggle() {
     var enabled by remember(context) { mutableStateOf(MinusOneSettings.enabled(context)) }
     ToggleRow(
         "桌面负一屏",
-        if (supported) "首屏右滑打开微件画布。切换后重启桌面生效"
-        else "需要 Android 17 和 Pixel 启动器 907",
         value = supported && enabled,
         enabled = supported,
     ) {

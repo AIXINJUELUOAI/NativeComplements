@@ -3,6 +3,8 @@ package dev.local.sunwindowdemo.features.minusone;
 import android.animation.ValueAnimator;
 import dev.local.sunwindowdemo.R;
 import android.app.Activity;
+import android.app.WallpaperManager;
+import android.app.WallpaperColors;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.appwidget.AppWidgetHost;
@@ -36,6 +38,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.AdapterView;
@@ -96,19 +99,36 @@ public final class MinusOneActivity extends Activity {
     private ScrollView scroll;
     private FrameLayout overlay;
     private View header, removeAction;
+    private TextView greetingTitle;
+    private final Runnable greetingRefresh = new Runnable() {
+        @Override public void run() {
+            if (greetingTitle != null) greetingTitle.setText(greeting(java.time.LocalTime.now().getHour()));
+            main.postDelayed(this, 60_000);
+        }
+    };
     private ResizableWidgetFrame resizeTarget;
     private CanvasEdit edit;
     private FeedOptionsPopup optionsPopup;
     private ColorDrawable wallpaperDim;
     private ValueAnimator widgetAppearance, dimAppearance;
     private float widgetBackgroundOpacity = 1f;
+    private final WallpaperManager.OnColorsChangedListener wallpaperColorsChanged = (colors, which) -> updateSystemBars();
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         getWindow().setDecorFitsSystemWindows(false);
+        getWindow().setNavigationBarColor(Color.TRANSPARENT);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setNavigationBarContrastEnforced(false);
+        getWindow().setStatusBarContrastEnforced(false);
+        getSystemService(WallpaperManager.class).addOnColorsChangedListener(wallpaperColorsChanged, main);
         preferences = MinusOneSettings.preferences(this);
         widgetManager = AppWidgetManager.getInstance(this);
-        host = new AppWidgetHost(this, HOST_ID);
+        host = new AppWidgetHost(this, HOST_ID) {
+            @Override protected AppWidgetHostView onCreateView(Context context, int id, AppWidgetProviderInfo info) {
+                return new FeedWidgetView(context);
+            }
+        };
         widgets.addAll(readWidgets());
         if (saved != null) {
             pending = saved.getInt("pending", NO_WIDGET);
@@ -135,6 +155,8 @@ public final class MinusOneActivity extends Activity {
             return;
         }
         getContentResolver().registerContentObserver(MinusOneSettings.WIDGET_GRID_URI, false, gridObserver);
+        main.removeCallbacks(greetingRefresh);
+        greetingRefresh.run();
         var saved = readWidgets();
         if (!widgets.equals(saved) || !Objects.equals(loadedSlots, preferences.getString(SLOTS, ""))
                 || !Objects.equals(workspaceGrid, MinusOneSettings.widgetGrid(this))) {
@@ -153,6 +175,7 @@ public final class MinusOneActivity extends Activity {
     }
 
     @Override protected void onPause() {
+        main.removeCallbacks(greetingRefresh);
         if (optionsPopup != null) optionsPopup.dismiss();
         awaitingPicker = false;
         main.removeCallbacks(pickerTimeout);
@@ -175,10 +198,12 @@ public final class MinusOneActivity extends Activity {
 
     @Override public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        if (hasFocus && !isPickerSession()) updateSystemBars();
         if (hasFocus && isPickerSession()) startPickerSession();
     }
 
     @Override protected void onDestroy() {
+        getSystemService(WallpaperManager.class).removeOnColorsChangedListener(wallpaperColorsChanged);
         if (widgetAppearance != null) widgetAppearance.cancel();
         if (dimAppearance != null) dimAppearance.cancel();
         if (isFinishing()) abandonWidget();
@@ -188,11 +213,14 @@ public final class MinusOneActivity extends Activity {
     private void loadPresentation() {
         workspaceGrid = MinusOneSettings.widgetGrid(this);
         int feedWidth = dp(Math.max(100, getResources().getConfiguration().screenWidthDp - 32));
-        grid = workspaceGrid.valid() ? workspaceGrid : new WidgetGrid(4, 5, feedWidth / 4, dp(84), 0, dp(8));
+        var desktop = workspaceGrid.valid() ? workspaceGrid : new WidgetGrid(4, 5, feedWidth / 4, dp(84), 0, 0);
+        grid = new WidgetGrid(desktop.columns(), desktop.rows(), desktop.cellWidth(), desktop.cellHeight(),
+                dp(12), dp(12), desktop.paddingLeft(), desktop.paddingTop(), desktop.paddingRight(), desktop.paddingBottom());
         if (grid.width(grid.columns()) > feedWidth) {
             grid = new WidgetGrid(grid.columns(), grid.rows(),
                     (feedWidth - (grid.columns() - 1) * grid.gapX()) / grid.columns(),
-                    grid.cellHeight(), grid.gapX(), grid.gapY());
+                    grid.cellHeight(), grid.gapX(), grid.gapY(),
+                    grid.paddingLeft(), grid.paddingTop(), grid.paddingRight(), grid.paddingBottom());
         }
         widgetBackgroundOpacity = widgetBackgroundTarget();
         loadSlots();
@@ -200,6 +228,13 @@ public final class MinusOneActivity extends Activity {
 
     private float widgetBackgroundTarget() {
         return preferences.getBoolean(TRANSPARENT, false) ? 0f : 1f;
+    }
+
+    static String greeting(int hour) {
+        if (hour >= 5 && hour < 11) return "早上好";
+        if (hour >= 11 && hour < 14) return "中午好";
+        if (hour >= 14 && hour < 18) return "下午好";
+        return "晚上好";
     }
 
     private void render() {
@@ -218,16 +253,18 @@ public final class MinusOneActivity extends Activity {
         root.setBackground(wallpaperDim);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             var safe = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            view.setPadding(dp(16) + safe.left, dp(6) + safe.top, dp(16) + safe.right, safe.bottom);
+            view.setPadding(dp(16) + safe.left, dp(6) + safe.top, dp(16) + safe.right, 0);
+            scroll.setPadding(0, 0, 0, safe.bottom);
             return insets;
         });
         var headerLayout = new LinearLayout(this);
         header = headerLayout;
         headerLayout.setGravity(Gravity.CENTER_VERTICAL);
         var title = new TextView(this);
-        title.setText("负一屏");
+        greetingTitle = title;
+        title.setText(greeting(java.time.LocalTime.now().getHour()));
         title.setTextColor(Color.WHITE);
-        title.setTextSize(24);
+        title.setTextSize(28);
         title.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
         title.setShadowLayer(dp(3), 0, dp(1), 0xb0000000);
         title.setAccessibilityHeading(true);
@@ -235,48 +272,48 @@ public final class MinusOneActivity extends Activity {
         headerLayout.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         var menu = new ImageButton(this);
         menu.setImageResource(R.drawable.nc_minus_one_menu);
-        menu.setImageTintList(ColorStateList.valueOf(Color.WHITE));
-        menu.setBackground(rounded(0x60000000, 24));
+        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                == Configuration.UI_MODE_NIGHT_YES;
+        menu.setImageTintList(ColorStateList.valueOf(getColor(dark
+                ? android.R.color.system_neutral1_50 : android.R.color.system_neutral1_900)));
+        menu.setPadding(dp(12), dp(12), dp(12), dp(12));
+        menu.setBackground(rounded(getColor(dark
+                ? android.R.color.system_neutral1_900 : android.R.color.system_neutral1_50), 24));
         menu.setContentDescription("负一屏选项");
         menu.setOnClickListener(this::showOptions);
         headerLayout.addView(menu, dp(48), dp(48));
         root.addView(headerLayout, -1, dp(56));
 
-        scroll = new ScrollView(this);
+        scroll = new ScrollView(this) {
+            @Override protected float getBottomFadingEdgeStrength() { return 0f; }
+        };
+        scroll.setVerticalFadingEdgeEnabled(true);
+        scroll.setFadingEdgeLength(dp(24));
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setOnScrollChangeListener((v, x, y, oldX, oldY) -> {
             positionRemoveAction();
         });
         scroll.setClipToPadding(false);
         scroll.setVerticalScrollBarEnabled(false);
         var feed = column();
-        feed.setPadding(0, dp(4), 0, dp(16));
+        feed.setPadding(0, dp(12), 0, dp(12));
         canvas = new WidgetCanvas(this, grid);
         var canvasLayout = new LinearLayout.LayoutParams(grid.width(grid.columns()), canvasHeight(0));
         canvasLayout.gravity = Gravity.CENTER_HORIZONTAL;
         feed.addView(canvas, canvasLayout);
         overlay = new FrameLayout(this);
         for (int id : widgets) addWidgetToCanvas(id);
-        var add = new Button(this, null, android.R.attr.borderlessButtonStyle);
-        add.setText("＋ 添加微件");
-        add.setAllCaps(false);
-        add.setLetterSpacing(0);
-        add.setTextColor(Color.WHITE);
-        add.setTextSize(15);
-        add.setBackground(rounded(0x68000000, 24));
-        add.setOnClickListener(view -> openWidgetPicker());
-        var addLayout = new LinearLayout.LayoutParams(-2, dp(48));
-        addLayout.gravity = Gravity.CENTER_HORIZONTAL;
-        addLayout.topMargin = dp(12);
-        feed.addView(add, addLayout);
         scroll.addView(feed, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         overlay.addView(root, 0, new FrameLayout.LayoutParams(-1, -1));
         setContentView(overlay);
+        overlay.post(this::updateSystemBars);
         if (previousScroll != 0) scroll.post(() -> scroll.scrollTo(0, previousScroll));
     }
 
     private void updateWallpaperDim() {
         dimWallpaper = preferences.getBoolean(DIM, false);
+        updateSystemBars();
         if (dimAppearance != null) dimAppearance.cancel();
         int target = dimWallpaper ? 64 : 0;
         if (wallpaperDim.getAlpha() == target) return;
@@ -285,6 +322,23 @@ public final class MinusOneActivity extends Activity {
         dimAppearance.setInterpolator(new DecelerateInterpolator());
         dimAppearance.addUpdateListener(value -> wallpaperDim.setAlpha((Integer) value.getAnimatedValue()));
         dimAppearance.start();
+    }
+
+    private void updateSystemBars() {
+        var decor = getWindow().peekDecorView();
+        if (decor == null) return;
+        boolean darkIcons = false;
+        try {
+            var colors = getSystemService(WallpaperManager.class).getWallpaperColors(WallpaperManager.FLAG_SYSTEM);
+            darkIcons = !dimWallpaper && colors != null
+                    && (colors.getColorHints() & WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0;
+        } catch (RuntimeException ignored) { }
+        var controller = decor.getWindowInsetsController();
+        // Keep the launcher's status-bar appearance; only control the navigation region.
+        int mask = WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+        int appearance = darkIcons ? mask : 0;
+        if (controller != null && (controller.getSystemBarsAppearance() & mask) != appearance)
+            controller.setSystemBarsAppearance(appearance, mask);
     }
 
     private void updateWidgetAppearance() {
@@ -428,7 +482,7 @@ public final class MinusOneActivity extends Activity {
         remove.setAllCaps(false);
         remove.setLetterSpacing(0);
         remove.setBackground(rounded(getColor(android.R.color.system_accent1_100), 24));
-        remove.setOnClickListener(view -> removeWidget(id));
+        remove.setOnClickListener(view -> removeWidget(id, view));
         var slot = slots.get(id);
         if (info == null) {
             var placeholder = new FrameLayout.LayoutParams(grid.width(slot.columns()), dp(48));
@@ -451,7 +505,9 @@ public final class MinusOneActivity extends Activity {
                     @Override public void move(float x, float y) { moveCanvasEdit(x, y); }
                     @Override public void finish(boolean commit) { finishCanvasEdit(commit); }
                 });
-        frame.addView(widget, new FrameLayout.LayoutParams(-1, -1));
+        var widgetLayout = new FrameLayout.LayoutParams(-1, -1);
+        widgetLayout.setMargins(grid.paddingLeft(), grid.paddingTop(), grid.paddingRight(), grid.paddingBottom());
+        frame.addView(widget, widgetLayout);
         frame.addOnLayoutChangeListener((view, l, t, r, b, ol, ot, or, ob) -> {
             if (resizeTarget == frame) positionRemoveAction();
         });
@@ -460,14 +516,21 @@ public final class MinusOneActivity extends Activity {
         widgetViews.put(id, frame);
     }
 
-    private void removeWidget(int id) {
+    private void removeWidget(int id, View action) {
+        if (edit != null) finishCanvasEdit(false);
+        selectResize(null);
         host.deleteAppWidgetId(id);
         widgets.remove(Integer.valueOf(id));
-        slots.remove(id);
+        var removed = slots.remove(id);
+        canvas.removeView(widgetViews.remove(id));
+        overlay.removeView(action);
+        var moves = WidgetCanvas.compactAfterRemoval(removed == null ? 0 : removed.row(), slots);
+        slots.putAll(moves);
         preferences.edit().remove("widget_width_" + id).remove("widget_height_" + id)
                 .remove("widget_columns_" + id).remove("widget_rows_" + id).apply();
         saveWidgets();
-        render();
+        moves.forEach((widgetId, target) -> settleView(widgetViews.get(widgetId), target, null));
+        canvas.postDelayed(() -> { if (edit == null) setCanvasHeight(canvasHeight(0)); }, 180);
     }
 
     private static final class CanvasEdit {
@@ -865,10 +928,23 @@ public final class MinusOneActivity extends Activity {
             if (width <= 0 || height <= 0 || (width == lastWidth && height == lastHeight)) return;
             lastWidth = width;
             lastHeight = height;
-            updateAppWidgetSize(new Bundle(), List.of(new SizeF(width, height)));
+            // Pixel Launcher reports the actual widget size and adds no AppWidgetHostView default padding.
+            var options = new Bundle();
+            options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, width);
+            options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, width);
+            options.putInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, height);
+            options.putInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, height);
+            options.putParcelableArrayList(AppWidgetManager.OPTION_APPWIDGET_SIZES,
+                    new ArrayList<>(List.of(new SizeF(width, height))));
+            updateAppWidgetOptions(options);
         };
 
         FeedWidgetView(Context context) { super(context); }
+
+        @Override public void setAppWidget(int id, AppWidgetProviderInfo info) {
+            super.setAppWidget(id, info);
+            setPadding(0, 0, 0, 0);
+        }
 
         @Override public void updateAppWidget(RemoteViews remoteViews) {
             restorePanelOpacity();

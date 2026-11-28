@@ -25,4 +25,18 @@ public class WidgetCanvasTest {
         Map<Integer, Slot> occupied = Map.of(1, new Slot(0, 0, 2, 2), 2, new Slot(2, 0, 2, 2));
         assertNull(WidgetCanvas.rearrange(new Slot(0, 0, 3, 2), 4, 2, occupied, 1));
     }
+
+    @Test public void removalFillsVacancyWithoutChangingColumnsOrSizes() {
+        Map<Integer, Slot> remaining = Map.of(2, new Slot(2,0,2,2),
+                3, new Slot(0,2,2,2), 4, new Slot(0,4,4,1));
+        assertEquals(Map.of(3, new Slot(0,0,2,2), 4, new Slot(0,2,4,1)),
+                WidgetCanvas.compactAfterRemoval(0, remaining));
+        assertEquals(Map.of(), WidgetCanvas.compactAfterRemoval(0,
+                Map.of(2, new Slot(2,0,2,2), 3, new Slot(0,2,4,2))));
+    }
+
+    @Test public void removalKeepsRowsAboveVacancyUnchanged() {
+        assertEquals(Map.of(2, new Slot(0,4,2,2)), WidgetCanvas.compactAfterRemoval(4,
+                Map.of(1, new Slot(0,2,2,1), 2, new Slot(0,8,2,2))));
+    }
 }

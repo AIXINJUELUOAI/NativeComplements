@@ -13,18 +13,14 @@ import android.database.ContentObserver;
 import dev.local.sunwindowdemo.features.shade.ShadeStore;
 import io.github.libxposed.api.XposedInterface;
 import java.util.function.Consumer;
-import io.github.libxposed.api.XposedInterface.HookHandle;
 import io.github.libxposed.api.XposedModule;
 import java.lang.reflect.Method;
 import java.util.Collection;
-import java.lang.reflect.Proxy;
 
-/** Inserts a separate app mixer into the native volume sheet's component column. */
+/** Adds application volume rails beside the native vertical volume slider. */
 public final class MediaVolumeModule {
     private static final String SYSTEM_UI = "com.android.systemui";
     private static final String TAG = "PixelOSMediaVolume";
-    private static final String ROOT = "com.android.systemui.volume.panel.ui.composable.";
-    private final ThreadLocal<Boolean> insideComponents = new ThreadLocal<>();
     private MediaPlayers players;
 
     private MediaVolumeModule() {}
@@ -38,59 +34,11 @@ public final class MediaVolumeModule {
     }
 
     private void installHooks(XposedModule module, ClassLoader loader, Consumer<String> note) {
-        HookHandle componentsHook = null;
-        try {
-            Class<?> root = Class.forName(ROOT + "VolumePanelRootKt", false, loader);
-            Class<?> scope = Class.forName(ROOT + "VolumePanelComposeScope", false, loader);
-            Class<?> layout = Class.forName("com.android.systemui.volume.panel.ui.layout.ComponentsLayout",
-                    false, loader);
-            Class<?> modifier = Class.forName("androidx.compose.ui.Modifier", false, loader);
-            Class<?> composer = Class.forName("androidx.compose.runtime.Composer", false, loader);
-            Class<?> function = Class.forName("kotlin.jvm.functions.Function1", false, loader);
-            Method components = root.getMethod("Components", scope, layout, modifier, composer, int.class);
-            Method bottomBar = root.getMethod("BottomBar", scope, layout, modifier, composer, int.class);
-            Class<?> views = Class.forName("androidx.compose.ui.viewinterop.AndroidView_androidKt", false, loader);
-            Method androidView = views.getMethod("AndroidView", function, modifier, function,
-                    composer, int.class, int.class);
-            Class<?> sizes = Class.forName("androidx.compose.foundation.layout.SizeKt", false, loader);
-            Object fullWidth = sizes.getMethod("fillMaxWidth$default", modifier, float.class,
-                    int.class, Object.class).invoke(null, modifier.getField("Companion").get(null),
-                    1f, 0, null);
-            Object viewFactory = Proxy.newProxyInstance(loader, new Class<?>[] {function},
-                    (proxy, method, args) -> switch (method.getName()) {
-                        case "invoke" -> makeView((Context) args[0]);
-                        case "equals" -> proxy == args[0];
-                        case "hashCode" -> System.identityHashCode(proxy);
-                        case "toString" -> "NativeComplements app mixer";
-                        default -> throw new UnsupportedOperationException(method.getName());
-                    });
-
-            componentsHook = module.hook(components).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                Boolean previous = insideComponents.get();
-                insideComponents.set(true);
-                try {
-                    return chain.proceed();
-                } finally {
-                    if (previous == null) insideComponents.remove();
-                    else insideComponents.set(previous);
-                }
-            });
-            module.hook(bottomBar).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
-                // Direct recompositions of BottomBar never recreate this sibling.
-                if (Boolean.TRUE.equals(insideComponents.get())) {
-                    androidView.invoke(null, viewFactory, fullWidth, null, chain.getArg(3), 0, 4);
-                }
-                return chain.proceed();
-            });
-            note.accept("APP_VOLUME_SHEET_READY");
-        } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
-            if (componentsHook != null) componentsHook.unhook();
-            Log.w(TAG, "Volume sheet integration unavailable", error);
-        }
         try {
             installSideMixer(module, loader);
             note.accept("APP_VOLUME_DIALOG_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError error) {
+            note.accept("APP_VOLUME_DIALOG_UNAVAILABLE " + error);
             Log.w(TAG, "Side volume mixer unavailable", error);
         }
     }
@@ -107,12 +55,16 @@ public final class MediaVolumeModule {
         Class<?> params = Class.forName("androidx.constraintlayout.widget.ConstraintLayout$LayoutParams",
                 false, loader);
         var constructor = params.getConstructor(int.class, int.class);
-        var topToTop = params.getField("topToTop");
         var bottomToBottom = params.getField("bottomToBottom");
         var endToStart = params.getField("endToStart");
         var vertical = dialogClass.getField("isVolumeDialogVertical");
+        Method listenerInfo = View.class.getDeclaredMethod("getListenerInfo");
+        listenerInfo.setAccessible(true);
+        var clickListener = listenerInfo.getReturnType().getDeclaredField("mOnClickListener");
+        clickListener.setAccessible(true);
 
         module.hook(binder.getMethod("bind", coroutineScope, Dialog.class, boolean.class)).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+            Object result = chain.proceed();
             Dialog dialog = (Dialog) chain.getArg(1);
             try {
                 if (dialogClass.isInstance(dialog) && vertical.getBoolean(dialog)) {
@@ -136,8 +88,17 @@ public final class MediaVolumeModule {
                         var mixer = new SideAppMixerView(context, getPlayers(context), userActivity);
                         var layout = (ViewGroup.MarginLayoutParams) constructor.newInstance(
                                 ViewGroup.LayoutParams.WRAP_CONTENT, 0);
-                        topToTop.setInt(layout, sliderId);
                         bottomToBottom.setInt(layout, sliderId);
+                        layout.height = slider.getHeight() + mixer.footerHeight();
+                        layout.bottomMargin = -mixer.footerHeight();
+                        slider.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                            int height = b - t + mixer.footerHeight();
+                            if (height > 0 && mixer.getLayoutParams().height != height) {
+                                var current = mixer.getLayoutParams();
+                                current.height = height;
+                                mixer.setLayoutParams(current);
+                            }
+                        });
                         boolean rtl = root.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
                         endToStart.setInt(layout, floatingId);
                         layout.setMarginEnd(mixer.gap());
@@ -147,22 +108,27 @@ public final class MediaVolumeModule {
                         @SuppressWarnings("unchecked")
                         Collection<View> bounds = (Collection<View>) touchable.get(viewModel.get(chain.getThisObject()));
                         mixer.setTouchableBounds(bounds);
+                        int controlId = res.getIdentifier("volume_dialog_settings", "id", SYSTEM_UI);
+                        View control = root.findViewById(controlId);
+                        if (control != null) control.post(() -> {
+                            try {
+                                Object listeners = listenerInfo.invoke(control);
+                                View.OnClickListener original = listeners == null ? null
+                                        : (View.OnClickListener)clickListener.get(listeners);
+                                control.setOnClickListener(v -> {
+                                    if (!mixer.toggleExpanded() && original != null) original.onClick(v);
+                                });
+                            } catch (ReflectiveOperationException | RuntimeException error) {
+                                Log.w(TAG, "Volume control binding unavailable", error);
+                            }
+                        });
                     }
                 }
             } catch (ReflectiveOperationException | RuntimeException error) {
                 Log.w(TAG, "Could not attach application sliders beside the system slider", error);
             }
-            return chain.proceed();
+            return result;
         });
-    }
-
-    private View makeView(Context context) {
-        try {
-            return new AppMixerView(context, getPlayers(context));
-        } catch (ReflectiveOperationException | RuntimeException error) {
-            Log.w(TAG, "Player volume integration unavailable", error);
-            return new View(context);
-        }
     }
 
     private MediaPlayers getPlayers(Context context) throws ReflectiveOperationException {
@@ -170,21 +136,25 @@ public final class MediaVolumeModule {
             var app = context.getApplicationContext();
             var handler = new Handler(Looper.getMainLooper());
             Uri settings = Uri.parse("content://" + ShadeStore.AUTHORITY + "/app_volume");
-            players = new MediaPlayers(app, handler, readEnabled(app, settings));
+            var snapshot = readSettings(app, settings);
+            players = new MediaPlayers(app, handler, snapshot.getBoolean("appVolume"));
+            players.setShowPercentage(snapshot.getBoolean("appVolumePercentage", true));
             app.getContentResolver().registerContentObserver(settings, false, new ContentObserver(handler) {
                 @Override public void onChange(boolean selfChange) {
-                    players.setEnabled(readEnabled(app, settings));
+                    var snapshot = readSettings(app, settings);
+                    players.setShowPercentage(snapshot.getBoolean("appVolumePercentage", true));
+                    players.setEnabled(snapshot.getBoolean("appVolume"));
                 }
             });
         }
         return players;
     }
-    private static boolean readEnabled(Context context, Uri uri) {
+    private static android.os.Bundle readSettings(Context context, Uri uri) {
         try {
             var result = context.getContentResolver().call(uri, "read", null, null);
-            return result != null && result.getBoolean("appVolume");
+            return result == null ? new android.os.Bundle() : result;
         } catch (RuntimeException unavailable) {
-            return false;
+            return new android.os.Bundle();
         }
     }
 }

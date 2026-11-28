@@ -79,22 +79,19 @@ internal fun BackupSettings() {
     }
     GroupTitle("备份与恢复")
     SettingsGroup {
-        SettingRow("导出备份", "选择保存位置，导出用户设置为 JSON 文件", onClick = if (busy || pending != null) null else ({
+        SettingRow("导出备份", onClick = if (busy || pending != null) null else ({
             busy = true
             message = ""
             try { export.launch("NativeComplements-settings-${java.time.LocalDate.now()}.json") }
             catch (_: Exception) { busy = false; message = "无法打开系统文件选择器。" }
         }))
-        SettingRow("恢复备份", "选择备份文件，校验后确认覆盖", onClick = if (busy || pending != null) null else ({
+        SettingRow("恢复备份", onClick = if (busy || pending != null) null else ({
             busy = true
             message = ""
             try { restore.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }
             catch (_: Exception) { busy = false; message = "无法打开系统文件选择器。" }
         }))
     }
-    Text("仅备份支持的用户设置，不含日志、拦截记录、临时运行状态、壁纸或图标素材。明文文件可能含应用列表、号码规则及关键词，请勿公开分享。",
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
     if (message.isNotEmpty()) Text(message, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
 }

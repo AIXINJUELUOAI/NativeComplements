@@ -344,7 +344,7 @@ public final class SettingsBackup {
         corner.put("blocked", packages(512)); corner.put("windowExcludedPackages", packages(512));
         Map<String, Field> dark = group(groups, "dark_aod"); bools(dark, "enabled"); dark.put("dark_lux", decimal(0, 5));
         Map<String, Field> shade = group(groups, "landscape_shade");
-        bools(shade, "enabled", "signal_display", "drawer_monet", "cover_monet", "desktop_double_tap_sleep", "lockscreen_double_tap_sleep", "floating_call_refresh", "app_volume");
+        bools(shade, "enabled", "signal_display", "drawer_monet", "cover_monet", "desktop_double_tap_sleep", "lockscreen_double_tap_sleep", "floating_call_refresh", "app_volume", "app_volume_percentage");
         shade.put("status_bar_offset", number(-32, 32)); shade.put("notification_icon_scale", number(80, 120)); shade.put("system_icon_scale", number(80, 120));
         bools(group(groups, "navbar_immersive"), "enabled");
         Map<String, Field> edge = group(groups, "edge_touch"); bools(edge, "enabled", "left_enabled", "right_enabled");
@@ -423,10 +423,10 @@ public final class SettingsBackup {
     private static Object backgroundRules(Object value) {
         for (var entry : packageMap(value, 512).entrySet()) {
             Map<String, Object> row = object(entry.getValue());
-            keys(row, Set.of("mode", "batch", "processes", "protect_playback", "keep_active"));
+            keys(row, Set.of("mode", "batch", "processes", "protect_playback", "keep_active", "protect_background"));
             if (row.containsKey("mode")) enumValue(BackgroundPolicy.Mode.class, row.get("mode"));
             if (row.containsKey("batch") && !Set.of("ALLOW", "FREEZE").contains(row.get("batch"))) throw invalid("无效批量动作");
-            for (String key : new String[]{"protect_playback", "keep_active"}) if (row.containsKey(key)) BOOL.validate(row.get(key));
+            for (String key : new String[]{"protect_playback", "keep_active", "protect_background"}) if (row.containsKey(key)) BOOL.validate(row.get(key));
             if (row.containsKey("protect_playback") && !BackgroundPolicy.supportsPlaybackOverride(entry.getKey())) throw invalid("该应用不支持播放保护覆盖");
             if (row.containsKey("processes")) {
                 Map<String, Object> processes = object(row.get("processes"));

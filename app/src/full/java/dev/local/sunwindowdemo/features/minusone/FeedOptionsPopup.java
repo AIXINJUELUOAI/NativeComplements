@@ -43,7 +43,7 @@ final class FeedOptionsPopup extends PopupWindow {
 
         var content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(8), dp(8), dp(8), dp(8));
+        content.setPadding(dp(6), dp(6), dp(6), dp(6));
         for (var group : groups) {
             for (int i = 0; i < group.size(); i++) {
                 var row = row(group.get(i), i == 0 ? 20 : 5, i == group.size() - 1 ? 20 : 5);
@@ -60,7 +60,7 @@ final class FeedOptionsPopup extends PopupWindow {
         var visible = new Rect();
         anchor.getWindowVisibleDisplayFrame(visible);
         int availableWidth = visible.width() > 0 ? visible.width() : anchor.getRootView().getWidth();
-        int width = Math.min(dp(290), Math.max(1, availableWidth - dp(32)));
+        int width = Math.min(dp(210), Math.max(1, availableWidth - dp(32)));
         setContentView(scroll);
         setWidth(width);
         setFocusable(true);
@@ -80,7 +80,7 @@ final class FeedOptionsPopup extends PopupWindow {
         var row = new LinearLayout(context);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPaddingRelative(dp(14), dp(8), dp(14), dp(8));
-        row.setMinimumHeight(dp(54));
+        row.setMinimumHeight(dp(48));
         boolean add = item.icon() == android.R.drawable.ic_input_add;
         int fill = add ? container : rowColor;
         row.setBackground(new RippleDrawable(ColorStateList.valueOf((ink & 0xffffff) | 0x20000000),
@@ -96,13 +96,13 @@ final class FeedOptionsPopup extends PopupWindow {
         var label = new TextView(context);
         label.setText(item.label());
         label.setTextColor(item.enabled() ? ink : secondary);
-        label.setTextSize(16);
+        label.setTextSize(14);
         label.setTypeface(Typeface.create(add ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL));
         label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         row.addView(label, new LinearLayout.LayoutParams(0, -2, 1));
 
         if (item.checked() != null) {
-            var size = new LinearLayout.LayoutParams(dp(48), dp(30));
+            var size = new LinearLayout.LayoutParams(dp(40), dp(24));
             size.setMarginStart(dp(10));
             row.addView(toggle(item.checked()), size);
         } else if (item.icon() != 0 && !add) {
@@ -142,13 +142,13 @@ final class FeedOptionsPopup extends PopupWindow {
         if (!checked) drawable.setStroke(dp(2), outline);
         track.setBackground(drawable);
         track.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        int diameter = dp(checked ? 22 : 14);
+        int diameter = dp(checked ? 18 : 12);
         var thumb = new View(context);
         thumb.setBackground(shape(checked ? onPrimary : outline, 14, 14));
         var params = new FrameLayout.LayoutParams(diameter, diameter,
                 Gravity.CENTER_VERTICAL | (checked ? Gravity.END : Gravity.START));
-        if (checked) params.setMarginEnd(dp(4));
-        else params.setMarginStart(dp(7));
+        if (checked) params.setMarginEnd(dp(3));
+        else params.setMarginStart(dp(6));
         track.addView(thumb, params);
         return track;
     }

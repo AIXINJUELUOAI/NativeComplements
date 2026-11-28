@@ -23,6 +23,7 @@ public final class BackgroundStore {
     private static final String ENABLED = "enabled";
     private static final String PROTECT_PLAYBACK = "protect_playback";
     private static final String KEEP_ACTIVE = "keep_active";
+    private static final String PROTECT_BACKGROUND = "protect_background";
     private static final String WAKE_LOCKS = "background_wake_locks";
     private static final String WAKE_LOCKS_ENABLED = "background_wake_locks_enabled";
     public static final WakeLockRule DEFAULT_WAKE_LOCK_RULE = new WakeLockRule(30, 15, 60);
@@ -135,7 +136,7 @@ public final class BackgroundStore {
                 if (action != null) actions.put(name, action);
             }
             boolean protectPlayback = !supportsPlaybackOverride(pkg) || row.optBoolean(PROTECT_PLAYBACK, defaultPlaybackProtection(pkg));
-            rules.put(pkg, new AppRule(mode, batch, actions, protectPlayback, row.optBoolean(KEEP_ACTIVE)));
+            rules.put(pkg, new AppRule(mode, batch, actions, protectPlayback, row.optBoolean(KEEP_ACTIVE), row.optBoolean(PROTECT_BACKGROUND)));
         }
         return new Settings(bundle.getBoolean(ENABLED), rules);
     }
@@ -155,6 +156,10 @@ public final class BackgroundStore {
 
     public static synchronized void keepActive(Context context, String pkg, boolean enabled) {
         change(context, pkg, row -> row.put(KEEP_ACTIVE, enabled));
+    }
+
+    public static synchronized void protectBackground(Context context, String pkg, boolean enabled) {
+        change(context, pkg, row -> row.put(PROTECT_BACKGROUND, enabled));
     }
 
     public static synchronized void batch(Context context, String pkg, Action action) {

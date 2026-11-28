@@ -71,7 +71,7 @@ class BackupSettingsUiTest {
             assertEquals(Intent.ACTION_OPEN_DOCUMENT, intent?.action)
             registry.dispatchResult(request, Activity.RESULT_CANCELED, null)
         }
-        compose.onNodeWithText("明文文件可能含", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("明文文件可能含", substring = true).assertDoesNotExist()
     }
 
     @Test fun importedSettingsRequireConfirmationAndCancelOrInvalidInputNeverWrites() {

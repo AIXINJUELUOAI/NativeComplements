@@ -129,7 +129,9 @@ public final class ManualHbmModule {
             if (session == null) return;
             if (!isOrderedBroadcast()) return;
             int availability = availability(session);
-            if (intent.getBooleanExtra(HbmControl.TOGGLE, false)) {
+            if (intent.getBooleanExtra(HbmControl.STOP, false)) {
+                if (expiresAt != 0) stop(session);
+            } else if (intent.getBooleanExtra(HbmControl.TOGGLE, false)) {
                 if (expiresAt != 0) stop(session);
                 else if (availability == HbmControl.OFF) {
                     expiresAt = SystemClock.elapsedRealtime() + SESSION_MS;

@@ -110,6 +110,28 @@ final class WidgetCanvas extends FrameLayout {
         }
     }
 
+    static Map<Integer, Slot> compactAfterRemoval(int fromRow, Map<Integer, Slot> positions) {
+        var ordered = new ArrayList<>(positions.entrySet());
+        ordered.sort(Comparator.comparingInt((Map.Entry<Integer, Slot> entry) -> entry.getValue().row())
+                .thenComparingInt(entry -> entry.getValue().column()));
+        var settled = new LinkedHashMap<Integer, Slot>();
+        var moves = new LinkedHashMap<Integer, Slot>();
+        for (var entry : ordered) {
+            Slot original = entry.getValue(), next = original;
+            if (original.row() >= fromRow) {
+                int row = fromRow;
+                for (Slot above : settled.values()) {
+                    if (original.column() < above.right() && original.right() > above.column())
+                        row = Math.max(row, above.bottom());
+                }
+                next = original.at(original.column(), Math.min(row, original.row()));
+            }
+            settled.put(entry.getKey(), next);
+            if (!next.equals(original)) moves.put(entry.getKey(), next);
+        }
+        return moves;
+    }
+
     /** Returns the additional moves needed to clear a drop, or null when it cannot fit. */
     static Map<Integer, Slot> rearrange(Slot drop, int columns, int rows, Map<Integer, Slot> positions, int id) {
         if (!inside(drop, columns, rows)) return null;

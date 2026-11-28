@@ -318,8 +318,15 @@ final class BackgroundProcessAccess {
         if (process.isInstance(record)) {
             ApplicationInfo info = (ApplicationInfo) appInfo.get(record);
             String processName = (String) name.get(record);
-            if (info != null && processName != null && info.uid == realUid.getInt(record) && host.rule(info) != null) {
-                host.observeProcess(info.packageName, processName);
+            if (info != null && processName != null && info.uid == realUid.getInt(record)) {
+                AppRule rule = host.rule(info);
+                if (rule != null) {
+                    host.observeProcess(info.packageName, processName);
+                    int nativeAdj = (Integer) getAdj.invoke(record);
+                    int protectedAdj = backgroundAdj(rule, processName,
+                        info.processName != null ? info.processName : info.packageName, nativeAdj);
+                    if (protectedAdj != nativeAdj && getThread.invoke(record) != null) setAdj.invoke(record, protectedAdj);
+                }
             }
         }
         Decision decision = decision(record);

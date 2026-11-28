@@ -4,6 +4,7 @@ final class HbmControl {
     static final String ACTION = "dev.nativecomplements.module.action.HBM";
     static final String PERMISSION = "dev.nativecomplements.module.permission.HBM_CONTROL";
     static final String TOGGLE = "toggle";
+    static final String STOP = "stop";
     static final int UNAVAILABLE = 0;
     static final int OFF = 1;
     static final int ON = 2;

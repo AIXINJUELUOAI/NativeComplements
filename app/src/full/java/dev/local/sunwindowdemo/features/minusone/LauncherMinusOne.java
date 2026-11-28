@@ -9,8 +9,12 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Canvas;
 import android.graphics.Point;
+import android.graphics.RectF;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.UserManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
 import android.view.View;
 import dev.local.sunwindowdemo.core.LauncherTargets;
 import io.github.libxposed.api.XposedInterface;
@@ -19,6 +23,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.WeakHashMap;
+import java.lang.ref.WeakReference;
 import java.util.function.Consumer;
 
 public final class LauncherMinusOne {
@@ -27,6 +32,7 @@ public final class LauncherMinusOne {
     private static final String ACTIVITY = PACKAGE + ".MinusOneOverlay";
     private static final String DISCOVER = "com.google.android.googlequicksearchbox";
     private static final long LAUNCHER_VERSION = 907;
+    private static WeakReference<Object> oseManager = new WeakReference<>(null);
 
     private LauncherMinusOne() {}
 
@@ -48,7 +54,7 @@ public final class LauncherMinusOne {
                     .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                         var app = (Application) chain.getThisObject();
                         if (LauncherTargets.PIXEL.equals(app.getPackageName())
-                                && supported(app) && MinusOneSettings.enabledForLauncher(app)) {
+                                && supported(app)) {
                             connect(module, loader, app, note);
                         }
                         return chain.proceed();
@@ -62,6 +68,36 @@ public final class LauncherMinusOne {
         try {
             var manager = Class.forName("android.app.ApplicationPackageManager", false, loader);
             var resolve = manager.getMethod("resolveActivity", Intent.class, int.class);
+            var oseType = Class.forName("com.android.launcher3.qsb.OSEManager", false, loader);
+            var reload = oseType.getDeclaredMethod("reloadOse");
+            var launcher = Class.forName("com.android.launcher3.Launcher", false, loader);
+            var recreateOverlay = launcher.getMethod("recreateOverlay");
+            var nexus = Class.forName("com.google.android.apps.nexuslauncher.NexusLauncherActivity", false, loader);
+            var chooseOverlay = nexus.getDeclaredMethod("getDefaultOverlay");
+            var item = Class.forName("com.android.launcher3.Item", false, loader);
+            var prefKey = item.getMethod("getSharedPrefKey");
+            var prefs = Class.forName("com.android.launcher3.LauncherPrefs", false, loader);
+            var readPreference = prefs.getMethod("getInner", item, Object.class);
+            ThreadLocal<Boolean> selectingOwnOverlay = new ThreadLocal<>();
+            module.hook(chooseOverlay).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                Boolean previous = selectingOwnOverlay.get();
+                selectingOwnOverlay.set(supported(app) && MinusOneSettings.enabledForLauncher(app));
+                try { return chain.proceed(); }
+                finally {
+                    if (previous == null) selectingOwnOverlay.remove();
+                    else selectingOwnOverlay.set(previous);
+                }
+            });
+            module.hook(readPreference).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                if (Boolean.TRUE.equals(selectingOwnOverlay.get())
+                        && "pref_enable_minus_one".equals(prefKey.invoke(chain.getArg(0)))) return true;
+                return chain.proceed();
+            });
+            if (!module.deoptimize(chooseOverlay)) throw new IllegalStateException("overlay selection deoptimize");
+            module.hook(reload).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                oseManager = new WeakReference<>(chain.getThisObject());
+                return chain.proceed();
+            });
             module.hook(resolve).setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
                 var intent = (Intent) chain.getArg(0);
                 if (intent == null || !ACTION.equals(intent.getAction()) || intent.getComponent() != null
@@ -69,21 +105,28 @@ public final class LauncherMinusOne {
                     return chain.proceed();
                 }
                 var stock = (ResolveInfo) chain.proceed();
+                if (!supported(app) || !MinusOneSettings.enabledForLauncher(app)) return stock;
                 if (stock != null && stock.activityInfo != null
                         && !DISCOVER.equals(stock.activityInfo.packageName)) return stock;
                 try {
                     var redirect = new Intent(intent).setPackage(PACKAGE);
                     var target = app.getPackageManager().resolveActivity(redirect,
                             PackageManager.ResolveInfoFlags.of(Integer.toUnsignedLong((Integer) chain.getArg(1))));
-                    if (target != null && isOurOverlay(target.activityInfo)) return target;
+                    if (target != null && isOurOverlay(target.activityInfo)) {
+                        note.accept("MINUS_ONE_TARGET_RESOLVED");
+                        return target;
+                    }
+                    note.accept("MINUS_ONE_TARGET_MISSING");
                 } catch (RuntimeException unavailable) {
                     note.accept("MINUS_ONE_RESOLVE_FAILED");
                 }
                 return stock;
             });
-            watchGrid(app, loader, note);
+            if (!module.deoptimize(reload)) throw new IllegalStateException("OSE reload deoptimize");
+            watchGrid(app, loader, reload, recreateOverlay, note);
             LauncherWidgetPicker.install(module, loader, app, note);
             installTransparentStartingView(module, loader, note);
+            installOverlayScrim(module, loader, note);
             note.accept("MINUS_ONE_READY");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
             note.accept("MINUS_ONE_CONNECT_FAILED " + unavailable.getClass().getSimpleName());
@@ -94,11 +137,99 @@ public final class LauncherMinusOne {
         return target != null && PACKAGE.equals(target.packageName) && ACTIVITY.equals(target.name);
     }
 
-    private static void watchGrid(Application app, ClassLoader loader, Consumer<String> note) {
+    private static void installOverlayScrim(XposedModule module, ClassLoader loader, Consumer<String> note) {
+        var hooks = new java.util.ArrayList<XposedInterface.HookHandle>();
+        try {
+            var manager = Class.forName("com.google.android.apps.nexuslauncher.overlay.TaskFragmentOverlayManager", false, loader);
+            var rootType = Class.forName("com.android.launcher3.LauncherRootView", false, loader);
+            var scrimType = Class.forName("com.android.launcher3.graphics.SysUiScrim", false, loader);
+            var target = field(manager, "k");
+            var activity = field(manager.getSuperclass(), "c");
+            var getRoot = activity.getType().getMethod("getRootView");
+            var scrim = field(rootType, "mSysUiScrim");
+            var topBounds = field(scrimType, "mTopMaskRect");
+            var progressByRoot = new WeakHashMap<View, Float>();
+            hooks.add(module.hook(manager.getDeclaredMethod("onOverlayScrollChanged", float.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                        Object owner = chain.getThisObject();
+                        if (isOurOverlay((ActivityInfo) target.get(owner))) {
+                            var root = (View) getRoot.invoke(activity.get(owner));
+                            progressByRoot.put(root, (Float) chain.getArg(0));
+                            root.invalidate();
+                        }
+                        return chain.proceed();
+                    }));
+            hooks.add(module.hook(manager.getDeclaredMethod("onActivityDestroyed"))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                        Object owner = chain.getThisObject();
+                        if (isOurOverlay((ActivityInfo) target.get(owner))) {
+                            var root = (View) getRoot.invoke(activity.get(owner));
+                            progressByRoot.remove(root);
+                            root.invalidate();
+                        }
+                        return chain.proceed();
+                    }));
+            hooks.add(module.hook(rootType.getDeclaredMethod("dispatchDraw", Canvas.class))
+                    .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE).intercept(chain -> {
+                        var root = (View) chain.getThisObject();
+                        Float progress = progressByRoot.get(root);
+                        if (progress == null || progress <= 0) return chain.proceed();
+                        var bounds = (RectF) topBounds.get(scrim.get(root));
+                        float left = bounds.left, right = bounds.right;
+                        // The transparent feed must not reveal a second shadow when native
+                        // input preparation briefly shows the launcher during vertical drags.
+                        hideTopScrim(bounds);
+                        try { return chain.proceed(); }
+                        finally { bounds.left = left; bounds.right = right; }
+                    }));
+            note.accept("MINUS_ONE_SCRIM_READY");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
+            for (var hook : hooks) hook.unhook();
+            note.accept("MINUS_ONE_SCRIM_UNAVAILABLE " + unavailable.getClass().getSimpleName());
+        }
+    }
+
+    static void hideTopScrim(RectF bounds) {
+        bounds.right = bounds.left;
+    }
+
+    private static void watchGrid(Application app, ClassLoader loader, Method reload, Method recreateOverlay,
+            Consumer<String> note) {
+        var applied = new WeakHashMap<Activity, Boolean>();
+        var resumed = new java.util.concurrent.atomic.AtomicReference<>(new WeakReference<Activity>(null));
+        java.util.function.Consumer<Activity> refresh = activity -> {
+            if (activity == null || activity.isDestroyed() || activity.isFinishing()
+                    || !app.getSystemService(UserManager.class).isUserUnlocked()) return;
+            boolean enabled = MinusOneSettings.enabledForLauncher(app);
+            Boolean previous = applied.get(activity);
+            if (Boolean.valueOf(enabled).equals(previous)) return;
+            Object ose = oseManager.get();
+            if (ose == null) return;
+            try {
+                if (enabled || Boolean.TRUE.equals(previous)) {
+                    reload.invoke(ose);
+                    recreateOverlay.invoke(activity);
+                    note.accept("MINUS_ONE_OVERLAY_REFRESHED enabled=" + enabled);
+                }
+                applied.put(activity, enabled);
+            } catch (ReflectiveOperationException | RuntimeException unavailable) {
+                note.accept("MINUS_ONE_REFRESH_UNAVAILABLE " + unavailable.getClass().getSimpleName());
+            }
+        };
+        app.registerReceiver(new BroadcastReceiver() {
+            @Override public void onReceive(Context context, Intent intent) {
+                Activity activity = resumed.get().get();
+                if (activity != null) activity.getWindow().getDecorView().post(() -> refresh.accept(activity));
+            }
+        }, new IntentFilter(Intent.ACTION_USER_UNLOCKED), Context.RECEIVER_NOT_EXPORTED);
         app.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             @Override public void onActivityResumed(Activity activity) {
                 if (!activity.getClass().getName().equals(LauncherTargets.PIXEL + ".NexusLauncherActivity")) return;
-                activity.getWindow().getDecorView().post(() -> publishGrid(activity, loader, note));
+                resumed.set(new WeakReference<>(activity));
+                activity.getWindow().getDecorView().post(() -> {
+                    publishGrid(activity, loader, note);
+                    refresh.accept(activity);
+                });
             }
 
             @Override public void onActivityCreated(Activity a, Bundle state) {}
@@ -120,10 +251,11 @@ public final class LauncherMinusOne {
             var workspace = method(profile.getClass(), "getWorkspaceProfile").invoke(profile);
             var type = workspace.getClass();
             var gap = (Point) field(type, "cellLayoutBorderSpacePx").get(workspace);
-            int width = field(type, "cellWidthPx").getInt(workspace);
-            int height = field(type, "cellHeightPx").getInt(workspace);
+            var cell = (Point) field(type, "cellSize").get(workspace);
+            var padding = (android.graphics.Rect) field(type, "widgetPadding").get(workspace);
             MinusOneSettings.publishWidgetGrid(activity,
-                    new WidgetGrid(columns, rows, width, height, gap.x, gap.y));
+                    new WidgetGrid(columns, rows, cell.x, cell.y, gap.x, gap.y,
+                            padding.left, padding.top, padding.right, padding.bottom));
         } catch (ReflectiveOperationException | RuntimeException | LinkageError unavailable) {
             note.accept("MINUS_ONE_GRID_UNAVAILABLE " + unavailable.getClass().getSimpleName());
         }

@@ -7,7 +7,6 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -50,6 +49,7 @@ import dev.local.sunwindowdemo.features.suggestions.SuggestionAppsScreen
 import dev.local.sunwindowdemo.features.shade.ShadeScreen
 import dev.local.sunwindowdemo.features.shade.ShadeStore
 import dev.local.sunwindowdemo.home.AboutScreen
+import dev.local.sunwindowdemo.home.HostRestartActions
 import dev.local.sunwindowdemo.home.HomeScreen
 import dev.local.sunwindowdemo.home.LicensesScreen
 
@@ -100,9 +100,10 @@ fun ModuleApp(
         expandedTitle = !selectingIcons && !searchOpen,
         titleContent = if (searchOpen) ({ AppQueryField(query) { query = it } }) else null,
         actions = {
+            if (page == Page.About) HostRestartActions()
             if (windowExclusions) Box {
                 IconButton(onClick = { appListMenu = true }) {
-                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "应用列表选项")
+                    Icon(Icons.Default.MoreVert, contentDescription = "应用列表选项")
                 }
                 DropdownMenu(appListMenu, onDismissRequest = { appListMenu = false }) {
                     DropdownMenuItem(text = { Text("显示系统应用") },

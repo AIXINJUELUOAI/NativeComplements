@@ -2,7 +2,11 @@ package dev.local.sunwindowdemo.features.minusone;
 
 import android.os.Bundle;
 
-public record WidgetGrid(int columns, int rows, int cellWidth, int cellHeight, int gapX, int gapY) {
+public record WidgetGrid(int columns, int rows, int cellWidth, int cellHeight, int gapX, int gapY,
+                         int paddingLeft, int paddingTop, int paddingRight, int paddingBottom) {
+    public WidgetGrid(int columns, int rows, int cellWidth, int cellHeight, int gapX, int gapY) {
+        this(columns, rows, cellWidth, cellHeight, gapX, gapY, 0, 0, 0, 0);
+    }
     public Bundle toBundle() {
         var out = new Bundle();
         out.putInt("columns", columns);
@@ -11,12 +15,18 @@ public record WidgetGrid(int columns, int rows, int cellWidth, int cellHeight, i
         out.putInt("cellHeight", cellHeight);
         out.putInt("gapX", gapX);
         out.putInt("gapY", gapY);
+        out.putInt("paddingLeft", paddingLeft);
+        out.putInt("paddingTop", paddingTop);
+        out.putInt("paddingRight", paddingRight);
+        out.putInt("paddingBottom", paddingBottom);
         return out;
     }
 
     static WidgetGrid fromBundle(Bundle bundle) {
         return new WidgetGrid(bundle.getInt("columns"), bundle.getInt("rows"), bundle.getInt("cellWidth"),
-                bundle.getInt("cellHeight"), bundle.getInt("gapX"), bundle.getInt("gapY"));
+                bundle.getInt("cellHeight"), bundle.getInt("gapX"), bundle.getInt("gapY"),
+                bundle.getInt("paddingLeft"), bundle.getInt("paddingTop"),
+                bundle.getInt("paddingRight"), bundle.getInt("paddingBottom"));
     }
 
     boolean valid() { return columns > 0 && rows > 0 && cellWidth > 0 && cellHeight > 0; }
