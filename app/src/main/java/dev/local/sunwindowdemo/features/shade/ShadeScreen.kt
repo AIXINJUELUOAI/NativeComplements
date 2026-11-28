@@ -117,6 +117,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
                     value = floatingCallRefresh) { ShadeStore.setFloatingCallRefresh(context, it) }
                 displayExtras()
             }
+            OutdoorRefreshOptions()
         }
         if (android.os.Build.VERSION.SDK_INT == 37 && android.os.Build.DEVICE == "dada") {
             GroupTitle("音量")
