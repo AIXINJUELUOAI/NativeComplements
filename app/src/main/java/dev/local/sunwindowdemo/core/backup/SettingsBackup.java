@@ -346,6 +346,8 @@ public final class SettingsBackup {
         Map<String, Field> shade = group(groups, "landscape_shade");
         bools(shade, "enabled", "signal_display", "drawer_monet", "cover_monet", "desktop_double_tap_sleep", "lockscreen_double_tap_sleep", "floating_call_refresh", "app_volume");
         shade.put("status_bar_offset", number(-32, 32)); shade.put("notification_icon_scale", number(80, 120)); shade.put("system_icon_scale", number(80, 120));
+        bools(shade, "hide_udfps_background", "hide_udfps_foreground");
+        shade.put("udfps_size", number(50, 200));
         bools(group(groups, "navbar_immersive"), "enabled");
         Map<String, Field> edge = group(groups, "edge_touch"); bools(edge, "enabled", "left_enabled", "right_enabled");
         edge.put("left_width_dp", number(1, 48)); edge.put("right_width_dp", number(1, 48));

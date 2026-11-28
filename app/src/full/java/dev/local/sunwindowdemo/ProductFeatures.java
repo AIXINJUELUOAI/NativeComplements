@@ -26,6 +26,7 @@ final class ProductFeatures {
         dev.local.sunwindowdemo.features.shade.SignalDisplay.install(module,loader,note);
         dev.local.sunwindowdemo.features.appvolume.MediaVolumeModule.install(module,loader,note);
         LockscreenDoubleTap.install(module,loader,note);
+        dev.local.sunwindowdemo.features.shade.LockscreenFingerprintLayers.install(module,loader,note);
         RotationSuggestion.install(module,loader,note);
     }
     static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){

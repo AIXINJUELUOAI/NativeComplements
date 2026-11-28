@@ -32,6 +32,9 @@ public final class ShadeStore {
         result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));
         result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
         result.putBoolean("lockscreenDoubleTapSleep", lockscreenDoubleTapSleep(context));
+        result.putBoolean("hideUdfpsBackground", hideUdfpsBackground(context));
+        result.putBoolean("hideUdfpsForeground", hideUdfpsForeground(context));
+        result.putInt("udfpsSize", udfpsSize(context));
         return result;
     }
 
@@ -44,10 +47,38 @@ public final class ShadeStore {
         return preferences(context).getBoolean("lockscreen_double_tap_sleep", false);
     }
 
-    public static void setLockscreenDoubleTapSleep(Context context, boolean enabled) {
-        preferences(context).edit().putBoolean("lockscreen_double_tap_sleep", enabled).apply();
+    public static boolean hideUdfpsBackground(Context context) {
+        return preferences(context).getBoolean("hide_udfps_background", false);
+    }
+
+    public static boolean hideUdfpsForeground(Context context) {
+        return preferences(context).getBoolean("hide_udfps_foreground", false);
+    }
+
+    public static int udfpsSize(Context context) {
+        return Math.clamp(preferences(context).getInt("udfps_size", LockscreenFingerprintLayers.DEFAULT_SIZE),
+                LockscreenFingerprintLayers.MIN_SIZE, LockscreenFingerprintLayers.MAX_SIZE);
+    }
+
+    public static void setUdfpsHidden(Context context, boolean foreground, boolean hidden) {
+        preferences(context).edit().putBoolean(foreground ? "hide_udfps_foreground" : "hide_udfps_background", hidden).apply();
+        notifySystemUi(context);
+    }
+
+    public static void setUdfpsSize(Context context, int percent) {
+        preferences(context).edit().putInt("udfps_size",
+                Math.clamp(percent, LockscreenFingerprintLayers.MIN_SIZE, LockscreenFingerprintLayers.MAX_SIZE)).apply();
+        notifySystemUi(context);
+    }
+
+    private static void notifySystemUi(Context context) {
         context.sendBroadcast(new Intent(CHANGED).setPackage(SYSTEM_UI), null,
                 BroadcastOptions.makeBasic().setShareIdentityEnabled(true).toBundle());
+    }
+
+    public static void setLockscreenDoubleTapSleep(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("lockscreen_double_tap_sleep", enabled).apply();
+        notifySystemUi(context);
     }
 
     public static boolean desktopDoubleTapSleep(Context context) {

@@ -24,6 +24,10 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
     var drawerMonet by remember { mutableStateOf(ShadeStore.drawerMonet(context)) }
     var coverMonet by remember { mutableStateOf(ShadeStore.coverMonet(context)) }
     var lockscreenDoubleTapSleep by remember { mutableStateOf(ShadeStore.lockscreenDoubleTapSleep(context)) }
+    val showFingerprintSettings = remember(context) { PixelOsShade.supports(context) }
+    var hideUdfpsBackground by remember { mutableStateOf(ShadeStore.hideUdfpsBackground(context)) }
+    var hideUdfpsForeground by remember { mutableStateOf(ShadeStore.hideUdfpsForeground(context)) }
+    var udfpsSize by remember { mutableIntStateOf(ShadeStore.udfpsSize(context)) }
     var desktopDoubleTapSleep by remember { mutableStateOf(ShadeStore.desktopDoubleTapSleep(context)) }
     var systemThemed by remember { mutableStateOf(IconLayerStore.systemThemed(context)) }
     var offset by remember { mutableIntStateOf(ShadeStore.offset(context)) }
@@ -41,6 +45,9 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
             coverMonet = ShadeStore.coverMonet(context)
             desktopDoubleTapSleep = ShadeStore.desktopDoubleTapSleep(context)
             lockscreenDoubleTapSleep = ShadeStore.lockscreenDoubleTapSleep(context)
+            hideUdfpsBackground = ShadeStore.hideUdfpsBackground(context)
+            hideUdfpsForeground = ShadeStore.hideUdfpsForeground(context)
+            udfpsSize = ShadeStore.udfpsSize(context)
             offset = ShadeStore.offset(context)
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
@@ -89,6 +96,19 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
         SettingsGroup {
             ToggleRow("双击锁屏空白处息屏", value = lockscreenDoubleTapSleep) {
                 ShadeStore.setLockscreenDoubleTapSleep(context, it)
+            }
+            if (showFingerprintSettings) {
+                ToggleRow("隐藏屏下指纹背景", "隐藏指纹图案后面的圆形底色。", value = hideUdfpsBackground) {
+                    ShadeStore.setUdfpsHidden(context, false, it)
+                }
+                ToggleRow("移除屏下指纹前景图标", "隐藏指纹图案和底色，仍可在原位置按指纹解锁。",
+                    value = hideUdfpsForeground) { ShadeStore.setUdfpsHidden(context, true, it) }
+                if (!hideUdfpsForeground) {
+                    SliderRow("指纹大小",
+                        if (hideUdfpsBackground) "只缩放指纹图案。" else "同时缩放圆形底色和指纹图案。",
+                        value = udfpsSize, range = LockscreenFingerprintLayers.MIN_SIZE..LockscreenFingerprintLayers.MAX_SIZE,
+                        unit = "%") { ShadeStore.setUdfpsSize(context, it) }
+                }
             }
         }
         GroupTitle("状态栏与控制中心")

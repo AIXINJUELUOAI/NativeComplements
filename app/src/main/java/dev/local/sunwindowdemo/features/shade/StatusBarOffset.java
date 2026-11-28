@@ -102,6 +102,7 @@ public final class StatusBarOffset {
     }
     private static void readSettings(Context context) {
         // Shares the shade snapshot; a stopped module process keeps the last stored offset.
+        boolean pixelOs = PixelOsShade.supports(context);
         HostSnapshot snapshot = HostSnapshot.open(context, "shade");
         HostSnapshot.Result read = snapshot.read(() -> context.getContentResolver()
                 .call(Uri.parse("content://" + ShadeStore.AUTHORITY), "read", null, null));
@@ -111,6 +112,7 @@ public final class StatusBarOffset {
                 set(read.config().getInt("statusBarOffset", 0));
                 StatusIconScale.set(read.config().getInt("notificationIconScale",100),read.config().getInt("systemIconScale",100));
             }
+            LockscreenFingerprintLayers.update(read.config(), pixelOs);
             if (retryLoad != null) main.removeCallbacks(retryLoad);
             if (!read.live()) { retryLoad=()->load(context);main.postDelayed(retryLoad,snapshot.retryDelay(3000)); }
         });
