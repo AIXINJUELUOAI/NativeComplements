@@ -112,6 +112,7 @@ public final class StatusBarOffset {
                 StatusIconScale.set(read.config().getInt("notificationIconScale",100),read.config().getInt("systemIconScale",100));
             }
             if (retryLoad != null) main.removeCallbacks(retryLoad);
+            NativeQsSliders.update(read.config());
             if (!read.live()) { retryLoad=()->load(context);main.postDelayed(retryLoad,snapshot.retryDelay(3000)); }
         });
     }

@@ -22,6 +22,7 @@ final class ProductFeatures {
     }
     static void installSystemUi(XposedModule module,ClassLoader loader,Consumer<String> note){
         dev.local.sunwindowdemo.features.shade.LandscapeShade.install(module,loader,note);
+        dev.local.sunwindowdemo.features.shade.NativeQsSliders.install(module,loader);
         dev.local.sunwindowdemo.features.shade.StatusBarOffset.install(module,loader,note);
         dev.local.sunwindowdemo.features.shade.SignalDisplay.install(module,loader,note);
         dev.local.sunwindowdemo.features.appvolume.MediaVolumeModule.install(module,loader,note);
@@ -38,6 +39,7 @@ final class ProductFeatures {
         try{dev.local.sunwindowdemo.features.shade.StatusBarOffset.connect(app);}
         catch(RuntimeException unavailable){note.accept("STATUS_BAR_CONNECT_FAILED "+unavailable.getClass().getSimpleName());}
         dev.local.sunwindowdemo.features.shade.SignalDisplay.connect(app);
+        dev.local.sunwindowdemo.features.shade.NativeQsSliders.connect(app);
         DesktopSleepHost.connect(app,note);
         LockscreenDoubleTap.connect(app,note);
         RotationSuggestion.connect(app);

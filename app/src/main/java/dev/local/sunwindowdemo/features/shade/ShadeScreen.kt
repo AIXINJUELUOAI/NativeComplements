@@ -109,6 +109,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
                 ShadeStore.setOffset(context, it)
             }
         }
+        if (remember(context) { PixelOsShade.supports(context) }) QsSliderSettings()
         if (android.os.Build.VERSION.SDK_INT == 37 &&
             android.os.Process.myUserHandle() == android.os.UserHandle.getUserHandleForUid(android.os.Process.SYSTEM_UID)) {
             GroupTitle("显示")
