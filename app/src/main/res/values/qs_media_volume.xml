@@ -1,0 +1,5 @@
+<resources>
+    <string name="qs_media_volume_tile">媒体音量</string>
+    <string name="qs_media_muted">已静音</string>
+    <string name="qs_media_unmuted">有声音</string>
+</resources>

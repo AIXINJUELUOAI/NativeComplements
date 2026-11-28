@@ -1,9 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <permission android:name="${applicationId}.permission.HBM_CONTROL" android:protectionLevel="signature" />
     <uses-permission android:name="${applicationId}.permission.HBM_CONTROL" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <application>
         <service android:name=".features.manualhbm.HbmTileService" android:label="@string/manual_hbm_label"
             android:icon="@drawable/ic_manual_hbm" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" android:exported="true">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
+        <service android:name=".features.shade.QsMediaVolumeTile" android:label="@string/qs_media_volume_tile"
+            android:icon="@drawable/ic_game_volume_up" android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
             <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
         </service>
         <activity android:name=".features.minusone.MinusOneActivity" android:excludeFromRecents="true"

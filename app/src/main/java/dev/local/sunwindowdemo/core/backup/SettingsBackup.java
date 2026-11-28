@@ -347,6 +347,12 @@ public final class SettingsBackup {
         bools(shade, "enabled", "signal_display", "drawer_monet", "cover_monet", "desktop_double_tap_sleep", "lockscreen_double_tap_sleep", "floating_call_refresh", "app_volume");
         shade.put("status_bar_offset", number(-32, 32)); shade.put("notification_icon_scale", number(80, 120)); shade.put("system_icon_scale", number(80, 120));
         bools(group(groups, "navbar_immersive"), "enabled");
+        shade.put("qs_brightness_visibility", number(0, 2));
+        shade.put("qs_adaptive_brightness_shortcut", number(0, 1));
+        shade.put("qs_media_slider", number(0, 1));
+        shade.put("qs_volume_compact", number(0, 1));
+        shade.put("qs_slider_layout", number(0, 1));
+        shade.put("qs_volume_unmute", number(1, 100));
         Map<String, Field> edge = group(groups, "edge_touch"); bools(edge, "enabled", "left_enabled", "right_enabled");
         edge.put("left_width_dp", number(1, 48)); edge.put("right_width_dp", number(1, 48));
         edge.put("height_percent", number(20, 100)); edge.put("position_percent", number(0, 100)); edge.put("corner_dp", number(0, 64));

@@ -30,6 +30,7 @@ public final class ShadeStore {
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         result.putBoolean("drawerMonet", drawerMonet(context));
         result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));
+        QsSliderPreferences.writeTo(context, result);
         result.putBoolean("desktopDoubleTapSleep", desktopDoubleTapSleep(context));
         result.putBoolean("lockscreenDoubleTapSleep", lockscreenDoubleTapSleep(context));
         return result;
