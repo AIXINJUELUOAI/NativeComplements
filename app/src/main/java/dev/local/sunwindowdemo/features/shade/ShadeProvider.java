@@ -14,6 +14,12 @@ public final class ShadeProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
     @Override public Bundle call(String method, String arg, Bundle extras) {
         int uid = Binder.getCallingUid();
+        if (OutdoorRefreshSettings.READ.equals(method)) {
+            if (uid != Process.SYSTEM_UID
+                    || !Process.myUserHandle().equals(UserHandle.getUserHandleForUid(Process.SYSTEM_UID)))
+                throw new SecurityException("outdoor refresh reader");
+            return OutdoorRefreshSettings.snapshot(getContext());
+        }
         if (ShadeStore.CALL_REFRESH_READ.equals(method)) {
             if (uid != Process.SYSTEM_UID
                     || !Process.myUserHandle().equals(UserHandle.getUserHandleForUid(Process.SYSTEM_UID)))

@@ -246,7 +246,10 @@ public final class SettingsBackup {
                         dev.local.sunwindowdemo.features.shade.ShadeStore.AUTHORITY + "/app_volume"), null);
                 broadcast(context, MODULE + ".SHADE_CHANGED", SYSTEM_UI);
                 for (String host : LauncherTargets.targets(context)) broadcast(context, MODULE + ".SHADE_CHANGED", host);
-                IconLayerStore.refresh(context); break;
+                IconLayerStore.refresh(context);
+                context.getContentResolver().notifyChange(android.net.Uri.parse("content://" +
+                        dev.local.sunwindowdemo.features.shade.ShadeStore.AUTHORITY + "/outdoor-refresh"), null);
+                break;
             case "edge_touch": broadcast(context, MODULE + ".EDGE_TOUCH_CHANGED", SYSTEM_UI); break;
             case "game_mode":
                 broadcast(context, MODULE + ".GAMEMODE_CHANGED", SYSTEM_UI);
@@ -366,6 +369,10 @@ public final class SettingsBackup {
         suggestion.put("bluetooth_app", string(value -> ((String) value).isEmpty() ? value : packageName(value)));
         Map<String, Field> motion = group(groups, "motion_access"); bools(motion, "enabled"); motion.put("default_mode", number(0, 2));
         motion.put("rules", structured(value -> { Map<String, Object> map = packageMap(value, 300); for (Object mode : map.values()) integer(mode, 0, 2); return value; }));
+        bools(shade, "outdoor_refresh_enabled");
+        shade.put("outdoor_refresh_trigger", choice("MANUAL", "BRIGHTNESS", "LIGHT"));
+        shade.put("outdoor_refresh_brightness", number(1, 100));
+        shade.put("outdoor_refresh_light", number(100, 30_000));
         Map<String, Field> background = group(groups, "background_management"); bools(background, "enabled", "background_wake_locks_enabled");
         background.put("rules", structured(SettingsBackup::backgroundRules)); background.put("background_wake_locks", structured(SettingsBackup::wakeLocks));
         Map<String, Field> icon = group(groups, "icon_layers"); bools(icon, "enabled", "notifications"); icon.put("mode", number(0, 2)); icon.put("originals", packages(512));

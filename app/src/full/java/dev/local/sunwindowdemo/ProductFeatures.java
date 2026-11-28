@@ -19,6 +19,7 @@ final class ProductFeatures {
         dev.local.sunwindowdemo.features.motion.MotionAccess.install(module,loader,note);
         dev.local.sunwindowdemo.features.background.BackgroundHost.install(module,loader,note);
         dev.local.sunwindowdemo.features.callrefresh.FloatingCallRefresh.install(module,loader,note);
+        dev.local.sunwindowdemo.features.shade.OutdoorRefreshModule.install(module,loader);
     }
     static void installSystemUi(XposedModule module,ClassLoader loader,Consumer<String> note){
         dev.local.sunwindowdemo.features.shade.LandscapeShade.install(module,loader,note);
