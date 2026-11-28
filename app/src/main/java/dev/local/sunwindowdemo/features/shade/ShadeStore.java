@@ -27,6 +27,7 @@ public final class ShadeStore {
         result.putInt("statusBarOffset", offset(context));
         result.putInt("notificationIconScale", iconScale(context, true));
         result.putInt("systemIconScale", iconScale(context, false));
+        QsGridPreferences.writeTo(context, result);
         result.putBoolean("signalDisplay", preferences(context).getBoolean("signal_display", false));
         result.putBoolean("drawerMonet", drawerMonet(context));
         result.putBoolean("appVolume", preferences(context).getBoolean("app_volume", false));

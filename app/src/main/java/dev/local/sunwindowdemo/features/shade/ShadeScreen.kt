@@ -126,5 +126,6 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
                 }
             }
         }
+        if (remember(context) { PixelOsShade.supports(context) }) QsGridSettings()
     }
 }

@@ -377,6 +377,15 @@ public final class SettingsBackup {
                 if (name.equals("sms_blocking")) blocking.put(slot + "keywords", structured(value -> ruleList(value, true, true)));
             }
         }
+        shade.put("qs_grid_round_tiles", number(0, 1));
+        shade.put("qs_grid_portrait_columns", number(0, 6));
+        shade.put("qs_grid_portrait_rows", number(0, 6));
+        shade.put("qs_grid_portrait_compact_rows", number(0, 3));
+        shade.put("qs_grid_landscape_columns", number(0, 8));
+        shade.put("qs_grid_landscape_rows", number(0, 6));
+        shade.put("qs_grid_landscape_compact_rows", number(0, 3));
+        shade.put("qs_grid_label_size", number(70, 130));
+        shade.put("qs_grid_secondary_label_size", number(70, 130));
         return groups;
     }
 
