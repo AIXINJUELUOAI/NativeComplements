@@ -27,6 +27,7 @@ final class ProductFeatures {
         dev.local.sunwindowdemo.features.appvolume.MediaVolumeModule.install(module,loader,note);
         LockscreenDoubleTap.install(module,loader,note);
         RotationSuggestion.install(module,loader,note);
+        dev.local.sunwindowdemo.features.shade.NativeQsGridHost.install(module,loader,note);
     }
     static void installNotifications(XposedModule module,ClassLoader loader,Consumer<String> note){
         installSuggestionNotifications(module,loader,note);

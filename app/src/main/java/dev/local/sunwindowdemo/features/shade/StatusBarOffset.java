@@ -113,6 +113,7 @@ public final class StatusBarOffset {
             }
             if (retryLoad != null) main.removeCallbacks(retryLoad);
             if (!read.live()) { retryLoad=()->load(context);main.postDelayed(retryLoad,snapshot.retryDelay(3000)); }
+            NativeQsGridHost.update(read.config());
         });
     }
 
