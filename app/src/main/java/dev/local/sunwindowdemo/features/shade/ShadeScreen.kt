@@ -30,6 +30,8 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
     var notificationIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, true)) }
     var systemIconScale by remember { mutableIntStateOf(ShadeStore.iconScale(context, false)) }
     var signalDisplay by remember { mutableStateOf(ShadeStore.read(context).getBoolean("signalDisplay")) }
+    val pixelOs = remember(context) { PixelOsShade.supports(context) }
+    var mergeSignalIcons by remember { mutableStateOf(ShadeStore.mergeSignalIcons(context)) }
     var floatingCallRefresh by remember { mutableStateOf(ShadeStore.floatingCallRefresh(context)) }
     var navbarImmersive by remember { mutableStateOf(NavbarStore.preferences(context).getBoolean("enabled", false)) }
     DisposableEffect(context) {
@@ -45,6 +47,7 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
             notificationIconScale = ShadeStore.iconScale(context, true)
             systemIconScale = ShadeStore.iconScale(context, false)
             signalDisplay = ShadeStore.read(context).getBoolean("signalDisplay")
+            mergeSignalIcons = ShadeStore.mergeSignalIcons(context)
             floatingCallRefresh = ShadeStore.floatingCallRefresh(context)
         }
         val icons = IconLayerStore.prefs(context)
@@ -96,6 +99,10 @@ fun ShadeScreen(bottomInset: Dp = 0.dp, desktopExtras: @Composable () -> Unit = 
             ToggleRow("横屏双栏", value = enabled) { ShadeStore.setEnabled(context, it) }
             ToggleRow("信号显示调整", value = signalDisplay) {
                 ShadeStore.setSignalDisplay(context, it)
+            }
+            if (pixelOs) {
+                ToggleRow("合并信号图标", "状态栏显示 Wi‑Fi 时收起蜂窝信号图标，Wi‑Fi 图标消失后恢复。",
+                    value = mergeSignalIcons) { ShadeStore.setMergeSignalIcons(context, it) }
             }
             SliderRow("通知图标大小",
                 value = notificationIconScale, range = 80..120, unit = "%") {

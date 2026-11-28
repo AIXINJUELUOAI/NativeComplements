@@ -23,6 +23,7 @@ final class ProductFeatures {
     static void installSystemUi(XposedModule module,ClassLoader loader,Consumer<String> note){
         dev.local.sunwindowdemo.features.shade.LandscapeShade.install(module,loader,note);
         dev.local.sunwindowdemo.features.shade.StatusBarOffset.install(module,loader,note);
+        dev.local.sunwindowdemo.features.shade.WifiSignalVisibility.install(module,loader,note);
         dev.local.sunwindowdemo.features.shade.SignalDisplay.install(module,loader,note);
         dev.local.sunwindowdemo.features.appvolume.MediaVolumeModule.install(module,loader,note);
         LockscreenDoubleTap.install(module,loader,note);

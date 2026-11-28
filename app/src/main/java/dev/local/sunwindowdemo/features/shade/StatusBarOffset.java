@@ -106,7 +106,10 @@ public final class StatusBarOffset {
         HostSnapshot.Result read = snapshot.read(() -> context.getContentResolver()
                 .call(Uri.parse("content://" + ShadeStore.AUTHORITY), "read", null, null));
         if (read.report()) note("STATUS_BAR_SETTINGS " + read.summary());
+        boolean mergeSignals = read.config() != null && read.config().getBoolean("mergeSignalIcons")
+                && PixelOsShade.supports(context);
         main.post(() -> {
+            WifiSignalVisibility.setEnabled(mergeSignals);
             if (read.config() != null) {
                 set(read.config().getInt("statusBarOffset", 0));
                 StatusIconScale.set(read.config().getInt("notificationIconScale",100),read.config().getInt("systemIconScale",100));
